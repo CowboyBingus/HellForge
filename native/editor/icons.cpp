@@ -34,7 +34,9 @@ Icon g_marks[UI_MARK_COUNT], g_logo;
 int g_height;
 std::vector<uint32_t> g_pixels; /* level 0 */
 ID3D12Resource* g_texture;
+ID3D11Texture2D* g_texture11;
 ImTextureID g_view;
+bool Uploaded() { return g_texture != nullptr || g_texture11 != nullptr; }
 
 std::string Key(Kind kind, const std::string& name) { return std::to_string((int)kind) + name; }
 
@@ -167,7 +169,7 @@ static bool Decode(const std::wstring& path, std::vector<uint32_t>& pixels, UINT
 
 bool AddImage(Kind kind, const std::string& name, const std::wstring& path)
 {
-    if (g_texture != nullptr || g_icons.count(Key(kind, name))) return g_icons.count(Key(kind, name)) > 0;
+    if (Uploaded() || g_icons.count(Key(kind, name))) return g_icons.count(Key(kind, name)) > 0;
     std::vector<uint32_t> pixels;
     UINT w = 0, h = 0;
     if (!Decode(path, pixels, w, h)) return false;
@@ -178,7 +180,7 @@ bool AddImage(Kind kind, const std::string& name, const std::wstring& path)
 
 bool AddStratagem(const std::string& name, const std::wstring& path)
 {
-    if (g_texture != nullptr || g_icons.count(Key(STRATAGEM, name))) return g_icons.count(Key(STRATAGEM, name)) > 0;
+    if (Uploaded() || g_icons.count(Key(STRATAGEM, name))) return g_icons.count(Key(STRATAGEM, name)) > 0;
     std::vector<uint32_t> pixels;
     UINT w = 0, h = 0;
     if (!Decode(path, pixels, w, h)) return false;
@@ -206,11 +208,9 @@ const Icon* Logo() { return g_height > 0 ? &g_logo : nullptr; }
 
 ImTextureID Texture() { return g_view; }
 
-bool Upload(ID3D12Device* device, ID3D12CommandQueue* queue, ExecuteFn execute, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE gpu)
+/* The levels, each half the last: alpha box filtered, colour averaged by alpha (no dark fringes). */
+std::vector<std::vector<uint32_t>> MipLevels()
 {
-    if (g_texture != nullptr) return true;
-    if (g_height == 0) return false;
-    /* the levels, each half the last: alpha box filtered, colour averaged by alpha (no dark fringes) */
     std::vector<std::vector<uint32_t>> levels;
     levels.push_back(g_pixels);
     int w = WIDTH, h = g_height;
@@ -234,7 +234,14 @@ bool Upload(ID3D12Device* device, ID3D12CommandQueue* queue, ExecuteFn execute, 
         levels.push_back(std::move(next));
         w = nw; h = nh;
     }
+    return levels;
+}
 
+bool Upload(ID3D12Device* device, ID3D12CommandQueue* queue, ExecuteFn execute, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE gpu)
+{
+    if (Uploaded()) return true;
+    if (g_height == 0) return false;
+    std::vector<std::vector<uint32_t>> levels = MipLevels();
     D3D12_HEAP_PROPERTIES heap = {};
     heap.Type = D3D12_HEAP_TYPE_DEFAULT;
     D3D12_RESOURCE_DESC desc = {};
@@ -321,6 +328,33 @@ bool Upload(ID3D12Device* device, ID3D12CommandQueue* queue, ExecuteFn execute, 
     device->CreateShaderResourceView(texture, &view, cpu);
     g_texture = texture;
     g_view = (ImTextureID)gpu.ptr;
+    g_pixels.clear();
+    g_pixels.shrink_to_fit();
+    return true;
+}
+
+bool Upload11(ID3D11Device* device)
+{
+    if (Uploaded()) return true;
+    if (g_height == 0) return false;
+    std::vector<std::vector<uint32_t>> levels = MipLevels();
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = WIDTH;
+    desc.Height = (UINT)g_height;
+    desc.MipLevels = LEVELS;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_IMMUTABLE;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_SUBRESOURCE_DATA data[LEVELS] = {};
+    for (int level = 0, w = WIDTH; level < LEVELS; level++, w /= 2) data[level] = {levels[level].data(), (UINT)w * 4, 0};
+    ID3D11Texture2D* texture = nullptr;
+    ID3D11ShaderResourceView* view = nullptr;
+    if (FAILED(device->CreateTexture2D(&desc, data, &texture))) return false;
+    if (FAILED(device->CreateShaderResourceView(texture, nullptr, &view))) { texture->Release(); return false; }
+    g_texture11 = texture;
+    g_view = (ImTextureID)(intptr_t)view;
     g_pixels.clear();
     g_pixels.shrink_to_fit();
     return true;

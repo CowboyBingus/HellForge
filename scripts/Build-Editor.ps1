@@ -1,7 +1,7 @@
 # Builds HellForge's in-game editor (native/editor, docs/sdk-roadmap.md phase 5a) into artifacts/editor/hellforge-editor, a
 # mod folder (manifest, DLL, Dear ImGui's licence) to copy into <installation>/mods. Dear ImGui 1.91.9b (MIT) is fetched
 # from GitHub once, pinned by SHA-256, into tools/imgui; it is compiled with the editor by the project's pinned Zig.
-# With -Test it also runs native/editor/test/overlay_test.cpp: the editor against a real D3D12 swap chain in a window of
+# With -Test it also runs native/editor/test/overlay_test.cpp: the editor against a real D3D12 swap chain (then a D3D11 one) in a window of
 # its own (shown for a few seconds), with F8, resizes and a screenshot check, and native/editor/test/local_stats_test.cpp,
 # its saving into the Local Stats mod.
 # Usage: scripts/Build-Editor.ps1 [-Install <installation>] [-Test]   (with -Install, the folder is copied into its mods, with
@@ -31,7 +31,7 @@ if(-not(Test-Path -LiteralPath $marker) -or [IO.File]::ReadAllText($marker) -ne 
 }
 $out=Join-Path $project 'artifacts/editor/hellforge-editor'
 New-Item -ItemType Directory $out -Force|Out-Null
-$sources=@('imgui.cpp','imgui_draw.cpp','imgui_tables.cpp','imgui_widgets.cpp','imgui_demo.cpp','backends/imgui_impl_win32.cpp','backends/imgui_impl_dx12.cpp')|ForEach-Object {Join-Path $imgui $_}
+$sources=@('imgui.cpp','imgui_draw.cpp','imgui_tables.cpp','imgui_widgets.cpp','imgui_demo.cpp','backends/imgui_impl_win32.cpp','backends/imgui_impl_dx11.cpp','backends/imgui_impl_dx12.cpp')|ForEach-Object {Join-Path $imgui $_}
 $common=@('-target','x86_64-windows-gnu','-O2','-std=c++17','-fno-exceptions','-fno-rtti','-I',(Join-Path $project 'native/mod-sdk'),'-I',$imgui,'-I',(Join-Path $imgui 'backends'),'-DIMGUI_DISABLE_OBSOLETE_FUNCTIONS',('-ffile-prefix-map='+$project+'=.')) # source paths in the DLL are relative: it ships
 # Dear ImGui as it is (its own warnings off), then the editor with the warnings every HellForge mod is built with.
 $objects=Join-Path $project 'artifacts/editor/obj'
@@ -45,7 +45,7 @@ foreach($source in $sources){
 }
 $editorSources=@('editor.cpp','app.cpp','canvas.cpp','catalog.cpp','icons.cpp','json.cpp','local_stats.cpp','sounds.cpp')|ForEach-Object{Join-Path $project ('native/editor/'+$_)}
 & $zig c++ @common -shared -Wall -Werror -Wno-unused-parameter -s @editorSources @built `
-    -ld3d12 -ldxgi -ld3dcompiler_47 -ldwmapi -lgdi32 -lole32 -o (Join-Path $out 'hellforge_editor.dll')
+    -ld3d11 -ld3d12 -ldxgi -ld3dcompiler_47 -ldwmapi -lgdi32 -lole32 -o (Join-Path $out 'hellforge_editor.dll')
 if($LASTEXITCODE){throw 'The editor did not compile.'}
 Get-ChildItem -LiteralPath $out -Filter '*.lib'|Remove-Item
 Copy-Item -LiteralPath (Join-Path $project 'native/editor/hellforge-mod.json') -Destination $out
@@ -71,13 +71,18 @@ if($Test){
         $hookObjects+=$object
     }
     & $zig c++ -target x86_64-windows-gnu -O1 -std=c++17 -Wall -Werror -Wno-unused-parameter -I (Join-Path $project 'native/mod-sdk') -I (Join-Path $minHook 'include') `
-        (Join-Path $project 'native/editor/test/overlay_test.cpp') @hookObjects -ld3d12 -ldxgi -lgdi32 -o (Join-Path $testOut 'overlay_test.exe')
+        (Join-Path $project 'native/editor/test/overlay_test.cpp') @hookObjects -ld3d11 -ld3d12 -ldxgi -lgdi32 -o (Join-Path $testOut 'overlay_test.exe')
     if($LASTEXITCODE){throw 'The overlay test did not compile.'}
     # a big HD2R Editor preset, where there is one (artifacts/presets; never committed): the editor must stay fast with it
     $big=Join-Path $project 'artifacts/presets/Black-Wolfs-balance.hd2rpreset.json'
     $env:HF_TEST_BIG_PRESET=if(Test-Path -LiteralPath $big){$big}else{''}
     & (Join-Path $testOut 'overlay_test.exe') (Join-Path $out 'hellforge_editor.dll') (Join-Path $testOut 'screen.bmp') $out
     if($LASTEXITCODE){throw 'The overlay test failed.'}
+    # again on a Direct3D 11 swap chain, as the game draws with --use-d3d11
+    $env:HELLFORGE_EDITOR_TEST_D3D11='1'
+    try { & (Join-Path $testOut 'overlay_test.exe') (Join-Path $out 'hellforge_editor.dll') (Join-Path $testOut 'screen11.bmp') $out }
+    finally { Remove-Item Env:HELLFORGE_EDITOR_TEST_D3D11 }
+    if($LASTEXITCODE){throw 'The overlay test failed on Direct3D 11.'}
     & $zig c++ -target x86_64-windows-gnu -O1 -std=c++17 -Wall -Werror (Join-Path $project 'native/editor/test/local_stats_test.cpp') `
         (Join-Path $project 'native/editor/local_stats.cpp') (Join-Path $project 'native/editor/json.cpp') -o (Join-Path $testOut 'local_stats_test.exe')
     if($LASTEXITCODE){throw 'The Local Stats test did not compile.'}

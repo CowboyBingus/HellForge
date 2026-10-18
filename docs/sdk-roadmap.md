@@ -291,7 +291,9 @@ Declarative content makes conflicts visible instead of silent (unlike script mod
      ExecuteCommandLists (the game's direct queue), with a fence per back buffer; F8 toggles it; while open, the game
      window's input goes to ImGui (window procedure replaced; ClipCursor, SetCursorPos and GetRawInputBuffer held back).
      One live control (the Liberator's fire rate through `set_live`). Passes `overlay_test` (a real D3D12 swap chain:
-     resizes, F8, a screenshot check); tried in game (the change applies on respawn). Changes are saved into the Local
+     resizes, F8, a screenshot check); tried in game (the change applies on respawn). A game started with `--use-d3d11`
+     (launch options) is drawn on with ImGui's DX11 backend (2026-10-18); `HELLFORGE_EDITOR_TEST_D3D11=1` runs
+     `overlay_test` on a D3D11 swap chain. Changes are saved into the Local
      Stats mod (`mods/zz.local.stats`, the launcher STATS page's save file, merged under its lock) a second after the
      last one, so the stats pass applies them at every boot; Reset removes the field and puts the game's own value back
      (`set_live` with `HF_LIVE_BASE`).

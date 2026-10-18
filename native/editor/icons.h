@@ -2,6 +2,7 @@
  * player's own game by HellForge's EditorIcons.cs; nothing of them ships), the HD2R Editor's marker icons (ui_marks.h), and
  * HellForge's icon (ui_logo.h). The masks are drawn in a colour, the icon as it is. */
 #pragma once
+#include <d3d11.h>
 #include <d3d12.h>
 #include <string>
 #include "imgui.h"
@@ -28,5 +29,7 @@ const Icon* Logo(); /* HellForge's icon, in colour (ui_logo.h) */
 typedef void(STDMETHODCALLTYPE* ExecuteFn)(ID3D12CommandQueue*, UINT, ID3D12CommandList* const*);
 /* Makes the texture on the game's device and queue (once), its view at the given descriptor. */
 bool Upload(ID3D12Device* device, ID3D12CommandQueue* queue, ExecuteFn execute, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE gpu);
+/* The same on a Direct3D 11 game's device (--use-d3d11): the texture and its view, which is the ImTextureID. */
+bool Upload11(ID3D11Device* device);
 ImTextureID Texture();
 } // namespace icons

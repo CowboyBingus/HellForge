@@ -4,9 +4,11 @@
  * Tab to the objects and to the fields, a field picked with the arrows, "1200" typed and applied with F9. It passes when
  * every Present succeeds, the device is never removed, the editor reports it is drawing, its window shows on screen (with
  * a screenshot), the change reached set_live, and Local Stats holds it.
- * Usage: overlay_test.exe <hellforge_editor.dll> [<screenshot.bmp> [<editor folder: editor-catalog.json, game-icons.bin>]] */
+ * Usage: overlay_test.exe <hellforge_editor.dll> [<screenshot.bmp> [<editor folder: editor-catalog.json, game-icons.bin>]]
+ * HELLFORGE_EDITOR_TEST_D3D11=1: the window presents with Direct3D 11 instead, as the game does with --use-d3d11. */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <d3d11.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <stdio.h>
@@ -35,7 +37,7 @@ static void Log(HfMod*, const char* format, ...)
     vsnprintf(line, sizeof line, format, arguments);
     va_end(arguments);
     printf("  mod: %s\n", line);
-    if (strstr(line, "drawing on the game's queue")) g_drawing = 1;
+    if (strstr(line, "drawing on the game's queue") || strstr(line, "drawing with Direct3D 11")) g_drawing = 1;
     if (strstr(line, "hooked the swap chain")) g_hooked = 1;
     if (strstr(line, "staged (APPLY writes them)")) g_presetImports++;
     if (strstr(line, "A/MG-101 Heavy MG Sentry gets a page")) g_modPage = 1;
@@ -209,12 +211,22 @@ int main(int argc, char** argv)
     WNDCLASSEXW type = {sizeof type, 0, DefWindowProcW, 0, 0, GetModuleHandleW(NULL), NULL, LoadCursor(NULL, IDC_ARROW), NULL, NULL, L"OverlayTest", NULL};
     RegisterClassExW(&type);
     HWND window = CreateWindowExW(WS_EX_TOPMOST, type.lpszClassName, L"HellForge overlay test", WS_POPUP | WS_VISIBLE, 0, 0, 1280, 720, NULL, NULL, type.hInstance, NULL);
-    ID3D12Device* device; ID3D12CommandQueue* queue; IDXGIFactory2* factory; IDXGISwapChain1* chain1; IDXGISwapChain3* chain;
+    ID3D12Device* device = NULL; ID3D12CommandQueue* queue = NULL; IDXGIFactory2* factory; IDXGISwapChain1* chain1; IDXGISwapChain3* chain;
+    const bool d3d11 = getenv("HELLFORGE_EDITOR_TEST_D3D11") != NULL;
+    ID3D11Device* device11 = NULL; ID3D11DeviceContext* context11 = NULL;
     D3D12_COMMAND_QUEUE_DESC queueDesc = {D3D12_COMMAND_LIST_TYPE_DIRECT, 0, D3D12_COMMAND_QUEUE_FLAG_NONE, 0};
     DXGI_SWAP_CHAIN_DESC1 desc = {};
     desc.Width = 1280; desc.Height = 720; desc.Format = DXGI_FORMAT_R10G10B10A2_UNORM; desc.SampleDesc.Count = 1;
     desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; desc.BufferCount = 3; desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    if (FAILED(D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device))) || FAILED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue))) ||
+    if (d3d11)
+    {
+        if (FAILED(D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, NULL, 0, D3D11_SDK_VERSION, &device11, NULL, &context11)) ||
+            FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))) || FAILED(factory->CreateSwapChainForHwnd(device11, window, &desc, NULL, NULL, &chain1)) ||
+            FAILED(chain1->QueryInterface(IID_PPV_ARGS(&chain))))
+        { puts("FAIL no D3D11 swap chain on this machine"); return 1; }
+        puts("  the window presents with Direct3D 11");
+    }
+    else if (FAILED(D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device))) || FAILED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue))) ||
         FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))) || FAILED(factory->CreateSwapChainForHwnd(queue, window, &desc, NULL, NULL, &chain1)) ||
         FAILED(chain1->QueryInterface(IID_PPV_ARGS(&chain))))
     { puts("FAIL no D3D12 swap chain on this machine"); return 1; }
@@ -230,13 +242,16 @@ int main(int argc, char** argv)
         if (!g_modPage || g_modApplied != 1) { puts("FAIL a mod's stratagem got no page, or its saved value did not reach its own row"); return 1; }
     }
 
-    ID3D12CommandAllocator* allocator; ID3D12GraphicsCommandList* list; ID3D12Fence* fence; ID3D12DescriptorHeap* rtvHeap;
+    ID3D12CommandAllocator* allocator = NULL; ID3D12GraphicsCommandList* list = NULL; ID3D12Fence* fence = NULL; ID3D12DescriptorHeap* rtvHeap = NULL;
     D3D12_DESCRIPTOR_HEAP_DESC rtv = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 3, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0};
-    device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator));
-    device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL, IID_PPV_ARGS(&list));
-    list->Close();
-    device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
-    device->CreateDescriptorHeap(&rtv, IID_PPV_ARGS(&rtvHeap));
+    if (!d3d11)
+    {
+        device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator));
+        device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL, IID_PPV_ARGS(&list));
+        list->Close();
+        device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+        device->CreateDescriptorHeap(&rtv, IID_PPV_ARGS(&rtvHeap));
+    }
     HANDLE event = CreateEventW(NULL, FALSE, FALSE, NULL);
     UINT64 value = 0;
     int failures = 0;
@@ -260,13 +275,31 @@ int main(int argc, char** argv)
         if (frame == 356) Key(window, VK_F9);
         if (frame == 150 || frame == 200) /* the game resizes its swap chain */
         {
-            fence->SetEventOnCompletion(value, event); queue->Signal(fence, ++value); WaitForSingleObject(event, 2000);
+            if (!d3d11) { fence->SetEventOnCompletion(value, event); queue->Signal(fence, ++value); WaitForSingleObject(event, 2000); }
             width = frame == 150 ? 1600 : 1280; height = frame == 150 ? 900 : 720;
             SetWindowPos(window, NULL, 0, 0, (int)width, (int)height, SWP_NOZORDER);
             if (FAILED(chain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0))) { puts("FAIL ResizeBuffers"); failures++; }
         }
+        const float color[4] = {0.05f, 0.25f, 0.05f, 1.0f}; /* green: what the "game" draws */
+        if (d3d11)
+        {
+            ID3D11Texture2D* back = NULL;
+            ID3D11RenderTargetView* view = NULL;
+            chain->GetBuffer(0, IID_PPV_ARGS(&back));
+            if (back && SUCCEEDED(device11->CreateRenderTargetView(back, NULL, &view)))
+            {
+                context11->OMSetRenderTargets(1, &view, NULL);
+                context11->ClearRenderTargetView(view, color);
+                view->Release();
+            }
+            if (back) back->Release();
+            HRESULT presented = chain->Present(1, 0);
+            if (FAILED(presented)) { printf("FAIL Present 0x%08lx at frame %d\n", (unsigned long)presented, frame); failures++; }
+        }
         UINT index = chain->GetCurrentBackBufferIndex();
-        ID3D12Resource* buffer;
+        ID3D12Resource* buffer = NULL;
+        if (!d3d11)
+        {
         chain->GetBuffer(index, IID_PPV_ARGS(&buffer));
         D3D12_CPU_DESCRIPTOR_HANDLE handle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
         handle.ptr += index * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -277,7 +310,6 @@ int main(int argc, char** argv)
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT; barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
         list->ResourceBarrier(1, &barrier);
-        const float color[4] = {0.05f, 0.25f, 0.05f, 1.0f}; /* green: what the "game" draws */
         list->ClearRenderTargetView(handle, color, 0, NULL);
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET; barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
         list->ResourceBarrier(1, &barrier);
@@ -289,6 +321,7 @@ int main(int argc, char** argv)
         queue->Signal(fence, ++value);
         fence->SetEventOnCompletion(value, event); WaitForSingleObject(event, 2000);
         buffer->Release();
+        }
         if (frame == 400 && argc > 2) /* the screen as it is, editor open */
         {
             HDC screen = GetDC(NULL), memory = CreateCompatibleDC(screen);
@@ -530,7 +563,7 @@ int main(int argc, char** argv)
             }
         }
     }
-    HRESULT removed = device->GetDeviceRemovedReason();
+    HRESULT removed = d3d11 ? device11->GetDeviceRemovedReason() : device->GetDeviceRemovedReason();
     if (removed != S_OK) { printf("FAIL device removed 0x%08lx\n", (unsigned long)removed); failures++; }
     if (!g_hooked || !g_drawing) { puts("FAIL the editor did not hook or start drawing"); failures++; }
     printf("%s overlay: hooked %d, drawing %d, 420 frames, two resizes, F8 open/close/open, device %s\n", failures ? "FAIL" : "PASS",
