@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "id": "skyeshade.stratagem-compendium",
+  "name": "Stratagem Compendium",
+  "version": "1.0.4",
+  "description": "Eleven new stratagems: four Pelican support runs (Gatling, Cannon, EMS, Gas), the A/MG-101 Heavy MG Sentry, Orbital Gas and EMS Barrages, three expendable launchers (Cluster, Gas, EMS) and the MS-N223 Shredder Silo, under a heading of their own in the selection screen.",
+  "icon": "icon.png",
+  "gameplay": true,
+  "code": {
+    "dll": "stratagem_compendium.dll",
+    "sdk": 8
+  }
+}

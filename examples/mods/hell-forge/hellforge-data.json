@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "patches": [
+    {
+      "archives": ["007e093ca718ca1a"],
+      "resources": [
+        { "icon": "images/hell_forge.png", "name": "skyeshade/hell_forge/icons/hell_forge", "prepare": "image" }
+      ]
+    }
+  ]
+}

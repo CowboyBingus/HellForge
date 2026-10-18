@@ -1,0 +1,547 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Runtime.Versioning;
+using System.Text.Json;
+using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Threading;
+using HellForge.Core;
+
+namespace HellForge.Launcher;
+
+// Setting up an installation: find HELLDIVERS 2 in Steam, confirm ownership, copy the game into the installation,
+// install its firewall block, optionally import earlier HellForge game data and create shortcuts. When Steam's own copy is
+// another build (Arrowhead patched the game) or missing, Steam itself downloads the supported build's depots through
+// its console (SteamDepotDownload) and the game is copied from there. Shown instead of the other
+// pages until the game is copied; Settings > Installation runs it again to check and repair.
+public partial class MainWindow
+{
+    enum SetupStep { Find, Ownership, Copy, Firewall, Import, Shortcuts }
+    static readonly string[] SetupStepNames =
+        ["Find HELLDIVERS 2 in Steam", "Confirm you own the game", "Copy the game into this folder", "Block the copy from the internet",
+            "Import earlier game data", "Create shortcuts"];
+
+    readonly List<(Border Dot, TextBlock Detail)> setupRows = [];
+    CancellationTokenSource? setupCancel;
+    bool setupRunning;
+    DispatcherTimer? downloadTimer;
+    string? downloadSteamRoot;
+
+    // Where the game kept its user data before installations existed, under the project's name then (HD2 Beyond The Stars).
+    static string EarlierGameData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Arrowhead", "HD2BeyondTheStars");
+
+    void InitializeSetup()
+    {
+        if (paths.InstallRoot == null) return;
+        var install = new InstallLayout(paths.InstallRoot);
+        if (OperatingSystem.IsWindows()) RenameLegacyShortcuts(install);
+        _ = SyncBundledMods(install);
+        foreach (var name in SetupStepNames)
+        {
+            var dot = new Border { Classes = { "dot" }, Background = Pending, VerticalAlignment = VerticalAlignment.Top, Margin = new(0, 5, 14, 0) };
+            var title = new TextBlock { Text = name, FontWeight = FontWeight.SemiBold };
+            var detail = new TextBlock { Classes = { "muted" }, FontSize = 12, TextWrapping = TextWrapping.Wrap };
+            var row = new DockPanel();
+            DockPanel.SetDock(dot, Dock.Left);
+            row.Children.Add(dot);
+            row.Children.Add(new StackPanel { Spacing = 2, Children = { title, detail } });
+            SetupSteps.Children.Add(row);
+            setupRows.Add((dot, detail));
+        }
+        ImportBox.IsVisible = Directory.Exists(Path.Combine(EarlierGameData, "profiles")) || File.Exists(Path.Combine(EarlierGameData, "user_settings.config"));
+        InstallCard.IsVisible = true;
+        InstallText.Text = $"{install.Root}  ·  HELLDIVERS 2 build {SupportedBuild.Current.BuildId}";
+        SetupStartButton.Click += async (_, _) => await RunSetup();
+        SetupPauseButton.Click += (_, _) => setupCancel?.Cancel();
+        SetupBackButton.Click += (_, _) => LeaveSetup();
+        OpenConsoleButton.Click += (_, _) => OpenSteamConsole();
+        DeleteDownloadBox.Content = $"Delete Steam's download after copying (frees about {SupportedBuild.Current.TotalBytes / 1e9:0} GB)";
+        RepairButton.Click += (_, _) => EnterSetup(repair: true);
+        UninstallButton.Click += (_, _) => AskUninstall(install);
+        UninstallConfirmButton.Click += async (_, _) => await Uninstall(install);
+        UninstallCancelButton.Click += (_, _) => UninstallConfirm.IsVisible = false;
+        if (!SupportedBuild.Current.IsComplete(install.Game)) EnterSetup(repair: false);
+    }
+
+    void EnterSetup(bool repair)
+    {
+        if (runner.IsRunning) return;
+        foreach (var page in new Control[] { PlayPage, ProfilePage, ModsPage, ConsolePage, SettingsPage }) page.IsVisible = false;
+        SetupPage.IsVisible = true;
+        // A first setup has nowhere to go back to; a repair can be left.
+        Nav.IsVisible = repair;
+        SetupBackButton.IsVisible = repair;
+        SetupBackButton.Content = "Back";
+        SetBackButtonPrimary(false);
+        SetupStartButton.IsVisible = true;
+        SetupTitle.Text = repair ? "Check and repair" : "Set up HellForge";
+        SetupStartButton.Content = repair ? "Check and repair" : "Start setup";
+        for (var i = 0; i < setupRows.Count; i++) SetRow((SetupStep)i, null, "");
+    }
+
+    void SetBackButtonPrimary(bool primary)
+    {
+        SetupBackButton.Classes.Set("primary", primary);
+        SetupBackButton.Classes.Set("ghost", !primary);
+    }
+
+    void LeaveSetup()
+    {
+        Nav.IsVisible = true;
+        ShowPage(Nav.SelectedIndex);
+    }
+
+    void SetRow(SetupStep step, bool? success, string detail, bool running = false)
+    {
+        var (dot, text) = setupRows[(int)step];
+        dot.Background = running ? Accent : success switch { true => Green, false => Red, null => Pending };
+        dot.Classes.Set("pulse", running);
+        text.Text = detail;
+        text.Foreground = success == false ? Red : Grey;
+    }
+
+    async Task RunSetup()
+    {
+        if (setupRunning || runner.IsRunning || paths.InstallRoot == null || !OperatingSystem.IsWindows()) return;
+        setupRunning = true;
+        SetupStartButton.IsEnabled = false;
+        SetupBackButton.IsVisible = false;
+        var install = new InstallLayout(paths.InstallRoot);
+        var step = SetupStep.Find;
+        try
+        {
+            SetRow(step, null, "Looking in your Steam libraries...", running: true);
+            await CheckWindowsFirewall(install);
+            var build = SupportedBuild.Current;
+            var steamRoot = SteamLocator.SteamRoot() ?? throw new SetupStopped("Steam is not installed on this PC. Install Steam and HELLDIVERS 2, then start setup again.");
+            SteamGame? game;
+            string? unusable = null;
+            try { game = await Task.Run(() => SteamLocator.FindGame(steamRoot)); }
+            catch (Exception error) when (error is InvalidDataException or IOException) { game = null; unusable = error.Message; }
+            var fromDepots = false;
+            if (game is { SupportedBuild: true }) SetRow(step, true, $"Build {game.Report.Pin.BuildId} in {game.Report.Source}");
+            else if (await Task.Run(() => SteamDepotDownload.IsComplete(steamRoot, build)))
+            {
+                fromDepots = true;
+                SetRow(step, true, $"Build {build.BuildId}, downloaded by Steam into {SteamDepotDownload.ContentFolder(steamRoot, build)}");
+            }
+            else
+            {
+                var have = game != null ? $"HELLDIVERS 2 build {game.Report.Pin.BuildId}" : unusable != null ? "a copy of HELLDIVERS 2 it cannot use right now" : "no HELLDIVERS 2";
+                ShowDownload(steamRoot, have);
+                throw new SetupWaiting($"Steam has {have}, but this version of HellForge needs build {build.BuildId}. Steam can download that exact " +
+                    "build for your account: follow the steps below. Setup continues by itself when the download is complete.");
+            }
+            var steamApi = fromDepots
+                ? SteamDepotDownload.Locate(steamRoot, build, build.Files.Single(f => f.Path == "bin/steam_api64.dll"))
+                : Path.Combine(game!.Report.Source, "bin", "steam_api64.dll");
+
+            step = SetupStep.Ownership;
+            SetRow(step, null, "Asking Steam...", running: true);
+            var ownership = await RunPowerShell(
+                $"-File {Arg(ScriptPath("Test-SteamOwnership.ps1"))} -NoBuild -PassThru -SteamApi {Arg(steamApi)} " +
+                $"-WorkRoot {Arg(Path.Combine(install.Temp, "ownership"))} -EvidencePath {Arg(Path.Combine(install.Logs, "setup-ownership.json"))}", install);
+            if (ownership.ExitCode != 0)
+                throw new SetupStopped("The ownership check did not pass: " + (ownership.Error.Length > 0 ? ownership.Error : $"exit code {ownership.ExitCode}.") +
+                    " Make sure Steam is running and signed in, then start setup again.");
+            SetRow(step, true, "Steam confirmed the game on this account.");
+
+            step = SetupStep.Copy;
+            SetRow(step, null, "Copying and verifying the game files...", running: true);
+            await CopyGame(fromDepots ? null : game!.Report.Source, steamRoot, install);
+            var copied = $"{build.Files.Count} files ({build.TotalBytes / 1e9:0.0} GB), each verified against Steam's hashes.";
+            if (fromDepots && DeleteDownloadBox.IsChecked == true)
+            {
+                SetRow(step, null, copied + " Deleting Steam's download...", running: true);
+                await Task.Run(() => SteamDepotDownload.Delete(steamRoot, build));
+                copied += " Steam's download was deleted.";
+            }
+            DownloadCard.IsVisible = false;
+            SetRow(step, true, copied);
+
+            step = SetupStep.Firewall;
+            SetRow(step, null, "Checking the firewall rules...", running: true);
+            if (await FirewallBlockInPlace(install)) SetRow(step, true, "Already in place.");
+            else
+            {
+                SetRow(step, null, "Windows asks for permission once to add the firewall rules...", running: true);
+                await InstallFirewallBlock(install);
+                SetRow(step, true, "The copied game can only reach this PC (its local backend). Your normal game is not affected.");
+            }
+
+            step = SetupStep.Import;
+            if (ImportBox.IsVisible && ImportBox.IsChecked == true)
+            {
+                var imported = await Task.Run(() => Migration.Run(install, Path.Combine(install.Temp, "no-repository"), EarlierGameData));
+                // The folder keeps the project's old name; the message doesn't show it.
+                SetRow(step, true, imported.Copied.Count > 0 ? $"Imported {imported.Copied.Count} item(s) from the earlier HellForge setup's game data; the originals stay where they were."
+                    : "Nothing new to import.");
+            }
+            else SetRow(step, true, "Skipped.");
+
+            step = SetupStep.Shortcuts;
+            var made = CreateShortcuts(install);
+            SetRow(step, true, made.Count > 0 ? string.Join(", ", made) : "Skipped.");
+            await SyncBundledMods(install); // with the game copied: the editor's icons and fonts, Hell Forge's icon
+
+            // The highlighted button on the right always moves forward: here that is Continue. Checking again stays
+            // available under Settings > Installation.
+            SetupTitle.Text = "Ready to play";
+            SetupStartButton.IsVisible = false;
+            SetupBackButton.Content = "Continue";
+            SetBackButtonPrimary(true);
+            SetupBackButton.IsVisible = true;
+            Nav.IsVisible = true;
+        }
+        catch (OperationCanceledException)
+        {
+            SetRow(step, null, "Paused. Start setup again to continue where it stopped.");
+            SetupStartButton.Content = "Continue setup";
+        }
+        catch (SetupWaiting waiting)
+        {
+            SetRow(step, null, waiting.Message);
+            SetupStartButton.Content = "Check again";
+            SetupBackButton.IsVisible = Nav.IsVisible;
+        }
+        catch (Exception error) when (error is SetupStopped or IOException or InvalidDataException or UnauthorizedAccessException or Win32Exception
+            or JsonException or InvalidOperationException)
+        {
+            SetRow(step, false, error is Win32Exception { NativeErrorCode: 1223 }
+                ? "Windows permission was declined. The firewall block is required; start setup again and allow it."
+                : error.Message);
+            SetupStartButton.Content = "Try again";
+            SetupBackButton.IsVisible = Nav.IsVisible;
+        }
+        finally
+        {
+            setupRunning = false;
+            setupCancel = null;
+            SetupStartButton.IsEnabled = true;
+            SetupPauseButton.IsVisible = false;
+        }
+    }
+
+    // From Steam's installed game (source), or from its depot downloads when source is null.
+    async Task CopyGame(string? source, string steamRoot, InstallLayout install)
+    {
+        CopyCard.IsVisible = true;
+        SetupPauseButton.IsVisible = true;
+        setupCancel = new();
+        var token = setupCancel.Token;
+        var clock = Stopwatch.StartNew();
+        long shown = -1;
+        var lastUpdate = TimeSpan.Zero;
+        void Progress(long done, long total, string file)
+        {
+            // At most five updates a second reach the window.
+            if (clock.Elapsed - lastUpdate < TimeSpan.FromMilliseconds(200) && done < total) return;
+            lastUpdate = clock.Elapsed;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (done == shown) return;
+                shown = done;
+                CopyProgress.Value = total > 0 ? done * 1000.0 / total : 0;
+                var rate = clock.Elapsed.TotalSeconds > 1 ? done / clock.Elapsed.TotalSeconds / 1e6 : 0;
+                CopyText.Text = $"{done / 1e9:0.0} of {total / 1e9:0.0} GB  ·  {rate:0} MB/s  ·  {file}";
+            });
+        }
+        await Task.Run(() =>
+        {
+            if (source != null) GameCopier.Copy(source, install.Game, SupportedBuild.Current, Progress, token);
+            else GameCopier.CopyFromDepots(steamRoot, install.Game, SupportedBuild.Current, Progress, token);
+        }, token);
+        CopyProgress.Value = 1000;
+        CopyText.Text = $"Done in {clock.Elapsed.TotalMinutes:0.0} min.";
+    }
+
+    // The download card: the console commands for the pinned depot manifests, and the download's progress, checked every
+    // 2 s. When every depot is complete, setup runs again and copies from the download.
+    void ShowDownload(string steamRoot, string have)
+    {
+        var build = SupportedBuild.Current;
+        downloadSteamRoot = steamRoot;
+        DownloadIntro.Text = $"Steam has {have}; this version of HellForge runs build {build.BuildId}. Steam can still download that exact build " +
+            "for your account. Open the Steam console, paste each command below and press Enter, one at a time. Steam then downloads about " +
+            $"{build.TotalBytes / 1e9:0} GB into {SteamDepotDownload.ContentFolder(steamRoot, build)} (your normal game is not touched). " +
+            "Steam shows no progress in its library for this; the bar below does.";
+        DownloadCommands.Children.Clear();
+        foreach (var command in SteamDepotDownload.Commands(build))
+        {
+            var copy = new Button { Content = "Copy", Classes = { "ghost" }, Margin = new(8, 0, 0, 0) };
+            var text = new TextBox { Text = command, IsReadOnly = true, FontFamily = new FontFamily("Consolas, monospace") };
+            copy.Click += async (_, _) =>
+            {
+                if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard) await clipboard.SetTextAsync(command);
+                copy.Content = "Copied";
+            };
+            var row = new DockPanel();
+            DockPanel.SetDock(copy, Dock.Right);
+            row.Children.Add(copy);
+            row.Children.Add(text);
+            DownloadCommands.Children.Add(row);
+        }
+        DownloadCard.IsVisible = true;
+        downloadTimer ??= new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, async (_, _) => await CheckDownload());
+        downloadTimer.Start();
+        _ = CheckDownload();
+    }
+
+    bool checkingDownload;
+
+    async Task CheckDownload()
+    {
+        if (checkingDownload || downloadSteamRoot == null) return;
+        checkingDownload = true;
+        try
+        {
+            var root = downloadSteamRoot;
+            var states = await Task.Run(() => SteamDepotDownload.Status(root, SupportedBuild.Current));
+            long done = states.Sum(s => s.Done), total = states.Sum(s => s.Total);
+            DownloadProgress.Value = total > 0 ? done * 1000.0 / total : 0;
+            DownloadText.Text = string.Join("   ", states.Select(s => $"depot {s.Depot.Id}: {(s.Complete ? "done" : $"{s.Done / 1e9:0.0} of {s.Total / 1e9:0.0} GB")}"));
+            if (states.All(s => s.Complete))
+            {
+                downloadTimer?.Stop();
+                DownloadText.Text = "Download complete. Copying it into this installation...";
+                if (!setupRunning) await RunSetup();
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { DownloadText.Text = "Could not check the download: " + error.Message; }
+        finally { checkingDownload = false; }
+    }
+
+    static void OpenSteamConsole()
+    {
+        try { Process.Start(new ProcessStartInfo("steam://open/console") { UseShellExecute = true }); }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
+    }
+
+    // HellForge's network block is a set of Windows Firewall rules, so Windows Firewall must be on for every network type.
+    // Security suites with a firewall of their own often switch it off. Checked first: before the long copy, and before
+    // Windows asks for permission. Exit 3 only when it is off; a check that cannot run leaves it to the firewall step.
+    async Task CheckWindowsFirewall(InstallLayout install)
+    {
+        var check = await RunPowerShell("-Command \"if(@(@('BFE','MpsSvc')|Where-Object {(Get-Service $_).Status -ne 'Running'}).Count -or " +
+            "@(Get-NetFirewallProfile -PolicyStore ActiveStore|Where-Object Enabled -ne True).Count){exit 3}; exit 0\"", install);
+        if (check.ExitCode == 3)
+            throw new SetupStopped("Windows Firewall is off. HellForge keeps its copy of the game offline with Windows Firewall rules, so it must be on " +
+                "for every network type (Domain, Private and Public). Another security program (Norton, Bitdefender, ESET, Kaspersky...) may " +
+                "have switched it off: turn it back on in Windows Security > Firewall & network protection, then start setup again.");
+    }
+
+    async Task<bool> FirewallBlockInPlace(InstallLayout install)
+    {
+        var check = await RunPowerShell("-Command \"$HellForgeInstallRoot=" + Quote(install.Root) + "; . " + Quote(ScriptPath("NetworkBlock.Common.ps1")) +
+            "; if(@(Test-HellForgeNetworkBlock (Get-HellForgeBlockedPrograms " + Quote(install.Game) + ")).Count){exit 3}; exit 0\"", install);
+        return check.ExitCode == 0;
+    }
+
+    // The mods HellForge ships (BundledMods: the in-game editor, Hell Forge) are in mods/ from the start, not only once a
+    // session has run. In the background: the editor's catalogue takes a moment to write.
+    // PLAY waits for it: the session's own sync would write the same files.
+    bool bundledSyncing;
+
+    async Task SyncBundledMods(InstallLayout install)
+    {
+        if (bundledSyncing || runner.IsRunning) return;
+        bundledSyncing = true;
+        UpdateButton();
+        var problems = await Task.Run(() =>
+        {
+            try { return BundledMods.Sync(install); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException) { return [error.Message]; }
+        });
+        bundledSyncing = false;
+        UpdateButton();
+        foreach (var problem in problems) Append(problem, Orange);
+        if (ModsPage.IsVisible) RefreshMods();
+    }
+
+    // Uninstall: what HellForge put outside its folder goes first (the firewall rules, elevated, since they outlive the
+    // folder; the shortcuts), then a small script outside the folder deletes it once this launcher has exited. Nothing
+    // is deleted when Windows' permission is declined, or while anything from the installation still runs.
+    void AskUninstall(InstallLayout install)
+    {
+        UninstallWarning.Text = $"This deletes {install.Root} and everything in it: the game copy (about 24 GB), your HellForge " +
+            "profiles and progress, every mod in its mods folder (your own too), saves and logs. Copy anything you want to keep first. " +
+            "HellForge closes when it is done.";
+        UninstallConfirm.IsVisible = true;
+        UninstallText.Text = "";
+    }
+
+    async Task Uninstall(InstallLayout install)
+    {
+        UninstallConfirm.IsVisible = false;
+        if (runner.IsRunning || setupRunning) { UninstallText.Text = "Stop the session (or setup) first."; return; }
+        var running = Process.GetProcesses().Where(p => p.Id != Environment.ProcessId && IsFrom(p, install.Root)).Select(p => p.ProcessName).Distinct().ToList();
+        if (running.Count > 0) { UninstallText.Text = "Close these first: " + string.Join(", ", running) + "."; return; }
+        try { UninstallSafety(install.Root); }
+        catch (InvalidDataException refused) { UninstallText.Text = refused.Message; return; }
+        UninstallButton.IsEnabled = false;
+        UninstallText.Text = "Removing the firewall rules: Windows asks for permission...";
+        try { await InstallFirewallBlock(install, uninstall: true); }
+        catch (Exception error) when (error is SetupStopped or IOException or Win32Exception or InvalidOperationException or JsonException)
+        {
+            UninstallText.Text = (error is Win32Exception ? "Windows did not give permission" : error.Message) + ": nothing was removed.";
+            UninstallButton.IsEnabled = true;
+            return;
+        }
+        if (OperatingSystem.IsWindows()) RemoveShortcuts(install);
+        var script = Path.Combine(Path.GetTempPath(), $"hellforge-uninstall-{Guid.NewGuid():N}.ps1");
+        File.WriteAllText(script,
+            "param([string]$Root,[int]$Launcher)\n" +
+            "$ErrorActionPreference='SilentlyContinue'\n" +
+            "Wait-Process -Id $Launcher -Timeout 120\n" +
+            "for($i=0;$i -lt 30 -and (Test-Path -LiteralPath $Root);$i++){Remove-Item -LiteralPath $Root -Recurse -Force;if(Test-Path -LiteralPath $Root){Start-Sleep -Seconds 1}}\n" +
+            "Remove-Item -LiteralPath $PSCommandPath -Force\n");
+        Process.Start(new ProcessStartInfo(PowerShell, $"-NoProfile -ExecutionPolicy Bypass -File {Arg(script)} -Root {Arg(install.Root)} -Launcher {Environment.ProcessId}")
+        { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetTempPath() });
+        Close();
+    }
+
+    // Deletes only a HellForge installation: its marker, no links in its path, and never a drive, the user's folder or
+    // one of its known folders.
+    static void UninstallSafety(string root)
+    {
+        root = LocalInstall.FullPath(root);
+        if (!new InstallLayout(root).Exists) throw new InvalidDataException("This folder is not a HellForge installation; nothing was removed.");
+        LocalInstall.NoLinks(root);
+        var keep = new[] { Path.GetPathRoot(root), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.Windows) };
+        if (keep.Any(folder => !string.IsNullOrEmpty(folder) && string.Equals(LocalInstall.FullPath(folder), root, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException($"HellForge is installed directly in {root}; delete its files by hand instead.");
+    }
+
+    // The Desktop and Start menu shortcuts that start this installation.
+    [SupportedOSPlatform("windows")]
+    static void RemoveShortcuts(InstallLayout install)
+    {
+        var type = Type.GetTypeFromProgID("WScript.Shell");
+        if (type == null) return;
+        dynamic shell = Activator.CreateInstance(type)!;
+        foreach (var folder in new[] { Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), Environment.GetFolderPath(Environment.SpecialFolder.Programs) })
+        {
+            var link = Path.Combine(folder, "HellForge.lnk");
+            if (string.IsNullOrEmpty(folder) || !File.Exists(link)) continue;
+            try
+            {
+                string target = shell.CreateShortcut(link).TargetPath;
+                if (LocalInstall.Within(target, install.Root)) File.Delete(link);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException) { }
+        }
+    }
+
+    static bool IsFrom(Process process, string root)
+    {
+        try { return process.MainModule?.FileName is { } file && LocalInstall.Within(file, root); }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException) { return false; }
+        finally { process.Dispose(); }
+    }
+
+    async Task InstallFirewallBlock(InstallLayout install, bool uninstall = false)
+    {
+        var report = Path.Combine(install.Logs, "setup-network-block.json");
+        if (File.Exists(report)) File.Delete(report);
+        var start = new ProcessStartInfo(PowerShell, $"-NoProfile -ExecutionPolicy Bypass -File {Arg(ScriptPath("Install-NetworkBlock.ps1"))} " +
+            $"-InstallRoot {Arg(install.Root)} -ReportPath {Arg(report)}" + (uninstall ? " -Uninstall" : ""))
+        { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = install.Root };
+        await Task.Run(() =>
+        {
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("Windows PowerShell did not start.");
+            process.WaitForExit();
+        });
+        var state = File.Exists(report) ? JsonDocument.Parse(File.ReadAllText(report)).RootElement : default;
+        if (state.ValueKind != JsonValueKind.Object || SessionFiles.Text(state, "status") != (uninstall ? "uninstalled" : "installed"))
+            throw new SetupStopped((uninstall ? "The firewall rules were not removed: " : "The firewall block was not installed: ") +
+                (state.ValueKind == JsonValueKind.Object ? SessionFiles.Text(state, "failure") : "no report was written."));
+    }
+
+    // Shortcuts from before the rename ("HD2 Beyond The Stars.lnk") into this installation become HellForge ones.
+    [SupportedOSPlatform("windows")]
+    public static void RenameLegacyShortcuts(InstallLayout install)
+    {
+        var target = Path.Combine(install.Root, "HellForge.exe");
+        if (!File.Exists(target)) return;
+        foreach (var folder in new[] { Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), Environment.GetFolderPath(Environment.SpecialFolder.Programs) })
+        {
+            var legacy = Path.Combine(folder, "HD2 Beyond The Stars.lnk");
+            if (string.IsNullOrEmpty(folder) || !File.Exists(legacy)) continue;
+            try
+            {
+                var type = Type.GetTypeFromProgID("WScript.Shell");
+                if (type == null) return;
+                dynamic shell = Activator.CreateInstance(type)!;
+                dynamic old = shell.CreateShortcut(legacy);
+                if (!((string)old.TargetPath).StartsWith(install.Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
+                dynamic shortcut = shell.CreateShortcut(Path.Combine(folder, "HellForge.lnk"));
+                shortcut.TargetPath = target;
+                shortcut.WorkingDirectory = install.Root;
+                shortcut.Description = "HellForge";
+                shortcut.Save();
+                File.Delete(legacy);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException) { }
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    List<string> CreateShortcuts(InstallLayout install)
+    {
+        var made = new List<string>();
+        var target = Path.Combine(install.Root, "HellForge.exe");
+        if (!File.Exists(target)) return made;
+        foreach (var (box, folder, name) in new[] {
+            (DesktopShortcutBox, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Desktop"),
+            (StartMenuShortcutBox, Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Start menu") })
+        {
+            if (box.IsChecked != true || string.IsNullOrEmpty(folder)) continue;
+            var type = Type.GetTypeFromProgID("WScript.Shell") ?? throw new InvalidOperationException("Windows Script Host is unavailable.");
+            dynamic shell = Activator.CreateInstance(type)!;
+            dynamic shortcut = shell.CreateShortcut(Path.Combine(folder, "HellForge.lnk"));
+            shortcut.TargetPath = target;
+            shortcut.WorkingDirectory = install.Root;
+            shortcut.Description = "HellForge";
+            shortcut.Save();
+            made.Add(name);
+        }
+        return made;
+    }
+
+    string ScriptPath(string name) => Path.Combine(paths.ScriptsFolder, name);
+
+    static string PowerShell => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
+
+    // A PowerShell single-quoted string, for paths inside a -Command script.
+    static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+
+    // A Windows command-line argument, for powershell.exe -File and its parameters: Windows splits the command line, not
+    // PowerShell, so single quotes do not group (a path with spaces broke the ownership check, 2026-10-14). Paths cannot
+    // contain double quotes; a trailing backslash is doubled so it does not escape the closing quote.
+    static string Arg(string value) => "\"" + (value.EndsWith('\\') ? value + "\\" : value) + "\"";
+
+    // Runs Windows PowerShell hidden with the installation's temp folder; returns the exit code and the last error line.
+    static Task<(int ExitCode, string Error)> RunPowerShell(string arguments, InstallLayout install) => Task.Run(() =>
+    {
+        var start = new ProcessStartInfo(PowerShell, "-NoProfile -ExecutionPolicy Bypass " + arguments)
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true, WorkingDirectory = install.Root
+        };
+        start.Environment["TEMP"] = start.Environment["TMP"] = Directory.CreateDirectory(install.Temp).FullName;
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Windows PowerShell did not start.");
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        _ = output.Result;
+        var last = error.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0 && !line.StartsWith("At ", StringComparison.Ordinal)) ?? "";
+        return (process.ExitCode, last);
+    });
+
+    sealed class SetupStopped(string message) : Exception(message);
+
+    // Setup waits for something outside it (Steam downloading the supported build); not a failure.
+    sealed class SetupWaiting(string message) : Exception(message);
+}

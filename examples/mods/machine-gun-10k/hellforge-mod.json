@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "id": "skyeshade.machine-gun-10k",
+  "name": "Machine Gun 10k",
+  "version": "1.0.0",
+  "description": "The M-1000 Maxigun's backpack holds 10,000 rounds. The engine replicates a backpack's live ammo count as the network field type deposit_value, 10 bits wide, and clamps every value to 1,023; this mod widens it to 14 bits (up to 16,383), which no Lua mod can do, and sets the backpack's capacity and starting ammo to 10,000 and its resupply to 5,000.",
+  "gameplay": true,
+  "native": {
+    "networkFieldTypes": [
+      { "name": "deposit_value", "expect": { "kind": 1, "bits": 10, "min": 0 }, "bits": 14 }
+    ],
+    "componentWrites": [
+      {
+        "component": "DepositComponentData",
+        "resource": "0x056DE1C5E21E723E",
+        "fields": [
+          { "name": "capacity", "offset": 0, "expect": 1000, "value": 10000 },
+          { "name": "start_amount", "offset": 4, "expect": 1000, "value": 10000 },
+          { "name": "refill_amount", "offset": 8, "expect": 500, "value": 5000 }
+        ]
+      }
+    ]
+  }
+}

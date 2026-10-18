@@ -1,0 +1,1355 @@
+{
+  "format": 1,
+  "build": "25480438",
+  "note": "Armor perk values (HD2Runtime 0.40.1 domains/armor_perks; scripts/ExportPerks.py). Shared by every wearer of the perk; no perk value edit is gameplay-tested in HD2Runtime.",
+  "perks": [
+    {
+      "id": 0,
+      "name": "STANDARD ISSUE",
+      "description": "No additional bonuses.",
+      "fields": {}
+    },
+    {
+      "id": 1,
+      "name": "EXTRA PADDING",
+      "description": "Provides a higher armor rating.",
+      "fields": {
+        "perk.armor_rating": {
+          "label": "Armor rating bonus",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 16,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 1.0,
+          "whole": false,
+          "note": "Uses the worn armor kit, not a passive slot override. Re-equip or respawn after editing.",
+          "hd2r": "ap|1|perk.armor_rating"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "name": "SCOUT",
+      "description": "Markers placed on the map will generate radar scans every #BONUS. Reduces range at which enemies can detect the wearer by #BONUS.",
+      "fields": {
+        "perk.radar_scan_interval": {
+          "label": "Marker radar scan interval",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 32,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0.05,
+          "max": 120,
+          "unit": "seconds",
+          "base": 2.0,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|2|perk.radar_scan_interval"
+        },
+        "perk.enemy_detection_range": {
+          "label": "Detection range multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 33,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.7,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|2|perk.enemy_detection_range"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "name": "FORTIFIED",
+      "description": "Further reduces recoil when crouching or prone by #BONUS. Provides #BONUS resistance to explosive damage.",
+      "fields": {
+        "perk.crouch_prone_recoil": {
+          "label": "Crouched and prone recoil multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 48,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.7,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|3|perk.crouch_prone_recoil"
+        },
+        "perk.explosive_resistance": {
+          "label": "Explosive damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 49,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|3|perk.explosive_resistance"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "name": "ELECTRICAL CONDUIT",
+      "description": "Provides #BONUS resistance to arc damage.",
+      "fields": {
+        "perk.arc_resistance": {
+          "label": "Arc damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 80,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.05,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|5|perk.arc_resistance"
+        },
+        "perk.unknown_8933e7f4": {
+          "label": "Arc status buildup multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 81,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.05,
+          "whole": false,
+          "note": "Scales element-2 status buildup; identification as arc is inferred from its consumers.",
+          "hd2r": "ap|5|perk.unknown_8933e7f4"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "name": "ENGINEERING KIT",
+      "description": "Further reduces recoil when crouching or prone by #BONUS. Increases initial inventory and holding capacity of throwables by #BONUS.",
+      "fields": {
+        "perk.crouch_prone_recoil": {
+          "label": "Crouched and prone recoil multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 96,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.7,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|6|perk.crouch_prone_recoil"
+        },
+        "perk.grenade_capacity": {
+          "label": "Extra grenades",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 97,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 20,
+          "unit": "count",
+          "base": 2.0,
+          "whole": true,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|6|perk.grenade_capacity"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "name": "MED-KIT",
+      "description": "Increases initial inventory and holding capacity of stims by #SIGN#BONUS. Increases stim effect duration by #BONUS.",
+      "fields": {
+        "perk.stim_capacity": {
+          "label": "Extra stims",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 112,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 20,
+          "unit": "count",
+          "base": 2.0,
+          "whole": true,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|7|perk.stim_capacity"
+        },
+        "perk.stim_duration": {
+          "label": "Extra stim duration",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 113,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 120,
+          "unit": "seconds",
+          "base": 2.0,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|7|perk.stim_duration"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "name": "SERVO-ASSISTED",
+      "description": "Increases throwing range by #BONUS. Provides #SIGN#BONUS limb health.",
+      "fields": {
+        "perk.throw_range": {
+          "label": "Throw range multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 128,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.3,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|8|perk.throw_range"
+        },
+        "perk.limb_health": {
+          "label": "Limb health multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 129,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|8|perk.limb_health"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "name": "DEMOCRACY PROTECTS",
+      "description": "#BONUS chance to not die when taking lethal damage. Prevents all damage from bleeding if chest hemorrhages.",
+      "fields": {
+        "perk.lethal_damage_survival": {
+          "label": "Lethal damage survival value",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 144,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.5,
+          "whole": false,
+          "note": "Native perk value, not a percentage. Its gameplay response has not been tested.",
+          "hd2r": "ap|9|perk.lethal_damage_survival"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "name": "REINFORCED EPAULETTES",
+      "description": "Increases reload speed of primary weapons by #BONUS. Gives wearer a #BONUS chance to avoid grievous limb injury. Increases melee damage by #BONUS.",
+      "fields": {
+        "perk.limb_injury_avoidance": {
+          "label": "Limb injury avoidance value",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 161,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.5,
+          "whole": false,
+          "note": "Native perk value, not a percentage. Its gameplay response has not been tested.",
+          "hd2r": "ap|10|perk.limb_injury_avoidance"
+        },
+        "perk.melee_damage": {
+          "label": "Melee damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 162,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.2,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|10|perk.melee_damage"
+        },
+        "perk.stat_13.add": {
+          "label": "Primary reload speed bonus",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 160,
+          "offset": 4,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.0,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|10|perk.stat_13.add"
+        },
+        "perk.stat_13.mul": {
+          "label": "Primary reload speed multiplier",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 160,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.3,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|10|perk.stat_13.mul"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "name": "INFLAMMABLE",
+      "description": "Provides #BONUS damage resistance to fire, allowing bearer to rest assured in their inflammability.",
+      "fields": {
+        "perk.fire_resistance": {
+          "label": "Fire damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 176,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.25,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|11|perk.fire_resistance"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "name": "PEAK PHYSIQUE",
+      "description": "Increases melee damage by #BONUS. Increases weapon ergonomics to reduce drag on weapon movement.",
+      "fields": {
+        "perk.melee_damage": {
+          "label": "Melee damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 192,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.4,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|12|perk.melee_damage"
+        },
+        "perk.weapon_ergonomics": {
+          "label": "Weapon ergonomics bonus",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 193,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 200,
+          "unit": "value",
+          "base": 30.0,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|12|perk.weapon_ergonomics"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "name": "ADVANCED FILTRATION",
+      "description": "Provides #BONUS resistance to gas damage and effects.",
+      "fields": {
+        "perk.gas_resistance": {
+          "label": "Gas damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 208,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.2,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|13|perk.gas_resistance"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "name": "UNFLINCHING",
+      "description": "Helps prevent Helldivers from flinching when hit. Provides a higher armor rating. Markers placed on the map will generate radar scans every #BONUS.",
+      "fields": {
+        "perk.armor_rating": {
+          "label": "Armor rating bonus",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 225,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.5,
+          "whole": false,
+          "note": "Uses the worn armor kit, not a passive slot override. Re-equip or respawn after editing.",
+          "hd2r": "ap|14|perk.armor_rating"
+        },
+        "perk.radar_scan_interval": {
+          "label": "Marker radar scan interval",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 226,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0.05,
+          "max": 120,
+          "unit": "seconds",
+          "base": 2.0,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|14|perk.radar_scan_interval"
+        },
+        "perk.stat_11.add": {
+          "label": "Unmapped stat 11 bonus",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 224,
+          "offset": 4,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.0,
+          "whole": false,
+          "note": "Native stat 11 has a verified reader, but its gameplay meaning is unresolved. Respawn after applying.",
+          "hd2r": "ap|14|perk.stat_11.add"
+        },
+        "perk.stat_11.mul": {
+          "label": "Unmapped stat 11 multiplier",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 224,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.05,
+          "whole": false,
+          "note": "Native stat 11 has a verified reader, but its gameplay meaning is unresolved. Respawn after applying.",
+          "hd2r": "ap|14|perk.stat_11.mul"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "name": "ACCLIMATED",
+      "description": "Provides #BONUS resistance to fire, gas, acid, and electrical damage.",
+      "fields": {
+        "perk.elemental_resistance": {
+          "label": "Elemental damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 240,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|15|perk.elemental_resistance"
+        },
+        "perk.unknown_8933e7f4": {
+          "label": "Arc status buildup multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 241,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.05,
+          "whole": false,
+          "note": "Scales element-2 status buildup; identification as arc is inferred from its consumers.",
+          "hd2r": "ap|15|perk.unknown_8933e7f4"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "name": "SIEGE-READY",
+      "description": "Increases reload speed of primary weapons by #BONUS. Increases ammo capacity of all weapons by #BONUS. Does not affect weapon backpacks.",
+      "fields": {
+        "perk.stat_13.add": {
+          "label": "Primary reload speed bonus",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 256,
+          "offset": 4,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.0,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|16|perk.stat_13.add"
+        },
+        "perk.stat_13.mul": {
+          "label": "Primary reload speed multiplier",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 256,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.3,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|16|perk.stat_13.mul"
+        },
+        "perk.stat_12.add": {
+          "label": "Ammo capacity bonus",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 257,
+          "offset": 4,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.0,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|16|perk.stat_12.add"
+        },
+        "perk.stat_12.mul": {
+          "label": "Ammo capacity multiplier",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 257,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.2,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|16|perk.stat_12.mul"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "name": "INTEGRATED EXPLOSIVES",
+      "description": "Armor explodes #BONUS after the wearer dies. Increases initial inventory and holding capacity of throwables by #BONUS.",
+      "fields": {
+        "perk.grenade_capacity": {
+          "label": "Extra grenades",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 273,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 20,
+          "unit": "count",
+          "base": 2.0,
+          "whole": true,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|17|perk.grenade_capacity"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "name": "GUNSLINGER",
+      "description": "Increases sidearms reload speed by #BONUS. Sidearm draw/holster speed increased by #BONUS. Sidearm recoil reduced by #BONUS.",
+      "fields": {
+        "perk.stat_15.add": {
+          "label": "Sidearm reload speed bonus",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 288,
+          "offset": 4,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.0,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|18|perk.stat_15.add"
+        },
+        "perk.stat_15.mul": {
+          "label": "Sidearm reload speed multiplier",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 288,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.6,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|18|perk.stat_15.mul"
+        },
+        "perk.stat_16.add": {
+          "label": "Sidearm draw and holster speed bonus",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 289,
+          "offset": 4,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.0,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|18|perk.stat_16.add"
+        },
+        "perk.stat_16.mul": {
+          "label": "Sidearm draw and holster speed multiplier",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 289,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.5,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|18|perk.stat_16.mul"
+        },
+        "perk.stat_17.add": {
+          "label": "Sidearm recoil bonus",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 290,
+          "offset": 4,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.0,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|18|perk.stat_17.add"
+        },
+        "perk.stat_17.mul": {
+          "label": "Sidearm recoil multiplier",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 290,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.3,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|18|perk.stat_17.mul"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "name": "ADRENO-DEFIBRILLATOR",
+      "description": "Provides one-time, short-lived resuscitation upon death, given that the Helldiver's body is still intact. Increases stim effect duration by #BONUS. Provides #BONUS resistance to arc damage.",
+      "fields": {
+        "perk.stim_duration": {
+          "label": "Extra stim duration",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 305,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 120,
+          "unit": "seconds",
+          "base": 2.0,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|19|perk.stim_duration"
+        },
+        "perk.arc_resistance": {
+          "label": "Arc damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 306,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|19|perk.arc_resistance"
+        },
+        "perk.unknown_8933e7f4": {
+          "label": "Arc status buildup multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 307,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.05,
+          "whole": false,
+          "note": "Scales element-2 status buildup; identification as arc is inferred from its consumers.",
+          "hd2r": "ap|19|perk.unknown_8933e7f4"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "name": "BALLISTIC PADDING",
+      "description": "Provides #BONUS resistance to chest damage. Provides #BONUS resistance to explosive damage. Prevents all damage from bleeding if chest hemorrhages.",
+      "fields": {
+        "perk.chest_damage_resistance": {
+          "label": "Chest damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 320,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.75,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|20|perk.chest_damage_resistance"
+        },
+        "perk.explosive_resistance": {
+          "label": "Explosive damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 321,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.75,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|20|perk.explosive_resistance"
+        }
+      }
+    },
+    {
+      "id": 21,
+      "name": "DESERT STORMER",
+      "description": "Provides #BONUS resistance to fire, gas, acid, and electrical damage. Increases throwing range by #BONUS.",
+      "fields": {
+        "perk.elemental_resistance": {
+          "label": "Elemental damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 336,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.6,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|21|perk.elemental_resistance"
+        },
+        "perk.unknown_8933e7f4": {
+          "label": "Arc status buildup multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 337,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.06,
+          "whole": false,
+          "note": "Scales element-2 status buildup; identification as arc is inferred from its consumers.",
+          "hd2r": "ap|21|perk.unknown_8933e7f4"
+        },
+        "perk.throw_range": {
+          "label": "Throw range multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 338,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.2,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|21|perk.throw_range"
+        }
+      }
+    },
+    {
+      "id": 31,
+      "name": "FEET FIRST",
+      "description": "Wearer makes #BONUS less noise when moving. Increases point-of-interest identification range by #BONUS. Provides immunity to leg injuries.",
+      "fields": {
+        "perk.movement_noise": {
+          "label": "Movement noise multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 496,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|31|perk.movement_noise"
+        },
+        "perk.poi_identification_range": {
+          "label": "Point of interest identification range multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 497,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.3,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|31|perk.poi_identification_range"
+        },
+        "perk.leg_injury_immunity": {
+          "label": "Leg injury immunity (0 / 1)",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 498,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 1,
+          "unit": "value",
+          "base": 1.0,
+          "whole": true,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|31|perk.leg_injury_immunity"
+        }
+      }
+    },
+    {
+      "id": 32,
+      "name": "REDUCED SIGNATURE",
+      "description": "Wearer makes #BONUS less noise when moving. Reduces range at which enemies can detect the wearer by #BONUS.",
+      "fields": {
+        "perk.movement_noise": {
+          "label": "Movement noise multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 512,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|32|perk.movement_noise"
+        },
+        "perk.enemy_detection_range": {
+          "label": "Detection range multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 513,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.6,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|32|perk.enemy_detection_range"
+        }
+      }
+    },
+    {
+      "id": 33,
+      "name": "ROCK-SOLID",
+      "description": "Increases melee damage by #BONUS. Bearer is more resistant to being knocked prone.",
+      "fields": {
+        "perk.melee_damage": {
+          "label": "Melee damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 528,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.4,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|33|perk.melee_damage"
+        },
+        "perk.knock_prone_resistance": {
+          "label": "Knockdown multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 530,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.7,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|33|perk.knock_prone_resistance"
+        }
+      }
+    },
+    {
+      "id": 34,
+      "name": "SUPPLEMENTAL ADRENALINE",
+      "description": "When the wearer takes damage, they regain some stamina. Provides a higher armor rating.",
+      "fields": {
+        "perk.stamina_when_damaged": {
+          "label": "Stamina gained when damaged",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 544,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 2.0,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|34|perk.stamina_when_damaged"
+        },
+        "perk.armor_rating": {
+          "label": "Armor rating bonus",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 545,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.5,
+          "whole": false,
+          "note": "Uses the worn armor kit, not a passive slot override. Re-equip or respawn after editing.",
+          "hd2r": "ap|34|perk.armor_rating"
+        }
+      }
+    },
+    {
+      "id": 35,
+      "name": "CONCUSSIVE PADDING, REINFORCED",
+      "description": "Provides #BONUS resistance to explosive damage. Provides a higher armor rating.",
+      "fields": {
+        "perk.explosive_resistance": {
+          "label": "Explosive damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 560,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|35|perk.explosive_resistance"
+        },
+        "perk.armor_rating": {
+          "label": "Armor rating bonus",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 561,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.6,
+          "whole": false,
+          "note": "Uses the worn armor kit, not a passive slot override. Re-equip or respawn after editing.",
+          "hd2r": "ap|35|perk.armor_rating"
+        }
+      }
+    },
+    {
+      "id": 36,
+      "name": "CONCUSSIVE PADDING, GRENADIER",
+      "description": "Provides #BONUS resistance to explosive damage. Increases initial inventory and holding capacity of throwables by #BONUS.",
+      "fields": {
+        "perk.explosive_resistance": {
+          "label": "Explosive damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 576,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|36|perk.explosive_resistance"
+        },
+        "perk.grenade_capacity": {
+          "label": "Extra grenades",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 577,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 20,
+          "unit": "count",
+          "base": 2.0,
+          "whole": true,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|36|perk.grenade_capacity"
+        }
+      }
+    },
+    {
+      "id": 37,
+      "name": "CONCUSSIVE PADDING, HAZMAT",
+      "description": "Provides #BONUS resistance to explosive damage. Provides #BONUS resistance to gas damage and effects. Sidearm recoil reduced by #BONUS.",
+      "fields": {
+        "perk.explosive_resistance": {
+          "label": "Explosive damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 592,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|37|perk.explosive_resistance"
+        },
+        "perk.gas_resistance": {
+          "label": "Gas damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 593,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.75,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|37|perk.gas_resistance"
+        },
+        "perk.stat_17.add": {
+          "label": "Sidearm recoil bonus",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 592,
+          "offset": 4,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.0,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|37|perk.stat_17.add"
+        },
+        "perk.stat_17.mul": {
+          "label": "Sidearm recoil multiplier",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 592,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.7,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|37|perk.stat_17.mul"
+        }
+      }
+    },
+    {
+      "id": 38,
+      "name": "OXYGENATOR",
+      "description": "Increases the wearer's walking and running speed. Increases the speed and duration of slides.",
+      "fields": {
+        "perk.movement_speed": {
+          "label": "Jog speed multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 608,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.1,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|38|perk.movement_speed"
+        },
+        "perk.unknown_f6d67313": {
+          "label": "Sprint speed multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 609,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.1,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|38|perk.unknown_f6d67313"
+        }
+      }
+    },
+    {
+      "id": 39,
+      "name": "KINETIC DISPLACEMENT MITIGATION",
+      "description": "Provides #BONUS damage resistance to fire, allowing bearer to rest assured in their inflammability. Gives wearer a #BONUS chance to avoid grievous limb injury. Reduces damage taken from impact and collisions by #BONUS.",
+      "fields": {
+        "perk.fire_resistance": {
+          "label": "Fire damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 624,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.5,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|39|perk.fire_resistance"
+        },
+        "perk.limb_injury_avoidance": {
+          "label": "Limb injury avoidance value",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 625,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.5,
+          "whole": false,
+          "note": "Native perk value, not a percentage. Its gameplay response has not been tested.",
+          "hd2r": "ap|39|perk.limb_injury_avoidance"
+        },
+        "perk.impact_resistance": {
+          "label": "Impact damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 626,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.7,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|39|perk.impact_resistance"
+        }
+      }
+    },
+    {
+      "id": 40,
+      "name": "BLUNT-FORCE MITIGATION",
+      "description": "Bearer is more resistant to being knocked prone. Reduces damage taken from impact and collisions by #BONUS. Provides a higher armor rating.",
+      "fields": {
+        "perk.knock_prone_resistance": {
+          "label": "Knockdown multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 640,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.7,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|40|perk.knock_prone_resistance"
+        },
+        "perk.impact_resistance": {
+          "label": "Impact damage multiplier",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 641,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 0.7,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|40|perk.impact_resistance"
+        },
+        "perk.armor_rating": {
+          "label": "Armor rating bonus",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 642,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.5,
+          "whole": false,
+          "note": "Uses the worn armor kit, not a passive slot override. Re-equip or respawn after editing.",
+          "hd2r": "ap|40|perk.armor_rating"
+        }
+      }
+    },
+    {
+      "id": 41,
+      "name": "TRUE GRIT",
+      "description": "Increases reload speed of support weapons by #BONUS. Slightly increases weapon ergonomics to reduce drag on weapon movement.",
+      "fields": {
+        "perk.weapon_ergonomics": {
+          "label": "Weapon ergonomics bonus",
+          "section": "Perk bonuses",
+          "kind": "PassiveModifier",
+          "record": 657,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 200,
+          "unit": "value",
+          "base": 20.0,
+          "whole": false,
+          "note": "Shared by everyone using this perk. Gameplay effect not yet tested.",
+          "hd2r": "ap|41|perk.weapon_ergonomics"
+        },
+        "perk.stat_14.add": {
+          "label": "Support reload speed bonus",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 656,
+          "offset": 4,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "value",
+          "base": 0.0,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|41|perk.stat_14.add"
+        },
+        "perk.stat_14.mul": {
+          "label": "Support reload speed multiplier",
+          "section": "Stats applied at spawn",
+          "kind": "PassiveStat",
+          "record": 656,
+          "offset": 8,
+          "storage": "f32",
+          "min": 0,
+          "max": 10,
+          "unit": "multiplier",
+          "base": 1.3,
+          "whole": false,
+          "note": "Uses the armor kit worn at spawn. Respawn after applying; passive slot overrides do not select these stats.",
+          "hd2r": "ap|41|perk.stat_14.mul"
+        }
+      }
+    }
+  ]
+}

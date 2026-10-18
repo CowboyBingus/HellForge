@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "weapons": { "AR-23 Liberator": { "rpm": 900, "magazine": 60, "spread": 5 } },
+  "throwables": { "G-12 High Explosive": { "fuse": 2.0 } },
+  "projectiles": { "276": { "speed": 1200, "damage": 54 } },
+  "damage": { "54": { "standard": 150, "durable": 40, "armorPenetration": [4, 4, 4, 4] } },
+  "stratagems": { "Orbital Precision Strike": { "cooldown": 60, "uses": -1 } }
+}

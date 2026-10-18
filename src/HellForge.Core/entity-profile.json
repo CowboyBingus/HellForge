@@ -1,0 +1,470 @@
+{
+ "source": "HD2Runtime schemas/current.lua",
+ "exeSha256": "F5FEE03DCFDB2E553A4752C283590950AC13316B376D8196AA556FF0400D5F06",
+ "gameDllSha256": "2E2C3B7C2500646DADD5F2B4C6E0504DBB7E7896139F64CDDC0D1813C718F51E",
+ "entityRegionSize": 46616576,
+ "mapHeader": "70cac1804c444c440100000070cac18084d002000100000000000000",
+ "mapRows": 4096,
+ "components": {
+  "AbilityWeaponComponentData": {
+   "offset": 27512448,
+   "header": "651c93ff4c444c4401000000651c93ff380400000100000000000000",
+   "index": 267,
+   "indices": 18,
+   "records": 9,
+   "recordOffset": 288,
+   "stride": 88,
+   "type": 4287831141
+  },
+  "ArcWeaponComponentData": {
+   "offset": 27492496,
+   "header": "eda97bb84c444c4401000000eda97bb8b00400000100000000000000",
+   "index": 265,
+   "indices": 20,
+   "records": 11,
+   "recordOffset": 320,
+   "stride": 80,
+   "type": 3095112173
+  },
+  "AvatarComponentData": {
+   "offset": 26015528,
+   "header": "4c20ef404c444c44010000004c20ef40c80600000100000000000000",
+   "index": 232,
+   "indices": 2,
+   "records": 2,
+   "recordOffset": 32,
+   "stride": 852,
+   "type": 1089413196
+  },
+  "BackpackComponentData": {
+   "offset": 776496,
+   "header": "3de9b8494c444c44010000003de9b849680400000100000000000000",
+   "index": 64,
+   "indices": 68,
+   "records": 34,
+   "recordOffset": 1088,
+   "stride": 1,
+   "type": 1236855101
+  },
+  "BeamWeaponComponentData": {
+   "offset": 27516128,
+   "header": "2c1c72f04c444c44010000002c1c72f0200e00000100000000000000",
+   "index": 270,
+   "indices": 46,
+   "records": 24,
+   "recordOffset": 736,
+   "stride": 120,
+   "type": 4034010156
+  },
+  "BehaviorComponentData": {
+   "offset": 29820096,
+   "header": "3d809bba4c444c44010000003d809bbaa0ac00000100000000000000",
+   "index": 284,
+   "indices": 2008,
+   "records": 1005,
+   "recordOffset": 32128,
+   "stride": 12,
+   "type": 3130753085
+  },
+  "BombardmentComponentData": {
+   "offset": 7364032,
+   "header": "d843bccd4c444c4401000000d843bccd001400000100000000000000",
+   "index": 193,
+   "indices": 44,
+   "records": 23,
+   "recordOffset": 704,
+   "stride": 192,
+   "type": 3451667416
+  },
+  "DepositComponentData": {
+   "offset": 7287344,
+   "header": "85ba35c44c444c440100000085ba35c4701500000100000000000000",
+   "index": 177,
+   "indices": 58,
+   "records": 30,
+   "recordOffset": 928,
+   "stride": 152,
+   "type": 3291855493
+  },
+  "DisplacementComponentData": {
+   "offset": 29092304,
+   "header": "463581a74c444c4401000000463581a7100500000100000000000000",
+   "index": 274,
+   "indices": 2,
+   "records": 2,
+   "recordOffset": 32,
+   "stride": 632,
+   "type": 2810262854
+  },
+  "EagleComponentData": {
+   "offset": 46402816,
+   "header": "8bf66f554c444c44010000008bf66f55c80700000100000000000000",
+   "index": 320,
+   "indices": 20,
+   "records": 11,
+   "recordOffset": 320,
+   "stride": 152,
+   "type": 1433400971
+  },
+  "ExplosiveComponentData": {
+   "offset": 27298048,
+   "header": "8c9bcff54c444c44010000008c9bcff5206e00000100000000000000",
+   "index": 255,
+   "indices": 142,
+   "records": 72,
+   "recordOffset": 2272,
+   "stride": 360,
+   "type": 4124023692
+  },
+  "HealthComponentData": {
+   "offset": 7825176,
+   "header": "e35d91b34c444c4401000000e35d91b3807fa9000100000000000000",
+   "index": 224,
+   "indices": 1002,
+   "records": 502,
+   "recordOffset": 16032,
+   "stride": 22096,
+   "type": 3012648419
+  },
+  "HellpodPayloadComponentData": {
+   "offset": 7277064,
+   "header": "3fc0b5dd4c444c44010000003fc0b5ddd01300000100000000000000",
+   "index": 164,
+   "indices": 230,
+   "records": 116,
+   "recordOffset": 3680,
+   "stride": 12,
+   "type": 3719675967
+  },
+  "HellpodRackComponentData": {
+   "offset": 6151256,
+   "header": "56b18ba94c444c440100000056b18ba948a600000100000000000000",
+   "index": 155,
+   "indices": 140,
+   "records": 71,
+   "recordOffset": 2240,
+   "stride": 568,
+   "type": 2844504406
+  },
+  "InventoryComponentData": {
+   "offset": 26614280,
+   "header": "3bb4da8a4c444c44010000003bb4da8ab03b00000100000000000000",
+   "index": 241,
+   "indices": 172,
+   "records": 87,
+   "recordOffset": 2752,
+   "stride": 144,
+   "type": 2329588795
+  },
+  "JumppackComponentData": {
+   "offset": 27491248,
+   "header": "080627544c444c440100000008062754c00400000100000000000000",
+   "index": 264,
+   "indices": 6,
+   "records": 4,
+   "recordOffset": 96,
+   "stride": 280,
+   "type": 1411843592
+  },
+  "LoadoutEntryComponentData": {
+   "offset": 716448,
+   "header": "17f42c4f4c444c440100000017f42c4f483300000100000000000000",
+   "index": 29,
+   "indices": 386,
+   "records": 193,
+   "recordOffset": 6176,
+   "stride": 32,
+   "type": 1328346135
+  },
+  "LoadoutPackageComponentData": {
+   "offset": 681824,
+   "header": "9186857a4c444c44010000009186857a208700000100000000000000",
+   "index": 28,
+   "indices": 1080,
+   "records": 541,
+   "recordOffset": 17280,
+   "stride": 32,
+   "type": 2055571089
+  },
+  "MeleeAttackComponentData": {
+   "offset": 729888,
+   "header": "8df224524c444c44010000008df22452701e00000100000000000000",
+   "index": 32,
+   "indices": 324,
+   "records": 163,
+   "recordOffset": 5184,
+   "stride": 16,
+   "type": 1378153101
+  },
+  "MeleeWeaponComponentData": {
+   "offset": 27513560,
+   "header": "3f00a9bb4c444c44010000003f00a9bba00900000100000000000000",
+   "index": 268,
+   "indices": 22,
+   "records": 11,
+   "recordOffset": 352,
+   "stride": 192,
+   "type": 3148415039
+  },
+  "MountComponentData": {
+   "offset": 29795320,
+   "header": "e0b145384c444c4401000000e0b14538a86000000100000000000000",
+   "index": 283,
+   "indices": 324,
+   "records": 163,
+   "recordOffset": 5184,
+   "stride": 120,
+   "type": 944091616
+  },
+  "OrbitalAbilityComponentData": {
+   "offset": 45329872,
+   "header": "089c6a934c444c4401000000089c6a93b80600000100000000000000",
+   "index": 308,
+   "indices": 4,
+   "records": 3,
+   "recordOffset": 64,
+   "stride": 552,
+   "type": 2473237512
+  },
+  "ProjectileWeaponComponentData": {
+   "offset": 46404840,
+   "header": "681b17454c444c4401000000681b174560b002000100000000000000",
+   "index": 321,
+   "indices": 542,
+   "records": 272,
+   "recordOffset": 8672,
+   "stride": 616,
+   "type": 1159142248
+  },
+  "RechargeComponentData": {
+   "offset": 2081808,
+   "header": "8e87421f4c444c44010000008e87421f700000000100000000000000",
+   "index": 99,
+   "indices": 6,
+   "records": 4,
+   "recordOffset": 96,
+   "stride": 4,
+   "type": 524453774
+  },
+  "RotationComponentData": {
+   "offset": 45337512,
+   "header": "9d187bfc4c444c44010000009d187bfc382e01000100000000000000",
+   "index": 310,
+   "indices": 448,
+   "records": 225,
+   "recordOffset": 7168,
+   "stride": 312,
+   "type": 4235925661
+  },
+  "SeekingMissileComponentData": {
+   "offset": 7369432,
+   "header": "89673abf4c444c440100000089673abf702200000100000000000000",
+   "index": 196,
+   "indices": 58,
+   "records": 29,
+   "recordOffset": 928,
+   "stride": 272,
+   "type": 3208275849
+  },
+  "SensorEyeComponentData": {
+   "offset": 7331256,
+   "header": "6a9b72144c444c44010000006a9b7214185d00000100000000000000",
+   "index": 191,
+   "indices": 626,
+   "records": 314,
+   "recordOffset": 10016,
+   "stride": 44,
+   "type": 343055210
+  },
+  "ShieldComponentData": {
+   "offset": 2073136,
+   "header": "66db54514c444c440100000066db5451601700000100000000000000",
+   "index": 94,
+   "indices": 30,
+   "records": 16,
+   "recordOffset": 480,
+   "stride": 344,
+   "type": 1364515686
+  },
+  "ShieldControllerComponentData": {
+   "offset": 6014024,
+   "header": "0a7833654c444c44010000000a783365280000000100000000000000",
+   "index": 136,
+   "indices": 2,
+   "records": 1,
+   "recordOffset": 32,
+   "stride": 8,
+   "type": 1697871882
+  },
+  "SprayWeaponComponentData": {
+   "offset": 46370040,
+   "header": "2611558e4c444c44010000002611558ee01700000100000000000000",
+   "index": 315,
+   "indices": 46,
+   "records": 24,
+   "recordOffset": 736,
+   "stride": 224,
+   "type": 2387939622
+  },
+  "TagComponentData": {
+   "offset": 205496,
+   "header": "49388b6e4c444c440100000049388b6e40ee04000100000000000000",
+   "index": 3,
+   "indices": 1122,
+   "records": 561,
+   "recordOffset": 17952,
+   "stride": 544,
+   "type": 1854617673
+  },
+  "TargetingComponentData": {
+   "offset": 26108376,
+   "header": "d268092c4c444c4401000000d268092ca06e00000100000000000000",
+   "index": 234,
+   "indices": 590,
+   "records": 295,
+   "recordOffset": 9440,
+   "stride": 64,
+   "type": 738814162
+  },
+  "ThrowableComponentData": {
+   "offset": 27335376,
+   "header": "b5bc16af4c444c4401000000b5bc16af704600000100000000000000",
+   "index": 259,
+   "indices": 92,
+   "records": 46,
+   "recordOffset": 1472,
+   "stride": 360,
+   "type": 2937502901
+  },
+  "ThrowerComponentData": {
+   "offset": 27330672,
+   "header": "d8849aa24c444c4401000000d8849aa2401200000100000000000000",
+   "index": 258,
+   "indices": 10,
+   "records": 6,
+   "recordOffset": 160,
+   "stride": 752,
+   "type": 2728035544
+  },
+  "TurretComponentData": {
+   "offset": 27288104,
+   "header": "9375ba1e4c444c44010000009375ba1e181f00000100000000000000",
+   "index": 248,
+   "indices": 146,
+   "records": 74,
+   "recordOffset": 2336,
+   "stride": 76,
+   "type": 515536275
+  },
+  "UnitComponentData": {
+   "offset": 912200,
+   "header": "4d5737444c444c44010000004d573744405604000100000000000000",
+   "index": 88,
+   "indices": 3382,
+   "records": 1692,
+   "recordOffset": 54112,
+   "stride": 136,
+   "type": 1144477517
+  },
+  "VehicleMotionComponentData": {
+   "offset": 18933432,
+   "header": "4354b6834c444c44010000004354b683b01a00000100000000000000",
+   "index": 225,
+   "indices": 28,
+   "records": 14,
+   "recordOffset": 448,
+   "stride": 456,
+   "type": 2209764419
+  },
+  "WeaponChargeComponentData": {
+   "offset": 7565064,
+   "header": "a135c3ea4c444c4401000000a135c3ea880a00000100000000000000",
+   "index": 204,
+   "indices": 20,
+   "records": 11,
+   "recordOffset": 320,
+   "stride": 216,
+   "type": 3938661793
+  },
+  "WeaponCustomizationComponentData": {
+   "offset": 27519776,
+   "header": "d0f3a8eb4c444c4401000000d0f3a8ebe05d0e000100000000000000",
+   "index": 271,
+   "indices": 382,
+   "records": 192,
+   "recordOffset": 6112,
+   "stride": 4872,
+   "type": 3953718224
+  },
+  "WeaponDataComponentData": {
+   "offset": 26151656,
+   "header": "b1dbe4884c444c4401000000b1dbe488000f07000100000000000000",
+   "index": 236,
+   "indices": 730,
+   "records": 366,
+   "recordOffset": 11680,
+   "stride": 1232,
+   "type": 2296699825
+  },
+  "WeaponHeatComponentData": {
+   "offset": 27493728,
+   "header": "d91c984c4c444c4401000000d91c984c004900000100000000000000",
+   "index": 266,
+   "indices": 58,
+   "records": 30,
+   "recordOffset": 928,
+   "stride": 592,
+   "type": 1285037273
+  },
+  "WeaponLinkedAmmoComponentData": {
+   "offset": 27285400,
+   "header": "d839707a4c444c4401000000d839707a480200000100000000000000",
+   "index": 246,
+   "indices": 12,
+   "records": 7,
+   "recordOffset": 192,
+   "stride": 56,
+   "type": 2054175192
+  },
+  "WeaponMagazineComponentData": {
+   "offset": 528664,
+   "header": "a3888dfb4c444c4401000000a3888dfb20cb00000100000000000000",
+   "index": 5,
+   "indices": 540,
+   "records": 271,
+   "recordOffset": 8640,
+   "stride": 160,
+   "type": 4220356771
+  },
+  "WeaponReloadComponentData": {
+   "offset": 5737840,
+   "header": "4e451d994c444c44010000004e451d99406d00000100000000000000",
+   "index": 113,
+   "indices": 498,
+   "records": 250,
+   "recordOffset": 7968,
+   "stride": 80,
+   "type": 2568832334
+  },
+  "WeaponRoundsComponentData": {
+   "offset": 5766096,
+   "header": "721008664c444c440100000072100866f01000000100000000000000",
+   "index": 117,
+   "indices": 50,
+   "records": 26,
+   "recordOffset": 800,
+   "stride": 136,
+   "type": 1711804530
+  },
+  "WeaponWindUpComponentData": {
+   "offset": 798168,
+   "header": "ee7ece844c444c4401000000ee7ece84880200000100000000000000",
+   "index": 70,
+   "indices": 18,
+   "records": 10,
+   "recordOffset": 288,
+   "stride": 36,
+   "type": 2228125422
+  }
+ }
+}

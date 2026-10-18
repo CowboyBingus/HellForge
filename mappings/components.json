@@ -1,0 +1,4408 @@
+{
+  "format": 1,
+  "build": "25480438",
+  "components": {
+    "ProjectileWeapon": {
+      "component": "ProjectileWeaponComponentData",
+      "index": 321,
+      "stride": 616,
+      "layout": "25480438",
+      "meaning": "a weapon that fires projectiles: what, how fast, its casings and firing sounds",
+      "fields": {
+        "projectile": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "the projectile type it fires (HF_PROJECTILE_...)",
+          "verified": true,
+          "source": "HD2Runtime research/docs/beam-conversion-add-layout-F5FEE03DCFDB.md:50-59; entities_region.bin",
+          "ref": "projectile"
+        },
+        "fire_rate": {
+          "offset": 4,
+          "type": "f32",
+          "count": 3,
+          "meaning": "rounds per minute in its rate slots; the middle one is the default, seeding the live rate at spawn",
+          "verified": true,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:579; stats-schema weapon.fire_rate (+8)"
+        },
+        "zeroing_slots": {
+          "offset": 16,
+          "type": "f32",
+          "count": 3,
+          "meaning": "zeroing distances",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "zeroing_hipfire": {
+          "offset": 28,
+          "type": "f32",
+          "meaning": "zeroing from the hip",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "zeroing_slot": {
+          "offset": 32,
+          "type": "u32",
+          "meaning": "the zeroing slot in use",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "infinite_ammo": {
+          "offset": 36,
+          "type": "u8",
+          "meaning": "1: never runs out",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "projectile_entity": {
+          "offset": 40,
+          "type": "u64",
+          "meaning": "an entity spawned per shot instead of a projectile, or 0",
+          "verified": true,
+          "source": "HD2Runtime research/docs/wasp-rocket-F5FEE03DCFDB.md:31"
+        },
+        "heat_buildup": {
+          "offset": 52,
+          "type": "f32",
+          "meaning": "heat per shot",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "maximum_heat": {
+          "offset": 56,
+          "type": "f32",
+          "meaning": "most heat",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "heat_bleed_speed": {
+          "offset": 60,
+          "type": "f32",
+          "meaning": "heat lost per second",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "heat_bleed_delay": {
+          "offset": 64,
+          "type": "f32",
+          "meaning": "seconds before heat bleeds",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "speed_multiplier": {
+          "offset": 124,
+          "type": "f32",
+          "meaning": "projectile speed multiplier",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "spinup_time": {
+          "offset": 144,
+          "type": "f32",
+          "meaning": "seconds to spin up",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "rpc_synced_fire_events": {
+          "offset": 148,
+          "type": "u8",
+          "meaning": "1: only its creator decides when it fires (networked fire)",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md:40"
+        },
+        "ejection_effect": {
+          "offset": 160,
+          "type": "u64",
+          "meaning": "ejection particle effect",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "ejection_node": {
+          "offset": 168,
+          "type": "u32",
+          "meaning": "the node casings leave from (hash)",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "casing_effect": {
+          "offset": 176,
+          "type": "u64",
+          "meaning": "the casings' particle effect",
+          "verified": true,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:581"
+        },
+        "casing_node": {
+          "offset": 184,
+          "type": "u32",
+          "count": 4,
+          "meaning": "casing nodes (hashes)",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "link_effect": {
+          "offset": 200,
+          "type": "u64",
+          "meaning": "belt links' particle effect",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "link_node": {
+          "offset": 208,
+          "type": "u32",
+          "meaning": "the node belt links leave from (hash)",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "casing_impact_type": {
+          "offset": 212,
+          "type": "u32",
+          "meaning": "the sound casings make landing",
+          "verified": true,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:581"
+        },
+        "casing_audio_event": {
+          "offset": 216,
+          "type": "u32",
+          "meaning": "the casings' audio event",
+          "verified": true,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:581"
+        },
+        "casing_playbacks": {
+          "offset": 220,
+          "type": "u32",
+          "meaning": "how many times the casing sound plays",
+          "verified": true,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:581"
+        },
+        "muzzle_flash": {
+          "offset": 224,
+          "type": "u64",
+          "meaning": "muzzle flash effect",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "shockwave_type": {
+          "offset": 232,
+          "type": "u32",
+          "meaning": "muzzle shockwave",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "use_faint_shockwave": {
+          "offset": 236,
+          "type": "u8",
+          "meaning": "1: a faint shockwave",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "use_midi_event_system": {
+          "offset": 237,
+          "type": "u8",
+          "meaning": "1: posts a note per shot and no loop start (the firing sounds of MIDI weapons)",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md:45-51"
+        },
+        "midi_timing_randomization": {
+          "offset": 240,
+          "type": "f32",
+          "count": 2,
+          "meaning": "MIDI timing randomization",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md; entities_region.bin"
+        },
+        "midi_stop_delay": {
+          "offset": 248,
+          "type": "f32",
+          "meaning": "MIDI stop delay",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "fire_loop_start_audio_event": {
+          "offset": 252,
+          "type": "u32",
+          "meaning": "posted when it starts firing",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md"
+        },
+        "fire_loop_stop_audio_event": {
+          "offset": 256,
+          "type": "u32",
+          "meaning": "posted when it stops firing",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md"
+        },
+        "fire_single_audio_event": {
+          "offset": 260,
+          "type": "u32",
+          "meaning": "posted every shot",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md"
+        },
+        "audio_event_108": {
+          "offset": 264,
+          "type": "u32",
+          "meaning": "an audio event of the firing sounds; its name (38 characters) is not known",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "fire_single_audio_event_mode4": {
+          "offset": 268,
+          "type": "u32",
+          "meaning": "posted every shot in fire mode 4, when set",
+          "verified": true,
+          "source": "HD2Runtime weapon_sound_fields.py:6-7,108"
+        },
+        "fire_single_audio_event_mode7": {
+          "offset": 272,
+          "type": "u32",
+          "meaning": "posted every shot in fire mode 7, when set",
+          "verified": true,
+          "source": "HD2Runtime weapon_sound_fields.py:6-7,108"
+        },
+        "haptics_loop_stop_event": {
+          "offset": 276,
+          "type": "u32",
+          "meaning": "secondary loop-stop event (controller haptics, inferred)",
+          "verified": false,
+          "source": "HD2Runtime research/docs/carrier-weapon-clone-F5FEE03DCFDB.md:254"
+        },
+        "haptics_single_event": {
+          "offset": 280,
+          "type": "u32",
+          "meaning": "secondary per-shot event (controller haptics, inferred)",
+          "verified": false,
+          "source": "HD2Runtime research/docs/carrier-weapon-clone-F5FEE03DCFDB.md:254"
+        },
+        "fire_loop_camera_shake": {
+          "offset": 288,
+          "type": "u64",
+          "meaning": "camera shake while firing",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "fire_loop_camera_shake_radius": {
+          "offset": 296,
+          "type": "f32",
+          "count": 2,
+          "meaning": "its inner and outer radius",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "silenced_fire_loop_start_audio_event": {
+          "offset": 528,
+          "type": "u32",
+          "meaning": "fire_loop_start_audio_event when silenced",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md:46,51"
+        },
+        "silenced_fire_loop_stop_audio_event": {
+          "offset": 532,
+          "type": "u32",
+          "meaning": "fire_loop_stop_audio_event when silenced",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md:46,51"
+        },
+        "silenced_fire_single_audio_event": {
+          "offset": 536,
+          "type": "u32",
+          "meaning": "fire_single_audio_event when silenced",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md:46,51"
+        },
+        "fire_node": {
+          "offset": 540,
+          "type": "u32",
+          "meaning": "the node it fires from (hash of \"muzzle\")",
+          "verified": true,
+          "source": "HD2Runtime research/docs/carrier-weapon-clone-F5FEE03DCFDB.md:115"
+        },
+        "silenced": {
+          "offset": 556,
+          "type": "u8",
+          "meaning": "1: posts the silenced events",
+          "verified": true,
+          "source": "HD2Runtime research/docs/weapon-sounds-F5FEE03DCFDB.md:46,51"
+        },
+        "weapon_function_projectile_type": {
+          "offset": 576,
+          "type": "u32",
+          "meaning": "the projectile type it fires with programmable ammunition on",
+          "verified": true,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json",
+          "ref": "projectile"
+        }
+      },
+      "groups": {
+        "casings": {
+          "meaning": "the casings it ejects: their effect and sounds",
+          "fields": [
+            "casing_effect",
+            "casing_impact_type",
+            "casing_audio_event",
+            "casing_playbacks"
+          ]
+        },
+        "firing_sounds": {
+          "meaning": "every firing sound, silenced or not (HfWeapon.sound_from copies the same)",
+          "fields": [
+            "use_midi_event_system",
+            "midi_timing_randomization",
+            "midi_stop_delay",
+            "fire_loop_start_audio_event",
+            "fire_loop_stop_audio_event",
+            "fire_single_audio_event",
+            "audio_event_108",
+            "fire_single_audio_event_mode4",
+            "fire_single_audio_event_mode7",
+            "haptics_loop_stop_event",
+            "haptics_single_event",
+            "silenced_fire_loop_start_audio_event",
+            "silenced_fire_loop_stop_audio_event",
+            "silenced_fire_single_audio_event",
+            "silenced"
+          ]
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": true,
+      "appliesSource": "artifacts/pelican-registry/HD2R-PELICAN.md:579 (the live rate is seeded from the type at creation)"
+    },
+    "WeaponData": {
+      "component": "WeaponDataComponentData",
+      "index": 236,
+      "stride": 1232,
+      "layout": "25480438",
+      "meaning": "a weapon's handling: recoil, spread, sway, fire modes (the live per-entity copy has another layout)",
+      "fields": {
+        "recoil_drift_horizontal": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "recoil block A, sideways",
+          "verified": true,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:584 (copied at creation, 0x784960); entities_region.bin"
+        },
+        "recoil_drift_vertical": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "recoil block A, up",
+          "verified": true,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:584; entities_region.bin"
+        },
+        "recoil_climb_horizontal": {
+          "offset": 28,
+          "type": "f32",
+          "meaning": "recoil block B, sideways",
+          "verified": true,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:584; entities_region.bin"
+        },
+        "recoil_climb_vertical": {
+          "offset": 32,
+          "type": "f32",
+          "meaning": "recoil block B, up",
+          "verified": true,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:584; entities_region.bin"
+        },
+        "recoil_multiplier_horizontal": {
+          "offset": 60,
+          "type": "f32",
+          "meaning": "sideways recoil multiplier",
+          "verified": false,
+          "source": "stats-schema weapon.recoil_multiplier_horizontal; HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "recoil_multiplier_vertical": {
+          "offset": 64,
+          "type": "f32",
+          "meaning": "upward recoil multiplier",
+          "verified": false,
+          "source": "stats-schema weapon.recoil_multiplier_vertical; HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "horizontal_spread": {
+          "offset": 84,
+          "type": "f32",
+          "meaning": "spread sideways (mrad, full width)",
+          "verified": true,
+          "source": "HD2Runtime domains/pelican.lua (read at 0x7826BD); entities_region.bin"
+        },
+        "vertical_spread": {
+          "offset": 88,
+          "type": "f32",
+          "meaning": "spread up and down (mrad, full width)",
+          "verified": true,
+          "source": "HD2Runtime domains/pelican.lua (read at 0x7826BD); entities_region.bin"
+        },
+        "spread_distribution": {
+          "offset": 92,
+          "type": "u8",
+          "meaning": "how rounds spread within it",
+          "verified": false,
+          "source": "artifacts/pelican-registry/HD2R-PELICAN.md:585; HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "sway": {
+          "offset": 104,
+          "type": "f32",
+          "meaning": "sway multiplier",
+          "verified": false,
+          "source": "stats-schema weapon.sway"
+        },
+        "suppressed": {
+          "offset": 112,
+          "type": "u8",
+          "meaning": "1: suppressed",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "burst_rounds": {
+          "offset": 140,
+          "type": "u32",
+          "meaning": "rounds per burst",
+          "verified": false,
+          "source": "stats-schema fire_mode.burst_rounds"
+        },
+        "fire_modes": {
+          "offset": 144,
+          "type": "u32",
+          "count": 3,
+          "meaning": "fire-mode slots: primary, secondary, tertiary",
+          "verified": false,
+          "source": "stats-schema; HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "weapon_function_left": {
+          "offset": 184,
+          "type": "u32",
+          "meaning": "left weapon function",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "weapon_function_right": {
+          "offset": 188,
+          "type": "u32",
+          "meaning": "right weapon function",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "ergonomics": {
+          "offset": 356,
+          "type": "f32",
+          "meaning": "ergonomics",
+          "verified": false,
+          "source": "stats-schema weapon.ergonomics"
+        },
+        "stationary_while_firing": {
+          "offset": 387,
+          "type": "u8",
+          "meaning": "1: the wielder stands still while firing",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "crosshair_type": {
+          "offset": 400,
+          "type": "u32",
+          "meaning": "crosshair",
+          "verified": false,
+          "source": "stats-schema"
+        }
+      },
+      "groups": {
+        "recoil": {
+          "meaning": "both recoil blocks, sideways and up",
+          "fields": [
+            "recoil_drift_horizontal",
+            "recoil_drift_vertical",
+            "recoil_climb_horizontal",
+            "recoil_climb_vertical"
+          ]
+        },
+        "spread": {
+          "meaning": "spread sideways and up and down",
+          "fields": [
+            "horizontal_spread",
+            "vertical_spread"
+          ]
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": true,
+      "appliesSource": "artifacts/pelican-registry/HD2R-PELICAN.md:584 (recoil blocks copied at creation, 0x784960)"
+    },
+    "WeaponMagazine": {
+      "component": "WeaponMagazineComponentData",
+      "index": 5,
+      "stride": 160,
+      "layout": "25480438",
+      "meaning": "a weapon's magazine: what it loads, how many rounds, spare magazines",
+      "fields": {
+        "magazine_type": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "1: rounds follow pattern",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "pattern": {
+          "offset": 4,
+          "type": "u32",
+          "count": 32,
+          "meaning": "projectile types of successive rounds",
+          "verified": true,
+          "source": "HD2Runtime research_active_projectile_sources.py:62,100"
+        },
+        "first_projectile": {
+          "offset": 132,
+          "type": "u32",
+          "meaning": "the projectile type chambered first",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "capacity": {
+          "offset": 136,
+          "type": "u32",
+          "meaning": "rounds per magazine (a turret's live count is an 11-bit network field: at most 2047)",
+          "verified": true,
+          "source": "stats-schema magazine.capacity; artifacts/pelican-registry/HD2R-PELICAN.md:583"
+        },
+        "starting_magazines": {
+          "offset": 140,
+          "type": "u32",
+          "meaning": "spare magazines at the start",
+          "verified": false,
+          "source": "stats-schema magazine.starting_magazines; HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "magazines_from_supply": {
+          "offset": 144,
+          "type": "u32",
+          "meaning": "spare magazines a resupply gives",
+          "verified": false,
+          "source": "stats-schema magazine.magazines_from_supply; HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "max_magazines": {
+          "offset": 148,
+          "type": "u32",
+          "meaning": "most spare magazines carried",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "reload_threshold": {
+          "offset": 152,
+          "type": "u32",
+          "meaning": "rounds left when it reloads",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "chambered": {
+          "offset": 156,
+          "type": "u8",
+          "meaning": "1: a round is chambered on top of the magazine",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Tag": {
+      "component": "TagComponentData",
+      "index": 3,
+      "stride": 544,
+      "layout": "25480438",
+      "meaning": "what an entity is, as single-bit tags the game tests (kill credit, targeting...)",
+      "fields": {
+        "tags": {
+          "offset": 0,
+          "type": "u64",
+          "count": 64,
+          "meaning": "its tags, a list ending in 0 (the game ORs them into its live mask)",
+          "verified": true,
+          "source": "HD2Runtime research_pelican.py:846-880 (credit check at 0x129C72E); entities_region.bin"
+        },
+        "on_destroyed_tags": {
+          "offset": 512,
+          "type": "u64",
+          "count": 4,
+          "meaning": "tags given when it is destroyed",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Mount": {
+      "component": "MountComponentData",
+      "index": 283,
+      "stride": 120,
+      "layout": "25480438",
+      "meaning": "what an entity carries: five 24-byte slots, each made a child entity at spawn",
+      "fields": {
+        "slot0_entity": {
+          "offset": 0,
+          "type": "u64",
+          "meaning": "slot 0: the entity it carries (its Path; 0: none)",
+          "verified": true,
+          "source": "artifacts/pelican-registry/PELICAN.md:52; HD2Runtime research_vehicle_weapons.py:4,48",
+          "ref": "mount"
+        },
+        "slot0_attach_node": {
+          "offset": 8,
+          "type": "u32",
+          "meaning": "slot 0: the node it attaches to (name hash)",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json; entities_region.bin"
+        },
+        "slot1_entity": {
+          "offset": 24,
+          "type": "u64",
+          "meaning": "slot 1: the entity it carries (its Path; 0: none)",
+          "verified": true,
+          "source": "artifacts/pelican-registry/PELICAN.md:52; HD2Runtime research_vehicle_weapons.py:4,48",
+          "ref": "mount"
+        },
+        "slot1_attach_node": {
+          "offset": 32,
+          "type": "u32",
+          "meaning": "slot 1: the node it attaches to (name hash)",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json; entities_region.bin"
+        },
+        "slot2_entity": {
+          "offset": 48,
+          "type": "u64",
+          "meaning": "slot 2: the entity it carries (its Path; 0: none)",
+          "verified": true,
+          "source": "artifacts/pelican-registry/PELICAN.md:52; HD2Runtime research_vehicle_weapons.py:4,48",
+          "ref": "mount"
+        },
+        "slot2_attach_node": {
+          "offset": 56,
+          "type": "u32",
+          "meaning": "slot 2: the node it attaches to (name hash)",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json; entities_region.bin"
+        },
+        "slot3_entity": {
+          "offset": 72,
+          "type": "u64",
+          "meaning": "slot 3: the entity it carries (its Path; 0: none)",
+          "verified": true,
+          "source": "artifacts/pelican-registry/PELICAN.md:52; HD2Runtime research_vehicle_weapons.py:4,48",
+          "ref": "mount"
+        },
+        "slot3_attach_node": {
+          "offset": 80,
+          "type": "u32",
+          "meaning": "slot 3: the node it attaches to (name hash)",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json; entities_region.bin"
+        },
+        "slot4_entity": {
+          "offset": 96,
+          "type": "u64",
+          "meaning": "slot 4: the entity it carries (its Path; 0: none)",
+          "verified": true,
+          "source": "artifacts/pelican-registry/PELICAN.md:52; HD2Runtime research_vehicle_weapons.py:4,48",
+          "ref": "mount"
+        },
+        "slot4_attach_node": {
+          "offset": 104,
+          "type": "u32",
+          "meaning": "slot 4: the node it attaches to (name hash)",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json; entities_region.bin"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": true,
+      "appliesSource": "artifacts/pelican-registry/HD2R-PELICAN.md (the mount resolves its Path at spawn)"
+    },
+    "Behavior": {
+      "component": "BehaviorComponentData",
+      "index": 284,
+      "stride": 12,
+      "layout": "25480438",
+      "meaning": "the behaviour an entity runs",
+      "fields": {
+        "behavior_id": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "the behaviour (HF_BEHAVIOUR_...; read at creation, 0x510BB0)",
+          "verified": true,
+          "source": "artifacts/pelican-registry/PELICAN.md:107-111; native/mod-loader/registry.c"
+        },
+        "task_cooldown": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "task cooldown (20 s in every record)",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "task_user": {
+          "offset": 8,
+          "type": "u32",
+          "meaning": "task user",
+          "verified": true,
+          "source": "artifacts/pelican-registry/behaviour/DISPATCH.md:224"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": true,
+      "appliesSource": "artifacts/pelican-registry/PELICAN.md:107-111 (read at creation, 0x510BB0)"
+    },
+    "LoadoutPackage": {
+      "component": "LoadoutPackageComponentData",
+      "index": 28,
+      "stride": 32,
+      "layout": "25480438",
+      "meaning": "the package an entity's call-in loads",
+      "fields": {
+        "bundle_tag": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "the package's bundle tag",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "package": {
+          "offset": 8,
+          "type": "u64",
+          "meaning": "the package resource (both Pelicans: HF_PACKAGE_PELICAN_GUNSHIP)",
+          "verified": true,
+          "source": "HD2Runtime research_package_residency.py:5; entities_region.bin"
+        },
+        "audio_resource": {
+          "offset": 16,
+          "type": "u64",
+          "meaning": "an audio resource it loads",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        },
+        "include_default_customizations": {
+          "offset": 24,
+          "type": "u8",
+          "meaning": "1: loads the default customizations too",
+          "verified": false,
+          "source": "HD2Runtime research/component-catalogue-F5FEE03DCFDB.json"
+        }
+      },
+      "applies": "mission",
+      "appliesVerified": false,
+      "appliesSource": "packages load with the mission"
+    },
+    "Deposit": {
+      "component": "DepositComponentData",
+      "index": 177,
+      "stride": 152,
+      "layout": "25480438",
+      "meaning": "what a backpack or drone pack holds: ammunition or magazines",
+      "fields": {
+        "capacity": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "most it holds (backpack ammunition, or drone magazines)",
+          "verified": false,
+          "source": "stats-schema deposit.capacity; examples/mods/machine-gun-10k"
+        },
+        "start_amount": {
+          "offset": 4,
+          "type": "i32",
+          "meaning": "what it holds at call-in",
+          "verified": false,
+          "source": "stats-schema deposit.start_amount"
+        },
+        "refill_amount": {
+          "offset": 8,
+          "type": "u32",
+          "meaning": "what a resupply adds",
+          "verified": false,
+          "source": "stats-schema deposit.refill_amount"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "DifficultySettings": {
+      "component": "DifficultySettings",
+      "row": "difficulty_row",
+      "stride": 816,
+      "layout": "25480438",
+      "meaning": "a difficulty level's settings (levels 1 to 11)",
+      "fields": {
+        "unlock_item": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "the inventory item that unlocks it (must stay)",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "level": {
+          "offset": 4,
+          "type": "u32",
+          "meaning": "its level (must stay)",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "name_text": {
+          "offset": 8,
+          "type": "u32",
+          "meaning": "text id of its name",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "description_text": {
+          "offset": 12,
+          "type": "u32",
+          "meaning": "text id of its description",
+          "verified": false,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "icon_sprite": {
+          "offset": 16,
+          "type": "u64",
+          "meaning": "its icon (an atlas sprite)",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "optional_objectives": {
+          "offset": 40,
+          "type": "u32",
+          "meaning": "optional objectives a mission draws (level 10: 4)",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "major_objectives": {
+          "offset": 44,
+          "type": "u32",
+          "meaning": "secondary objectives (level 10: 1)",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "outposts": {
+          "offset": 52,
+          "type": "u32",
+          "count": 20,
+          "meaning": "enemy outposts of each size",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "encounter_points": {
+          "offset": 228,
+          "type": "f32",
+          "meaning": "spawn budget of patrols, drops and breaches (level 10: 600)",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c",
+          "applies": "now",
+          "appliesVerified": false,
+          "appliesSource": "the director's budgets (read with the patrol fields)"
+        },
+        "guardforce_points": {
+          "offset": 232,
+          "type": "f32",
+          "meaning": "budget of the map's guards (level 10: 600)",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c",
+          "applies": "now",
+          "appliesVerified": false,
+          "appliesSource": "the director's budgets (read with the patrol fields)"
+        },
+        "tech_level": {
+          "offset": 236,
+          "type": "u8",
+          "meaning": "the enemies' tech level (their spawn weights by level)",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "map_radius": {
+          "offset": 240,
+          "type": "f32",
+          "count": 4,
+          "meaning": "playable radius by map size",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c"
+        },
+        "spawner_cooldown": {
+          "offset": 260,
+          "type": "f32",
+          "meaning": "seconds between the shared spawners' waves (level 10: 1.5)",
+          "verified": true,
+          "source": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c",
+          "applies": "now",
+          "appliesVerified": false,
+          "appliesSource": "the shared spawners' wave timer"
+        },
+        "patrol_interval": {
+          "offset": 672,
+          "type": "f32",
+          "count": 3,
+          "meaning": "seconds between roaming patrols: Terminids, Automatons, Illuminate (level 10: 65, 78, 75)",
+          "verified": true,
+          "source": "artifacts/difficulty11/research-patrols; artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c",
+          "applies": "now",
+          "appliesVerified": true,
+          "appliesSource": "artifacts/difficulty11/research-patrols (the director reads the row every frame, 0x94EB90)"
+        },
+        "patrol_cap": {
+          "offset": 684,
+          "type": "u32",
+          "count": 3,
+          "meaning": "most living patrol enemies, per faction (level 10: 41, 39, 48)",
+          "verified": true,
+          "source": "artifacts/difficulty11/research-patrols; artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c",
+          "applies": "now",
+          "appliesVerified": true,
+          "appliesSource": "artifacts/difficulty11/research-patrols (the director reads the row every frame, 0x94EB90)"
+        }
+      },
+      "applies": "mission",
+      "appliesVerified": true,
+      "appliesSource": "artifacts/difficulty11/FINDINGS.md; native/mod-loader/difficulty.c (level generation reads the row when a mission is made)"
+    },
+    "DamageInfo": {
+      "component": "DamageInfo",
+      "row": "damage_row",
+      "stride": 76,
+      "layout": "25480438",
+      "meaning": "a damage type: damage, armour penetration, forces and status effects",
+      "fields": {
+        "id": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "its damage id (must stay)",
+          "verified": true,
+          "source": "native/mod-sdk/hellforge_mod.h damage_row"
+        },
+        "standard_damage": {
+          "offset": 4,
+          "type": "i32",
+          "meaning": "damage to unarmoured parts",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "durable_damage": {
+          "offset": 8,
+          "type": "i32",
+          "meaning": "damage to durable parts",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "armor_penetration": {
+          "offset": 12,
+          "type": "u32",
+          "count": 4,
+          "meaning": "armour penetration: direct, slight, large and extreme angle",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "demolition": {
+          "offset": 28,
+          "type": "u32",
+          "meaning": "demolition force",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "stagger": {
+          "offset": 32,
+          "type": "u32",
+          "meaning": "stagger force",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "push_force": {
+          "offset": 36,
+          "type": "u32",
+          "meaning": "push force",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "status_1_type": {
+          "offset": 44,
+          "type": "u32",
+          "meaning": "the status effect type it applies in slot 1 (0: empty; slots fill from 1, no gaps)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/projectile_terminal_payloads, damage_status_slots, attack_outputs (HD2R Editor payload swaps)",
+          "ref": "status"
+        },
+        "status_1_strength": {
+          "offset": 48,
+          "type": "f32",
+          "meaning": "Status strength (factor)",
+          "verified": false,
+          "source": "stats-schema status_1_strength"
+        },
+        "status_2_type": {
+          "offset": 52,
+          "type": "u32",
+          "meaning": "the status effect type it applies in slot 2 (0: empty; slots fill from 1, no gaps)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/projectile_terminal_payloads, damage_status_slots, attack_outputs (HD2R Editor payload swaps)",
+          "ref": "status"
+        },
+        "status_2_strength": {
+          "offset": 56,
+          "type": "f32",
+          "meaning": "Status strength (factor)",
+          "verified": false,
+          "source": "stats-schema status_2_strength"
+        },
+        "status_3_type": {
+          "offset": 60,
+          "type": "u32",
+          "meaning": "the status effect type it applies in slot 3 (0: empty; slots fill from 1, no gaps)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/projectile_terminal_payloads, damage_status_slots, attack_outputs (HD2R Editor payload swaps)",
+          "ref": "status"
+        },
+        "status_3_strength": {
+          "offset": 64,
+          "type": "f32",
+          "meaning": "Status strength (factor)",
+          "verified": false,
+          "source": "stats-schema status_3_strength"
+        },
+        "status_4_type": {
+          "offset": 68,
+          "type": "u32",
+          "meaning": "the status effect type it applies in slot 4 (0: empty; slots fill from 1, no gaps)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/projectile_terminal_payloads, damage_status_slots, attack_outputs (HD2R Editor payload swaps)",
+          "ref": "status"
+        },
+        "status_4_strength": {
+          "offset": 72,
+          "type": "f32",
+          "meaning": "Status strength (factor)",
+          "verified": false,
+          "source": "stats-schema status_4_strength"
+        }
+      },
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "rows are looked up by id when damage is dealt"
+    },
+    "ProjectileSettings": {
+      "component": "ProjectileSettings",
+      "row": "projectile_row",
+      "stride": 272,
+      "layout": "25480438",
+      "meaning": "a projectile type: flight and the damage it deals",
+      "fields": {
+        "type": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "its projectile type (must stay)",
+          "verified": true,
+          "source": "native/mod-sdk/hellforge_mod.h projectile_row"
+        },
+        "pellet_count": {
+          "offset": 28,
+          "type": "u32",
+          "meaning": "projectiles per shot",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "velocity": {
+          "offset": 32,
+          "type": "f32",
+          "meaning": "speed (m/s)",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "mass": {
+          "offset": 36,
+          "type": "f32",
+          "meaning": "mass (g)",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "drag": {
+          "offset": 40,
+          "type": "f32",
+          "meaning": "drag",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "gravity": {
+          "offset": 44,
+          "type": "f32",
+          "meaning": "gravity factor",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "lifetime": {
+          "offset": 52,
+          "type": "f32",
+          "meaning": "seconds before it expires",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "damage": {
+          "offset": 60,
+          "type": "u32",
+          "meaning": "the damage id its hits deal",
+          "verified": true,
+          "source": "native/mod-sdk/hellforge_mod.h HfProjectile.damage",
+          "ref": "damage"
+        },
+        "penetration_slowdown": {
+          "offset": 64,
+          "type": "f32",
+          "meaning": "slowdown when it penetrates",
+          "verified": false,
+          "source": "stats-schema"
+        },
+        "spawn_effect": {
+          "offset": 72,
+          "type": "u64",
+          "meaning": "its main particle effect",
+          "verified": true,
+          "source": "native/mod-sdk/hellforge_mod.h HfProjectile.spawn_effect"
+        },
+        "flight_effect": {
+          "offset": 112,
+          "type": "u64",
+          "meaning": "its second particle effect (light and trail)",
+          "verified": true,
+          "source": "native/mod-sdk/hellforge_mod.h HfProjectile.flight_effect"
+        },
+        "impact_explosion": {
+          "offset": 144,
+          "type": "u32",
+          "meaning": "the explosion type where it hits (0: none)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/projectile_terminal_payloads, damage_status_slots, attack_outputs (HD2R Editor payload swaps)",
+          "applies": "now",
+          "appliesVerified": true,
+          "appliesSource": "read when the shot hits",
+          "ref": "explosion"
+        },
+        "expiry_explosion": {
+          "offset": 156,
+          "type": "u32",
+          "meaning": "the explosion type when its lifetime runs out (0: none)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/projectile_terminal_payloads, damage_status_slots, attack_outputs (HD2R Editor payload swaps)",
+          "applies": "now",
+          "appliesVerified": true,
+          "appliesSource": "read when the shot expires",
+          "ref": "explosion"
+        }
+      },
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "rows are looked up by type when a projectile spawns"
+    },
+    "StratagemSettings": {
+      "component": "StratagemDefinition",
+      "row": "stratagem_row",
+      "stride": 400,
+      "layout": "25480438",
+      "meaning": "a stratagem: text, input, uses, cooldown, delivery, payload, packages and traits",
+      "fields": {
+        "type": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "its StratagemType (must stay)",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "stable_id": {
+          "offset": 4,
+          "type": "u32",
+          "meaning": "its stable id, which saved loadouts keep (must stay)",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "name_text": {
+          "offset": 40,
+          "type": "u32",
+          "meaning": "text id of its name (upper case)",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "cased_name_text": {
+          "offset": 44,
+          "type": "u32",
+          "meaning": "text id of its name",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "description_text": {
+          "offset": 48,
+          "type": "u32",
+          "meaning": "text id of its description",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "delivery": {
+          "offset": 60,
+          "type": "u32",
+          "meaning": "how it arrives: 0 Eagle, 1 orbital strike, 2 hellpod, 3 Pelican, 4 mission, 5 barrage, 6 SEAF squad, 7 rearm",
+          "verified": true,
+          "source": "HD2Runtime docs/custom-stratagems.md; row data"
+        },
+        "code": {
+          "offset": 64,
+          "type": "u64",
+          "meaning": "pointer to its input's directions (u32: 1 up, 2 right, 3 down, 4 left)",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "code_length": {
+          "offset": 72,
+          "type": "u32",
+          "meaning": "how many directions",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "uses": {
+          "offset": 80,
+          "type": "u32",
+          "meaning": "uses per mission (0xFFFFFFFF unlimited)",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes); stats-schema stratagem.max_uses"
+        },
+        "call_in_time": {
+          "offset": 84,
+          "type": "f32",
+          "meaning": "seconds from the throw to the arrival",
+          "verified": false,
+          "source": "stats-schema stratagem.call_in_time"
+        },
+        "free_spot_radius": {
+          "offset": 88,
+          "type": "f32",
+          "meaning": "radius searched for a free landing spot",
+          "verified": false,
+          "source": "artifacts/pelican-registry/PELICAN.md:186"
+        },
+        "linger": {
+          "offset": 96,
+          "type": "f32",
+          "meaning": "seconds it lingers after activating",
+          "verified": false,
+          "source": "HD2Runtime research_beacon_redirect.py:404"
+        },
+        "cooldown": {
+          "offset": 104,
+          "type": "f32",
+          "meaning": "seconds before it can be called again",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes); stats-schema stratagem.cooldown"
+        },
+        "origin_type": {
+          "offset": 112,
+          "type": "u32",
+          "meaning": "where it comes from (StratagemOriginType)",
+          "verified": false,
+          "source": "type library"
+        },
+        "call_in_type": {
+          "offset": 116,
+          "type": "u32",
+          "meaning": "throw, exact location, LZ beacon or hellpad (StratagemCallInType)",
+          "verified": false,
+          "source": "type library"
+        },
+        "cooldown_type": {
+          "offset": 148,
+          "type": "u32",
+          "meaning": "individual, shared by the team or by the clan (StratagemCooldownType)",
+          "verified": false,
+          "source": "type library"
+        },
+        "payload": {
+          "offset": 152,
+          "type": "u64",
+          "meaning": "pointer to the entities it spawns (u64 resources)",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "payload_count": {
+          "offset": 160,
+          "type": "u32",
+          "meaning": "how many",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "package": {
+          "offset": 168,
+          "type": "u64",
+          "meaning": "the package it loads for the mission",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "icon": {
+          "offset": 176,
+          "type": "u64",
+          "meaning": "its icon resource",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "hud_type": {
+          "offset": 184,
+          "type": "u32",
+          "meaning": "loadout section and ping colour: 0 offensive, 1 mission, 2 supply, 3 defensive, 4 special",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "loadout_weight": {
+          "offset": 188,
+          "type": "u32",
+          "meaning": "loadout slot weight (a loadout keeps at most 4)",
+          "verified": false,
+          "source": "HD2Runtime docs/custom-stratagems.md:506"
+        },
+        "linked_type": {
+          "offset": 200,
+          "type": "u32",
+          "meaning": "a linked StratagemType (an Eagle's: Eagle Rearm)",
+          "verified": false,
+          "source": "HD2Runtime research_eagle_components.py:61"
+        },
+        "beam": {
+          "offset": 212,
+          "type": "u32",
+          "meaning": "beacon beam colour: 1 red, 2 blue, 3 yellow",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "loads_item": {
+          "offset": 248,
+          "type": "u32",
+          "meaning": "a loadout item whose package loads too",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes)"
+        },
+        "traits": {
+          "offset": 260,
+          "type": "u32",
+          "meaning": "its traits (HF_TRAIT_...)",
+          "verified": true,
+          "source": "native/mod-loader/stratagems.c; HD2Runtime type library (StratagemInfo, 400 bytes); artifacts/stratagem-registry/flag_bits.py"
+        },
+        "waves": {
+          "offset": 300,
+          "type": "u32",
+          "meaning": "waves minus one",
+          "verified": false,
+          "source": "artifacts/pelican-registry/PELICAN.md:180"
+        },
+        "beacon_flags": {
+          "offset": 368,
+          "type": "u8",
+          "meaning": "how its thrown beacon lands; bit 1 (2): it sticks only where navmesh is within 0.1 m of the hit and otherwise bounces and is steered toward navmesh (hellpods, vehicles, SEAF; orbitals and Eagles have it clear and stick anywhere); bit 0 not known",
+          "verified": true,
+          "source": "game.dll ball update 0x6A0CF8 / 0x6A1426 and contact 0x6A4025 (the only readers of bit 1); artifacts/difficulty11/research-beacons/NOTES.md; artifacts/stratagem-registry/nav_bit.py"
+        }
+      },
+      "applies": "mission",
+      "appliesVerified": false,
+      "appliesSource": "a loadout's stratagems are set up when the mission starts"
+    },
+    "ExplosionSettings": {
+      "component": "ExplosionSettings",
+      "table": true,
+      "stride": 152,
+      "layout": "25480438",
+      "meaning": "an explosion type",
+      "fields": {
+        "damage": {
+          "offset": 4,
+          "type": "u32",
+          "meaning": "the damage id it deals (DamageInfo)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/projectile_terminal_payloads, damage_status_slots, attack_outputs (HD2R Editor payload swaps)",
+          "ref": "damage"
+        },
+        "inner_radius": {
+          "offset": 16,
+          "type": "f32",
+          "meaning": "Explosion inner radius (meters)",
+          "verified": false,
+          "source": "stats-schema explosion.inner_radius"
+        },
+        "outer_radius": {
+          "offset": 20,
+          "type": "f32",
+          "meaning": "Explosion outer radius (meters)",
+          "verified": false,
+          "source": "stats-schema explosion.outer_radius"
+        },
+        "shockwave_radius": {
+          "offset": 24,
+          "type": "f32",
+          "meaning": "Explosion shockwave radius (meters)",
+          "verified": false,
+          "source": "stats-schema explosion.shockwave_radius"
+        },
+        "shrapnel_count": {
+          "offset": 80,
+          "type": "u32",
+          "meaning": "Shrapnel / bomblet count (projectiles)",
+          "verified": false,
+          "source": "stats-schema explosion.shrapnel_count"
+        }
+      },
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "rows are looked up by type when an explosion happens"
+    },
+    "ArcSettings": {
+      "component": "ArcSettings",
+      "table": true,
+      "stride": 104,
+      "layout": "25480438",
+      "meaning": "an arc type",
+      "fields": {
+        "velocity": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "Arc velocity",
+          "verified": false,
+          "source": "stats-schema arc.velocity"
+        },
+        "range": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Arc range (meters)",
+          "verified": false,
+          "source": "stats-schema arc.range"
+        },
+        "distance_at_max_spread": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "Arc distance at maximum spread (meters)",
+          "verified": false,
+          "source": "stats-schema arc.distance_at_max_spread"
+        },
+        "distance_at_max_spread_first_shot": {
+          "offset": 16,
+          "type": "f32",
+          "meaning": "First-shot distance at maximum spread (meters)",
+          "verified": false,
+          "source": "stats-schema arc.distance_at_max_spread_first_shot"
+        },
+        "max_angle_spread": {
+          "offset": 20,
+          "type": "f32",
+          "meaning": "Arc maximum angle spread (degrees)",
+          "verified": false,
+          "source": "stats-schema arc.max_angle_spread"
+        },
+        "max_angle_spread_first_shot": {
+          "offset": 24,
+          "type": "f32",
+          "meaning": "First-shot maximum angle spread (degrees)",
+          "verified": false,
+          "source": "stats-schema arc.max_angle_spread_first_shot"
+        },
+        "chain_count": {
+          "offset": 28,
+          "type": "u32",
+          "meaning": "Arc maximum chain length (targets)",
+          "verified": false,
+          "source": "stats-schema arc.chain_count"
+        },
+        "max_split": {
+          "offset": 32,
+          "type": "u32",
+          "meaning": "Arc maximum split (targets)",
+          "verified": false,
+          "source": "stats-schema arc.max_split"
+        }
+      },
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "rows are looked up by type when an arc fires"
+    },
+    "BeamSettings": {
+      "component": "BeamSettings",
+      "table": true,
+      "stride": 112,
+      "layout": "25480438",
+      "meaning": "a beam type",
+      "fields": {
+        "radius": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "Beam radius (meters)",
+          "verified": false,
+          "source": "stats-schema beam.radius"
+        },
+        "length": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Beam length (meters)",
+          "verified": false,
+          "source": "stats-schema beam.length"
+        }
+      },
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "rows are looked up by type while a beam fires"
+    },
+    "StatusEffectSettings": {
+      "component": "StatusEffectSettings",
+      "table": true,
+      "stride": 152,
+      "layout": "25480438",
+      "meaning": "a status effect",
+      "fields": {
+        "strength": {
+          "offset": 36,
+          "type": "f32",
+          "meaning": "Status strength (factor)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/booster_authoring (Experimental Infusion status.strength, status_row +36)"
+        },
+        "duration": {
+          "offset": 40,
+          "type": "f32",
+          "meaning": "Status duration (seconds)",
+          "verified": false,
+          "source": "stats-schema status.duration"
+        }
+      },
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "rows are looked up by type when a status applies"
+    },
+    "Health": {
+      "component": "HealthComponentData",
+      "index": 224,
+      "stride": 22096,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "health": {
+          "offset": 0,
+          "type": "i32",
+          "meaning": "entity.health",
+          "verified": false,
+          "source": "stats-schema entity.health"
+        },
+        "armor_118": {
+          "offset": 280,
+          "type": "u32",
+          "meaning": "Main armor (armor_class)",
+          "verified": false,
+          "source": "stats-schema entity.armor"
+        },
+        "explosive_damage_percentage": {
+          "offset": 388,
+          "type": "f32",
+          "meaning": "Explosion damage share",
+          "verified": false,
+          "source": "stats-schema entity.explosive_damage_percentage"
+        },
+        "damage_multiplier_4": {
+          "offset": 716,
+          "type": "u32",
+          "meaning": "Damage multiplier",
+          "verified": false,
+          "source": "stats-schema head:zone.damage_multiplier"
+        },
+        "damage_multiplier_dps_4": {
+          "offset": 720,
+          "type": "u32",
+          "meaning": "Damage over time multiplier",
+          "verified": false,
+          "source": "stats-schema head:zone.damage_multiplier_dps"
+        },
+        "durable_resistance_4": {
+          "offset": 724,
+          "type": "f32",
+          "meaning": "Durable damage share",
+          "verified": false,
+          "source": "stats-schema head:zone.durable_resistance"
+        },
+        "armor": {
+          "offset": 736,
+          "type": "u32",
+          "meaning": "zone.armor",
+          "verified": false,
+          "source": "stats-schema zone.armor"
+        },
+        "health_2f0": {
+          "offset": 752,
+          "type": "i32",
+          "meaning": "zone.health",
+          "verified": false,
+          "source": "stats-schema zone.health"
+        },
+        "affects_main_health": {
+          "offset": 768,
+          "type": "f32",
+          "meaning": "Damage forwarded to main health (ratio)",
+          "verified": false,
+          "source": "stats-schema zone.affects_main_health"
+        },
+        "damage_multiplier_3": {
+          "offset": 1268,
+          "type": "u32",
+          "meaning": "Damage multiplier",
+          "verified": false,
+          "source": "stats-schema body:zone.damage_multiplier"
+        },
+        "damage_multiplier_dps_3": {
+          "offset": 1272,
+          "type": "u32",
+          "meaning": "Damage over time multiplier",
+          "verified": false,
+          "source": "stats-schema body:zone.damage_multiplier_dps"
+        },
+        "durable_resistance_3": {
+          "offset": 1276,
+          "type": "f32",
+          "meaning": "Durable damage share",
+          "verified": false,
+          "source": "stats-schema body:zone.durable_resistance"
+        },
+        "armor_2": {
+          "offset": 1288,
+          "type": "u32",
+          "meaning": "Shield plate armor",
+          "verified": false,
+          "source": "stats-schema zone.armor"
+        },
+        "health_2": {
+          "offset": 1304,
+          "type": "i32",
+          "meaning": "Shield plate health",
+          "verified": false,
+          "source": "stats-schema zone.health"
+        },
+        "zone_1_affects_main_health": {
+          "offset": 1320,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_1.affects_main_health"
+        },
+        "damage_multiplier": {
+          "offset": 1820,
+          "type": "u32",
+          "meaning": "Damage multiplier",
+          "verified": false,
+          "source": "stats-schema arm_left:zone.damage_multiplier"
+        },
+        "damage_multiplier_dps": {
+          "offset": 1824,
+          "type": "u32",
+          "meaning": "Damage over time multiplier",
+          "verified": false,
+          "source": "stats-schema arm_left:zone.damage_multiplier_dps"
+        },
+        "durable_resistance": {
+          "offset": 1828,
+          "type": "f32",
+          "meaning": "Durable damage share",
+          "verified": false,
+          "source": "stats-schema arm_left:zone.durable_resistance"
+        },
+        "zone_2_armor": {
+          "offset": 1840,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_2.armor"
+        },
+        "zone_2_health": {
+          "offset": 1856,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_2.health"
+        },
+        "zone_2_affects_main_health": {
+          "offset": 1872,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_2.affects_main_health"
+        },
+        "damage_multiplier_2": {
+          "offset": 2372,
+          "type": "u32",
+          "meaning": "Damage multiplier",
+          "verified": false,
+          "source": "stats-schema arm_right:zone.damage_multiplier"
+        },
+        "damage_multiplier_dps_2": {
+          "offset": 2376,
+          "type": "u32",
+          "meaning": "Damage over time multiplier",
+          "verified": false,
+          "source": "stats-schema arm_right:zone.damage_multiplier_dps"
+        },
+        "durable_resistance_2": {
+          "offset": 2380,
+          "type": "f32",
+          "meaning": "Durable damage share",
+          "verified": false,
+          "source": "stats-schema arm_right:zone.durable_resistance"
+        },
+        "zone_3_armor": {
+          "offset": 2392,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_3.armor"
+        },
+        "zone_3_health": {
+          "offset": 2408,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_3.health"
+        },
+        "zone_3_affects_main_health": {
+          "offset": 2424,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_3.affects_main_health"
+        },
+        "damage_multiplier_5": {
+          "offset": 2924,
+          "type": "u32",
+          "meaning": "Damage multiplier",
+          "verified": false,
+          "source": "stats-schema leg_left:zone.damage_multiplier"
+        },
+        "damage_multiplier_dps_5": {
+          "offset": 2928,
+          "type": "u32",
+          "meaning": "Damage over time multiplier",
+          "verified": false,
+          "source": "stats-schema leg_left:zone.damage_multiplier_dps"
+        },
+        "durable_resistance_5": {
+          "offset": 2932,
+          "type": "f32",
+          "meaning": "Durable damage share",
+          "verified": false,
+          "source": "stats-schema leg_left:zone.durable_resistance"
+        },
+        "zone_4_armor": {
+          "offset": 2944,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_4.armor"
+        },
+        "zone_4_health": {
+          "offset": 2960,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_4.health"
+        },
+        "zone_4_affects_main_health": {
+          "offset": 2976,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_4.affects_main_health"
+        },
+        "damage_multiplier_6": {
+          "offset": 3476,
+          "type": "u32",
+          "meaning": "Damage multiplier",
+          "verified": false,
+          "source": "stats-schema leg_right:zone.damage_multiplier"
+        },
+        "damage_multiplier_dps_6": {
+          "offset": 3480,
+          "type": "u32",
+          "meaning": "Damage over time multiplier",
+          "verified": false,
+          "source": "stats-schema leg_right:zone.damage_multiplier_dps"
+        },
+        "durable_resistance_6": {
+          "offset": 3484,
+          "type": "f32",
+          "meaning": "Durable damage share",
+          "verified": false,
+          "source": "stats-schema leg_right:zone.durable_resistance"
+        },
+        "zone_5_armor": {
+          "offset": 3496,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_5.armor"
+        },
+        "zone_5_health": {
+          "offset": 3512,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_5.health"
+        },
+        "zone_5_affects_main_health": {
+          "offset": 3528,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_5.affects_main_health"
+        },
+        "zone_6_armor": {
+          "offset": 4048,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_6.armor"
+        },
+        "zone_6_health": {
+          "offset": 4064,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_6.health"
+        },
+        "zone_6_affects_main_health": {
+          "offset": 4080,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_6.affects_main_health"
+        },
+        "zone_7_armor": {
+          "offset": 4600,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_7.armor"
+        },
+        "zone_7_health": {
+          "offset": 4616,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_7.health"
+        },
+        "zone_7_affects_main_health": {
+          "offset": 4632,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_7.affects_main_health"
+        },
+        "zone_8_armor": {
+          "offset": 5152,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_8.armor"
+        },
+        "zone_8_health": {
+          "offset": 5168,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_8.health"
+        },
+        "zone_8_affects_main_health": {
+          "offset": 5184,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_8.affects_main_health"
+        },
+        "zone_9_armor": {
+          "offset": 5704,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_9.armor"
+        },
+        "zone_9_health": {
+          "offset": 5720,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_9.health"
+        },
+        "zone_9_affects_main_health": {
+          "offset": 5736,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_9.affects_main_health"
+        },
+        "zone_10_armor": {
+          "offset": 6256,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_10.armor"
+        },
+        "zone_10_health": {
+          "offset": 6272,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_10.health"
+        },
+        "zone_10_affects_main_health": {
+          "offset": 6288,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_10.affects_main_health"
+        },
+        "zone_11_armor": {
+          "offset": 6808,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_11.armor"
+        },
+        "zone_11_health": {
+          "offset": 6824,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_11.health"
+        },
+        "zone_11_affects_main_health": {
+          "offset": 6840,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_11.affects_main_health"
+        },
+        "zone_12_armor": {
+          "offset": 7360,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_12.armor"
+        },
+        "zone_12_health": {
+          "offset": 7376,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_12.health"
+        },
+        "zone_12_affects_main_health": {
+          "offset": 7392,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_12.affects_main_health"
+        },
+        "zone_13_armor": {
+          "offset": 7912,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_13.armor"
+        },
+        "zone_13_health": {
+          "offset": 7928,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_13.health"
+        },
+        "zone_13_affects_main_health": {
+          "offset": 7944,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_13.affects_main_health"
+        },
+        "zone_14_armor": {
+          "offset": 8464,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_14.armor"
+        },
+        "zone_14_health": {
+          "offset": 8480,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_14.health"
+        },
+        "zone_14_affects_main_health": {
+          "offset": 8496,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_14.affects_main_health"
+        },
+        "zone_15_armor": {
+          "offset": 9016,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_15.armor"
+        },
+        "zone_15_health": {
+          "offset": 9032,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_15.health"
+        },
+        "zone_15_affects_main_health": {
+          "offset": 9048,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_15.affects_main_health"
+        },
+        "zone_16_armor": {
+          "offset": 9568,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_16.armor"
+        },
+        "zone_16_health": {
+          "offset": 9584,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_16.health"
+        },
+        "zone_16_affects_main_health": {
+          "offset": 9600,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_16.affects_main_health"
+        },
+        "zone_17_armor": {
+          "offset": 10120,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_17.armor"
+        },
+        "zone_17_health": {
+          "offset": 10136,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_17.health"
+        },
+        "zone_17_affects_main_health": {
+          "offset": 10152,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_17.affects_main_health"
+        },
+        "zone_18_armor": {
+          "offset": 10672,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_18.armor"
+        },
+        "zone_18_health": {
+          "offset": 10688,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_18.health"
+        },
+        "zone_18_affects_main_health": {
+          "offset": 10704,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_18.affects_main_health"
+        },
+        "zone_19_armor": {
+          "offset": 11224,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_19.armor"
+        },
+        "zone_19_health": {
+          "offset": 11240,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_19.health"
+        },
+        "zone_19_affects_main_health": {
+          "offset": 11256,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_19.affects_main_health"
+        },
+        "zone_20_armor": {
+          "offset": 11776,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_20.armor"
+        },
+        "zone_20_health": {
+          "offset": 11792,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_20.health"
+        },
+        "zone_20_affects_main_health": {
+          "offset": 11808,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_20.affects_main_health"
+        },
+        "zone_21_armor": {
+          "offset": 12328,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_21.armor"
+        },
+        "zone_21_health": {
+          "offset": 12344,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_21.health"
+        },
+        "zone_21_affects_main_health": {
+          "offset": 12360,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_21.affects_main_health"
+        },
+        "zone_22_armor": {
+          "offset": 12880,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_22.armor"
+        },
+        "zone_22_health": {
+          "offset": 12896,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_22.health"
+        },
+        "zone_22_affects_main_health": {
+          "offset": 12912,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_22.affects_main_health"
+        },
+        "zone_23_armor": {
+          "offset": 13432,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_23.armor"
+        },
+        "zone_23_health": {
+          "offset": 13448,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_23.health"
+        },
+        "zone_23_affects_main_health": {
+          "offset": 13464,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_23.affects_main_health"
+        },
+        "zone_24_armor": {
+          "offset": 13984,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_24.armor"
+        },
+        "zone_24_health": {
+          "offset": 14000,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_24.health"
+        },
+        "zone_24_affects_main_health": {
+          "offset": 14016,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_24.affects_main_health"
+        },
+        "zone_25_armor": {
+          "offset": 14536,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_25.armor"
+        },
+        "zone_25_health": {
+          "offset": 14552,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_25.health"
+        },
+        "zone_25_affects_main_health": {
+          "offset": 14568,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_25.affects_main_health"
+        },
+        "zone_26_armor": {
+          "offset": 15088,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_26.armor"
+        },
+        "zone_26_health": {
+          "offset": 15104,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_26.health"
+        },
+        "zone_26_affects_main_health": {
+          "offset": 15120,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_26.affects_main_health"
+        },
+        "zone_27_armor": {
+          "offset": 15640,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_27.armor"
+        },
+        "zone_27_health": {
+          "offset": 15656,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_27.health"
+        },
+        "zone_27_affects_main_health": {
+          "offset": 15672,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_27.affects_main_health"
+        },
+        "zone_28_armor": {
+          "offset": 16192,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_28.armor"
+        },
+        "zone_28_health": {
+          "offset": 16208,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_28.health"
+        },
+        "zone_28_affects_main_health": {
+          "offset": 16224,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_28.affects_main_health"
+        },
+        "zone_29_armor": {
+          "offset": 16744,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_29.armor"
+        },
+        "zone_29_health": {
+          "offset": 16760,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_29.health"
+        },
+        "zone_29_affects_main_health": {
+          "offset": 16776,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_29.affects_main_health"
+        },
+        "zone_30_armor": {
+          "offset": 17296,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_30.armor"
+        },
+        "zone_30_health": {
+          "offset": 17312,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_30.health"
+        },
+        "zone_30_affects_main_health": {
+          "offset": 17328,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_30.affects_main_health"
+        },
+        "zone_31_armor": {
+          "offset": 17848,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_31.armor"
+        },
+        "zone_31_health": {
+          "offset": 17864,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_31.health"
+        },
+        "zone_31_affects_main_health": {
+          "offset": 17880,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_31.affects_main_health"
+        },
+        "zone_32_armor": {
+          "offset": 18400,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_32.armor"
+        },
+        "zone_32_health": {
+          "offset": 18416,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_32.health"
+        },
+        "zone_32_affects_main_health": {
+          "offset": 18432,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_32.affects_main_health"
+        },
+        "zone_33_armor": {
+          "offset": 18952,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_33.armor"
+        },
+        "zone_33_health": {
+          "offset": 18968,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_33.health"
+        },
+        "zone_33_affects_main_health": {
+          "offset": 18984,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_33.affects_main_health"
+        },
+        "zone_34_armor": {
+          "offset": 19504,
+          "type": "u32",
+          "meaning": "Armor",
+          "verified": false,
+          "source": "stats-schema zone_34.armor"
+        },
+        "zone_34_health": {
+          "offset": 19520,
+          "type": "i32",
+          "meaning": "Health",
+          "verified": false,
+          "source": "stats-schema zone_34.health"
+        },
+        "zone_34_affects_main_health": {
+          "offset": 19536,
+          "type": "f32",
+          "meaning": "Affects main health",
+          "verified": false,
+          "source": "stats-schema zone_34.affects_main_health"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Jumppack": {
+      "component": "JumppackComponentData",
+      "index": 264,
+      "stride": 280,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "vertical_launch_velocity": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "jump.vertical_launch_velocity",
+          "verified": false,
+          "source": "stats-schema jump.vertical_launch_velocity"
+        },
+        "launch_duration": {
+          "offset": 24,
+          "type": "f32",
+          "meaning": "jump.launch_duration",
+          "verified": false,
+          "source": "stats-schema jump.launch_duration"
+        },
+        "launch_forward_ratio": {
+          "offset": 32,
+          "type": "f32",
+          "meaning": "jump.launch_forward_ratio",
+          "verified": false,
+          "source": "stats-schema jump.launch_forward_ratio"
+        },
+        "sustain_thrust": {
+          "offset": 36,
+          "type": "f32",
+          "meaning": "jump.sustain_thrust",
+          "verified": false,
+          "source": "stats-schema jump.sustain_thrust"
+        },
+        "sustain_duration": {
+          "offset": 40,
+          "type": "f32",
+          "meaning": "jump.sustain_duration",
+          "verified": false,
+          "source": "stats-schema jump.sustain_duration"
+        },
+        "sustain_forward_ratio": {
+          "offset": 44,
+          "type": "f32",
+          "meaning": "jump.sustain_forward_ratio",
+          "verified": false,
+          "source": "stats-schema jump.sustain_forward_ratio"
+        },
+        "sustain_start_delay": {
+          "offset": 48,
+          "type": "f32",
+          "meaning": "jump.sustain_start_delay",
+          "verified": false,
+          "source": "stats-schema jump.sustain_start_delay"
+        },
+        "sustain_start_speed": {
+          "offset": 52,
+          "type": "f32",
+          "meaning": "jump.sustain_start_speed",
+          "verified": false,
+          "source": "stats-schema jump.sustain_start_speed"
+        },
+        "sustain_cutoff_speed": {
+          "offset": 56,
+          "type": "f32",
+          "meaning": "jump.sustain_cutoff_speed",
+          "verified": false,
+          "source": "stats-schema jump.sustain_cutoff_speed"
+        },
+        "air_control_acceleration": {
+          "offset": 60,
+          "type": "f32",
+          "meaning": "jump.air_control_acceleration",
+          "verified": false,
+          "source": "stats-schema jump.air_control_acceleration"
+        },
+        "duration": {
+          "offset": 156,
+          "type": "f32",
+          "meaning": "hover.duration",
+          "verified": false,
+          "source": "stats-schema hover.duration"
+        },
+        "vertical_acceleration_low_speed": {
+          "offset": 168,
+          "type": "f32",
+          "meaning": "hover.vertical_acceleration_low_speed",
+          "verified": false,
+          "source": "stats-schema hover.vertical_acceleration_low_speed"
+        },
+        "vertical_acceleration_high_speed": {
+          "offset": 172,
+          "type": "f32",
+          "meaning": "hover.vertical_acceleration_high_speed",
+          "verified": false,
+          "source": "stats-schema hover.vertical_acceleration_high_speed"
+        },
+        "air_control_max_speed": {
+          "offset": 176,
+          "type": "f32",
+          "meaning": "jump.air_control_max_speed",
+          "verified": false,
+          "source": "stats-schema jump.air_control_max_speed"
+        },
+        "max_vertical_speed": {
+          "offset": 180,
+          "type": "f32",
+          "meaning": "hover.max_vertical_speed",
+          "verified": false,
+          "source": "stats-schema hover.max_vertical_speed"
+        },
+        "vertical_speed_range_end": {
+          "offset": 196,
+          "type": "f32",
+          "meaning": "hover.vertical_speed_range_end",
+          "verified": false,
+          "source": "stats-schema hover.vertical_speed_range_end"
+        },
+        "fuel_rate_low_speed": {
+          "offset": 200,
+          "type": "f32",
+          "meaning": "hover.fuel_rate_low_speed",
+          "verified": false,
+          "source": "stats-schema hover.fuel_rate_low_speed"
+        },
+        "fuel_rate_high_speed": {
+          "offset": 204,
+          "type": "f32",
+          "meaning": "hover.fuel_rate_high_speed",
+          "verified": false,
+          "source": "stats-schema hover.fuel_rate_high_speed"
+        },
+        "takeoff_forward_speed": {
+          "offset": 208,
+          "type": "f32",
+          "meaning": "jump.takeoff_forward_speed",
+          "verified": false,
+          "source": "stats-schema jump.takeoff_forward_speed"
+        },
+        "takeoff_speed": {
+          "offset": 212,
+          "type": "f32",
+          "meaning": "jump.takeoff_speed",
+          "verified": false,
+          "source": "stats-schema jump.takeoff_speed"
+        },
+        "takeoff_speed_alternate_stance": {
+          "offset": 216,
+          "type": "f32",
+          "meaning": "jump.takeoff_speed_alternate_stance",
+          "verified": false,
+          "source": "stats-schema jump.takeoff_speed_alternate_stance"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Recharge": {
+      "component": "RechargeComponentData",
+      "index": 99,
+      "stride": 4,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "time": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "recharge.time",
+          "verified": false,
+          "source": "stats-schema recharge.time"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Shield": {
+      "component": "ShieldComponentData",
+      "index": 94,
+      "stride": 344,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "radius": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "shield.radius",
+          "verified": false,
+          "source": "stats-schema shield.radius"
+        },
+        "durability": {
+          "offset": 76,
+          "type": "f32",
+          "meaning": "shield.durability",
+          "verified": false,
+          "source": "stats-schema shield.durability"
+        },
+        "recharge_delay": {
+          "offset": 88,
+          "type": "f32",
+          "meaning": "shield.recharge_delay",
+          "verified": false,
+          "source": "stats-schema shield.recharge_delay"
+        },
+        "broken_recharge_delay": {
+          "offset": 92,
+          "type": "f32",
+          "meaning": "shield.broken_recharge_delay",
+          "verified": false,
+          "source": "stats-schema shield.broken_recharge_delay"
+        },
+        "recharge_rate": {
+          "offset": 96,
+          "type": "f32",
+          "meaning": "shield.recharge_rate",
+          "verified": false,
+          "source": "stats-schema shield.recharge_rate"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "HellpodPayload": {
+      "component": "HellpodPayloadComponentData",
+      "index": 164,
+      "stride": 12,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "lifetime": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "Deployed lifetime (seconds)",
+          "verified": false,
+          "source": "stats-schema payload.lifetime"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "SensorEye": {
+      "component": "SensorEyeComponentData",
+      "index": 191,
+      "stride": 44,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "range": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "Targeting range (meters)",
+          "verified": false,
+          "source": "stats-schema targeting.range"
+        },
+        "side_range": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "Side targeting range (meters)",
+          "verified": false,
+          "source": "stats-schema targeting.side_range"
+        },
+        "rear_range": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Rear targeting range (meters)",
+          "verified": false,
+          "source": "stats-schema targeting.rear_range"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Turret": {
+      "component": "TurretComponentData",
+      "index": 248,
+      "stride": 76,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "pitch_speed": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Vertical turn speed (degrees_per_second)",
+          "verified": false,
+          "source": "stats-schema turret.pitch_speed"
+        },
+        "yaw_speed": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "Horizontal turn speed (degrees_per_second)",
+          "verified": false,
+          "source": "stats-schema turret.yaw_speed"
+        },
+        "pitch_yaw_coupling": {
+          "offset": 16,
+          "type": "f32",
+          "meaning": "Pitch slowdown while turning (exponent)",
+          "verified": false,
+          "source": "stats-schema turret.pitch_yaw_coupling"
+        },
+        "pitch_min": {
+          "offset": 20,
+          "type": "f32",
+          "meaning": "Lowest aim angle (degrees)",
+          "verified": false,
+          "source": "stats-schema turret.pitch_min"
+        },
+        "pitch_max": {
+          "offset": 24,
+          "type": "f32",
+          "meaning": "Highest aim angle (degrees)",
+          "verified": false,
+          "source": "stats-schema turret.pitch_max"
+        },
+        "yaw_min": {
+          "offset": 28,
+          "type": "f32",
+          "meaning": "Left traverse limit (degrees)",
+          "verified": false,
+          "source": "stats-schema turret.yaw_min"
+        },
+        "yaw_max": {
+          "offset": 32,
+          "type": "f32",
+          "meaning": "Right traverse limit (degrees)",
+          "verified": false,
+          "source": "stats-schema turret.yaw_max"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "WeaponWindUp": {
+      "component": "WeaponWindUpComponentData",
+      "index": 70,
+      "stride": 36,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "wind_up_seconds": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "Wind-up time (seconds)",
+          "verified": false,
+          "source": "stats-schema windup.wind_up_seconds"
+        },
+        "wind_down_seconds": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "Wind-down time (seconds)",
+          "verified": false,
+          "source": "stats-schema windup.wind_down_seconds"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "BeamWeapon": {
+      "component": "BeamWeaponComponentData",
+      "index": 270,
+      "stride": 120,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "fire_mode": {
+          "offset": 100,
+          "type": "u32",
+          "meaning": "Beam fire mode",
+          "verified": false,
+          "source": "stats-schema beam.fire_mode"
+        },
+        "fire_rate": {
+          "offset": 104,
+          "type": "i32",
+          "meaning": "Beam fire rate (rpm)",
+          "verified": false,
+          "source": "stats-schema beam.fire_rate"
+        },
+        "pulse_beams": {
+          "offset": 108,
+          "type": "i32",
+          "meaning": "Beams per pulse",
+          "verified": false,
+          "source": "stats-schema beam.pulse_beams"
+        },
+        "pulse_seconds": {
+          "offset": 112,
+          "type": "f32",
+          "meaning": "Pulse duration (limits the fire rate)",
+          "verified": false,
+          "source": "stats-schema beam.pulse_seconds"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "WeaponHeat": {
+      "component": "WeaponHeatComponentData",
+      "index": 266,
+      "stride": 592,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "level_1_threshold": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "Heat level 1 threshold (heat_units)",
+          "verified": false,
+          "source": "stats-schema heat.level_1_threshold"
+        },
+        "level_1_self_status": {
+          "offset": 20,
+          "type": "u32",
+          "meaning": "Heat level 1 status on the wielder",
+          "verified": false,
+          "source": "stats-schema heat.level_1_self_status",
+          "ref": "status"
+        },
+        "level_2_threshold": {
+          "offset": 24,
+          "type": "f32",
+          "meaning": "Heat level 2 threshold (heat_units)",
+          "verified": false,
+          "source": "stats-schema heat.level_2_threshold"
+        },
+        "level_2_self_status": {
+          "offset": 44,
+          "type": "u32",
+          "meaning": "Heat level 2 status on the wielder",
+          "verified": false,
+          "source": "stats-schema heat.level_2_self_status",
+          "ref": "status"
+        },
+        "level_3_threshold": {
+          "offset": 48,
+          "type": "f32",
+          "meaning": "Heat level 3 threshold (heat_units)",
+          "verified": false,
+          "source": "stats-schema heat.level_3_threshold"
+        },
+        "level_3_self_status": {
+          "offset": 68,
+          "type": "u32",
+          "meaning": "Heat level 3 status on the wielder",
+          "verified": false,
+          "source": "stats-schema heat.level_3_self_status",
+          "ref": "status"
+        },
+        "fire_rate_multiplier_max": {
+          "offset": 72,
+          "type": "f32",
+          "meaning": "Fire rate multiplier at maximum heat (multiplier)",
+          "verified": false,
+          "source": "stats-schema heat.fire_rate_multiplier_max"
+        },
+        "fire_rate_curve_exponent": {
+          "offset": 76,
+          "type": "f32",
+          "meaning": "Heat fire rate curve exponent (factor)",
+          "verified": false,
+          "source": "stats-schema heat.fire_rate_curve_exponent"
+        },
+        "overheat_lock": {
+          "offset": 80,
+          "type": "u8",
+          "meaning": "Locks at maximum heat",
+          "verified": false,
+          "source": "stats-schema heat.overheat_lock"
+        },
+        "starting": {
+          "offset": 84,
+          "type": "u32",
+          "meaning": "Starting heatsinks (heatsinks)",
+          "verified": false,
+          "source": "stats-schema heatsink.starting"
+        },
+        "from_supply": {
+          "offset": 88,
+          "type": "u32",
+          "meaning": "Heatsinks from supply (heatsinks)",
+          "verified": false,
+          "source": "stats-schema heatsink.from_supply"
+        },
+        "spare": {
+          "offset": 92,
+          "type": "u32",
+          "meaning": "Spare heatsinks (heatsinks)",
+          "verified": false,
+          "source": "stats-schema heatsink.spare"
+        },
+        "capacity": {
+          "offset": 96,
+          "type": "f32",
+          "meaning": "Overheat threshold (heat_units)",
+          "verified": false,
+          "source": "stats-schema heat.capacity"
+        },
+        "overheat_release_threshold": {
+          "offset": 100,
+          "type": "f32",
+          "meaning": "Overheat release threshold (heat_units)",
+          "verified": false,
+          "source": "stats-schema heat.overheat_release_threshold"
+        },
+        "heat_per_shot": {
+          "offset": 116,
+          "type": "f32",
+          "meaning": "Heat per shot (heat_units_per_shot)",
+          "verified": false,
+          "source": "stats-schema heat.heat_per_shot"
+        },
+        "heat_per_second": {
+          "offset": 120,
+          "type": "f32",
+          "meaning": "Heat per second (heat_units_per_second)",
+          "verified": false,
+          "source": "stats-schema heat.heat_per_second"
+        },
+        "cool_per_second": {
+          "offset": 128,
+          "type": "f32",
+          "meaning": "Cooling rate (heat_units_per_second)",
+          "verified": false,
+          "source": "stats-schema heat.cool_per_second"
+        },
+        "cooling_multiplier_hot": {
+          "offset": 132,
+          "type": "f32",
+          "meaning": "Hot environment cooling multiplier (multiplier)",
+          "verified": false,
+          "source": "stats-schema heat.cooling_multiplier_hot"
+        },
+        "cooling_multiplier_cold": {
+          "offset": 136,
+          "type": "f32",
+          "meaning": "Cold environment cooling multiplier (multiplier)",
+          "verified": false,
+          "source": "stats-schema heat.cooling_multiplier_cold"
+        },
+        "cool_per_second_overheated": {
+          "offset": 140,
+          "type": "f32",
+          "meaning": "Cooling while charging or overheated (heat_units_per_second)",
+          "verified": false,
+          "source": "stats-schema heat.cool_per_second_overheated"
+        },
+        "prevent_overheat_cooling": {
+          "offset": 144,
+          "type": "u8",
+          "meaning": "Prevent cooling while charging or overheated",
+          "verified": false,
+          "source": "stats-schema heat.prevent_overheat_cooling"
+        },
+        "firing_charge": {
+          "offset": 148,
+          "type": "f32",
+          "meaning": "Wind-up: charge needed to fire (charge)",
+          "verified": false,
+          "source": "stats-schema heat.firing_charge"
+        },
+        "charge_gain_per_second": {
+          "offset": 152,
+          "type": "f32",
+          "meaning": "Wind-up: charge gained per second (charge_per_second)",
+          "verified": false,
+          "source": "stats-schema heat.charge_gain_per_second"
+        },
+        "charge_loss_per_second": {
+          "offset": 156,
+          "type": "f32",
+          "meaning": "Wind-up: charge lost per second (charge_per_second)",
+          "verified": false,
+          "source": "stats-schema heat.charge_loss_per_second"
+        },
+        "reset_charge_after_shot": {
+          "offset": 160,
+          "type": "u8",
+          "meaning": "Wind-up: charge resets after each shot",
+          "verified": false,
+          "source": "stats-schema heat.reset_charge_after_shot"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Eagle": {
+      "component": "EagleComponentData",
+      "index": 320,
+      "stride": 152,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "airstrike_pattern": {
+          "offset": 20,
+          "type": "i32",
+          "meaning": "Bomb landing pattern (pattern)",
+          "verified": false,
+          "source": "stats-schema eagle.airstrike_pattern"
+        },
+        "attack_angle": {
+          "offset": 28,
+          "type": "f32",
+          "meaning": "Approach angle (degrees)",
+          "verified": false,
+          "source": "stats-schema eagle.attack_angle"
+        },
+        "target_radius": {
+          "offset": 36,
+          "type": "f32",
+          "meaning": "Target search radius (meters)",
+          "verified": false,
+          "source": "stats-schema eagle.target_radius"
+        },
+        "fire_duration": {
+          "offset": 40,
+          "type": "f32",
+          "meaning": "Attack duration (seconds)",
+          "verified": false,
+          "source": "stats-schema eagle.fire_duration"
+        },
+        "drop_interval": {
+          "offset": 44,
+          "type": "f32",
+          "meaning": "Time between bomb releases (seconds)",
+          "verified": false,
+          "source": "stats-schema eagle.drop_interval"
+        },
+        "attack_sweep_length": {
+          "offset": 108,
+          "type": "f32",
+          "meaning": "Strafe sweep length (meters)",
+          "verified": false,
+          "source": "stats-schema eagle.attack_sweep_length"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Thrower": {
+      "component": "ThrowerComponentData",
+      "index": 258,
+      "stride": 752,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "salvos": {
+          "offset": 40,
+          "type": "u32",
+          "meaning": "Mine salvos (count)",
+          "verified": false,
+          "source": "stats-schema minefield.salvos"
+        },
+        "mines_per_salvo": {
+          "offset": 44,
+          "type": "u32",
+          "meaning": "Mines per salvo (count)",
+          "verified": false,
+          "source": "stats-schema minefield.mines_per_salvo"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Bombardment": {
+      "component": "BombardmentComponentData",
+      "index": 193,
+      "stride": 192,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "shells_per_salvo": {
+          "offset": 4,
+          "type": "u32",
+          "meaning": "Shells per salvo (count)",
+          "verified": false,
+          "source": "stats-schema orbital.shells_per_salvo"
+        },
+        "shell_interval": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Time between shells (seconds)",
+          "verified": false,
+          "source": "stats-schema orbital.shell_interval"
+        },
+        "shell_interval_random": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "Time between shells (random part) (seconds)",
+          "verified": false,
+          "source": "stats-schema orbital.shell_interval_random"
+        },
+        "aim_step_min": {
+          "offset": 16,
+          "type": "f32",
+          "meaning": "Random aim step minimum",
+          "verified": false,
+          "source": "stats-schema orbital.aim_step_min"
+        },
+        "aim_step_max": {
+          "offset": 20,
+          "type": "f32",
+          "meaning": "Random aim step maximum",
+          "verified": false,
+          "source": "stats-schema orbital.aim_step_max"
+        },
+        "salvos": {
+          "offset": 24,
+          "type": "u32",
+          "meaning": "Salvos (count)",
+          "verified": false,
+          "source": "stats-schema orbital.salvos"
+        },
+        "salvo_interval": {
+          "offset": 28,
+          "type": "f32",
+          "meaning": "Time between salvos (seconds)",
+          "verified": false,
+          "source": "stats-schema orbital.salvo_interval"
+        },
+        "salvo_interval_random": {
+          "offset": 32,
+          "type": "f32",
+          "meaning": "Time between salvos (random part) (seconds)",
+          "verified": false,
+          "source": "stats-schema orbital.salvo_interval_random"
+        },
+        "scatter": {
+          "offset": 36,
+          "type": "f32",
+          "meaning": "Shell scatter (record_units)",
+          "verified": false,
+          "source": "stats-schema orbital.scatter"
+        },
+        "salvo_scatter": {
+          "offset": 40,
+          "type": "f32",
+          "meaning": "Salvo-centre scatter (record_units)",
+          "verified": false,
+          "source": "stats-schema orbital.salvo_scatter"
+        },
+        "shells": {
+          "offset": 64,
+          "type": "u32",
+          "count": 8,
+          "meaning": "projectile types of its shells, fired in turn; keep them packed (the game counts the non-zero ones when the barrage starts)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 research/offensive-stratagem-runtime-F5FEE03DCFDB.json (the 120mm barrage: 194, 137, 137) and the pack 0.4.1 barrages"
+        },
+        "walking_speed": {
+          "offset": 96,
+          "type": "f32",
+          "meaning": "Walking speed (0 disables)",
+          "verified": false,
+          "source": "stats-schema orbital.walking_speed"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Explosive": {
+      "component": "ExplosiveComponentData",
+      "index": 255,
+      "stride": 360,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "arming_delay": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Arming delay (seconds)",
+          "verified": false,
+          "source": "stats-schema throwable.arming_delay"
+        },
+        "explosion_delay": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "Fuse (explosion delay) (seconds)",
+          "verified": false,
+          "source": "stats-schema throwable.explosion_delay"
+        },
+        "explosion": {
+          "offset": 36,
+          "type": "u32",
+          "meaning": "Explosion payload",
+          "verified": false,
+          "source": "stats-schema throwable.explosion",
+          "ref": "explosion"
+        },
+        "armed_ability": {
+          "offset": 328,
+          "type": "u32",
+          "meaning": "the ability it runs once it is set off (the Solo Silo missile: 2088, its launch)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 research/silo-payload-F5FEE03DCFDB.json; game.dll 0x110F270 (ability 2088) via the ability dispatcher 0x11509E0"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Throwable": {
+      "component": "ThrowableComponentData",
+      "index": 259,
+      "stride": 360,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "launch_distance_min": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "Launch curve minimum distance (meters)",
+          "verified": false,
+          "source": "stats-schema throwable.launch_distance_min"
+        },
+        "launch_distance_max": {
+          "offset": 16,
+          "type": "f32",
+          "meaning": "Launch curve maximum distance (meters)",
+          "verified": false,
+          "source": "stats-schema throwable.launch_distance_max"
+        },
+        "spin_min_x": {
+          "offset": 24,
+          "type": "f32",
+          "meaning": "Spin min X (native_angular_velocity)",
+          "verified": false,
+          "source": "stats-schema throwable.spin_min_x"
+        },
+        "spin_min_y": {
+          "offset": 28,
+          "type": "f32",
+          "meaning": "Spin min Y (native_angular_velocity)",
+          "verified": false,
+          "source": "stats-schema throwable.spin_min_y"
+        },
+        "spin_min_z": {
+          "offset": 32,
+          "type": "f32",
+          "meaning": "Spin min Z (native_angular_velocity)",
+          "verified": false,
+          "source": "stats-schema throwable.spin_min_z"
+        },
+        "spin_max_x": {
+          "offset": 36,
+          "type": "f32",
+          "meaning": "Spin max X (native_angular_velocity)",
+          "verified": false,
+          "source": "stats-schema throwable.spin_max_x"
+        },
+        "spin_max_y": {
+          "offset": 40,
+          "type": "f32",
+          "meaning": "Spin max Y (native_angular_velocity)",
+          "verified": false,
+          "source": "stats-schema throwable.spin_max_y"
+        },
+        "spin_max_z": {
+          "offset": 44,
+          "type": "f32",
+          "meaning": "Spin max Z (native_angular_velocity)",
+          "verified": false,
+          "source": "stats-schema throwable.spin_max_z"
+        },
+        "forward_strength_bonus": {
+          "offset": 72,
+          "type": "f32",
+          "meaning": "Forward movement throw-strength bonus (strength)",
+          "verified": false,
+          "source": "stats-schema throwable.forward_strength_bonus"
+        },
+        "backward_strength_penalty": {
+          "offset": 76,
+          "type": "f32",
+          "meaning": "Backward movement throw-strength penalty (strength)",
+          "verified": false,
+          "source": "stats-schema throwable.backward_strength_penalty"
+        },
+        "starting_count": {
+          "offset": 100,
+          "type": "u32",
+          "meaning": "Starting count (throwables)",
+          "verified": false,
+          "source": "stats-schema throwable.starting_count"
+        },
+        "max_count": {
+          "offset": 104,
+          "type": "u32",
+          "meaning": "Maximum carried (throwables)",
+          "verified": false,
+          "source": "stats-schema throwable.max_count"
+        },
+        "count_from_supply": {
+          "offset": 108,
+          "type": "u32",
+          "meaning": "Count from supply (throwables)",
+          "verified": false,
+          "source": "stats-schema throwable.count_from_supply"
+        },
+        "launch_speed_override": {
+          "offset": 348,
+          "type": "f32",
+          "meaning": "Launch speed override (0 uses curve) (meters_per_second)",
+          "verified": false,
+          "source": "stats-schema throwable.launch_speed_override"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "VehicleMotion": {
+      "component": "VehicleMotionComponentData",
+      "index": 225,
+      "stride": 456,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "steering_response_speed": {
+          "offset": 364,
+          "type": "f32",
+          "meaning": "vehicle.steering_response_speed",
+          "verified": false,
+          "source": "stats-schema vehicle.steering_response_speed"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "WeaponCharge": {
+      "component": "WeaponChargeComponentData",
+      "index": 204,
+      "stride": 216,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "level_1": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "Minimum charge time (seconds)",
+          "verified": false,
+          "source": "stats-schema charge.level_1"
+        },
+        "level_2": {
+          "offset": 24,
+          "type": "f32",
+          "meaning": "Full charge time (seconds)",
+          "verified": false,
+          "source": "stats-schema charge.level_2"
+        },
+        "level_3": {
+          "offset": 48,
+          "type": "f32",
+          "meaning": "Overcharge time (seconds)",
+          "verified": false,
+          "source": "stats-schema charge.level_3"
+        },
+        "minimum_seconds": {
+          "offset": 72,
+          "type": "f32",
+          "meaning": "Projectile speed multiplier at minimum charge (deprecated id) (multiplier)",
+          "verified": false,
+          "source": "stats-schema charge.minimum_seconds"
+        },
+        "maximum_seconds": {
+          "offset": 76,
+          "type": "f32",
+          "meaning": "Projectile speed multiplier at full overcharge (deprecated id) (multiplier)",
+          "verified": false,
+          "source": "stats-schema charge.maximum_seconds"
+        },
+        "damage_multiplier_min": {
+          "offset": 80,
+          "type": "f32",
+          "meaning": "Damage multiplier at minimum charge (multiplier)",
+          "verified": false,
+          "source": "stats-schema charge.damage_multiplier_min"
+        },
+        "damage_multiplier_overcharge": {
+          "offset": 84,
+          "type": "f32",
+          "meaning": "Damage multiplier at full overcharge (multiplier)",
+          "verified": false,
+          "source": "stats-schema charge.damage_multiplier_overcharge"
+        },
+        "penetration_multiplier_min": {
+          "offset": 88,
+          "type": "f32",
+          "meaning": "Armor-penetration multiplier at minimum charge (multiplier)",
+          "verified": false,
+          "source": "stats-schema charge.penetration_multiplier_min"
+        },
+        "penetration_multiplier_overcharge": {
+          "offset": 92,
+          "type": "f32",
+          "meaning": "Armor-penetration multiplier at full overcharge (multiplier)",
+          "verified": false,
+          "source": "stats-schema charge.penetration_multiplier_overcharge"
+        },
+        "arc_distance_multiplier_min": {
+          "offset": 96,
+          "type": "f32",
+          "meaning": "Arc distance multiplier at minimum charge (multiplier)",
+          "verified": false,
+          "source": "stats-schema charge.arc_distance_multiplier_min"
+        },
+        "arc_distance_multiplier_overcharge": {
+          "offset": 100,
+          "type": "f32",
+          "meaning": "Arc distance multiplier at full overcharge (multiplier)",
+          "verified": false,
+          "source": "stats-schema charge.arc_distance_multiplier_overcharge"
+        },
+        "auto_fire_at_full": {
+          "offset": 184,
+          "type": "u8",
+          "meaning": "Fire automatically at full charge",
+          "verified": false,
+          "source": "stats-schema charge.auto_fire_at_full"
+        },
+        "explode_at_overcharge": {
+          "offset": 185,
+          "type": "u8",
+          "meaning": "Explode when the overcharge time is reached",
+          "verified": false,
+          "source": "stats-schema charge.explode_at_overcharge"
+        },
+        "burst_shots": {
+          "offset": 188,
+          "type": "u32",
+          "meaning": "Shots per charge (shots)",
+          "verified": false,
+          "source": "stats-schema charge.burst_shots"
+        },
+        "burst_interval_seconds": {
+          "offset": 192,
+          "type": "f32",
+          "meaning": "Delay between shots of one charge (seconds)",
+          "verified": false,
+          "source": "stats-schema charge.burst_interval_seconds"
+        },
+        "overcharge_limit_seconds": {
+          "offset": 208,
+          "type": "f32",
+          "meaning": "Overcharge hold limit (seconds)",
+          "verified": false,
+          "source": "stats-schema charge.overcharge_limit_seconds"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "WeaponReload": {
+      "component": "WeaponReloadComponentData",
+      "index": 113,
+      "stride": 80,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "duration": {
+          "offset": 56,
+          "type": "f32",
+          "meaning": "Reload duration override (0 = native) (seconds)",
+          "verified": false,
+          "source": "stats-schema reload.duration"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "WeaponRounds": {
+      "component": "WeaponRoundsComponentData",
+      "index": 117,
+      "stride": 136,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "primary_projectile": {
+          "offset": 64,
+          "type": "u32",
+          "meaning": "the projectile type its primary rounds fire",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/attack_outputs sources (member WeaponRounds +64); research/docs/projectile-swap-and-payloads",
+          "ref": "projectile"
+        },
+        "alternate_projectile": {
+          "offset": 68,
+          "type": "u32",
+          "meaning": "the projectile type its alternate rounds fire",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/attack_outputs sources (member WeaponRounds +64); research/docs/projectile-swap-and-payloads",
+          "ref": "projectile"
+        },
+        "feed_capacity_1": {
+          "offset": 72,
+          "type": "f32",
+          "meaning": "Feed 1 capacity (rounds)",
+          "verified": false,
+          "source": "stats-schema rounds.feed_capacity_1"
+        },
+        "feed_capacity_2": {
+          "offset": 76,
+          "type": "f32",
+          "meaning": "Feed 2 capacity (rounds)",
+          "verified": false,
+          "source": "stats-schema rounds.feed_capacity_2"
+        },
+        "spare_rounds": {
+          "offset": 80,
+          "type": "u32",
+          "meaning": "Spare rounds (rounds)",
+          "verified": false,
+          "source": "stats-schema rounds.spare_rounds"
+        },
+        "rounds_from_supply": {
+          "offset": 84,
+          "type": "u32",
+          "meaning": "Rounds from supply (rounds)",
+          "verified": false,
+          "source": "stats-schema rounds.rounds_from_supply"
+        },
+        "starting_rounds": {
+          "offset": 88,
+          "type": "u32",
+          "meaning": "Starting rounds (rounds)",
+          "verified": false,
+          "source": "stats-schema rounds.starting_rounds"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "ArcWeapon": {
+      "component": "ArcWeaponComponentData",
+      "index": 265,
+      "stride": 80,
+      "layout": "25480438",
+      "meaning": "(from the stats schema)",
+      "fields": {
+        "fire_rate": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "Fire rate (rpm)",
+          "verified": false,
+          "source": "stats-schema weapon.fire_rate"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "entities copy their type's records when they are made"
+    },
+    "BoosterSettings": {
+      "component": "BoosterSettings",
+      "table": true,
+      "stride": 56,
+      "layout": "25480438",
+      "meaning": "a booster definition (game.dll +0x32FDA90, a row by the booster's value: HF_BOOSTER_...)",
+      "fields": {
+        "granted_stratagem": {
+          "offset": 4,
+          "type": "u32",
+          "meaning": "The stratagem type the booster grants (15 for Surplus EAT Allocation, else 0)",
+          "verified": false,
+          "source": "HD2Runtime research booster-native-F5FEE03DCFDB.json, sdk/BoosterAuthoringCapabilities.json"
+        },
+        "tuning": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "The booster's tuning value, read where its effect applies (what it is depends on the booster: mappings/boosters.json)",
+          "verified": false,
+          "source": "HD2Runtime research booster-native-F5FEE03DCFDB.json, sdk/BoosterAuthoringCapabilities.json"
+        }
+      },
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "the readers load the value right after the booster's gate (docs/booster-authoring.md); reinforcement budgets apply when the mission sets them up"
+    },
+    "PassiveModifier": {
+      "component": "PassiveModifier",
+      "table": true,
+      "stride": 16,
+      "layout": "25480438",
+      "meaning": "an armor passive's bonus (id: passive * 16 + index; shared by every wearer)",
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "read where the game reads the passive (not gameplay-tested)",
+      "fields": {
+        "key": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "which bonus it is (must stay)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/armor_perk_writes.lua, armor_perks.lua (perk_data.h)"
+        },
+        "value": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "the bonus",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/armor_perk_writes.lua, armor_perks.lua (perk_data.h)"
+        }
+      }
+    },
+    "PassiveStat": {
+      "component": "PassiveStat",
+      "table": true,
+      "stride": 12,
+      "layout": "25480438",
+      "meaning": "an armor passive's stat change (id: passive * 16 + index; applied at spawn from the worn kit)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "HD2Runtime: stats follow the kit worn at spawn",
+      "fields": {
+        "stat": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "which stat (must stay)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/armor_perk_writes.lua, armor_perks.lua (perk_data.h)"
+        },
+        "add": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "added to the stat",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/armor_perk_writes.lua, armor_perks.lua (perk_data.h)"
+        },
+        "mul": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "the stat multiplied by",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 domains/armor_perk_writes.lua, armor_perks.lua (perk_data.h)"
+        }
+      }
+    },
+    "OrbitalAbility": {
+      "component": "OrbitalAbilityComponentData",
+      "index": 308,
+      "stride": 552,
+      "layout": "25480438",
+      "meaning": "OrbitalAbilityComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "duration": {
+          "offset": 460,
+          "type": "f32",
+          "meaning": "Orbital attack duration",
+          "verified": false,
+          "source": "stats-schema orbital.duration"
+        },
+        "movement_speed": {
+          "offset": 468,
+          "type": "f32",
+          "meaning": "Orbital tracking speed",
+          "verified": false,
+          "source": "stats-schema orbital.movement_speed"
+        },
+        "search_radius": {
+          "offset": 472,
+          "type": "f32",
+          "meaning": "Orbital search radius",
+          "verified": false,
+          "source": "stats-schema orbital.search_radius"
+        },
+        "tick_interval": {
+          "offset": 480,
+          "type": "f32",
+          "meaning": "Orbital damage tick interval",
+          "verified": false,
+          "source": "stats-schema orbital.tick_interval"
+        },
+        "fire_delay": {
+          "offset": 540,
+          "type": "f32",
+          "meaning": "Shot delay",
+          "verified": false,
+          "source": "stats-schema orbital.fire_delay"
+        },
+        "retarget_interval": {
+          "offset": 544,
+          "type": "f32",
+          "meaning": "Target re-search interval",
+          "verified": false,
+          "source": "stats-schema orbital.retarget_interval"
+        }
+      }
+    },
+    "Rotation": {
+      "component": "RotationComponentData",
+      "index": 310,
+      "stride": 312,
+      "layout": "25480438",
+      "meaning": "RotationComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "rotation_turn_speed": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "Turn speed",
+          "verified": false,
+          "source": "stats-schema rotation.turn_speed"
+        },
+        "rotation_acceleration": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "Acceleration",
+          "verified": false,
+          "source": "stats-schema rotation.acceleration"
+        },
+        "rotation_deceleration": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Deceleration",
+          "verified": false,
+          "source": "stats-schema rotation.deceleration"
+        }
+      }
+    },
+    "Displacement": {
+      "component": "DisplacementComponentData",
+      "index": 274,
+      "stride": 632,
+      "layout": "25480438",
+      "meaning": "DisplacementComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "distance": {
+          "offset": 120,
+          "type": "f32",
+          "meaning": "warp.distance",
+          "verified": false,
+          "source": "stats-schema warp.distance"
+        },
+        "upward_bias": {
+          "offset": 128,
+          "type": "f32",
+          "meaning": "warp.upward_bias",
+          "verified": false,
+          "source": "stats-schema warp.upward_bias"
+        },
+        "downward_bias": {
+          "offset": 132,
+          "type": "f32",
+          "meaning": "warp.downward_bias",
+          "verified": false,
+          "source": "stats-schema warp.downward_bias"
+        },
+        "safe_heat_threshold": {
+          "offset": 140,
+          "type": "f32",
+          "meaning": "warp.safe_heat_threshold",
+          "verified": false,
+          "source": "stats-schema warp.safe_heat_threshold"
+        },
+        "unsafe_heat_threshold": {
+          "offset": 144,
+          "type": "f32",
+          "meaning": "warp.unsafe_heat_threshold",
+          "verified": false,
+          "source": "stats-schema warp.unsafe_heat_threshold"
+        },
+        "heat_per_use": {
+          "offset": 148,
+          "type": "f32",
+          "meaning": "warp.heat_per_use",
+          "verified": false,
+          "source": "stats-schema warp.heat_per_use"
+        },
+        "heat_cooldown_per_second": {
+          "offset": 152,
+          "type": "f32",
+          "meaning": "warp.heat_cooldown_per_second",
+          "verified": false,
+          "source": "stats-schema warp.heat_cooldown_per_second"
+        },
+        "head_injury_damage": {
+          "offset": 164,
+          "type": "f32",
+          "meaning": "warp.head_injury_damage",
+          "verified": false,
+          "source": "stats-schema warp.head_injury_damage"
+        },
+        "left_arm_injury_damage": {
+          "offset": 188,
+          "type": "f32",
+          "meaning": "warp.left_arm_injury_damage",
+          "verified": false,
+          "source": "stats-schema warp.left_arm_injury_damage"
+        },
+        "right_arm_injury_damage": {
+          "offset": 212,
+          "type": "f32",
+          "meaning": "warp.right_arm_injury_damage",
+          "verified": false,
+          "source": "stats-schema warp.right_arm_injury_damage"
+        },
+        "left_leg_injury_damage": {
+          "offset": 236,
+          "type": "f32",
+          "meaning": "warp.left_leg_injury_damage",
+          "verified": false,
+          "source": "stats-schema warp.left_leg_injury_damage"
+        },
+        "right_leg_injury_damage": {
+          "offset": 260,
+          "type": "f32",
+          "meaning": "warp.right_leg_injury_damage",
+          "verified": false,
+          "source": "stats-schema warp.right_leg_injury_damage"
+        }
+      }
+    },
+    "SeekingMissile": {
+      "component": "SeekingMissileComponentData",
+      "index": 196,
+      "stride": 272,
+      "layout": "25480438",
+      "meaning": "SeekingMissileComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "guidance_delay": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "Function missile guidance delay",
+          "verified": false,
+          "source": "stats-schema function_missile.guidance_delay"
+        },
+        "max_lifetime": {
+          "offset": 64,
+          "type": "f32",
+          "meaning": "Missile max lifetime",
+          "verified": false,
+          "source": "stats-schema missile.max_lifetime"
+        },
+        "starting_speed": {
+          "offset": 68,
+          "type": "f32",
+          "meaning": "Missile starting speed",
+          "verified": false,
+          "source": "stats-schema missile.starting_speed"
+        },
+        "minimum_speed": {
+          "offset": 72,
+          "type": "f32",
+          "meaning": "Missile minimum speed",
+          "verified": false,
+          "source": "stats-schema missile.minimum_speed"
+        },
+        "preferred_speed": {
+          "offset": 76,
+          "type": "f32",
+          "meaning": "Missile preferred speed",
+          "verified": false,
+          "source": "stats-schema missile.preferred_speed"
+        },
+        "acceleration": {
+          "offset": 80,
+          "type": "f32",
+          "meaning": "Missile acceleration",
+          "verified": false,
+          "source": "stats-schema missile.acceleration"
+        },
+        "max_angle_to_target": {
+          "offset": 84,
+          "type": "f32",
+          "meaning": "Missile turn blend angle",
+          "verified": false,
+          "source": "stats-schema missile.max_angle_to_target"
+        },
+        "turn_rate_at_max_angle": {
+          "offset": 88,
+          "type": "f32",
+          "meaning": "Missile turn rate at the blend angle",
+          "verified": false,
+          "source": "stats-schema missile.turn_rate_at_max_angle"
+        },
+        "turn_rate_aligned": {
+          "offset": 92,
+          "type": "f32",
+          "meaning": "Missile turn rate on target",
+          "verified": false,
+          "source": "stats-schema missile.turn_rate_aligned"
+        }
+      }
+    },
+    "LoadoutEntry": {
+      "component": "LoadoutEntryComponentData",
+      "index": 29,
+      "stride": 32,
+      "layout": "25480438",
+      "meaning": "LoadoutEntryComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "traits_1": {
+          "offset": 12,
+          "type": "u32",
+          "meaning": "Trait 1",
+          "verified": false,
+          "source": "stats-schema presentation.traits.1"
+        },
+        "traits_2": {
+          "offset": 16,
+          "type": "u32",
+          "meaning": "Trait 2",
+          "verified": false,
+          "source": "stats-schema presentation.traits.2"
+        },
+        "traits_3": {
+          "offset": 20,
+          "type": "u32",
+          "meaning": "Trait 3",
+          "verified": false,
+          "source": "stats-schema presentation.traits.3"
+        },
+        "traits_4": {
+          "offset": 24,
+          "type": "u32",
+          "meaning": "Trait 4",
+          "verified": false,
+          "source": "stats-schema presentation.traits.4"
+        },
+        "traits_5": {
+          "offset": 28,
+          "type": "u32",
+          "meaning": "Trait 5",
+          "verified": false,
+          "source": "stats-schema presentation.traits.5"
+        }
+      }
+    },
+    "HellpodRack": {
+      "component": "HellpodRackComponentData",
+      "index": 155,
+      "stride": 568,
+      "layout": "25480438",
+      "meaning": "HellpodRackComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "slot0_item": {
+          "offset": 0,
+          "type": "u64",
+          "meaning": "slot 0: the entity it delivers (0: none)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+        },
+        "slot1_item": {
+          "offset": 64,
+          "type": "u64",
+          "meaning": "slot 1: the entity it delivers (0: none)",
+          "verified": true,
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+        },
+        "slot2_item": {
+          "offset": 128,
+          "type": "u64",
+          "meaning": "slot 2: the entity it delivers (0: none)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+        },
+        "slot3_item": {
+          "offset": 192,
+          "type": "u64",
+          "meaning": "slot 3: the entity it delivers (0: none)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+        },
+        "slot4_item": {
+          "offset": 256,
+          "type": "u64",
+          "meaning": "slot 4: the entity it delivers (0: none)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+        },
+        "slot5_item": {
+          "offset": 320,
+          "type": "u64",
+          "meaning": "slot 5: the entity it delivers (0: none)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+        },
+        "slot6_item": {
+          "offset": 384,
+          "type": "u64",
+          "meaning": "slot 6: the entity it delivers (0: none)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+        },
+        "slot7_item": {
+          "offset": 448,
+          "type": "u64",
+          "meaning": "slot 7: the entity it delivers (0: none)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+        },
+        "spawn_count": {
+          "offset": 556,
+          "type": "u32",
+          "meaning": "Items spawned",
+          "verified": false,
+          "source": "stats-schema payload.spawn_count"
+        }
+      }
+    },
+    "Avatar": {
+      "component": "AvatarComponentData",
+      "index": 232,
+      "stride": 852,
+      "layout": "25480438",
+      "meaning": "AvatarComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "direction_factor": {
+          "offset": 4,
+          "type": "f32",
+          "meaning": "Strafe and backpedal factor",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.direction_factor"
+        },
+        "aim": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Aiming",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.aim"
+        },
+        "walk": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "Walk",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.walk"
+        },
+        "jog": {
+          "offset": 16,
+          "type": "f32",
+          "meaning": "Jog",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.jog"
+        },
+        "sprint": {
+          "offset": 20,
+          "type": "f32",
+          "meaning": "Sprint",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.sprint"
+        },
+        "sprint_exhausted": {
+          "offset": 24,
+          "type": "f32",
+          "meaning": "Sprint (exhausted)",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.sprint_exhausted"
+        },
+        "crouch_aim": {
+          "offset": 28,
+          "type": "f32",
+          "meaning": "Crouched, aiming",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.crouch_aim"
+        },
+        "crouch_walk": {
+          "offset": 32,
+          "type": "f32",
+          "meaning": "Crouched, walking",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.crouch_walk"
+        },
+        "crouch_jog": {
+          "offset": 36,
+          "type": "f32",
+          "meaning": "Crouched, jogging",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.crouch_jog"
+        },
+        "crouch_sprint": {
+          "offset": 40,
+          "type": "f32",
+          "meaning": "Crouched, sprinting",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.crouch_sprint"
+        },
+        "prone": {
+          "offset": 44,
+          "type": "f32",
+          "meaning": "Prone",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.prone"
+        },
+        "swim": {
+          "offset": 48,
+          "type": "f32",
+          "meaning": "Swimming",
+          "verified": false,
+          "source": "stats-schema helldiver.speed.swim"
+        },
+        "sprint_duration": {
+          "offset": 52,
+          "type": "f32",
+          "meaning": "Sprint duration",
+          "verified": false,
+          "source": "stats-schema helldiver.stamina.sprint_duration"
+        },
+        "recover_time_standing": {
+          "offset": 60,
+          "type": "f32",
+          "meaning": "Recovery standing",
+          "verified": false,
+          "source": "stats-schema helldiver.stamina.recover_time_standing"
+        },
+        "recover_time_crouching": {
+          "offset": 64,
+          "type": "f32",
+          "meaning": "Recovery crouching",
+          "verified": false,
+          "source": "stats-schema helldiver.stamina.recover_time_crouching"
+        },
+        "recover_time_prone": {
+          "offset": 68,
+          "type": "f32",
+          "meaning": "Recovery prone",
+          "verified": false,
+          "source": "stats-schema helldiver.stamina.recover_time_prone"
+        },
+        "recover_delay": {
+          "offset": 72,
+          "type": "f32",
+          "meaning": "Recovery delay",
+          "verified": false,
+          "source": "stats-schema helldiver.stamina.recover_delay"
+        },
+        "cost_jump": {
+          "offset": 76,
+          "type": "f32",
+          "meaning": "Cost of a jump",
+          "verified": false,
+          "source": "stats-schema helldiver.stamina.cost_jump"
+        },
+        "cost_dodge": {
+          "offset": 80,
+          "type": "f32",
+          "meaning": "Cost of a dive",
+          "verified": false,
+          "source": "stats-schema helldiver.stamina.cost_dodge"
+        },
+        "cost_climb": {
+          "offset": 88,
+          "type": "f32",
+          "meaning": "Cost of a climb",
+          "verified": false,
+          "source": "stats-schema helldiver.stamina.cost_climb"
+        },
+        "cost_slide": {
+          "offset": 92,
+          "type": "f32",
+          "meaning": "Cost of a slide",
+          "verified": false,
+          "source": "stats-schema helldiver.stamina.cost_slide"
+        }
+      }
+    },
+    "Inventory": {
+      "component": "InventoryComponentData",
+      "index": 241,
+      "stride": 144,
+      "layout": "25480438",
+      "meaning": "InventoryComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "stims_from_supply": {
+          "offset": 52,
+          "type": "u32",
+          "meaning": "Stims from supply",
+          "verified": false,
+          "source": "stats-schema helldiver.supply.stims_from_supply"
+        }
+      }
+    },
+    "MeleeHitVolume": {
+      "component": "MeleeHitVolume",
+      "table": true,
+      "stride": 248,
+      "layout": "25480438",
+      "meaning": "a melee hit volume (static in game.dll, a record by its RVA; HD2Runtime melee_authoring)",
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "copied when a melee attack starts: the next attack uses it (HD2Runtime melee_authoring lifecycle)",
+      "fields": {
+        "volume_x": {
+          "offset": 40,
+          "type": "f32",
+          "meaning": "Hit volume X",
+          "verified": false,
+          "source": "stats-schema zone_1:melee.volume_x"
+        },
+        "volume_y": {
+          "offset": 44,
+          "type": "f32",
+          "meaning": "Hit volume Y",
+          "verified": false,
+          "source": "stats-schema zone_1:melee.volume_y"
+        },
+        "volume_z": {
+          "offset": 48,
+          "type": "f32",
+          "meaning": "Hit volume Z",
+          "verified": false,
+          "source": "stats-schema zone_1:melee.volume_z"
+        },
+        "offset_x": {
+          "offset": 56,
+          "type": "f32",
+          "meaning": "Hit volume local offset X",
+          "verified": false,
+          "source": "stats-schema zone_1:melee.offset_x"
+        },
+        "offset_y": {
+          "offset": 60,
+          "type": "f32",
+          "meaning": "Hit volume local offset Y",
+          "verified": false,
+          "source": "stats-schema zone_1:melee.offset_y"
+        },
+        "offset_z": {
+          "offset": 64,
+          "type": "f32",
+          "meaning": "Hit volume local offset Z",
+          "verified": false,
+          "source": "stats-schema zone_1:melee.offset_z"
+        },
+        "repeat_hit_interval": {
+          "offset": 172,
+          "type": "f32",
+          "meaning": "Repeat-hit interval (0 once per attack)",
+          "verified": false,
+          "source": "stats-schema zone_1:melee.repeat_hit_interval"
+        }
+      }
+    },
+    "MeleeWeapon": {
+      "component": "MeleeWeaponComponentData",
+      "index": 268,
+      "stride": 192,
+      "layout": "25480438",
+      "meaning": "MeleeWeaponComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "stamina_cost": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Stamina cost per attack",
+          "verified": false,
+          "source": "stats-schema tuning:melee.stamina_cost"
+        }
+      }
+    },
+    "AbilityWeapon": {
+      "component": "AbilityWeaponComponentData",
+      "index": 267,
+      "stride": 88,
+      "layout": "25480438",
+      "meaning": "an ability weapon's two fire modes: the ability each starts on the weapon when it fires (the C4 detonator's, the silo's targeting remote's)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the weapon fires",
+      "fields": {
+        "mode0_ability": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "fire mode 0: the ability it starts on the weapon when it fires (0: none)",
+          "verified": true,
+          "source": "game.dll 0x7D6080 (an ability weapon fires: its mode settings, 0x7D5FB0) and the C4 detonator record (abilities 521, 520); 2026-10-18"
+        },
+        "mode0_spends_round": {
+          "offset": 32,
+          "type": "u8",
+          "meaning": "fire mode 0: 1, starting it spends a round",
+          "verified": false,
+          "source": "game.dll 0x7D6080 (an ability weapon fires: its mode settings, 0x7D5FB0) and the C4 detonator record (abilities 521, 520); 2026-10-18"
+        },
+        "mode0_always": {
+          "offset": 33,
+          "type": "u8",
+          "meaning": "fire mode 0: 1, it starts whenever the weapon fires (else after a check)",
+          "verified": false,
+          "source": "game.dll 0x7D6080 (an ability weapon fires: its mode settings, 0x7D5FB0) and the C4 detonator record (abilities 521, 520); 2026-10-18"
+        },
+        "mode1_ability": {
+          "offset": 40,
+          "type": "u32",
+          "meaning": "fire mode 1: the ability it starts on the weapon when it fires (0: none)",
+          "verified": true,
+          "source": "game.dll 0x7D6080 (an ability weapon fires: its mode settings, 0x7D5FB0) and the C4 detonator record (abilities 521, 520); 2026-10-18"
+        },
+        "mode1_spends_round": {
+          "offset": 72,
+          "type": "u8",
+          "meaning": "fire mode 1: 1, starting it spends a round",
+          "verified": false,
+          "source": "game.dll 0x7D6080 (an ability weapon fires: its mode settings, 0x7D5FB0) and the C4 detonator record (abilities 521, 520); 2026-10-18"
+        },
+        "mode1_always": {
+          "offset": 73,
+          "type": "u8",
+          "meaning": "fire mode 1: 1, it starts whenever the weapon fires (else after a check)",
+          "verified": false,
+          "source": "game.dll 0x7D6080 (an ability weapon fires: its mode settings, 0x7D5FB0) and the C4 detonator record (abilities 521, 520); 2026-10-18"
+        }
+      }
+    }
+  }
+}

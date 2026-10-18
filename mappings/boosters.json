@@ -1,0 +1,720 @@
+{
+  "format": 2,
+  "build": "25480438",
+  "note": "Every booster as HD2R Editor lists it (HD2Runtime 0.40.1 domains/booster_authoring; written by scripts/ExportBoosters.py). No booster edit is gameplay-tested in HD2Runtime.",
+  "boosters": {
+    "Armed Resupply Pods": {
+      "value": 15,
+      "native": "DefensiveAmmoPod",
+      "fields": {
+        "magazine.capacity": {
+          "label": "Magazine capacity",
+          "section": "Deployed Entity",
+          "offset": 136,
+          "storage": "u32",
+          "unit": "rounds",
+          "base": 140,
+          "shared": false,
+          "hd2r": "booster:armed-resupply-pods:deployed_entity:magazine.capacity",
+          "min": null,
+          "max": null,
+          "kind": "component",
+          "component": "WeaponMagazineComponentData",
+          "resource": "0x73681FFD58FA1A90",
+          "record": 260
+        },
+        "weapon.fire_rate": {
+          "label": "Fire rate",
+          "section": "Deployed Entity",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "rpm",
+          "base": 640.0,
+          "shared": false,
+          "hd2r": "booster:armed-resupply-pods:deployed_entity:weapon.fire_rate",
+          "min": null,
+          "max": null,
+          "kind": "component",
+          "component": "ProjectileWeaponComponentData",
+          "resource": "0x73681FFD58FA1A90",
+          "record": 262
+        }
+      }
+    },
+    "Concealed Insertion": {
+      "value": 18,
+      "native": "SmokePods",
+      "fields": {
+        "explosion.inner_radius": {
+          "label": "Explosion inner radius",
+          "section": "Explosion",
+          "offset": 16,
+          "storage": "f32",
+          "unit": "meters",
+          "base": 5.0,
+          "shared": true,
+          "hd2r": "booster:concealed-insertion:explosion:explosion.inner_radius",
+          "min": 0,
+          "max": 100,
+          "kind": "ExplosionSettings",
+          "record": 400
+        },
+        "explosion.outer_radius": {
+          "label": "Explosion outer radius",
+          "section": "Explosion",
+          "offset": 20,
+          "storage": "f32",
+          "unit": "meters",
+          "base": 5.0,
+          "shared": true,
+          "hd2r": "booster:concealed-insertion:explosion:explosion.outer_radius",
+          "min": 0,
+          "max": 100,
+          "kind": "ExplosionSettings",
+          "record": 400
+        }
+      }
+    },
+    "Dead Sprint": {
+      "value": 14,
+      "native": "DeathMarch",
+      "fields": {
+        "damage.durable_damage": {
+          "label": "Durable damage",
+          "section": "Status Damage",
+          "offset": 8,
+          "storage": "i32",
+          "unit": "damage",
+          "base": 5,
+          "shared": true,
+          "hd2r": "booster:dead-sprint:status_damage:damage.durable_damage",
+          "min": 0,
+          "max": 1000,
+          "kind": "DamageInfo",
+          "record": 541
+        },
+        "damage.standard_damage": {
+          "label": "Standard damage",
+          "section": "Status Damage",
+          "offset": 4,
+          "storage": "i32",
+          "unit": "damage",
+          "base": 5,
+          "shared": true,
+          "hd2r": "booster:dead-sprint:status_damage:damage.standard_damage",
+          "min": 0,
+          "max": 1000,
+          "kind": "DamageInfo",
+          "record": 541
+        },
+        "booster.health_floor": {
+          "label": "Health floor",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "fraction",
+          "base": 0.05,
+          "shared": false,
+          "hd2r": "booster:dead-sprint:tuning:booster.health_floor",
+          "min": 0,
+          "max": 1,
+          "kind": "BoosterSettings",
+          "record": 14
+        }
+      }
+    },
+    "Experimental Infusion": {
+      "value": 11,
+      "native": "CombatDrugs",
+      "fields": {
+        "status.duration": {
+          "label": "Status duration",
+          "section": "Status Effect",
+          "offset": 40,
+          "storage": "f32",
+          "unit": "seconds",
+          "base": 10.0,
+          "shared": true,
+          "hd2r": "booster:experimental-infusion:status_effect:status.duration",
+          "min": null,
+          "max": null,
+          "kind": "StatusEffectSettings",
+          "record": 29
+        },
+        "status.incoming_damage_scale": {
+          "label": "Incoming damage scale",
+          "section": "Status Effect",
+          "offset": 4,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 0.9,
+          "shared": true,
+          "hd2r": "booster:experimental-infusion:status_effect:status.incoming_damage_scale",
+          "min": null,
+          "max": null,
+          "kind": "StatusMultiplier",
+          "record": 29,
+          "component": "2"
+        },
+        "status.strength": {
+          "label": "Status strength",
+          "section": "Status Effect",
+          "offset": 36,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 1.1,
+          "shared": true,
+          "hd2r": "booster:experimental-infusion:status_effect:status.strength",
+          "min": null,
+          "max": null,
+          "kind": "StatusEffectSettings",
+          "record": 29
+        }
+      }
+    },
+    "Expert Extraction Pilot": {
+      "value": 9,
+      "native": "FastExtraction",
+      "fields": {
+        "booster.extraction_time_scale": {
+          "label": "Extraction call-in time multiplier",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 0.7,
+          "shared": false,
+          "hd2r": "booster:expert-extraction-pilot:tuning:booster.extraction_time_scale",
+          "min": 0.05,
+          "max": 10,
+          "kind": "BoosterSettings",
+          "record": 9
+        }
+      }
+    },
+    "Firebomb Hellpods": {
+      "value": 12,
+      "native": "FieryDrop",
+      "fields": {
+        "explosion.damage.ap_direct": {
+          "label": "Explosion armor penetration",
+          "section": "Explosion",
+          "offset": 12,
+          "storage": "u32",
+          "unit": "armor_class",
+          "base": 10,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:explosion.damage.ap_direct",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 427
+        },
+        "explosion.damage.demolition": {
+          "label": "Explosion demolition force",
+          "section": "Explosion",
+          "offset": 28,
+          "storage": "u32",
+          "unit": "force",
+          "base": 40,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:explosion.damage.demolition",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 427
+        },
+        "explosion.damage.durable_damage": {
+          "label": "Explosion durable damage",
+          "section": "Explosion",
+          "offset": 8,
+          "storage": "i32",
+          "unit": "damage",
+          "base": 200,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:explosion.damage.durable_damage",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 427
+        },
+        "explosion.damage.push_force": {
+          "label": "Explosion push force",
+          "section": "Explosion",
+          "offset": 36,
+          "storage": "u32",
+          "unit": "force",
+          "base": 20,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:explosion.damage.push_force",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 427
+        },
+        "explosion.damage.stagger": {
+          "label": "Explosion stagger force",
+          "section": "Explosion",
+          "offset": 32,
+          "storage": "u32",
+          "unit": "force",
+          "base": 15,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:explosion.damage.stagger",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 427
+        },
+        "explosion.damage.standard_damage": {
+          "label": "Explosion standard damage",
+          "section": "Explosion",
+          "offset": 4,
+          "storage": "i32",
+          "unit": "damage",
+          "base": 200,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:explosion.damage.standard_damage",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 427
+        },
+        "explosion.inner_radius": {
+          "label": "Explosion inner radius",
+          "section": "Explosion",
+          "offset": 16,
+          "storage": "f32",
+          "unit": "meters",
+          "base": 2.0,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:explosion.inner_radius",
+          "min": 0,
+          "max": 100,
+          "kind": "ExplosionSettings",
+          "record": 83
+        },
+        "explosion.outer_radius": {
+          "label": "Explosion outer radius",
+          "section": "Explosion",
+          "offset": 20,
+          "storage": "f32",
+          "unit": "meters",
+          "base": 4.0,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:explosion.outer_radius",
+          "min": 0,
+          "max": 100,
+          "kind": "ExplosionSettings",
+          "record": 83
+        },
+        "explosion.shockwave_radius": {
+          "label": "Explosion shockwave radius",
+          "section": "Explosion",
+          "offset": 24,
+          "storage": "f32",
+          "unit": "meters",
+          "base": 4.0,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:explosion.shockwave_radius",
+          "min": 0,
+          "max": 100,
+          "kind": "ExplosionSettings",
+          "record": 83
+        },
+        "status.strength": {
+          "label": "Status strength",
+          "section": "Explosion",
+          "offset": 48,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 20.0,
+          "shared": true,
+          "hd2r": "booster:firebomb-hellpods:explosion:status.strength",
+          "min": 0,
+          "max": 10000,
+          "kind": "DamageInfo",
+          "record": 427
+        }
+      }
+    },
+    "Flexible Reinforcement Budget": {
+      "value": 6,
+      "native": "FlexibleReinforcementBudget",
+      "fields": {
+        "booster.reinforcement_cooldown_scale": {
+          "label": "Reinforcement refill cooldown multiplier",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 0.75,
+          "shared": false,
+          "hd2r": "booster:flexible-reinforcement-budget:tuning:booster.reinforcement_cooldown_scale",
+          "min": 0.05,
+          "max": 10,
+          "kind": "BoosterSettings",
+          "record": 6
+        }
+      }
+    },
+    "Hellpod Space Optimization": {
+      "value": 7,
+      "native": "HellpodSpaceOptimization",
+      "fields": {}
+    },
+    "Increased Reinforcement Budget": {
+      "value": 5,
+      "native": "IncreasedReinforcementBudget",
+      "fields": {
+        "booster.reinforcements_per_player": {
+          "label": "Extra reinforcements per player",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "reinforcements",
+          "base": 1.0,
+          "shared": false,
+          "hd2r": "booster:increased-reinforcement-budget:tuning:booster.reinforcements_per_player",
+          "min": 0,
+          "max": 20,
+          "kind": "BoosterSettings",
+          "record": 5
+        }
+      }
+    },
+    "Integrated Extinguishers": {
+      "value": 19,
+      "native": "FireExtinguish",
+      "fields": {
+        "booster.burn_decay_bonus": {
+          "label": "Burn decay bonus",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "fraction",
+          "base": 0.5,
+          "shared": false,
+          "hd2r": "booster:integrated-extinguishers:tuning:booster.burn_decay_bonus",
+          "min": 0,
+          "max": 0.95,
+          "kind": "BoosterSettings",
+          "record": 19
+        }
+      }
+    },
+    "Localization Confusion": {
+      "value": 8,
+      "native": "LocalizationConfusion",
+      "fields": {
+        "booster.encounter_rate_scale": {
+          "label": "Encounter rate multiplier",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 0.9,
+          "shared": false,
+          "hd2r": "booster:localization-confusion:tuning:booster.encounter_rate_scale",
+          "min": 0.1,
+          "max": 10,
+          "kind": "BoosterSettings",
+          "record": 8
+        }
+      }
+    },
+    "Motivational Shocks": {
+      "value": 10,
+      "native": "SlowStunResistance",
+      "fields": {
+        "booster.slow_scale": {
+          "label": "Slow and stun multiplier",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 0.5,
+          "shared": false,
+          "hd2r": "booster:motivational-shocks:tuning:booster.slow_scale",
+          "min": 0,
+          "max": 4,
+          "kind": "BoosterSettings",
+          "record": 10
+        }
+      }
+    },
+    "Muscle Enhancement": {
+      "value": 3,
+      "native": "MuscleEnhancement",
+      "fields": {
+        "booster.terrain_slowdown_scale": {
+          "label": "Terrain slowdown multiplier",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 0.35,
+          "shared": false,
+          "hd2r": "booster:muscle-enhancement:tuning:booster.terrain_slowdown_scale",
+          "min": 0,
+          "max": 1,
+          "kind": "BoosterSettings",
+          "record": 3
+        }
+      }
+    },
+    "Sample Extricator": {
+      "value": 16,
+      "native": "BigEnemiesDropSamples",
+      "fields": {
+        "booster.sample_drop_cap": {
+          "label": "Sample drop cap",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "samples",
+          "base": 10.0,
+          "shared": false,
+          "hd2r": "booster:sample-extricator:tuning:booster.sample_drop_cap",
+          "min": 0,
+          "max": 1000,
+          "kind": "BoosterSettings",
+          "record": 16
+        }
+      }
+    },
+    "Sample Scanner": {
+      "value": 13,
+      "native": "DoubleSampleChance",
+      "fields": {
+        "booster.double_sample_chance": {
+          "label": "Double sample chance",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "probability",
+          "base": 0.15,
+          "shared": false,
+          "hd2r": "booster:sample-scanner:tuning:booster.double_sample_chance",
+          "min": 0,
+          "max": 1,
+          "kind": "BoosterSettings",
+          "record": 13
+        }
+      }
+    },
+    "Stamina Enhancement": {
+      "value": 2,
+      "native": "Stamina",
+      "fields": {
+        "booster.stamina_scale": {
+          "label": "Stamina efficiency multiplier",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 1.3,
+          "shared": false,
+          "hd2r": "booster:stamina-enhancement:tuning:booster.stamina_scale",
+          "min": 0.1,
+          "max": 10,
+          "kind": "BoosterSettings",
+          "record": 2
+        }
+      }
+    },
+    "Stun Pods": {
+      "value": 17,
+      "native": "ShockPods",
+      "fields": {
+        "explosion.damage.ap_direct": {
+          "label": "Explosion armor penetration",
+          "section": "Explosion",
+          "offset": 12,
+          "storage": "u32",
+          "unit": "armor_class",
+          "base": 10,
+          "shared": true,
+          "hd2r": "booster:stun-pods:explosion:explosion.damage.ap_direct",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 428
+        },
+        "explosion.damage.demolition": {
+          "label": "Explosion demolition force",
+          "section": "Explosion",
+          "offset": 28,
+          "storage": "u32",
+          "unit": "force",
+          "base": 40,
+          "shared": true,
+          "hd2r": "booster:stun-pods:explosion:explosion.damage.demolition",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 428
+        },
+        "explosion.damage.durable_damage": {
+          "label": "Explosion durable damage",
+          "section": "Explosion",
+          "offset": 8,
+          "storage": "i32",
+          "unit": "damage",
+          "base": 50,
+          "shared": true,
+          "hd2r": "booster:stun-pods:explosion:explosion.damage.durable_damage",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 428
+        },
+        "explosion.damage.stagger": {
+          "label": "Explosion stagger force",
+          "section": "Explosion",
+          "offset": 32,
+          "storage": "u32",
+          "unit": "force",
+          "base": 50,
+          "shared": true,
+          "hd2r": "booster:stun-pods:explosion:explosion.damage.stagger",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 428
+        },
+        "explosion.damage.standard_damage": {
+          "label": "Explosion standard damage",
+          "section": "Explosion",
+          "offset": 4,
+          "storage": "i32",
+          "unit": "damage",
+          "base": 50,
+          "shared": true,
+          "hd2r": "booster:stun-pods:explosion:explosion.damage.standard_damage",
+          "min": 0,
+          "max": 100000,
+          "kind": "DamageInfo",
+          "record": 428
+        },
+        "explosion.inner_radius": {
+          "label": "Explosion inner radius",
+          "section": "Explosion",
+          "offset": 16,
+          "storage": "f32",
+          "unit": "meters",
+          "base": 2.0,
+          "shared": true,
+          "hd2r": "booster:stun-pods:explosion:explosion.inner_radius",
+          "min": 0,
+          "max": 100,
+          "kind": "ExplosionSettings",
+          "record": 335
+        },
+        "explosion.outer_radius": {
+          "label": "Explosion outer radius",
+          "section": "Explosion",
+          "offset": 20,
+          "storage": "f32",
+          "unit": "meters",
+          "base": 4.0,
+          "shared": true,
+          "hd2r": "booster:stun-pods:explosion:explosion.outer_radius",
+          "min": 0,
+          "max": 100,
+          "kind": "ExplosionSettings",
+          "record": 335
+        },
+        "explosion.shockwave_radius": {
+          "label": "Explosion shockwave radius",
+          "section": "Explosion",
+          "offset": 24,
+          "storage": "f32",
+          "unit": "meters",
+          "base": 4.0,
+          "shared": true,
+          "hd2r": "booster:stun-pods:explosion:explosion.shockwave_radius",
+          "min": 0,
+          "max": 100,
+          "kind": "ExplosionSettings",
+          "record": 335
+        },
+        "status.strength": {
+          "label": "Status strength",
+          "section": "Explosion",
+          "offset": 48,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 100.0,
+          "shared": true,
+          "hd2r": "booster:stun-pods:explosion:status.strength",
+          "min": 0,
+          "max": 10000,
+          "kind": "DamageInfo",
+          "record": 428
+        }
+      }
+    },
+    "Surplus EAT Allocation": {
+      "value": 20,
+      "native": "FreeEAT",
+      "fields": {
+        "stratagem.max_uses": {
+          "label": "Mission uses",
+          "section": "Granted Stratagem",
+          "offset": 80,
+          "storage": "u32",
+          "unit": "uses",
+          "base": 2,
+          "shared": false,
+          "hd2r": "booster:surplus-eat-allocation:granted_stratagem:stratagem.max_uses",
+          "min": 0,
+          "max": 100,
+          "kind": "StratagemDefinition",
+          "record": 3753216434,
+          "stratagemType": 15
+        }
+      }
+    },
+    "UAV Recon Booster": {
+      "value": 4,
+      "native": "UAVRecon",
+      "fields": {
+        "booster.radar_range_scale": {
+          "label": "Radar range multiplier",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 1.5,
+          "shared": false,
+          "hd2r": "booster:uav-recon-booster:tuning:booster.radar_range_scale",
+          "min": 0.1,
+          "max": 10,
+          "kind": "BoosterSettings",
+          "record": 4
+        }
+      }
+    },
+    "Vitality Enhancement": {
+      "value": 1,
+      "native": "Vitality",
+      "fields": {
+        "booster.damage_taken_scale": {
+          "label": "Damage taken multiplier",
+          "section": "Tuning",
+          "offset": 8,
+          "storage": "f32",
+          "unit": "factor",
+          "base": 0.9,
+          "shared": false,
+          "hd2r": "booster:vitality-enhancement:tuning:booster.damage_taken_scale",
+          "min": 0,
+          "max": 4,
+          "kind": "BoosterSettings",
+          "record": 1
+        }
+      }
+    }
+  }
+}

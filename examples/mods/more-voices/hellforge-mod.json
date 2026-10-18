@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "skyeshade.more-voices",
+  "name": "More Voices",
+  "version": "0.1.0",
+  "description": "The game plays at most 140 sounds at once and cuts the lowest priority ones first in big fights, among them your own footsteps. This raises the limit to 256 through Wwise's own SetMaxNumVoicesLimit once the sound engine is up. Source in src/.",
+  "gameplay": false,
+  "code": {
+    "dll": "more_voices.dll",
+    "sdk": 1
+  }
+}

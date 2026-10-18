@@ -1,0 +1,343 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="HellForge.Launcher.App"
+             RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <!-- HellForge's colours: its icon's red for actions and selection, its slate for surfaces, the in-game editor's gold
+         for edits and work under way -->
+    <SolidColorBrush x:Key="AccentBrush" Color="#E5392B" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#F2523F" />
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="#C22D21" />
+    <SolidColorBrush x:Key="AccentWashBrush" Color="#2A1714" />
+    <SolidColorBrush x:Key="GoldBrush" Color="#FFC72C" />
+    <SolidColorBrush x:Key="BackgroundBrush" Color="#101216" />
+    <SolidColorBrush x:Key="SidebarBrush" Color="#14171B" />
+    <SolidColorBrush x:Key="CardBrush" Color="#191C21" />
+    <SolidColorBrush x:Key="CardBorderBrush" Color="#282C33" />
+    <SolidColorBrush x:Key="TextBrush" Color="#E6E6E0" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#9AA0A8" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#FF6054" />
+    <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, DejaVu Sans Mono, Menlo, monospace</FontFamily>
+    <!-- White glyphs on the red accent -->
+    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#FFFFFF" />
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark" Accent="#E5392B" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+
+    <!-- Typography -->
+    <Style Selector="TextBlock.eyebrow">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="LetterSpacing" Value="3" />
+      <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    </Style>
+    <Style Selector="TextBlock.h1">
+      <Setter Property="FontSize" Value="30" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="2" />
+      <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+      <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+    <Style Selector="TextBlock.muted, SelectableTextBlock.muted">
+      <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+    </Style>
+    <Style Selector="TextBlock.stat">
+      <Setter Property="FontSize" Value="30" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="Margin" Value="0,8,0,4" />
+    </Style>
+
+    <!-- Cards -->
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{StaticResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="22" />
+    </Style>
+
+    <!-- Status dot: pulses while a session is busy -->
+    <Style Selector="Border.dot">
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="12" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Border.dot.pulse">
+      <Style.Animations>
+        <Animation Duration="0:0:1.1" IterationCount="Infinite" PlaybackDirection="Alternate">
+          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.35" /></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+
+    <!-- Left navigation -->
+    <Style Selector="ListBox.nav">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem">
+      <Setter Property="Padding" Value="24,14" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1B1E23" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentWashBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+    <!-- Console lines -->
+    <Style Selector="ListBox.console">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.console ListBoxItem">
+      <Setter Property="Padding" Value="14,1" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <!-- Buttons -->
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="2" />
+    </Style>
+    <Style Selector="Button.ghost /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="#3A3D45" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="Padding" Value="14,8" />
+    </Style>
+    <Style Selector="Button.ghost:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1F2125" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+    <Style Selector="Button.play">
+      <Setter Property="FontSize" Value="26" />
+      <Setter Property="FontWeight" Value="Black" />
+      <Setter Property="Width" Value="280" />
+      <Setter Property="Height" Value="72" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.play /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="BoxShadow" Value="0 6 22 0 #55E5392B" />
+    </Style>
+    <Style Selector="Button.play:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentHoverBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.play:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentPressedBrush}" />
+    </Style>
+    <!-- STOP: the red outlined, so PLAY and STOP never look alike -->
+    <Style Selector="Button.play.stop /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1B1E23" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+      <Setter Property="BoxShadow" Value="none" />
+    </Style>
+    <Style Selector="Button.play.stop:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentWashBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource AccentHoverBrush}" />
+    </Style>
+    <Style Selector="Button.play:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#24272D" />
+      <Setter Property="Foreground" Value="#6B7079" />
+      <Setter Property="BoxShadow" Value="none" />
+    </Style>
+
+    <Style Selector="Button.primary /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentHoverBrush}" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#2A2C31" />
+      <Setter Property="Foreground" Value="#6B7079" />
+    </Style>
+    <Style Selector="Button.ghost:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="#5A5F68" />
+      <Setter Property="BorderBrush" Value="#2A2C31" />
+    </Style>
+
+    <!-- Dropdown rows: a dark highlight keeps muted text and badges readable -->
+    <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#2A2C31" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#33363C" />
+    </Style>
+
+    <!-- Small "DEV" marker for development templates such as unlock-all -->
+    <Style Selector="Border.badge">
+      <Setter Property="Background" Value="#E0402F" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Padding" Value="5,1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.badge > TextBlock">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="LetterSpacing" Value="1" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- Stats editor: section tabs, category chips, item list, field rows -->
+    <Style Selector="Button.tab">
+      <Setter Property="Padding" Value="0,4" />
+      <Setter Property="Margin" Value="0,0,22,0" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.tab /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0,0,0,2" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="Button.tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+    </Style>
+    <Style Selector="Button.tab.selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    </Style>
+    <Style Selector="Button.chip">
+      <Setter Property="Padding" Value="11,5" />
+      <Setter Property="Margin" Value="0,0,6,6" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.chip /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#17191D" />
+      <Setter Property="BorderBrush" Value="#2E3138" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="CornerRadius" Value="12" />
+    </Style>
+    <Style Selector="Button.chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1F2125" />
+      <Setter Property="BorderBrush" Value="#4A4E57" />
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+    </Style>
+    <Style Selector="Button.chip.selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentWashBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    </Style>
+    <Style Selector="Button.flat">
+      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.flat /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+    </Style>
+    <Style Selector="Button.flat:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1F2125" />
+      <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+    <!-- The Discord link: a quiet line, in Discord's blurple when pointed at -->
+    <Style Selector="Button.discord">
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="Button.discord /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+      <Setter Property="Padding" Value="6,4" />
+    </Style>
+    <Style Selector="Button.discord:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#7984F5" />
+    </Style>
+    <Style Selector="Button.discord:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#5865F2" />
+    </Style>
+    <!-- the logo takes the label's colour (the theme gives icons their own) -->
+    <Style Selector="Button.discord PathIcon">
+      <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+    </Style>
+    <Style Selector="Button.discord:pointerover PathIcon">
+      <Setter Property="Foreground" Value="#7984F5" />
+    </Style>
+    <Style Selector="Button.discord:pressed PathIcon">
+      <Setter Property="Foreground" Value="#5865F2" />
+    </Style>
+
+    <Style Selector="Button.danger /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#B8281D" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Padding" Value="16,8" />
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#E04040" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <!-- The deployment steps' tracks: a thin bar between each step and the next, filling with the step's progress -->
+    <Style Selector="ProgressBar.track">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="4" />
+      <Setter Property="Height" Value="4" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Background" Value="#2C3037" />
+      <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    </Style>
+    <Style Selector="ProgressBar.track.busy">
+      <Setter Property="Foreground" Value="{StaticResource GoldBrush}" />
+    </Style>
+    <Style Selector="ProgressBar.detail">
+      <Setter Property="Height" Value="6" />
+      <Setter Property="MinHeight" Value="6" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Background" Value="#2C3037" />
+      <Setter Property="Foreground" Value="{StaticResource GoldBrush}" />
+    </Style>
+  </Application.Styles>
+</Application>

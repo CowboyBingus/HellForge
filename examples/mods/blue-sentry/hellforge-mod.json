@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "skyeshade.blue-sentry",
+  "name": "Blue Metal Sentry",
+  "version": "0.1.0",
+  "description": "A test of models of their own: a new sentry stratagem, the A/MG-43 Machine Gun Sentry's twin in blue metal. Only the new sentry is blue; the MG-43 keeps its colours.",
+  "gameplay": true,
+  "code": {
+    "dll": "blue_sentry.dll",
+    "sdk": 8
+  }
+}

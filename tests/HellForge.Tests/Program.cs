@@ -1,0 +1,357 @@
+using HellForge.Core;
+
+// Dependency-free integration checks. Every game file here is synthetic.
+var root = Path.GetFullPath(Path.Combine("artifacts", "tests", Guid.NewGuid().ToString("N")));
+Directory.CreateDirectory(root);
+var passed = 0;
+var failed = 0;
+void Check(bool condition, string reason)
+{
+    if (!condition) throw new Exception(reason);
+}
+void Reject(Action action)
+{
+    try { action(); }
+    catch (Exception error) when (error is InvalidDataException or IOException) { return; }
+    throw new Exception("Expected rejection.");
+}
+void Test(string name, Action action)
+{
+    try { action(); passed++; Console.WriteLine($"PASS {name}"); }
+    catch (Exception error) { failed++; Console.WriteLine($"FAIL {name}: {error.Message}"); }
+}
+(string Manifest, string Source, string Home) Fixture(string name)
+{
+    var home = Path.Combine(root, name);
+    var steamApps = Path.Combine(home, "Steam", "steamapps");
+    var source = Path.Combine(steamApps, "common", "Helldivers 2");
+    Directory.CreateDirectory(Path.Combine(source, "bin"));
+    Directory.CreateDirectory(Path.Combine(source, "data", "game"));
+    File.WriteAllText(Path.Combine(source, LocalInstall.Exe), "synthetic executable");
+    File.WriteAllText(Path.Combine(source, LocalInstall.GameDll), "synthetic game library");
+    File.WriteAllText(Path.Combine(source, "data", "asset"), "synthetic asset");
+    var manifest = Path.Combine(steamApps, "appmanifest_553850.acf");
+    File.WriteAllText(manifest, """
+        "AppState" { "appid" "553850" "StateFlags" "4" "installdir" "Helldivers 2" "buildid" "12345" }
+        """);
+    return (manifest, source, home);
+}
+
+Test("Steam ownership requires the correct app, live subscription, matching owner, and no shared or temporary mode", () =>
+{
+    var valid = new SteamOwnershipObservation(553850, true, true, true, false, false, false);
+    Check(SteamOwnershipPolicy.ConfirmsCurrentClientOwner(valid), "Live matching owner rejected.");
+    foreach (var rejected in new[] { valid with { AppId = 480 }, valid with { LoggedOn = false },
+        valid with { Subscribed = false }, valid with { SameOwner = false }, valid with { FamilyShared = true },
+        valid with { FreeWeekend = true }, valid with { Cafe = true } })
+        Check(!SteamOwnershipPolicy.ConfirmsCurrentClientOwner(rejected), "Incomplete ownership observation accepted.");
+});
+
+Test("Valve metadata supports comments, escapes, and quoted braces", () =>
+{
+    var data = ValveData.Parse("""
+        // Steam fixture
+        "root" { "path" "C:\\Games\\Steam" "brace" "}" "quote" "a\"b" }
+        """).Children["root"];
+    Check(data.Required("path") == @"C:\Games\Steam", "Escaped path was damaged.");
+    Check(data.Required("brace") == "}" && data.Required("quote") == "a\"b", "Quoted values were damaged.");
+});
+Test("Malformed and ambiguous Steam metadata fails", () =>
+{
+    foreach (var text in new[] { "\"x\" {", "\"x\"", "\"x\" \"1\" \"X\" \"2\"", "}", "\"x" })
+        Reject(() => ValveData.Parse(text));
+});
+Test("Discovery supports secondary Steam libraries", () =>
+{
+    var fixture = Fixture("secondary");
+    var primary = Path.Combine(fixture.Home, "Primary");
+    Directory.CreateDirectory(Path.Combine(primary, "steamapps"));
+    var library = Path.Combine(fixture.Home, "Steam").Replace("\\", "\\\\");
+    File.WriteAllText(Path.Combine(primary, "steamapps", "libraryfolders.vdf"),
+        $"\"libraryfolders\" {{ \"1\" {{ \"path\" \"{library}\" }} }}");
+    Check(LocalInstall.FindManifests(primary).SequenceEqual([fixture.Manifest]), "Secondary library not discovered.");
+});
+Test("Inspection fingerprints files without claiming ownership or isolation", () =>
+{
+    var fixture = Fixture("inspect");
+    var before = LocalInstall.Hash(Path.Combine(fixture.Source, LocalInstall.Exe));
+    var report = LocalInstall.Inspect(fixture.Manifest);
+    Check(report.Pin.BuildId == "12345" && report.Pin.ExeSha256 == before, "Incorrect build identity.");
+    Check(report.FileCount == 3 && report.TotalBytes > 0, "Incorrect inventory.");
+    Check(!report.ReadyToLaunch && report.OwnershipStatus == "not_verified_local_metadata_only" &&
+        report.IsolationStatus == "not_implemented", "Unsupported readiness claim.");
+    Check(LocalInstall.Hash(Path.Combine(fixture.Source, LocalInstall.Exe)) == before, "Source changed.");
+});
+Test("Wrong app, incomplete install, and traversal are rejected", () =>
+{
+    var fixture = Fixture("metadata");
+    var original = File.ReadAllText(fixture.Manifest);
+    foreach (var changed in new[] { original.Replace("553850", "999"), original.Replace("\"4\"", "\"6\""),
+        original.Replace("Helldivers 2", "../escape") })
+    {
+        File.WriteAllText(fixture.Manifest, changed);
+        Reject(() => LocalInstall.Inspect(fixture.Manifest));
+    }
+});
+Test("Missing required game binary is rejected", () =>
+{
+    var fixture = Fixture("missing");
+    File.Delete(Path.Combine(fixture.Source, LocalInstall.GameDll));
+    Reject(() => LocalInstall.Inspect(fixture.Manifest));
+});
+Test("Preparation verifies copy bytes and leaves source unchanged", () =>
+{
+    var fixture = Fixture("copy");
+    var report = LocalInstall.Inspect(fixture.Manifest);
+    var destination = Path.Combine(fixture.Home, "HellForge");
+    var receipt = CopyPreparer.Prepare(fixture.Manifest, destination, report.Pin);
+    Check(receipt.Files.Count == 3 && !receipt.ReadyToLaunch, "Incorrect copy receipt.");
+    foreach (var file in receipt.Files)
+    {
+        Check(LocalInstall.Hash(Path.Combine(destination, "game", file.RelativePath)) == file.Sha256, "Wrong copied bytes.");
+        Check(LocalInstall.Hash(Path.Combine(fixture.Source, file.RelativePath)) == file.Sha256, "Source was altered.");
+    }
+    Check(File.Exists(Path.Combine(destination, "copy-receipt.json")), "Missing receipt.");
+    Check(!File.Exists(Path.Combine(destination, "preparing.lock")), "Successful copy left incomplete marker.");
+});
+Test("Build and executable mismatches fail before creating destination", () =>
+{
+    var fixture = Fixture("pins");
+    var report = LocalInstall.Inspect(fixture.Manifest);
+    var destination = Path.Combine(fixture.Home, "HellForge");
+    Reject(() => CopyPreparer.Prepare(fixture.Manifest, destination, report.Pin with { BuildId = "54321" }));
+    Reject(() => CopyPreparer.Prepare(fixture.Manifest, destination, report.Pin with { ExeSha256 = new string('0', 64) }));
+    Check(!Directory.Exists(destination), "Rejected pin created destination.");
+});
+Test("Overlapping, existing, and Steam-managed destinations fail", () =>
+{
+    var fixture = Fixture("paths");
+    var pin = LocalInstall.Inspect(fixture.Manifest).Pin;
+    foreach (var destination in new[] { fixture.Source, Path.Combine(fixture.Source, "HellForge"), fixture.Home,
+        Path.Combine(Path.GetDirectoryName(fixture.Manifest)!, "common", "HellForge") })
+        Reject(() => CopyPreparer.Prepare(fixture.Manifest, destination, pin));
+    Check(!Directory.Exists(Path.Combine(fixture.Source, "HellForge")), "Source contains rejected destination.");
+});
+Test("Interrupted copy retains marker and cannot be resumed as complete", () =>
+{
+    var fixture = Fixture("interrupted");
+    var pin = LocalInstall.Inspect(fixture.Manifest).Pin;
+    var destination = Path.Combine(fixture.Home, "HellForge");
+    Reject(() => CopyPreparer.Prepare(fixture.Manifest, destination, pin, (_, _) => throw new IOException("Injected interruption")));
+    Check(File.Exists(Path.Combine(destination, "preparing.lock")), "Missing incomplete marker.");
+    Check(!File.Exists(Path.Combine(destination, "copy-receipt.json")), "Interrupted copy has receipt.");
+    Reject(() => CopyPreparer.Prepare(fixture.Manifest, destination, pin));
+});
+Test("Source change during copy prevents completion", () =>
+{
+    var fixture = Fixture("changed");
+    var pin = LocalInstall.Inspect(fixture.Manifest).Pin;
+    var destination = Path.Combine(fixture.Home, "HellForge");
+    Reject(() => CopyPreparer.Prepare(fixture.Manifest, destination, pin, (done, _) =>
+    {
+        if (done == 1) File.AppendAllText(Path.Combine(fixture.Source, LocalInstall.Exe), "changed");
+    }));
+    Check(!File.Exists(Path.Combine(destination, "copy-receipt.json")), "Changed source was accepted.");
+});
+
+// Steam content manifests: protobuf sections with a payload (files) and metadata (depot, manifest).
+static byte[] Varint(ulong value)
+{
+    var bytes = new List<byte>();
+    do { var current = (byte)(value & 0x7F); value >>= 7; bytes.Add(value != 0 ? (byte)(current | 0x80) : current); } while (value != 0);
+    return bytes.ToArray();
+}
+static byte[] Number(int field, ulong value) => [.. Varint((ulong)(field << 3)), .. Varint(value)];
+static byte[] Blob(int field, byte[] value) => [.. Varint((ulong)(field << 3 | 2)), .. Varint((ulong)value.Length), .. value];
+static byte[] Section(uint magic, byte[] body) => [.. BitConverter.GetBytes(magic), .. BitConverter.GetBytes((uint)body.Length), .. body];
+static byte[] DepotManifestBytes(uint depot, ulong manifest, params (string Name, byte[] Content, uint Flags)[] files)
+{
+    var payload = new List<byte>();
+    foreach (var (name, content, flags) in files)
+    {
+        var chunk = Blob(1, System.Security.Cryptography.SHA1.HashData(content)).Concat(Number(3, 0)).Concat(Number(4, (ulong)content.Length)).ToArray();
+        payload.AddRange(Blob(1, Blob(1, System.Text.Encoding.UTF8.GetBytes(name)).Concat(Number(2, (ulong)content.Length)).Concat(Number(3, flags))
+            .Concat(Blob(5, System.Security.Cryptography.SHA1.HashData(content))).Concat(Blob(6, chunk)).ToArray()));
+    }
+    var metadata = Number(1, depot).Concat(Number(2, manifest)).Concat(Number(4, 0)).ToArray();
+    return [.. Section(0x71F617D0, payload.ToArray()), .. Section(0x1F4812BE, metadata), .. BitConverter.GetBytes(0x32C415ABu)];
+}
+// A fake Steam install of build 12345 with depot 553851 (manifest 42) and its cached manifest.
+(string Manifest, string Source, string DepotCache) DepotFixture(string name)
+{
+    var (manifest, source, home) = Fixture(name);
+    File.WriteAllText(manifest, """
+        "AppState" { "appid" "553850" "StateFlags" "4" "installdir" "Helldivers 2" "buildid" "12345"
+            "InstalledDepots" { "553851" { "manifest" "42" "size" "1" } } }
+        """);
+    Directory.CreateDirectory(Path.Combine(source, "bin", "GameGuard"));
+    File.WriteAllText(Path.Combine(source, "bin", "GameGuard", "npsc.des"), "self-updating module");
+    File.WriteAllText(Path.Combine(source, "data", "asset.patch_0"), "a mod, not part of any depot");
+    var depotCache = Path.Combine(home, "Steam", "depotcache");
+    Directory.CreateDirectory(depotCache);
+    (string, byte[], uint) Entry(string relative) => (relative.Replace('/', '\\'), File.ReadAllBytes(Path.Combine(source, relative)), 0u);
+    File.WriteAllBytes(Path.Combine(depotCache, "553851_42.manifest"), DepotManifestBytes(553851, 42,
+        ("bin", [], 0x40u), Entry(LocalInstall.Exe), Entry(LocalInstall.GameDll), Entry("data/asset"), Entry("bin/GameGuard/npsc.des")));
+    return (manifest, source, depotCache);
+}
+
+Test("Steam depot manifests yield files, hashes and chunks, and mark directories", () =>
+{
+    var content = "synthetic"u8.ToArray();
+    var parsed = SteamDepotManifest.Parse(DepotManifestBytes(553853, 7, ("data", [], 0x40u), ("data\\bundle", content, 0u)));
+    Check(parsed.DepotId == 553853 && parsed.ManifestId == 7 && !parsed.FilenamesEncrypted, "Metadata not read.");
+    Check(parsed.Files.Count == 2 && parsed.Files[0].IsDirectory && !parsed.Files[1].IsDirectory, "Directory flag not read.");
+    var file = parsed.Files[1];
+    Check(file.Path == "data/bundle" && file.Size == (ulong)content.Length && file.Sha1 == Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(content)),
+        "File entry not read.");
+    Check(file.Chunks.Count == 1 && file.Chunks[0].OriginalSize == content.Length, "Chunk not read.");
+    Reject(() => SteamDepotManifest.Parse("not a manifest"u8));
+});
+
+Test("A supported build lists depot files only, pins the build, and verifies a copy", () =>
+{
+    var (manifest, source, depotCache) = DepotFixture("supported-build");
+    var build = SupportedBuild.FromSteam(manifest, depotCache);
+    Check(build.BuildId == "12345" && build.Depots.Single().ManifestId == "42", "Build or depot not recorded.");
+    Check(build.Files.Count == 4 && build.Files.All(f => f.Path != "data/asset.patch_0"), "Non-depot files listed.");
+    Check(build.Files.Single(f => f.Path == "bin/GameGuard/npsc.des").Volatile && !build.Files.Single(f => f.Path == "data/asset").Volatile,
+        "Self-updating files are not marked volatile.");
+    Check(build.ExeSha256 == LocalInstall.Hash(Path.Combine(source, LocalInstall.Exe)), "Executable not pinned.");
+    var saved = Path.Combine(root, "supported-build.json");
+    build.Save(saved);
+    using (var stream = File.OpenRead(saved))
+    {
+        var loaded = SupportedBuild.Load(stream);
+        Check(loaded.BuildId == build.BuildId && loaded.ExeSha256 == build.ExeSha256 && loaded.Depots.SequenceEqual(build.Depots) &&
+            loaded.Files.SequenceEqual(build.Files), "The saved list does not load back unchanged.");
+    }
+    Check(build.Verify(source).Count == 0, "A matching folder failed verification.");
+    Check(build.IsComplete(source), "A matching folder is not complete.");
+    var asset = Path.Combine(source, "data", "asset");
+    var assetBytes = File.ReadAllBytes(asset);
+    File.WriteAllBytes(asset + GameSettings.OriginalSuffix, assetBytes);
+    File.AppendAllText(asset, " rewritten by a session");
+    Check(build.IsComplete(source), "A file rewritten from its kept original made the copy incomplete.");
+    File.Delete(asset + GameSettings.OriginalSuffix);
+    Check(!build.IsComplete(source), "A resized file passed the completeness check.");
+    File.WriteAllBytes(asset, assetBytes);
+    File.WriteAllText(Path.Combine(source, "bin", "GameGuard", "npsc.des"), "the module updated itself");
+    Check(build.Verify(source).Count == 0, "A self-updated module failed verification.");
+    File.WriteAllText(Path.Combine(source, "data", "asset"), "synthetic assft");
+    Check(build.Verify(source).SequenceEqual(["changed: data/asset"]), "A changed file passed verification.");
+    File.WriteAllText(Path.Combine(source, LocalInstall.Exe), "other build");
+    Reject(() => SupportedBuild.FromSteam(manifest, depotCache));
+});
+
+Test("The game copy takes depot files only, resumes, repairs, and rejects other builds", () =>
+{
+    var (manifest, source, depotCache) = DepotFixture("game-copy");
+    var build = SupportedBuild.FromSteam(manifest, depotCache);
+    var destination = Path.Combine(root, "game-copy-install", "game");
+    long lastDone = 0, lastTotal = 0;
+    GameCopier.Copy(source, destination, build, (done, total, _) => (lastDone, lastTotal) = (done, total));
+    Check(build.Verify(destination).Count == 0 && lastDone == lastTotal && lastTotal == build.TotalBytes, "Copy incomplete.");
+    Check(!File.Exists(Path.Combine(destination, "data", "asset.patch_0")), "A mod was copied.");
+    Check(!Directory.EnumerateFiles(destination, "*.partial", SearchOption.AllDirectories).Any(), "Partial files remain.");
+    File.Delete(Path.Combine(destination, "data", "asset"));
+    File.WriteAllText(Path.Combine(destination, LocalInstall.GameDll), "damaged");
+    GameCopier.Copy(source, destination, build);
+    Check(build.Verify(destination).Count == 0, "Copy did not repair missing and damaged files.");
+    File.WriteAllText(Path.Combine(source, "data", "asset"), "a different build");
+    File.Delete(Path.Combine(destination, "data", "asset"));
+    Reject(() => GameCopier.Copy(source, destination, build));
+    Check(!File.Exists(Path.Combine(destination, "data", "asset")), "A file from another build was installed.");
+    Reject(() => GameCopier.Copy(source, Path.Combine(source, "nested"), build));
+});
+
+Test("The game is copied from Steam's depot downloads of the supported build, which can be deleted after", () =>
+{
+    var (manifest, source, depotCache) = DepotFixture("depot-download");
+    var build = SupportedBuild.FromSteam(manifest, depotCache);
+    var steam = Path.Combine(root, "depot-download-steam");
+    Check(SteamDepotDownload.Commands(build).SequenceEqual(build.Depots.Select(d => $"download_depot {build.AppId} {d.Id} {d.ManifestId}")),
+        "The console commands do not name the pinned manifests.");
+    Check(!SteamDepotDownload.IsComplete(steam, build) && SteamDepotDownload.Status(steam, build).All(d => d.Done == 0), "Nothing downloaded counts as complete.");
+    // Steam writes each depot's files under steamapps/content/app_<app>/depot_<id>.
+    foreach (var file in build.Files)
+    {
+        var target = SteamDepotDownload.Locate(steam, build, file);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Copy(Path.Combine(source, file.Path), target);
+    }
+    Check(SteamDepotDownload.IsComplete(steam, build), "A complete download is not complete.");
+    var destination = Path.Combine(root, "depot-download-install", "game");
+    GameCopier.CopyFromDepots(steam, destination, build);
+    Check(build.Verify(destination).Count == 0, "The copy from the download is not the build.");
+    Reject(() => GameCopier.CopyFromDepots(steam, Path.Combine(steam, "steamapps", "common", "game"), build));
+    var asset = build.Files.Single(f => f.Path == "data/asset");
+    File.WriteAllText(SteamDepotDownload.Locate(steam, build, asset), "another manifest");
+    File.Delete(Path.Combine(destination, "data", "asset"));
+    Reject(() => GameCopier.CopyFromDepots(steam, destination, build));
+    SteamDepotDownload.Delete(steam, build);
+    Check(!Directory.Exists(SteamDepotDownload.ContentFolder(steam, build)), "The download was not deleted.");
+});
+
+Test("Migration copies profiles, settings and game user data into an installation without overwriting", () =>
+{
+    var old = Path.Combine(root, "migration", "host-startup");
+    var appData = Path.Combine(root, "migration", "appdata");
+    void Write(string path, string text) { Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllText(path, text); }
+    Write(Path.Combine(old, "local-profile", "profile.json"), "legacy progress");
+    Write(Path.Combine(old, "local-profile", "profile.lock"), "");
+    Write(Path.Combine(old, "profiles", "pp-real", "profile.json"), "main progress");
+    Write(Path.Combine(old, "profiles", "Not Valid", "profile.json"), "ignored");
+    Write(Path.Combine(old, "launcher-settings.json"), "{\"selectedProfile\":\"pp-real\"}");
+    Write(Path.Combine(appData, "user_settings.config"), "shared settings");
+    Write(Path.Combine(appData, "saves", "player_user_settings.config"), "shared save");
+    Write(Path.Combine(appData, "profiles", "pp-real", "user_settings.config"), "profile settings");
+    Write(Path.Combine(appData, "shader_cache", "cache.bin"), "shaders");
+    var install = new InstallLayout(Path.Combine(root, "migration", "install"));
+    install.Create("12345");
+    var result = Migration.Run(install, old, appData);
+    Check(File.ReadAllText(Path.Combine(install.Profiles, "default", "profile.json")) == "legacy progress", "Legacy profile not migrated as default.");
+    Check(!File.Exists(Path.Combine(install.Profiles, "default", "profile.lock")), "A lock file was copied.");
+    Check(File.ReadAllText(Path.Combine(install.Profiles, "pp-real", "profile.json")) == "main progress", "Profile not migrated.");
+    Check(!Directory.Exists(Path.Combine(install.Profiles, "Not Valid")), "An invalid profile name was migrated.");
+    Check(File.Exists(Path.Combine(install.Root, "launcher-settings.json")), "Launcher settings not migrated.");
+    Check(File.ReadAllText(Path.Combine(install.GameProfile("default"), "saves", "player_user_settings.config")) == "shared save" &&
+        File.ReadAllText(Path.Combine(install.GameProfile("default"), "user_settings.config")) == "shared settings", "Shared game data not given to default.");
+    Check(File.ReadAllText(Path.Combine(install.GameProfile("pp-real"), "user_settings.config")) == "profile settings", "Profile game data not migrated.");
+    Check(File.Exists(Path.Combine(install.UserData, "shader_cache", "cache.bin")), "Shader cache not migrated.");
+    Check(result.Copied.Count == 6 && result.Kept.Count == 0, $"Unexpected copy count {result.Copied.Count}/{result.Kept.Count}.");
+    File.WriteAllText(Path.Combine(install.Profiles, "pp-real", "profile.json"), "played in the installation");
+    var again = Migration.Run(install, old, appData);
+    Check(again.Copied.Count == 0 && again.Kept.Count == 6, "A second migration copied again.");
+    Check(File.ReadAllText(Path.Combine(install.Profiles, "pp-real", "profile.json")) == "played in the installation", "Migration overwrote newer data.");
+    Check(File.Exists(Path.Combine(old, "profiles", "pp-real", "profile.json")) && File.Exists(Path.Combine(appData, "shader_cache", "cache.bin")),
+        "Migration removed the originals.");
+});
+
+Test("Session settings point every game path into the installation, per profile", () =>
+{
+    var original = "\tlog = \"%APPDATA%/Arrowhead/Helldivers2/network_logs/x.ndp\"\r\n\tuser_settings = \"%APPDATA%/Arrowhead/Helldivers2/user_settings.config\"\r\n" +
+        "\tsave_dir = \"%APPDATA%/Arrowhead/Helldivers2/saves\"\r\n";
+    var userData = Path.Combine(root, "settings install", "userdata");
+    var rewritten = GameSettings.Rewrite(original, userData, "pp-real");
+    var prefix = LocalInstall.FullPath(userData).Replace('\\', '/');
+    Check(!rewritten.Contains("%APPDATA%") && rewritten.Contains($"log = \"{prefix}/network_logs/x.ndp\"\r\n") &&
+        rewritten.Contains($"user_settings = \"{prefix}/profiles/pp-real/user_settings.config\"") &&
+        rewritten.Contains($"save_dir = \"{prefix}/profiles/pp-real/saves\""), "Paths not rewritten as expected.");
+    Reject(() => GameSettings.Rewrite("no user data here", userData, "pp-real"));
+    Reject(() => GameSettings.Rewrite(original, Path.Combine(root, "100%"), "pp-real"));
+    try { GameSettings.Rewrite(original, userData, "Bad Name"); throw new Exception("Accepted an invalid profile name."); }
+    catch (ArgumentException) { }
+});
+
+ModTests.Register(Test, Check, Reject, root);
+StatsTests.Register(Test, Check, Reject, root);
+DataBuilderTests.Register(Test, Check, Reject, root);
+SdkTests.Register(Test, Check, Reject, root);
+LiveEditTests.Register(Test, Check, Reject, root);
+ModKitTests.Register(Test, Check, Reject, root);
+BundledModsTests.Register(Test, Check, Reject, root);
+CosmeticPacksTests.Register(Test, Check, Reject, root);
+EditorTests.Register(Test, Check, Reject, root);
+
+Console.WriteLine($"{passed} passed; {failed} failed. Synthetic fixtures: {root}");
+return failed == 0 ? 0 : 1;

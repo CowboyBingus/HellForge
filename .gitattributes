@@ -1,0 +1,4 @@
+# LF everywhere (pinned files such as scripts/EarlyConstructorExperiment.cs are checked by their SHA-256, so their
+# bytes must not change with the platform or core.autocrlf). Windows command scripts keep CRLF.
+* text=auto eol=lf
+*.cmd text eol=crlf

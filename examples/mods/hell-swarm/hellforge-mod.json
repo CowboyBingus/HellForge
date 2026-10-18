@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "skyeshade.hell-swarm",
+  "name": "Hell Swarm (stress test)",
+  "version": "0.2.0",
+  "description": "A stress test for difficulty 11 (needs Hell Forge): enemy budgets ten times Super Helldive's, spawner waves every 0.25 s, and patrols every 8 s with room for 400 living patrol enemies. Not meant for play. Source in src/.",
+  "gameplay": true,
+  "code": {
+    "dll": "hell_swarm.dll",
+    "sdk": 6
+  }
+}

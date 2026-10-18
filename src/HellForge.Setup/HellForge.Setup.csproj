@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>HellForge-Setup</AssemblyName>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- The launcher's icon (scripts/Build-LauncherIcon.ps1): the file in Explorer, and the window's (SetupForm). -->
+    <ApplicationIcon>../HellForge.Launcher/Assets/hellforge.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../HellForge.Core/HellForge.Core.csproj" /></ItemGroup>
+  <!-- scripts/Package-HellForge.ps1 passes the zipped app; a plain build has no payload and says so when run. -->
+  <ItemGroup Condition="'$(PayloadZip)' != ''"><EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" /></ItemGroup>
+</Project>

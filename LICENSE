@@ -1,0 +1,54 @@
+HellForge Source-Available License, version 1.0
+
+Copyright (c) 2026 SkyeShade. All rights reserved, except as granted below.
+
+"HellForge" means the software and other material in this repository and in builds made from it, except the parts
+listed in LICENSE-SDK, which are under the MIT No Attribution License (MIT-0) instead. "You" means anyone who receives
+HellForge.
+
+1. What you may do
+
+   a. View and study HellForge's source code.
+   b. Build HellForge, and run it for your own personal, non-commercial use.
+   c. Modify it for that use.
+   d. Share your changes with the licensor: by forking the official repository on GitHub, as GitHub's Terms of Service
+      allow, and offering them as a pull request, or otherwise sending them to the licensor.
+   e. Share links to the official repository and to official releases.
+
+2. What you may not do without the licensor's prior written permission
+
+   a. Distribute, publish, upload, mirror or otherwise make available HellForge, any part of it, or any modified
+      version of it or work based on it, in source or built form, including as part of another project, except as
+      section 1.d allows.
+   b. Use HellForge or any part of it commercially: sell it, put it behind a paywall, or bundle it with something sold.
+
+3. Mods
+
+   Mods made with HellForge's mod SDK belong to their authors and are not covered by this licence. The SDK headers, the
+   mod template and the example mods are under the MIT No Attribution License (LICENSE-SDK).
+
+4. Contributions
+
+   By submitting a contribution to HellForge (code, documentation, data or anything else), you grant the licensor a
+   perpetual, worldwide, non-exclusive, royalty-free, irrevocable licence to use, copy, modify, distribute, sublicense
+   and relicense your contribution under any terms, including this licence, a later version of it or a more
+   permissive one. You confirm that you have the right to grant this licence for your contribution.
+
+5. Other people's material
+
+   Components HellForge downloads or uses (such as Dear ImGui, MinHook and Zig) stay under their own licences.
+   HELLDIVERS 2, its files, names and trademarks belong to their owners, Arrowhead Game Studios and Sony Interactive
+   Entertainment; this licence grants no rights to them. HellForge is an independent fan project, not affiliated with
+   or endorsed by them.
+
+6. Ending
+
+   If you break this licence, your permissions under it end at once. The licensor may also license HellForge to anyone
+   under other terms, and publish later versions of this licence.
+
+7. No warranty
+
+   HELLFORGE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+   WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE LICENSOR
+   OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH HELLFORGE OR THE USE OF OR OTHER DEALINGS IN IT.

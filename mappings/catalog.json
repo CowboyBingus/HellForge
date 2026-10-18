@@ -1,0 +1,2832 @@
+{
+  "format": 1,
+  "build": "25480438",
+  "items": {
+    "AR-23 Liberator": {
+      "id": "0xAA035309"
+    },
+    "LAS-16 Sickle": {
+      "id": "0x6AF4EC48"
+    },
+    "MG-206 Heavy Machine Gun": {
+      "id": "0x1FC9CA61"
+    },
+    "GL-15 Evictor": {
+      "id": "0xB1949046",
+      "note": "armory type 1"
+    },
+    "SG-8 Punisher": {
+      "id": "0x7C816371",
+      "note": "armory type 1"
+    },
+    "SG-8F Punisher fire of liberty": {
+      "id": "0x7349AF9A",
+      "note": "armory type 1"
+    },
+    "SG-8S Slugger": {
+      "id": "0x85E79A11",
+      "note": "armory type 1"
+    },
+    "SG-20 Halt": {
+      "id": "0x0753EF3E",
+      "note": "armory type 1"
+    },
+    "SG-451 Cookout": {
+      "id": "0x4EBE8680",
+      "note": "armory type 1"
+    },
+    "SG-8P Punisher Plasma": {
+      "id": "0xEBC68B9D",
+      "note": "armory type 1"
+    },
+    "SG-97 Sweeper": {
+      "id": "0x37879A69",
+      "note": "armory type 1"
+    },
+    "DBS-2 Double Freedom": {
+      "id": "0xCBAE1DBD",
+      "note": "armory type 1"
+    },
+    "M90A Shotgun": {
+      "id": "0xCB7DB486",
+      "note": "armory type 1"
+    },
+    "MP-98 Knight": {
+      "id": "0x80DD6F30",
+      "note": "armory type 1"
+    },
+    "SMG/FLAM-34 Stoker": {
+      "id": "0x77E1231D",
+      "note": "armory type 1"
+    },
+    "StA-11 SMG": {
+      "id": "0x464E4078",
+      "note": "armory type 1"
+    },
+    "M7S SMG": {
+      "id": "0x4A493DCA",
+      "note": "armory type 1"
+    },
+    "SMG-32 Reprimand": {
+      "id": "0x2B39C31F",
+      "note": "armory type 1"
+    },
+    "SMG-203 Gallant": {
+      "id": "0x202ABB40",
+      "note": "armory type 1"
+    },
+    "PLAS-39 Accelerator Rifle": {
+      "id": "0xCF5BB183",
+      "note": "armory type 1"
+    },
+    "VG-70 Variable": {
+      "id": "0x1BF99308",
+      "note": "armory type 1"
+    },
+    "ARC-12 Blitzer": {
+      "id": "0x3B92F7FA",
+      "note": "armory type 1"
+    },
+    "AR-23P Liberator Penetrator": {
+      "id": "0x63E774F4",
+      "note": "armory type 1"
+    },
+    "AR-23C Liberator Concussive": {
+      "id": "0x1669E66F",
+      "note": "armory type 1"
+    },
+    "AR/GL-21 One-Two": {
+      "id": "0xCC625481",
+      "note": "armory type 1"
+    },
+    "StA-52 Assault Rifle": {
+      "id": "0xC7596DC3",
+      "note": "armory type 1"
+    },
+    "AR-32 Pacifier": {
+      "id": "0xD7F2DE4F",
+      "note": "armory type 1"
+    },
+    "AR-2 Coyote": {
+      "id": "0x17DC1FA0",
+      "note": "armory type 1"
+    },
+    "MA5C Assault Rifle": {
+      "id": "0x98DF943D",
+      "note": "armory type 1"
+    },
+    "AR-23A Liberator Carbine": {
+      "id": "0x45323D4A",
+      "note": "armory type 1"
+    },
+    "AR-61 Tenderizer": {
+      "id": "0x727694FF",
+      "note": "armory type 1"
+    },
+    "AR-11 Arbitrator": {
+      "id": "0x57E616A0",
+      "note": "armory type 1"
+    },
+    "AR-59 Suppressor": {
+      "id": "0x9D947EFA",
+      "note": "armory type 1"
+    },
+    "SG-225 Breaker": {
+      "id": "0x46787908",
+      "note": "armory type 1"
+    },
+    "SG-225SP Breaker Spray&Pray": {
+      "id": "0xE35F8901",
+      "note": "armory type 1"
+    },
+    "SG-225IE Breaker Incendiary": {
+      "id": "0xB6E82301",
+      "note": "armory type 1"
+    },
+    "BR-14 Adjudicator": {
+      "id": "0x9D60CB41",
+      "note": "armory type 1"
+    },
+    "R-2 Amendment": {
+      "id": "0xDFF8870C",
+      "note": "armory type 1"
+    },
+    "R-2124 Constitution": {
+      "id": "0xF80523DD",
+      "note": "armory type 1"
+    },
+    "CB-9 Exploding Crossbow": {
+      "id": "0x73C93995",
+      "note": "armory type 1"
+    },
+    "FLAM-66 Torcher": {
+      "id": "0xF4DBB8B9",
+      "note": "armory type 1"
+    },
+    "JAR-5 Dominator": {
+      "id": "0x7E71CC40",
+      "note": "armory type 1"
+    },
+    "R-36 Eruptor": {
+      "id": "0x1438E266",
+      "note": "armory type 1"
+    },
+    "LAS-5 Scythe": {
+      "id": "0xE673DCC8",
+      "note": "armory type 1"
+    },
+    "LAS-22 Shear": {
+      "id": "0x7DE53646",
+      "note": "armory type 1"
+    },
+    "LAS-17 Double-Edge Sickle": {
+      "id": "0x126DB14F",
+      "note": "armory type 1"
+    },
+    "LAS-13 Trident": {
+      "id": "0xAB1B4972",
+      "note": "armory type 1"
+    },
+    "LAS-12 Sai": {
+      "id": "0xF47A207A",
+      "note": "armory type 1"
+    },
+    "R-6 Deadeye": {
+      "id": "0x7D6DC828",
+      "note": "armory type 1"
+    },
+    "R-4 Hyena": {
+      "id": "0x850C35D4",
+      "note": "armory type 1"
+    },
+    "R-72 Censor": {
+      "id": "0x31FD55E1",
+      "note": "armory type 1"
+    },
+    "R/40-K Hot-shot Marksman Rifle": {
+      "id": "0xF16B0BCF",
+      "note": "armory type 1"
+    },
+    "R-63 Diligence": {
+      "id": "0x8986A03E",
+      "note": "armory type 1"
+    },
+    "R-63CS Diligence Counter Sniper": {
+      "id": "0x371B35AD",
+      "note": "armory type 1"
+    },
+    "SMG-37 Defender": {
+      "id": "0xA8283F4C",
+      "note": "armory type 1"
+    },
+    "SMG-72 Pummeler": {
+      "id": "0x382687EE",
+      "note": "armory type 1"
+    },
+    "PLAS-1 Scorcher": {
+      "id": "0x372EBAC6",
+      "note": "armory type 1"
+    },
+    "PLAS-101 Purifier": {
+      "id": "0xAC227D76",
+      "note": "armory type 1"
+    },
+    "B/MD C4 Pack": {
+      "id": "0xDF6C920A",
+      "note": "armory type 2"
+    },
+    "CQC-20 Breaching Hammer": {
+      "id": "0xC682A504",
+      "note": "armory type 2"
+    },
+    "CQC-72 Entrenchment Tool": {
+      "id": "0xF662D295",
+      "note": "armory type 2"
+    },
+    "SG-88 Break-Action Shotgun": {
+      "id": "0xDF31041C",
+      "note": "armory type 2"
+    },
+    "TACTICAL VIDEO CAMERA": {
+      "id": "0x31F53DAC",
+      "note": "armory type 2"
+    },
+    "CQC-9 Defoliation Tool": {
+      "id": "0xD4E8C390",
+      "note": "armory type 2"
+    },
+    "CQC-1 One True Flag": {
+      "id": "0x30DF8520",
+      "note": "armory type 2"
+    },
+    "M-105 Stalwart": {
+      "id": "0x00DAE676",
+      "note": "armory type 2"
+    },
+    "RL-77 Airburst Rocket Launcher": {
+      "id": "0x77ADEF81",
+      "note": "armory type 2"
+    },
+    "ARC-3 Arc Thrower": {
+      "id": "0x3B21EE6A",
+      "note": "armory type 2"
+    },
+    "AC-8 Autocannon": {
+      "id": "0x342FD96B",
+      "note": "armory type 2"
+    },
+    "GL-28 Belt-Fed Grenade Launcher": {
+      "id": "0x1E86BFC1",
+      "note": "armory type 2"
+    },
+    "TX-41 Sterilizer": {
+      "id": "0xF77D6B07",
+      "note": "armory type 2"
+    },
+    "40-K Meltagun": {
+      "id": "0x2E2E6FD8",
+      "note": "armory type 2"
+    },
+    "MGX-42 Bullet Storm": {
+      "id": "0xC40048D8",
+      "note": "armory type 2"
+    },
+    "EAT-411 Leveller": {
+      "id": "0xAEEFCA37",
+      "note": "armory type 2"
+    },
+    "EAT-700 Expendable Napalm": {
+      "id": "0x6C19DD47",
+      "note": "armory type 2"
+    },
+    "FAF-14 Spear": {
+      "id": "0xE9DE8D7F",
+      "note": "armory type 2"
+    },
+    "StA-X3 W.A.S.P. Launcher": {
+      "id": "0x351B2B3E",
+      "note": "armory type 2"
+    },
+    "FLAM-40 Flamethrower": {
+      "id": "0x5563504D",
+      "note": "armory type 2"
+    },
+    "GL-21 Grenade Launcher": {
+      "id": "0xC74C740D",
+      "note": "armory type 2"
+    },
+    "GL-52 De-Escalator": {
+      "id": "0x092B178B",
+      "note": "armory type 2"
+    },
+    "S-11 Speargun": {
+      "id": "0x14118731",
+      "note": "armory type 2"
+    },
+    "B/FLAM-80 Cremator": {
+      "id": "0x7A409A20",
+      "note": "armory type 2"
+    },
+    "LAS-98 Laser Cannon": {
+      "id": "0xA83CF95D",
+      "note": "armory type 2"
+    },
+    "MLS-4X Commando": {
+      "id": "0x8518B86B",
+      "note": "armory type 2"
+    },
+    "LAS-99 Quasar Cannon": {
+      "id": "0x9C77755B",
+      "note": "armory type 2"
+    },
+    "EAT-17 Expendable Anti-Tank": {
+      "id": "0xCB778090",
+      "note": "armory type 2"
+    },
+    "MG-43 Machine Gun": {
+      "id": "0x1B4F8FA2",
+      "note": "armory type 2"
+    },
+    "M-1000 Maxigun": {
+      "id": "0xCDFBF3C2",
+      "note": "armory type 2"
+    },
+    "Solo Silo Targeting Remote": {
+      "id": "0xADF7054D",
+      "note": "armory type 2"
+    },
+    "PLAS-45 Epoch": {
+      "id": "0x7F9B0760",
+      "note": "armory type 2"
+    },
+    "RS-422 Railgun": {
+      "id": "0xB77A3F9D",
+      "note": "armory type 2"
+    },
+    "GR-8 Recoilless Rifle": {
+      "id": "0x4D67103D",
+      "note": "armory type 2"
+    },
+    "APW-1 Anti-Materiel Rifle": {
+      "id": "0x83970A39",
+      "note": "armory type 2"
+    },
+    "CQC-19 Stun Lance": {
+      "id": "0x96162F54",
+      "note": "armory type 3"
+    },
+    "P-92 Warrant": {
+      "id": "0x0C65CF53",
+      "note": "armory type 3"
+    },
+    "P-33 Missile Pistol": {
+      "id": "0x1565C087",
+      "note": "armory type 3"
+    },
+    "P-2 Peacemaker": {
+      "id": "0xA7977F98",
+      "note": "armory type 3"
+    },
+    "P-11 Stim Pistol": {
+      "id": "0x40A0EC6A",
+      "note": "armory type 3"
+    },
+    "CQC-2": {
+      "id": "0xF4F0EB9B",
+      "note": "armory type 3"
+    },
+    "CQC-30": {
+      "id": "0xBE998808",
+      "note": "armory type 3"
+    },
+    "CQC-5": {
+      "id": "0x57282CEC",
+      "note": "armory type 3"
+    },
+    "CQC-42": {
+      "id": "0xE604030B",
+      "note": "armory type 3"
+    },
+    "SG-22 Bushwhacker": {
+      "id": "0x86F75F90",
+      "note": "armory type 3"
+    },
+    "P-19 Redeemer": {
+      "id": "0xED550938",
+      "note": "armory type 3"
+    },
+    "P-35 Re-educator": {
+      "id": "0x41B85816",
+      "note": "armory type 3"
+    },
+    "LAS-58": {
+      "id": "0x727AE1EA",
+      "note": "armory type 3"
+    },
+    "P-72 Crisper": {
+      "id": "0x8B7D1CAE",
+      "note": "armory type 3"
+    },
+    "GP-31 Grenade Pistol": {
+      "id": "0xA6C20EAC",
+      "note": "armory type 3"
+    },
+    "P-34 Breacher": {
+      "id": "0xEE48242E",
+      "note": "armory type 3"
+    },
+    "LAS-7 Dagger": {
+      "id": "0x951D05B0",
+      "note": "armory type 3"
+    },
+    "P-113 Verdict": {
+      "id": "0x7386969F",
+      "note": "armory type 3"
+    },
+    "P-69 Veto": {
+      "id": "0x4E3F5600",
+      "note": "armory type 3"
+    },
+    "GP-20 Ultimatum": {
+      "id": "0x335B8A1A",
+      "note": "armory type 3"
+    },
+    "M6C/SOCOM Pistol": {
+      "id": "0x7854FEC9",
+      "note": "armory type 3"
+    },
+    "P/40-K Bolt Pistol": {
+      "id": "0xC304AEBB",
+      "note": "armory type 3"
+    },
+    "PLAS-15 Loyalist": {
+      "id": "0x7168A1D2",
+      "note": "armory type 3"
+    },
+    "P-4 Senator": {
+      "id": "0x51E62268",
+      "note": "armory type 3"
+    },
+    "P-41 Ombudsman": {
+      "id": "0xC9F609BA",
+      "note": "armory type 3"
+    },
+    "G-31 Arc": {
+      "id": "0x3D721B3B",
+      "note": "armory type 4"
+    },
+    "G-48 Giga Grenade": {
+      "id": "0x0B4761B8",
+      "note": "armory type 4"
+    },
+    "G-16 Impact": {
+      "id": "0xA8461265",
+      "note": "armory type 4"
+    },
+    "G-89 Smokescreen": {
+      "id": "0x07DD527D",
+      "note": "armory type 4"
+    },
+    "G-13 Incendiary Impact": {
+      "id": "0x00F94E53",
+      "note": "armory type 4"
+    },
+    "G-8 Immolation": {
+      "id": "0xC0690A6D",
+      "note": "armory type 4"
+    },
+    "G-60 Anti-Tank Seeker": {
+      "id": "0x3792E8AE",
+      "note": "armory type 4"
+    },
+    "G-11 Caltrops": {
+      "id": "0xE2E872C1",
+      "note": "armory type 4"
+    },
+    "G-7 Pineapple": {
+      "id": "0x61B9ED5F",
+      "note": "armory type 4"
+    },
+    "TED-63": {
+      "id": "0x16F9AD29",
+      "note": "armory type 4"
+    },
+    "G/SH-39 Shield": {
+      "id": "0xCE9B46A2",
+      "note": "armory type 4"
+    },
+    "G-23 Stun": {
+      "id": "0x165A462A",
+      "note": "armory type 4"
+    },
+    "G-6 Frag": {
+      "id": "0xC4736993",
+      "note": "armory type 4"
+    },
+    "G-4 Gas": {
+      "id": "0x4AD84EEA",
+      "note": "armory type 4"
+    },
+    "G-12 High Explosive": {
+      "id": "0xBE376EA8",
+      "note": "armory type 4"
+    },
+    "G-10 Incendiary": {
+      "id": "0xDF716242",
+      "note": "armory type 4"
+    },
+    "TM-1 Lure Mine": {
+      "id": "0x686F617B",
+      "note": "armory type 4"
+    },
+    "G/40-K Melta Mine": {
+      "id": "0x4FD3EC53",
+      "note": "armory type 4"
+    },
+    "G-50 Seeker": {
+      "id": "0x6AAC9355",
+      "note": "armory type 4"
+    },
+    "G-3 Smoke": {
+      "id": "0xAB8353BB",
+      "note": "armory type 4"
+    },
+    "G-123 Thermite": {
+      "id": "0xE6A4960D",
+      "note": "armory type 4"
+    },
+    "G-109 Urchin": {
+      "id": "0x60E7A1E1",
+      "note": "armory type 4"
+    },
+    "K-2 Throwing Knife": {
+      "id": "0x6ECA4E67",
+      "note": "armory type 4"
+    },
+    "G-142 Pyrotech": {
+      "id": "0x601F9A85",
+      "note": "armory type 4"
+    },
+    "BACKPACK": {
+      "id": "0x00000000",
+      "note": "armory type 6"
+    },
+    "Resupply": {
+      "id": "0xAD382F14",
+      "note": "armory type 6"
+    },
+    "Airburst Rocket Backpack": {
+      "id": "0x877B526D",
+      "note": "armory type 6"
+    },
+    "B-1 Supply Pack": {
+      "id": "0x72C8B22F",
+      "note": "armory type 6"
+    },
+    "Autocannon Backpack": {
+      "id": "0xB6C440C0",
+      "note": "armory type 6"
+    },
+    "SH-20 Ballistic Shield Backpack": {
+      "id": "0x3D5358E7",
+      "note": "armory type 6"
+    },
+    "Belt-Fed Grenade Launcher Backpack": {
+      "id": "0x1E86BFC1",
+      "note": "armory type 6"
+    },
+    "B-100 Portable Hellbomb": {
+      "id": "0xFDA67955",
+      "note": "armory type 6"
+    },
+    "SH-51 Directional Shield": {
+      "id": "0x103DB8DC",
+      "note": "armory type 6"
+    },
+    "LIFT-182 Warp Pack": {
+      "id": "0xC1E54B3A",
+      "note": "armory type 6"
+    },
+    "AX/FLAM-75 Hot Dog": {
+      "id": "0xE772388F",
+      "note": "armory type 6"
+    },
+    "AX/TX-13 Dog Breath": {
+      "id": "0xFCED5B6D",
+      "note": "armory type 6"
+    },
+    "AX/AR-23 Guard Dog": {
+      "id": "0xA0FD2B8D",
+      "note": "armory type 6"
+    },
+    "AX/LAS-5 Rover": {
+      "id": "0x55D86280",
+      "note": "armory type 6"
+    },
+    "SH-32 Shield Generator Pack": {
+      "id": "0x4E45D003",
+      "note": "armory type 6"
+    },
+    "Spear Backpack": {
+      "id": "0x102EE929",
+      "note": "armory type 6"
+    },
+    "W.A.S.P. Launcher Backpack": {
+      "id": "0x2F1F6B77",
+      "note": "armory type 6"
+    },
+    "AX/ARC-3 K-9": {
+      "id": "0x6FC95612",
+      "note": "armory type 6"
+    },
+    "Cremator Backpack": {
+      "id": "0x19CDB707",
+      "note": "armory type 6"
+    },
+    "LIFT-860": {
+      "id": "0x1AFD96A2",
+      "note": "armory type 6"
+    },
+    "LIFT-850 Jump Pack": {
+      "id": "0x9DE57ACA",
+      "note": "armory type 6"
+    },
+    "SH-20 MEDIC BACKPACK": {
+      "id": "0xEF09E5F0",
+      "note": "armory type 6"
+    },
+    "Maxigun Backpack": {
+      "id": "0x411F7D9B",
+      "note": "armory type 6"
+    },
+    "Recoilless Rifle Backpack": {
+      "id": "0x83EED502",
+      "note": "armory type 6"
+    },
+    "Larva Container": {
+      "id": "0x00000000",
+      "note": "armory type 6"
+    },
+    "Chemical Backpack": {
+      "id": "0x00000000",
+      "note": "armory type 6"
+    }
+  },
+  "projectiles": {
+    "LAS-58 Talon": {
+      "id": "144"
+    },
+    "AR-23 Liberator": {
+      "id": "276"
+    },
+    "MG-206 Heavy Machine Gun": {
+      "id": "275"
+    },
+    "SMG-37 Defender": {
+      "id": "3"
+    },
+    "P-113 Verdict": {
+      "id": "15"
+    },
+    "EAT-411 Leveller": {
+      "id": "34"
+    },
+    "SMG/FLAM-34 Stoker": {
+      "id": "38"
+    },
+    "Gatekeeper": {
+      "id": "39"
+    },
+    "R-36 Eruptor": {
+      "id": "40"
+    },
+    "AR-61 Tenderizer": {
+      "id": "44"
+    },
+    "MG-43 Machine Gun": {
+      "id": "49"
+    },
+    "SG-8P Punisher Plasma": {
+      "id": "57"
+    },
+    "SMG-203 Gallant": {
+      "id": "76"
+    },
+    "R/40-K Hot-Shot Marksman Rifle": {
+      "id": "86"
+    },
+    "GL-28 Belt-Fed Grenade Launcher": {
+      "id": "89"
+    },
+    "VG-70 Variable": {
+      "id": "94"
+    },
+    "AR-32 Pacifier": {
+      "id": "98"
+    },
+    "GP-20 Ultimatum": {
+      "id": "103"
+    },
+    "MA5C Assault Rifle": {
+      "id": "119"
+    },
+    "SMG-32 Reprimand": {
+      "id": "123"
+    },
+    "S-11 Speargun": {
+      "id": "125"
+    },
+    "EXO-45 Patriot Exosuit slot 0": {
+      "id": "128"
+    },
+    "EAT-17 Expendable Anti-Tank": {
+      "id": "132"
+    },
+    "LAS-99 Quasar Cannon": {
+      "id": "133"
+    },
+    "BR-14 Adjudicator": {
+      "id": "135"
+    },
+    "AR-2 Coyote": {
+      "id": "138"
+    },
+    "AR-59 Suppressor": {
+      "id": "139"
+    },
+    "P-33 Missile Pistol": {
+      "id": "152"
+    },
+    "GR-8 Recoilless Rifle": {
+      "id": "153"
+    },
+    "A/M-23 EMS Mortar Sentry": {
+      "id": "154"
+    },
+    "PLAS-39 Accelerator Rifle": {
+      "id": "155"
+    },
+    "SMG-72 Pummeler": {
+      "id": "157"
+    },
+    "PLAS-15 Loyalist": {
+      "id": "171"
+    },
+    "SG-225SP Breaker Spray&Pray": {
+      "id": "174"
+    },
+    "JAR-5 Dominator": {
+      "id": "177"
+    },
+    "SG-225 Breaker": {
+      "id": "179"
+    },
+    "P/40-K Bolt Pistol": {
+      "id": "202"
+    },
+    "R-4 Hyena": {
+      "id": "207"
+    },
+    "FAF-14 Spear": {
+      "id": "225"
+    },
+    "APW-1 Anti-Materiel Rifle": {
+      "id": "226"
+    },
+    "LAS-12 Sai": {
+      "id": "236"
+    },
+    "R-63CS Diligence Counter Sniper": {
+      "id": "241"
+    },
+    "CB-9 Exploding Crossbow": {
+      "id": "249"
+    },
+    "TD-110 Maelstrom attach_tank_gun": {
+      "id": "251"
+    },
+    "EAT-700 Expendable Napalm": {
+      "id": "259"
+    },
+    "P-34 Breacher": {
+      "id": "270"
+    },
+    "AR-11 Arbitrator": {
+      "id": "288"
+    },
+    "R-63 Diligence": {
+      "id": "305"
+    },
+    "M-1000 Maxigun": {
+      "id": "306"
+    },
+    "M6C/SOCOM Pistol": {
+      "id": "308"
+    },
+    "RL-77 Airburst Rocket Launcher": {
+      "id": "312"
+    },
+    "SG-225IE Breaker Incendiary": {
+      "id": "314"
+    },
+    "A/MLS-4X Rocket Sentry": {
+      "id": "320"
+    },
+    "R-72 Censor": {
+      "id": "325"
+    },
+    "P-92 Warrant": {
+      "id": "326"
+    },
+    "R-2 Amendment": {
+      "id": "327"
+    },
+    "AR/GL-21 One-Two": {
+      "id": "334"
+    },
+    "M7S SMG": {
+      "id": "340"
+    },
+    "A/GM-17 Gas Mortar Sentry": {
+      "id": "342"
+    },
+    "P-35 Re-Educator": {
+      "id": "343"
+    },
+    "A/M-12 Mortar Sentry": {
+      "id": "346"
+    }
+  },
+  "stratagems": {
+    "Orbital Precision Strike": {
+      "id": "118"
+    },
+    "Orbital Airburst Strike": {
+      "id": "83"
+    },
+    "Orbital 120mm HE Barrage": {
+      "constant": "ORBITAL_120MM_BARRAGE",
+      "id": "136"
+    },
+    "Orbital 380mm HE Barrage": {
+      "constant": "ORBITAL_380MM_BARRAGE",
+      "id": "125"
+    },
+    "Orbital Gatling Barrage": {
+      "id": "4"
+    },
+    "EXO-45 Patriot Exosuit": {
+      "constant": "EXO45_PATRIOT",
+      "id": "27",
+      "note": "a Pelican drop (delivery kind 3)"
+    },
+    "TD-220 Bastion MK XVI": {
+      "id": "1",
+      "note": "DropoffTank, stable id 7756f32c"
+    },
+    "AX/ARC-3 K-9": {
+      "id": "2",
+      "note": "Drone_Stun, stable id 64dbeffc"
+    },
+    "Eagle 500kg Bomb": {
+      "id": "3",
+      "note": "EagleBomb, stable id f583b70b"
+    },
+    "Orbital Illumination Flare": {
+      "id": "5",
+      "note": "OrbitalIlluminationFlare, stable id 651210db"
+    },
+    "MLS-4X Commando": {
+      "id": "6",
+      "note": "LaserGuidedMissileLauncher, stable id 8518b86b"
+    },
+    "Extraction Beacon": {
+      "id": "7",
+      "note": "ExtractionBeacon, stable id 33ef371e"
+    },
+    "A/FLAM-40 Flame Sentry": {
+      "id": "8",
+      "note": "TurretFlamethrower, stable id 1c4bb6bd"
+    },
+    "E/AT-12 Anti-Tank Emplacement": {
+      "id": "9",
+      "note": "TurretMannedAntiTank, stable id 2d741bf8"
+    },
+    "EXO-49 Emancipator Exosuit": {
+      "id": "10",
+      "note": "DropoffCombatWalker_Autocannon, stable id 4ceb772f"
+    },
+    "Raise Flag": {
+      "id": "11",
+      "note": "RaiseFlag, stable id ddde011a"
+    },
+    "MD-17 Anti-Tank Mines": {
+      "id": "12",
+      "note": "MineDeployer_AntiTank, stable id 8577190e"
+    },
+    "M-105 Stalwart": {
+      "id": "13",
+      "note": "LightMachinegun, stable id 00dae676"
+    },
+    "B/MD C4 Pack": {
+      "id": "14",
+      "note": "C4, stable id df6c920a"
+    },
+    "LATOneshot Booster": {
+      "id": "15",
+      "note": "LATOneshot_Booster, stable id dfb589b2"
+    },
+    "EAT-411 Leveller": {
+      "id": "16",
+      "note": "ExpendableMassiveRocketLauncher, stable id aeefca37"
+    },
+    "Bug Thumper": {
+      "id": "17",
+      "note": "BugThumper, stable id a22d8513"
+    },
+    "Eagle Airstrike": {
+      "id": "18",
+      "note": "EagleAirstrike, stable id 49cfda04"
+    },
+    "Seismic Probe": {
+      "id": "19",
+      "note": "SeismicProbe, stable id 26c50c61"
+    },
+    "Medic Backpack President Reward": {
+      "id": "20",
+      "note": "MedicBackpack_PresidentReward, stable id 410b33ce"
+    },
+    "Orbital Walking Barrage": {
+      "id": "21",
+      "note": "OrbitalWalkingBarrage, stable id c37dfb01"
+    },
+    "FX-12 Shield Generator Relay": {
+      "id": "22",
+      "note": "EnergyShield, stable id 880384ff"
+    },
+    "A/LAS-98 Laser Sentry": {
+      "id": "23",
+      "note": "TurretLaserCannon, stable id 393e6019"
+    },
+    "LIFT-182 Warp Pack": {
+      "id": "24",
+      "note": "DisplacementBackpack, stable id 823d2463"
+    },
+    "AC-8 Autocannon": {
+      "id": "25",
+      "note": "AutomaticCannon, stable id 342fd96b"
+    },
+    "M-103 Supply FRV": {
+      "id": "26",
+      "note": "DropoffFrv_Supply, stable id 9d28d826"
+    },
+    "SEAF Gun": {
+      "id": "28",
+      "note": "SEAF_Gun, stable id b1ee312a"
+    },
+    "Dark Fluid Backpack": {
+      "id": "29",
+      "note": "DarkFluidBackpack, stable id 3e227d72"
+    },
+    "Eagle Strafing Run": {
+      "id": "30",
+      "note": "EagleCAS, stable id a7619b75"
+    },
+    "B-100 Portable Hellbomb": {
+      "id": "31",
+      "note": "MissionHellbombBackpack, stable id 3ecc4bae"
+    },
+    "MG-206 Heavy Machine Gun": {
+      "id": "32",
+      "note": "Heavy_Mg, stable id 1fc9ca61"
+    },
+    "Resupply": {
+      "id": "33",
+      "note": "AmmoRack, stable id 33babe96"
+    },
+    "Orbital EMS Strike": {
+      "id": "34",
+      "note": "OrbitalStun, stable id 4c561b17"
+    },
+    "Eagle Strafe": {
+      "id": "35",
+      "note": "EagleStrafe, stable id 376cd317"
+    },
+    "Oil Rig Extract": {
+      "id": "36",
+      "note": "OilRigExtract, stable id 03e86f3c"
+    },
+    "Dropoff Combat Walker President Reward": {
+      "id": "37",
+      "note": "DropoffCombatWalker_PresidentReward, stable id 9a403cbf"
+    },
+    "Eagle Smoke Strike": {
+      "id": "38",
+      "note": "EagleAirstrikeSmoke, stable id 6472975a"
+    },
+    "EAT-700 Expendable Napalm": {
+      "id": "39",
+      "note": "ExpendableNapalmLauncher, stable id 6c19dd47"
+    },
+    "Tutorial Extract": {
+      "id": "40",
+      "note": "Tutorial_Extract, stable id 84ebe436"
+    },
+    "Orbital Gas Strike": {
+      "id": "41",
+      "note": "OrbitalGas, stable id be55db09"
+    },
+    "Dropoff Hellbomb": {
+      "id": "42",
+      "note": "DropoffHellbomb, stable id edc80afc"
+    },
+    "SH-32 Shield Generator Pack": {
+      "id": "43",
+      "note": "EnergyShieldBackpack, stable id e51a48f4"
+    },
+    "A/M-23 EMS Mortar Sentry": {
+      "id": "44",
+      "note": "TurretMortar_Staticfield, stable id b7e90b5a"
+    },
+    "PLAS-45 Epoch": {
+      "id": "45",
+      "note": "PlasmaBlaster, stable id fe02c2e3"
+    },
+    "MD-8 Gas Mines": {
+      "id": "46",
+      "note": "MineDeployer_GasMines, stable id 26640a59"
+    },
+    "Tank Reload HE": {
+      "id": "47",
+      "note": "TankReloadHE, stable id 060c1d28"
+    },
+    "Data Jack": {
+      "id": "48",
+      "note": "DataJack, stable id 2897ac3f"
+    },
+    "Eagle Rearm": {
+      "id": "49",
+      "note": "EagleRearm, stable id e4b4f558"
+    },
+    "TD-110 Maelstrom": {
+      "id": "50",
+      "note": "DropoffTankStorm, stable id 1b7853ac"
+    },
+    "CQC-9 Defoliation Tool": {
+      "id": "51",
+      "note": "Melee_Chainsaw_Greatsword, stable id d4e8c390"
+    },
+    "A/GM-17 Gas Mortar Sentry": {
+      "id": "52",
+      "note": "TurretMortar_Gas, stable id bdbde856"
+    },
+    "A/MLS-4X Rocket Sentry": {
+      "id": "53",
+      "note": "TurretRocket, stable id 2ac7580f"
+    },
+    "RL-77 Airburst Rocket Launcher": {
+      "id": "54",
+      "note": "Air_Burst_Rocket_Launcher, stable id 77adef81"
+    },
+    "LIFT-860 Hover Pack": {
+      "id": "55",
+      "note": "HoverpackBackpack, stable id 04610b4d"
+    },
+    "RS-422 Railgun": {
+      "id": "56",
+      "note": "Railgun, stable id b77a3f9d"
+    },
+    "AX/FLAM-75 Hot Dog": {
+      "id": "57",
+      "note": "Drone_FLAMETHROWER, stable id 4312d593"
+    },
+    "Orbital Railcannon Strike": {
+      "id": "58",
+      "note": "OrbitalRailcannon, stable id a39552a5"
+    },
+    "E/GL-21 Grenadier Battlement": {
+      "id": "59",
+      "note": "Cover_Grenade_Launcher, stable id 93d3c05c"
+    },
+    "Tank Reload Canister": {
+      "id": "60",
+      "note": "TankReloadCanister, stable id fe319036"
+    },
+    "TX-41 Sterilizer": {
+      "id": "61",
+      "note": "Chem_Gun, stable id f77d6b07"
+    },
+    "Orbital Walking Barrage Smoke": {
+      "id": "62",
+      "note": "OrbitalWalkingBarrageSmoke, stable id e2446220"
+    },
+    "LAS-98 Laser Cannon": {
+      "id": "63",
+      "note": "LaserCannon, stable id a83cf95d"
+    },
+    "TCS03 Thumper": {
+      "id": "64",
+      "note": "TCS03Thumper, stable id 54ffa8fe"
+    },
+    "Eagle Cluster Bomb": {
+      "id": "65",
+      "note": "EagleClusterbombs, stable id d9efc7d3"
+    },
+    "A/G-16 Gatling Sentry": {
+      "id": "66",
+      "note": "TurretMachinegun, stable id 2528336d"
+    },
+    "SH-51 Directional Shield": {
+      "id": "67",
+      "note": "DirectionalEnergyShield, stable id 103db8dc"
+    },
+    "ARC-3 Arc Thrower": {
+      "id": "68",
+      "note": "ArcThrower, stable id 3b21ee6a"
+    },
+    "Turret Rocket President Reward": {
+      "id": "69",
+      "note": "TurretRocket_PresidentReward, stable id c3386d38"
+    },
+    "Prospecting Drill": {
+      "id": "70",
+      "note": "ProspectingDrill, stable id 28d77b55"
+    },
+    "Dropoff Cargo Container": {
+      "id": "71",
+      "note": "DropoffCargoContainer, stable id 5fbd75b0"
+    },
+    "Dropoff Bug Plug": {
+      "id": "72",
+      "note": "DropoffBugPlug, stable id 5996e290"
+    },
+    "AX/AR-23 Guard Dog": {
+      "id": "73",
+      "note": "DroneMG, stable id 1cf5bd48"
+    },
+    "Orbital Smoke Strike": {
+      "id": "74",
+      "note": "OrbitalSmoke, stable id dd588e38"
+    },
+    "FAF-14 Spear": {
+      "id": "75",
+      "note": "FafMissileLauncher, stable id e9de8d7f"
+    },
+    "Cyborg Carry Data": {
+      "id": "76",
+      "note": "CyborgCarryData, stable id ea2efc09"
+    },
+    "Health Pack Rack": {
+      "id": "77",
+      "note": "HealthPackRack, stable id 84df23be"
+    },
+    "Shoulder Mounted Camera": {
+      "id": "78",
+      "note": "ShoulderMountedCamera, stable id 82559b5c"
+    },
+    "Carry Data": {
+      "id": "79",
+      "note": "CarryData, stable id 8a41c607"
+    },
+    "GL-21 Grenade Launcher": {
+      "id": "80",
+      "note": "GrenadeLauncher, stable id c74c740d"
+    },
+    "40-K Meltagun": {
+      "id": "81",
+      "note": "Energy_Weapon_Shark, stable id 2e2e6fd8"
+    },
+    "Machinegun President Reward": {
+      "id": "82",
+      "note": "Machinegun_PresidentReward, stable id 5d6e6c44"
+    },
+    "Jammed Pinata": {
+      "id": "84",
+      "note": "JammedPinata, stable id e6919129"
+    },
+    "Raise Flag no clear area": {
+      "id": "85",
+      "note": "RaiseFlag_no_clear_area, stable id 23b71612"
+    },
+    "Remote Explosives": {
+      "id": "86",
+      "note": "RemoteExplosives, stable id 497dc11b"
+    },
+    "B/FLAM-80 Cremator": {
+      "id": "87",
+      "note": "heavy_flamethrower, stable id 8763e173"
+    },
+    "EXO-55 Breakthrough Exosuit": {
+      "id": "88",
+      "note": "DropoffCombatWalker_Breacher, stable id 219bb243"
+    },
+    "MS-11 Solo Silo": {
+      "id": "89",
+      "note": "MiniMissile, stable id 4fb52679"
+    },
+    "Health Pack Rack President Reward": {
+      "id": "90",
+      "note": "HealthPackRack_PresidentReward, stable id 0f378cf4"
+    },
+    "EXO-51 Lumberer Exosuit": {
+      "id": "91",
+      "note": "DropoffCombatWalkerLumberer, stable id b7f54989"
+    },
+    "MG-43 Machine Gun": {
+      "id": "92",
+      "note": "Machinegun, stable id 1b4f8fa2"
+    },
+    "Tutorial Reinforcement Beacon": {
+      "id": "93",
+      "note": "Tutorial_ReinforcementBeacon, stable id 3376096e"
+    },
+    "Dropoff Poison Drill": {
+      "id": "94",
+      "note": "DropoffPoisonDrill, stable id 3674508d"
+    },
+    "Tank Reload AT": {
+      "id": "95",
+      "note": "TankReloadAT, stable id dcb0a25d"
+    },
+    "SH-20 Ballistic Shield Backpack": {
+      "id": "96",
+      "note": "BallisticShield, stable id c7e2797b"
+    },
+    "StA-X3 W.A.S.P. Launcher": {
+      "id": "97",
+      "note": "FafMissileLauncherHelghast, stable id 351b2b3e"
+    },
+    "Emergency Extraction Beacon": {
+      "id": "98",
+      "note": "EmergencyExtractionBeacon, stable id 2aaea4fc"
+    },
+    "MGX-42 Bullet Storm": {
+      "id": "99",
+      "note": "Expendable_Machinegun, stable id c40048d8"
+    },
+    "CQC-20 Breaching Hammer": {
+      "id": "100",
+      "note": "Melee_Sledge_Hammer, stable id c682a504"
+    },
+    "B-1 Supply Pack": {
+      "id": "101",
+      "note": "AmmoBackpack, stable id 71b6d7da"
+    },
+    "Mobile Comms Relay": {
+      "id": "102",
+      "note": "MobileCommsRelay, stable id 2a09b78d"
+    },
+    "Carpet Bomb": {
+      "id": "103",
+      "note": "CarpetBomb, stable id 35f2078f"
+    },
+    "A/ARC-3 Tesla Tower": {
+      "id": "104",
+      "note": "TurretTesla, stable id 8f349f3b"
+    },
+    "M-102 Gunner FRV": {
+      "id": "105",
+      "note": "DropoffFrv, stable id ea902c4b"
+    },
+    "Orbital Napalm Barrage": {
+      "id": "106",
+      "note": "OrbitalNapalmBarrage, stable id ad00e173"
+    },
+    "Orbital Laser": {
+      "id": "107",
+      "note": "OrbitalLaser, stable id 39d7e6a4"
+    },
+    "Scrambler": {
+      "id": "108",
+      "note": "Scrambler, stable id 3bf627cf"
+    },
+    "Ammo Rack President Reward": {
+      "id": "109",
+      "note": "AmmoRack_PresidentReward, stable id 4d36b84c"
+    },
+    "M-1000 Maxigun": {
+      "id": "110",
+      "note": "Minigun, stable id cdfbf3c2"
+    },
+    "Immediate Extraction Beacon": {
+      "id": "111",
+      "note": "ImmediateExtractionBeacon, stable id 1e61988b"
+    },
+    "FLAM-40 Flamethrower": {
+      "id": "112",
+      "note": "Flamethrower, stable id 5563504d"
+    },
+    "S-11 Speargun": {
+      "id": "113",
+      "note": "harpoon_gun, stable id 14118731"
+    },
+    "CQC-1 One True Flag": {
+      "id": "114",
+      "note": "Melee_Flag, stable id 8703e7b7"
+    },
+    "AX/LAS-5 Rover": {
+      "id": "115",
+      "note": "Drone_Laser_Rifle, stable id 38be3206"
+    },
+    "Dropoff SEAFSquad": {
+      "id": "116",
+      "note": "DropoffSEAFSquad, stable id 566465c9"
+    },
+    "A/M-12 Mortar Sentry": {
+      "id": "117",
+      "note": "TurretMortar, stable id 5e52ffca"
+    },
+    "MD-6 Anti-Personnel Minefield": {
+      "id": "119",
+      "note": "MineDeployer, stable id 00c19c58"
+    },
+    "Hellbomb Backpack": {
+      "id": "120",
+      "note": "HellbombBackpack, stable id 02bbff50"
+    },
+    "A/MG-43 Machine Gun Sentry": {
+      "id": "121",
+      "note": "TurretMachinegunGPMG, stable id fcb5ffa9"
+    },
+    "Spire Sterilizer": {
+      "id": "122",
+      "note": "SpireSterilizer, stable id 6cc40a80"
+    },
+    "Call In Destroyer": {
+      "id": "123",
+      "note": "CallInDestroyer, stable id f8f90965"
+    },
+    "Reinforcement Beacon": {
+      "id": "124",
+      "note": "ReinforcementBeacon, stable id 87147bdb"
+    },
+    "Eagle Gas Airstrike": {
+      "id": "126",
+      "note": "EagleAirstrikeGas, stable id fa1e1428"
+    },
+    "GL-28 Belt-Fed Grenade Launcher": {
+      "id": "127",
+      "note": "BeltFedGrenadeLauncher, stable id 1e86bfc1"
+    },
+    "Upload Discovery": {
+      "id": "128",
+      "note": "UploadDiscovery, stable id c4bc2b6f"
+    },
+    "Drilling Charge": {
+      "id": "129",
+      "note": "DrillingCharge, stable id 2ab17685"
+    },
+    "GR-8 Recoilless Rifle": {
+      "id": "130",
+      "note": "Recoilless, stable id 4d67103d"
+    },
+    "GL-52 De-Escalator": {
+      "id": "131",
+      "note": "GrenadeLauncherTactical, stable id 092b178b"
+    },
+    "Nuke": {
+      "id": "132",
+      "note": "Nuke, stable id 9ec3f5aa"
+    },
+    "Eagle Napalm Airstrike": {
+      "id": "133",
+      "note": "EagleAirstrikeNapalm, stable id 799a07db"
+    },
+    "LIFT-850 Jump Pack": {
+      "id": "134",
+      "note": "JumppackBackpack, stable id 68835223"
+    },
+    "M-104 Incinerator FRV": {
+      "id": "135",
+      "note": "DropoffFrv_Flamer, stable id a9a97cd7"
+    },
+    "A/AC-8 Autocannon Sentry": {
+      "id": "137",
+      "note": "TurretAutocannon, stable id 32ef9ab3"
+    },
+    "Dropoff Special Cargo Container": {
+      "id": "138",
+      "note": "DropoffSpecialCargoContainer, stable id 9f26d520"
+    },
+    "MD-I4 Incendiary Mines": {
+      "id": "139",
+      "note": "MineDeployer_IncendiaryMines, stable id a371c29d"
+    },
+    "Eagle 110mm Rocket Pods": {
+      "id": "140",
+      "note": "EagleRocket, stable id 76031695"
+    },
+    "APW-1 Anti-Materiel Rifle": {
+      "id": "141",
+      "note": "Sniper, stable id 83970a39"
+    },
+    "AX/TX-13 Dog Breath": {
+      "id": "142",
+      "note": "Drone_GASPROJECTOR, stable id 004f214c"
+    },
+    "Jumppack Backpack President Reward": {
+      "id": "143",
+      "note": "JumppackBackpack_PresidentReward, stable id c5ac3dd0"
+    },
+    "E/MG-101 HMG Emplacement": {
+      "id": "144",
+      "note": "TurretManned, stable id ae094363"
+    },
+    "SOSBeacon": {
+      "id": "145",
+      "note": "SOSBeacon, stable id be58bfa5"
+    },
+    "Eagle Missile": {
+      "id": "146",
+      "note": "EagleMissile, stable id b2e060bb"
+    },
+    "EAT-17 Expendable Anti-Tank": {
+      "id": "147",
+      "note": "LATOneshot, stable id cb778090"
+    },
+    "Extract": {
+      "id": "148",
+      "note": "Extract, stable id 06e60500"
+    },
+    "LAS-99 Quasar Cannon": {
+      "id": "149",
+      "note": "LaserPulseCannon, stable id 9c77755b"
+    }
+  },
+  "behaviours": {
+    "Pelican Transport": {
+      "id": "667",
+      "note": "shuttle_transport: flies in, hovers 6 s, releases its cargo, departs"
+    },
+    "Pelican Turret": {
+      "id": "645",
+      "note": "the Pelican's chin turret: aims 1.5 s, fires 0.5 s bursts"
+    }
+  },
+  "entities": {
+    "Pelican Transport": {
+      "id": "0x75BE82ED8592A6B3",
+      "note": "shuttle_transport: carries vehicles; behaviour 667"
+    },
+    "Pelican Gunship": {
+      "id": "0xEF3A4136B21592CB",
+      "note": "shuttle_gunship: extraction; behaviour 202"
+    },
+    "Pelican Turret": {
+      "id": "0x8365609B35EF6672",
+      "note": "shuttle_gunship_turret_hmg: the chin turret; behaviour 645"
+    },
+    "A/G-16 Gatling Sentry": {
+      "constant": "GATLING_SENTRY",
+      "id": "0xEF85D6CF58E31D70",
+      "note": "gatling_turret; behaviour 213"
+    },
+    "MG-206 Heavy Machine Gun": {
+      "id": "0x2152D5147B0AC418",
+      "note": "content/fac_helldivers/equipment/support_weapons/heavy_mg"
+    },
+    "GL-15 Evictor": {
+      "id": "0x006E44327BB953FE"
+    },
+    "SG-8 Punisher": {
+      "id": "0x41EAC4A03987FAA0"
+    },
+    "SG-8F Punisher fire of liberty": {
+      "id": "0xBCC2177439D231BE"
+    },
+    "SG-8S Slugger": {
+      "id": "0x4F749E2EE26F532D"
+    },
+    "SG-20 Halt": {
+      "id": "0x4E310B1FE4C52B52"
+    },
+    "SG-451 Cookout": {
+      "id": "0xD323DE60855898AC"
+    },
+    "SG-8P Punisher Plasma": {
+      "id": "0x05D8D8C073B9D502"
+    },
+    "SG-97 Sweeper": {
+      "id": "0xDCD1C835407EF7BA"
+    },
+    "DBS-2 Double Freedom": {
+      "id": "0x72170A55A1F37FF1"
+    },
+    "M90A Shotgun": {
+      "id": "0x90DDC374F4E3D756"
+    },
+    "MP-98 Knight": {
+      "id": "0x9571CA51F0DAF35B"
+    },
+    "SMG/FLAM-34 Stoker": {
+      "id": "0x8A307BD1811A5FE9"
+    },
+    "StA-11 SMG": {
+      "id": "0x4BA41B6F9F405CC2"
+    },
+    "M7S SMG": {
+      "id": "0xBE70EE0D8D44028E"
+    },
+    "SMG-32 Reprimand": {
+      "id": "0x94BD931B5FB4EE95"
+    },
+    "SMG-203 Gallant": {
+      "id": "0x186EA95DE7306B1A"
+    },
+    "PLAS-39 Accelerator Rifle": {
+      "id": "0x30061F91AF477F5E"
+    },
+    "VG-70 Variable": {
+      "id": "0xF992CE97577C8A7F"
+    },
+    "ARC-12 Blitzer": {
+      "id": "0x076DD5D4F4360204"
+    },
+    "AR-23 Liberator": {
+      "id": "0x968211C0033DCE64"
+    },
+    "AR-23P Liberator Penetrator": {
+      "id": "0x43CB1033961A2276"
+    },
+    "AR-23C Liberator Concussive": {
+      "id": "0xCF5F176E0E322BE1"
+    },
+    "AR/GL-21 One-Two": {
+      "id": "0xA955C4EA6F6D4203"
+    },
+    "StA-52 Assault Rifle": {
+      "id": "0xCDF28BE026BB7D84"
+    },
+    "AR-32 Pacifier": {
+      "id": "0xBC29613666DF696B"
+    },
+    "AR-2 Coyote": {
+      "id": "0x84354339522C932D"
+    },
+    "MA5C Assault Rifle": {
+      "id": "0x4DBD74F49C8FFC13"
+    },
+    "AR-23A Liberator Carbine": {
+      "id": "0xA7EE1EBF58FCDF1F"
+    },
+    "AR-61 Tenderizer": {
+      "id": "0xCE063AA33D95A812"
+    },
+    "AR-11 Arbitrator": {
+      "id": "0xA8A91EB54892B6B2"
+    },
+    "AR-59 Suppressor": {
+      "id": "0x708EA298C82093D0"
+    },
+    "SG-225 Breaker": {
+      "id": "0x46183B50961D1328"
+    },
+    "SG-225SP Breaker Spray&Pray": {
+      "id": "0x5EBAEA70C0D060B9"
+    },
+    "SG-225IE Breaker Incendiary": {
+      "id": "0xC12A34F375BD5A87"
+    },
+    "BR-14 Adjudicator": {
+      "id": "0x5FECAB819F96A3E8"
+    },
+    "R-2 Amendment": {
+      "id": "0x0F83639AB8C86165"
+    },
+    "R-2124 Constitution": {
+      "id": "0x7B75E5132FFD4CA6"
+    },
+    "CB-9 Exploding Crossbow": {
+      "id": "0xF49227A0630A3F7F"
+    },
+    "FLAM-66 Torcher": {
+      "id": "0x4FB0F8C02F55C82B"
+    },
+    "JAR-5 Dominator": {
+      "id": "0x80F1A156D9FA1E36"
+    },
+    "R-36 Eruptor": {
+      "id": "0xB6AFF2195568767F"
+    },
+    "LAS-5 Scythe": {
+      "id": "0x27EE1ED8F6FB6356"
+    },
+    "LAS-22 Shear": {
+      "id": "0x7E3145A5BAA4B948"
+    },
+    "LAS-16 Sickle": {
+      "id": "0x8645F167B3C813A2"
+    },
+    "LAS-17 Double-Edge Sickle": {
+      "id": "0x295BEB26DC4F8FF1"
+    },
+    "LAS-13 Trident": {
+      "id": "0x3C86E871923F3970"
+    },
+    "LAS-12 Sai": {
+      "id": "0xC85F576D5E086147"
+    },
+    "R-6 Deadeye": {
+      "id": "0xE6D932BE83729076"
+    },
+    "R-4 Hyena": {
+      "id": "0xE5796355A8FD67E0"
+    },
+    "R-72 Censor": {
+      "id": "0xF0338468DCDB6A6C"
+    },
+    "R/40-K Hot-shot Marksman Rifle": {
+      "id": "0x1ABBFF60D26BA391"
+    },
+    "R-63 Diligence": {
+      "id": "0x03E67A19B07C6523"
+    },
+    "R-63CS Diligence Counter Sniper": {
+      "id": "0x4C786785C79D44E7"
+    },
+    "SMG-37 Defender": {
+      "id": "0x4E4A613EB9BF5C24"
+    },
+    "SMG-72 Pummeler": {
+      "id": "0x0807AEA5217E4767"
+    },
+    "PLAS-1 Scorcher": {
+      "id": "0xEEA5E3CEF1E12C14"
+    },
+    "PLAS-101 Purifier": {
+      "id": "0xFB3A19078694708A"
+    },
+    "B/MD C4 Pack": {
+      "id": "0x9B75217D8312DD67"
+    },
+    "CQC-20 Breaching Hammer": {
+      "id": "0x5F3EC9BDA2BD8553"
+    },
+    "CQC-72 Entrenchment Tool": {
+      "id": "0xE85E623F93F96FB3"
+    },
+    "SG-88 Break-Action Shotgun": {
+      "id": "0x52071F49263415E4"
+    },
+    "TACTICAL VIDEO CAMERA": {
+      "id": "0x372481E910C05A76"
+    },
+    "CQC-9 Defoliation Tool": {
+      "id": "0xBF4CFD2AEABFB5A4"
+    },
+    "CQC-1 One True Flag": {
+      "id": "0xB0F1B354BA1D38D8"
+    },
+    "M-105 Stalwart": {
+      "id": "0xA6A735ACCB4A327F"
+    },
+    "RL-77 Airburst Rocket Launcher": {
+      "id": "0x26E40437EA275296"
+    },
+    "ARC-3 Arc Thrower": {
+      "id": "0x96DE9CD50F7306E6"
+    },
+    "AC-8 Autocannon": {
+      "id": "0xA8CFFB316F0B5C5F"
+    },
+    "GL-28 Belt-Fed Grenade Launcher": {
+      "id": "0x88C2D09AD85A7C9F"
+    },
+    "TX-41 Sterilizer": {
+      "id": "0x88F61AFFF48AC8A4"
+    },
+    "40-K Meltagun": {
+      "id": "0x6CFCC7F8801A0266"
+    },
+    "MGX-42 Bullet Storm": {
+      "id": "0xB16C9D490AA59B77"
+    },
+    "EAT-411 Leveller": {
+      "id": "0x7617642765AC38C7"
+    },
+    "EAT-700 Expendable Napalm": {
+      "id": "0xB2B5E0D185605F9E"
+    },
+    "FAF-14 Spear": {
+      "id": "0x25AA2FD4643CF4EE"
+    },
+    "StA-X3 W.A.S.P. Launcher": {
+      "id": "0xCC786F6491FE7E65"
+    },
+    "FLAM-40 Flamethrower": {
+      "id": "0x39AB99895147A3BF"
+    },
+    "GL-21 Grenade Launcher": {
+      "id": "0x02EECD0B1FA49630"
+    },
+    "GL-52 De-Escalator": {
+      "id": "0xFE3B29B2CFA63F9B"
+    },
+    "S-11 Speargun": {
+      "id": "0x3828E2051AA9E897"
+    },
+    "B/FLAM-80 Cremator": {
+      "id": "0x78A8185F63A70795"
+    },
+    "LAS-98 Laser Cannon": {
+      "id": "0xD54B9505C0F72873"
+    },
+    "MLS-4X Commando": {
+      "id": "0x5990123D142B16CB"
+    },
+    "LAS-99 Quasar Cannon": {
+      "id": "0x35A61296619CC47E"
+    },
+    "EAT-17 Expendable Anti-Tank": {
+      "id": "0x80932FA0ED6901D3"
+    },
+    "MG-43 Machine Gun": {
+      "id": "0x11C27D3BABB38956"
+    },
+    "M-1000 Maxigun": {
+      "id": "0x43A58CB89CFA197C"
+    },
+    "Solo Silo Targeting Remote": {
+      "id": "0xFC13460592CA79AA"
+    },
+    "PLAS-45 Epoch": {
+      "id": "0xE8D5F49AD7780E54"
+    },
+    "RS-422 Railgun": {
+      "id": "0x2E9D0BDC48B09E60"
+    },
+    "GR-8 Recoilless Rifle": {
+      "id": "0x9F80D67A12A7E40F"
+    },
+    "APW-1 Anti-Materiel Rifle": {
+      "id": "0x89C5493E08CA4207"
+    },
+    "CQC-19 Stun Lance": {
+      "id": "0xE3B6AEDD07FCB464"
+    },
+    "P-92 Warrant": {
+      "id": "0xCF8934FF6567A42D"
+    },
+    "P-33 Missile Pistol": {
+      "id": "0x14D5D4506056C7A4"
+    },
+    "P-2 Peacemaker": {
+      "id": "0x05E4E5C2DB6E44A2"
+    },
+    "P-11 Stim Pistol": {
+      "id": "0xD6B1FB05B9109353"
+    },
+    "CQC-2": {
+      "id": "0xFCD8A6E67EAC635A"
+    },
+    "CQC-30": {
+      "id": "0x52CDBFBACA3CB397"
+    },
+    "CQC-5": {
+      "id": "0x75816077C139C850"
+    },
+    "CQC-42": {
+      "id": "0x792D5D2A340FD6E6"
+    },
+    "SG-22 Bushwhacker": {
+      "id": "0x2B28E17FFED05F7C"
+    },
+    "P-19 Redeemer": {
+      "id": "0x3575AABC5F1F9326"
+    },
+    "P-35 Re-educator": {
+      "id": "0x0B882808C6F498E8"
+    },
+    "LAS-58": {
+      "id": "0x416D053372C4E433"
+    },
+    "P-72 Crisper": {
+      "id": "0x3F92BA65EF65CCA9"
+    },
+    "GP-31 Grenade Pistol": {
+      "id": "0x52E4334E6A128CAF"
+    },
+    "P-34 Breacher": {
+      "id": "0xE91F569C2AD8AF01"
+    },
+    "LAS-7 Dagger": {
+      "id": "0x7B06196E90154C88"
+    },
+    "P-113 Verdict": {
+      "id": "0x1A437158E1B8D2A1"
+    },
+    "P-69 Veto": {
+      "id": "0xC780BCD79547DA0F"
+    },
+    "GP-20 Ultimatum": {
+      "id": "0x9EB160830321BFD6"
+    },
+    "M6C/SOCOM Pistol": {
+      "id": "0x4D58C77087B774C5"
+    },
+    "P/40-K Bolt Pistol": {
+      "id": "0xDBB6C961C59FADC1"
+    },
+    "PLAS-15 Loyalist": {
+      "id": "0xAA69A60D74A3EC54"
+    },
+    "P-4 Senator": {
+      "id": "0x8D3D52A3B2F19402"
+    },
+    "P-41 Ombudsman": {
+      "id": "0xBDE1F2534280300D"
+    },
+    "G-31 Arc": {
+      "id": "0xDB922A7AFC42894B"
+    },
+    "G-48 Giga Grenade": {
+      "id": "0x46333FC9E3D4BD34"
+    },
+    "G-16 Impact": {
+      "id": "0x7686544F539BB9B7"
+    },
+    "G-89 Smokescreen": {
+      "id": "0xDAB81B0D80B511C7"
+    },
+    "G-13 Incendiary Impact": {
+      "id": "0xEB725C39FC38B87C"
+    },
+    "G-8 Immolation": {
+      "id": "0x5C14F27759DD3BE0"
+    },
+    "G-60 Anti-Tank Seeker": {
+      "id": "0x8E325C933E55BF62"
+    },
+    "G-11 Caltrops": {
+      "id": "0x2968DEBA6D6C2F09"
+    },
+    "G-7 Pineapple": {
+      "id": "0x075B19B068FB1045"
+    },
+    "TED-63": {
+      "id": "0x14368DC8784220B0"
+    },
+    "G/SH-39 Shield": {
+      "id": "0x1B9AC59697006337"
+    },
+    "G-23 Stun": {
+      "id": "0x0080869506299773"
+    },
+    "G-6 Frag": {
+      "id": "0x4CE9EAB785A79B7B"
+    },
+    "G-4 Gas": {
+      "id": "0x0416984F4922757B"
+    },
+    "G-12 High Explosive": {
+      "id": "0x6B11FC757618C57E"
+    },
+    "G-10 Incendiary": {
+      "id": "0x04653AB33F3FFB44"
+    },
+    "TM-1 Lure Mine": {
+      "id": "0xA20683199DFC19E8"
+    },
+    "G/40-K Melta Mine": {
+      "id": "0xEE4C107B941AB7F4"
+    },
+    "G-50 Seeker": {
+      "id": "0x2D398D1EC35E0838"
+    },
+    "G-3 Smoke": {
+      "id": "0x5DE8FD02A05B4B0A"
+    },
+    "G-123 Thermite": {
+      "id": "0xC5C05FCB5747C799"
+    },
+    "G-109 Urchin": {
+      "id": "0x3FA94F58F596BC0B"
+    },
+    "K-2 Throwing Knife": {
+      "id": "0xF7B35A9C5AE340B6"
+    },
+    "G-142 Pyrotech": {
+      "id": "0x03F31CAF3A7D8F4E"
+    },
+    "BACKPACK": {
+      "id": "0x8726D02AEAF98E86"
+    },
+    "Resupply": {
+      "id": "0x35F50DEC0EC647C6"
+    },
+    "Airburst Rocket Backpack": {
+      "id": "0xE75CD68E858A12AC"
+    },
+    "B-1 Supply Pack": {
+      "id": "0x4EF9A47109239A58"
+    },
+    "Autocannon Backpack": {
+      "id": "0xE60AE045E0090F4C"
+    },
+    "SH-20 Ballistic Shield Backpack": {
+      "id": "0x967ED15E0BAE363B"
+    },
+    "Belt-Fed Grenade Launcher Backpack": {
+      "id": "0xBB4B15B588F974FD"
+    },
+    "B-100 Portable Hellbomb": {
+      "id": "0x9ACE8638421ABC8E"
+    },
+    "SH-51 Directional Shield": {
+      "id": "0xA4E796F84801B40A"
+    },
+    "LIFT-182 Warp Pack": {
+      "id": "0xB49756795D9B0E68"
+    },
+    "AX/FLAM-75 Hot Dog": {
+      "id": "0x3015626AA69F8D4D"
+    },
+    "AX/TX-13 Dog Breath": {
+      "id": "0xBFFCB4CD971A8EDA"
+    },
+    "AX/AR-23 Guard Dog": {
+      "id": "0xDFC8B9519169B67A"
+    },
+    "AX/LAS-5 Rover": {
+      "id": "0xAF9B683CCB6DDC02"
+    },
+    "SH-32 Shield Generator Pack": {
+      "id": "0x12C8D71AC3897A5C"
+    },
+    "Spear Backpack": {
+      "id": "0x8EC3026B5F2E579A"
+    },
+    "W.A.S.P. Launcher Backpack": {
+      "id": "0xB8FEB0CC191C1EF3"
+    },
+    "AX/ARC-3 K-9": {
+      "id": "0xC28DA712B12E3DFA"
+    },
+    "Cremator Backpack": {
+      "id": "0x43EB1C3C1A1860E0"
+    },
+    "LIFT-860": {
+      "id": "0x5EC80F4F1CDB66CF"
+    },
+    "LIFT-850 Jump Pack": {
+      "id": "0x59C5CA839449B379"
+    },
+    "SH-20 MEDIC BACKPACK": {
+      "id": "0x0A55E504092B981D"
+    },
+    "Maxigun Backpack": {
+      "id": "0x056DE1C5E21E723E"
+    },
+    "Recoilless Rifle Backpack": {
+      "id": "0x96DFC6542AA22980"
+    },
+    "Larva Container": {
+      "id": "0x9EA89CEEA6F8E766"
+    },
+    "Chemical Backpack": {
+      "id": "0x073270650F859DD0"
+    },
+    "A/AC-8 Autocannon Sentry": {
+      "id": "0x54D86057F5DACFB9"
+    },
+    "A/ARC-3 Tesla Tower": {
+      "id": "0x74599E56F72F9D7E"
+    },
+    "A/FLAM-40 Flame Sentry": {
+      "id": "0x820CC3BAFE962858"
+    },
+    "A/GM-17 Gas Mortar Sentry": {
+      "id": "0x299C0D3DFD2F0994"
+    },
+    "A/LAS-98 Laser Sentry": {
+      "id": "0x56070F36CFFFA8A8"
+    },
+    "A/M-12 Mortar Sentry": {
+      "id": "0x51A0812E3BCE2D74"
+    },
+    "A/M-23 EMS Mortar Sentry": {
+      "id": "0xB2053A1838092F8B"
+    },
+    "A/MG-43 Machine Gun Sentry": {
+      "id": "0x37CDE43876BA26BB"
+    },
+    "A/MLS-4X Rocket Sentry": {
+      "id": "0x37079568DC86E9C6"
+    },
+    "AA Emplacement": {
+      "id": "0xAEAEF7A1851E6C9D"
+    },
+    "ACQUIRE SOIL SCAN DATA": {
+      "id": "0x0158E1E47C059B69"
+    },
+    "ACTIVATE OIL PUMPS": {
+      "id": "0x5293B9A2D9398DDE"
+    },
+    "ACTIVATE TCS+ STATION": {
+      "id": "0x271210083A29459F"
+    },
+    "ANTI-AIR EMPLACEMENT": {
+      "id": "0x8C8237654EF77272"
+    },
+    "AQUIFER DRILL": {
+      "id": "0xB31073E494A0643A"
+    },
+    "Access Codes": {
+      "id": "0x9867D9EC6AC7E680"
+    },
+    "Alpha Commander": {
+      "id": "0xF79CD8BB654397DF"
+    },
+    "Assault Raider": {
+      "id": "0x856E9710E45E760F"
+    },
+    "Automaton Dropship": {
+      "id": "0xD84FFC32A6E640A8"
+    },
+    "Automaton Mortar Emplacement": {
+      "id": "0xFF5CC825B9571052"
+    },
+    "BLACK BOX": {
+      "id": "0x4A3E722B5A865E38"
+    },
+    "Ballistic Missile": {
+      "id": "0x5D142C3A73EBC634"
+    },
+    "Barrager Tank": {
+      "id": "0x63DF3D07B7424588"
+    },
+    "Bile Spitter": {
+      "id": "0x72A83E49CED6DB3D"
+    },
+    "Bile Warrior": {
+      "id": "0x10081ACEF6163EF6"
+    },
+    "Brawler": {
+      "id": "0xD8CBC4A807A6D035"
+    },
+    "Briefcase": {
+      "id": "0x90001FEAC563D6A1"
+    },
+    "Brood Commander": {
+      "id": "0xD522FD4748D443A5"
+    },
+    "Bulk Fabricator": {
+      "id": "0x4232EE48E2CFD24E"
+    },
+    "COLLECT BLACK BOX": {
+      "id": "0x459DD5EB8C68C63F"
+    },
+    "COLLECT ENCRYPTED HARD DRIVE": {
+      "id": "0xCE1306E16A1A0739"
+    },
+    "CONDEMN ILLICIT EXPERIMENTS": {
+      "id": "0x29171C54040B2EAD"
+    },
+    "CONFIDENTIAL DATA": {
+      "id": "0xC71C0C7B2E688B9B"
+    },
+    "CONTACT MINE": {
+      "id": "0x31A7EA446FD15B8D"
+    },
+    "CQC-2 SABER": {
+      "id": "0xFCD8A6E67EAC635A"
+    },
+    "CQC-30 STUN BATON": {
+      "id": "0x52CDBFBACA3CB397"
+    },
+    "CQC-42 MACHETE": {
+      "id": "0x792D5D2A340FD6E6"
+    },
+    "CQC-5 COMBAT HATCHET": {
+      "id": "0x75816077C139C850"
+    },
+    "Cargo Truck": {
+      "id": "0x888EAAFD58C03C75"
+    },
+    "Charger": {
+      "id": "0x1A7FCDFF98C664B0"
+    },
+    "Cognitive Disruptor Battery": {
+      "id": "0x4446E7312B401E69"
+    },
+    "Command Bunker": {
+      "id": "0x6E499C5C95B019FC"
+    },
+    "Conflagration Devastator": {
+      "id": "0xE0353177F1329573"
+    },
+    "Cooling Tower": {
+      "id": "0xE432929E520FDDFB"
+    },
+    "Credit card": {
+      "id": "0xBD6F4DE16B9AEDCD"
+    },
+    "Crescent Overseer": {
+      "id": "0xE8F19A0AA958E46D"
+    },
+    "Crusher": {
+      "id": "0x905809A4C28D8A45"
+    },
+    "DEACTIVATE TERMICIDE TOWER": {
+      "id": "0x4BAC90C3B06A45D2"
+    },
+    "DEPLOY SEISMIC PROBE": {
+      "id": "0x8A54E81FEBB2F1FD"
+    },
+    "DESTROY AIR BASE CONTROL TOWER": {
+      "id": "0xD6F9C1D41D1E416A"
+    },
+    "DESTROY AUTOMATON COMMAND BUNKER": {
+      "id": "0x92ABCCA27674DB9D"
+    },
+    "DESTROY BIO-PROCESSORS": {
+      "id": "0x7AE1C94D5140B8DC"
+    },
+    "DESTROY DROPSHIPS": {
+      "id": "0xCCF0C855D4C5A9F1"
+    },
+    "DESTROY EGGS": {
+      "id": "0xC9E402CB57F4EFE0"
+    },
+    "DESTROY FUEL RESERVES": {
+      "id": "0xA837FBF26AF5DFE7"
+    },
+    "DESTROY ROGUE RESEARCH STATION": {
+      "id": "0xE062C8055B4DCE77"
+    },
+    "DESTROY STOCKPILED AMMUNITION": {
+      "id": "0xE85E6BE1877B05AF"
+    },
+    "DESTROY TRANSMISSION NETWORK": {
+      "id": "0x9880780EA1AB7463"
+    },
+    "DETECTOR TOWER": {
+      "id": "0xE6B3D18884B960D2"
+    },
+    "Dragonroach": {
+      "id": "0x960B48A421A3FAAA"
+    },
+    "E/AT-12 Anti-Tank Emplacement": {
+      "id": "0x2B11C9E4980EC479"
+    },
+    "EARN YOUR HELLDIVER CAPE": {
+      "id": "0x59A0CE2762F49C7A"
+    },
+    "ELIMINATE BILE TITAN": {
+      "id": "0x6403797EB4E18638"
+    },
+    "ELIMINATE BROOD COMMANDER": {
+      "id": "0x441C1CA987BD0059"
+    },
+    "ELIMINATE CHARGER": {
+      "id": "0x606043CAC59312EC"
+    },
+    "ELIMINATE DEVASTATOR": {
+      "id": "0xF0C9B2D04A4A3E68"
+    },
+    "ELIMINATE FACTORY STRIDER": {
+      "id": "0x84EA7CFC98B30FF8"
+    },
+    "ELIMINATE HULK": {
+      "id": "0xAFF49E6571E77FB9"
+    },
+    "ERADICATE AUTOMATON FORCES": {
+      "id": "0x43C1270C7B467D79"
+    },
+    "ERADICATE MUTATED NESTS": {
+      "id": "0x178183C8C74C6EBA"
+    },
+    "ESTABLISH COMMUNICATION UPLINK": {
+      "id": "0x844B077BEA19A72D"
+    },
+    "EVACUATE PRIORITY CITIZENS": {
+      "id": "0xBE2EA3D89166B3C7"
+    },
+    "EXO-45 Patriot Exosuit": {
+      "id": "0x79E4B3D2DA5E45E3"
+    },
+    "EXO-49 Emancipator Exosuit": {
+      "id": "0xC2D449ECF7FACAB1"
+    },
+    "EXO-51 Lumberer Exosuit": {
+      "id": "0x7B2326F6FD9C8069"
+    },
+    "EXO-55 Breakthrough Exosuit": {
+      "id": "0x35DBF54F016F3624"
+    },
+    "EXTERMINATE TERMINIDS": {
+      "id": "0xB6B06C4B6EC3DCF9"
+    },
+    "Elevated Overseer": {
+      "id": "0x604A794EC45BB820"
+    },
+    "Exospire Battery": {
+      "id": "0xB3436D6C3E3A2113"
+    },
+    "Exospire Core": {
+      "id": "0x2778F620A6E414AF"
+    },
+    "Exospire Shield": {
+      "id": "0xCE38D9313E31A6F1"
+    },
+    "Exospire Tower": {
+      "id": "0x4D6701191DD4EA6F"
+    },
+    "FUSION BATTERY": {
+      "id": "0xD8A28BFB827392BE"
+    },
+    "FX-12 Shield Generator Relay": {
+      "id": "0xED13DDC480EC6910"
+    },
+    "Fleshmob": {
+      "id": "0x67DC32DCA4F02D33"
+    },
+    "Fusion Smelter Beam": {
+      "id": "0x08886D27A6F6DB8C"
+    },
+    "GRENADES": {
+      "id": "0x97AF34FBF093409C"
+    },
+    "GUNSHIP FACILITY": {
+      "id": "0x7B343A7110BAD388"
+    },
+    "Gatekeeper": {
+      "id": "0x453FE22C634EB30F"
+    },
+    "Gazer": {
+      "id": "0x0883366204E1CCC5"
+    },
+    "Gunship": {
+      "id": "0x282EB766C1FFA6A1"
+    },
+    "Gunship Fabricator": {
+      "id": "0xA8AE6952B375EF6C"
+    },
+    "HIVE BREAKER DRILL": {
+      "id": "0x44748FFC63F78A72"
+    },
+    "Heavy Fusion Cannon": {
+      "id": "0x8FB47DD28B398CF7"
+    },
+    "Hive Guard": {
+      "id": "0xA1F37BF2A40FBDE4"
+    },
+    "Hive Lord": {
+      "id": "0xD465D9C7F77A07CB"
+    },
+    "Hulk": {
+      "id": "0x96BA14C9EBB49CE1"
+    },
+    "Hulk Firebomber": {
+      "id": "0x6DAB2EADF5D8B692"
+    },
+    "Hulk Obliterator": {
+      "id": "0x1E66EE1F6F7FD00E"
+    },
+    "Illuminate Artifact": {
+      "id": "0xB663751EB459D242"
+    },
+    "Incendiary MG Devastator": {
+      "id": "0x58B2B86C11369241"
+    },
+    "Infested Tower": {
+      "id": "0xAFC719AF96F10DC3"
+    },
+    "Intel PDA": {
+      "id": "0x1C8764D62E12925A"
+    },
+    "Intel Package": {
+      "id": "0x2D3BC1683A54298D"
+    },
+    "Investigate Rogue Research Station": {
+      "id": "0x421157C11E97DDA5"
+    },
+    "KEYCARD": {
+      "id": "0x7624C278C9AF905B"
+    },
+    "LAS-58 TALON": {
+      "id": "0x416D053372C4E433"
+    },
+    "LAUNCH ICBM": {
+      "id": "0x9EA66520B8B82A57"
+    },
+    "LIDAR STATION": {
+      "id": "0x6409A568CEB88B23"
+    },
+    "LIFT-860 HOVER PACK": {
+      "id": "0x5EC80F4F1CDB66CF"
+    },
+    "Leviathan": {
+      "id": "0xF22D027B37BEF107"
+    },
+    "Lightning Spire": {
+      "id": "0x0D382AE7FFEA9D45"
+    },
+    "M-103 Supply FRV": {
+      "id": "0x9B2140378640432E"
+    },
+    "M-104 Incinerator FRV": {
+      "id": "0x2D85BFE3D8717FE5"
+    },
+    "MD-17 Anti-tank Mines": {
+      "id": "0x25A2FD037B6ED25C"
+    },
+    "MD-6 Anti-Personnel Minefield": {
+      "id": "0xF00C349422E8E320"
+    },
+    "MD-8 Gas Mines": {
+      "id": "0xA9982969137F3D77"
+    },
+    "MD-I4 INCENDIARY MINES": {
+      "id": "0xBF32E12923A9A252"
+    },
+    "MINING SITE COORDINATES": {
+      "id": "0xAEBFA791C98B904E"
+    },
+    "MORTAR EMPLACEMENT": {
+      "id": "0xA12293E3D75FB72A"
+    },
+    "MUTATED EGG": {
+      "id": "0x2B5D3186EE3A4A84"
+    },
+    "Marauder": {
+      "id": "0x0002BA767DF856F3"
+    },
+    "Medal": {
+      "id": "0x147BD99513726F88"
+    },
+    "Monolith": {
+      "id": "0xC85A744553A4BA14"
+    },
+    "NEUTRALIZE ORBITAL CANNON": {
+      "id": "0x747FD11505196C41"
+    },
+    "NUKE NURSERY CHAMBER": {
+      "id": "0x45F1AF49E3C6D25E"
+    },
+    "Obtruder": {
+      "id": "0x34DFD23365472E9E"
+    },
+    "Overship": {
+      "id": "0xBAF9DBD86B22270A"
+    },
+    "PLATINUM BAR": {
+      "id": "0x0DC9084E50C051F3"
+    },
+    "Phase-Beam": {
+      "id": "0x7C2107D3FF9B70EB"
+    },
+    "Pistol": {
+      "id": "0x4D58C77087B774C5"
+    },
+    "Pouncer": {
+      "id": "0xAAB438596F5E8FD9"
+    },
+    "Predator Hunter": {
+      "id": "0x883401AF2A98A5F6"
+    },
+    "Predator Stalker": {
+      "id": "0xD1E990BAF22D5A52"
+    },
+    "Pyro Trooper": {
+      "id": "0x82A87AD8D595B2BA"
+    },
+    "RAISE FLAG OF SUPER EARTH": {
+      "id": "0x3AADE0806542AF22"
+    },
+    "REACTIVATE POWER GENERATOR": {
+      "id": "0xB736612B9EC11C26"
+    },
+    "RESCUE SCIENCE TEAMS": {
+      "id": "0x4923715619149543"
+    },
+    "RETRIEVE LAUNCH CODES": {
+      "id": "0x570D1E0A855E8199"
+    },
+    "RETRIEVE MUTANT LARVA": {
+      "id": "0x1C9D1066C4CC40BB"
+    },
+    "RETRIEVE THE CHEMICALS": {
+      "id": "0x27A6AF7AFAD648BA"
+    },
+    "Reinforced Scout Strider": {
+      "id": "0x9076EEED17FCEE35"
+    },
+    "Relay Tower": {
+      "id": "0x62D2C45A8B9703CC"
+    },
+    "Requisition slips": {
+      "id": "0x6B72305013C2833F"
+    },
+    "Rocket Pod": {
+      "id": "0xC3C1BBA1F445A81E"
+    },
+    "Rocket Raider": {
+      "id": "0x2A12104F2853AE16"
+    },
+    "Rupture Charger": {
+      "id": "0x0AB7B92B131C228C"
+    },
+    "Rupture Spewer": {
+      "id": "0xA381A11C07D3EB94"
+    },
+    "Rupture Warrior": {
+      "id": "0xA35207C6F2150806"
+    },
+    "SEAF ARTILLERY": {
+      "id": "0xD622224A7889AD79"
+    },
+    "SEAF Artillery Terminal": {
+      "id": "0xC2F0CC038E724374"
+    },
+    "SEAF Mobile Radar": {
+      "id": "0xE73F6B5A100B7230"
+    },
+    "SEAF Mobile Radar Button": {
+      "id": "0xB9AAAE21AD68B51C"
+    },
+    "SEAF SAM-SITE": {
+      "id": "0xB93C9B7A24ABC6B7"
+    },
+    "SEIZE THE CIVILIAN SATELLITE TOWERS": {
+      "id": "0xF73574301F5E9ABC"
+    },
+    "SHREDDER TANK": {
+      "id": "0xC6449FFD9EA3779C"
+    },
+    "SHRIEKER NEST": {
+      "id": "0xA36F5938D78A0349"
+    },
+    "SR005 Rocket": {
+      "id": "0x9FF6AFD33975861F"
+    },
+    "STALKER LAIR": {
+      "id": "0xB51D693EF3B1F3A9"
+    },
+    "START FUEL PUMPS": {
+      "id": "0xECB5398588FC7C74"
+    },
+    "STATUE": {
+      "id": "0x7C9455FCEF107E41"
+    },
+    "STRATAGEM JAMMER": {
+      "id": "0x0CE2AF8C2AAF1380"
+    },
+    "SUPER SAMPLE": {
+      "id": "0x9D4935FA69B6B41A"
+    },
+    "SUPPLIES": {
+      "id": "0xA94913CA014F7579"
+    },
+    "Sample Container": {
+      "id": "0xA9936CBE561E8180"
+    },
+    "Scout Raider": {
+      "id": "0x30CF04B2EC8C9BD4"
+    },
+    "Scout Strider": {
+      "id": "0xF8131632AA867107"
+    },
+    "Septic Breath": {
+      "id": "0x271567F38F9CEDFD"
+    },
+    "Shotgun": {
+      "id": "0x90DDC374F4E3D756"
+    },
+    "Smoke": {
+      "id": "0xC39E7FD97E974E5E"
+    },
+    "Specimen Case": {
+      "id": "0x3E099DDF97ACF85F"
+    },
+    "Spore Burst Hunter": {
+      "id": "0x1F0A91729C0004E0"
+    },
+    "Spore Burst Scavenger": {
+      "id": "0xDB964631BE1CF501"
+    },
+    "Spore Burst Warrior": {
+      "id": "0x728421351D440EBC"
+    },
+    "Spore Charger": {
+      "id": "0x6B202392F4AB605E"
+    },
+    "Spore Lung": {
+      "id": "0xDC901B71A3A73B9A"
+    },
+    "Stalker": {
+      "id": "0xF540CA9D9D4A422E"
+    },
+    "Stalker Lair Bug Hole": {
+      "id": "0x4776A1CF3F19A13B"
+    },
+    "Stingray": {
+      "id": "0x19E18B46EC55D94A"
+    },
+    "Stratagem Jammer Terminal": {
+      "id": "0x68BFAC3C8A03BB83"
+    },
+    "Super Credits": {
+      "id": "0x818603ED54533506"
+    },
+    "TD-110 Maelstrom": {
+      "id": "0xB0C9FAF4AF8903F9"
+    },
+    "TD-220 Bastion Mk XVI": {
+      "id": "0x16474112801385B6"
+    },
+    "TED-63 DYNAMITE": {
+      "id": "0x14368DC8784220B0"
+    },
+    "TERMINATE ILLEGAL BROADCAST": {
+      "id": "0xC54746AD0BF050BF"
+    },
+    "TRANSFER OIL TO SHUTTLE": {
+      "id": "0x76D67F32E48FDF51"
+    },
+    "UPLOAD DATA VIA LOCAL RELAY": {
+      "id": "0xDEFDECDB7E95E2DE"
+    },
+    "UPLOAD ESCAPE POD DATA": {
+      "id": "0xA99575EEE4F0E719"
+    },
+    "Veracitor": {
+      "id": "0x20B9C7734DAEAD65"
+    },
+    "Void Blossom": {
+      "id": "0x5C9B80235E57B43B"
+    },
+    "W.A.S.P. Launcher": {
+      "id": "0xCC786F6491FE7E65"
+    },
+    "WARP GATEWAY": {
+      "id": "0x7DF314C744F0D935"
+    },
+    "War Strider": {
+      "id": "0xEF570293245A17C2"
+    },
+    "Warhead": {
+      "id": "0x5726276FED2241B3"
+    },
+    "Watcher": {
+      "id": "0xAC60E78435098C9D"
+    },
+    "Wretch": {
+      "id": "0xCC188F0C80505C6C"
+    },
+    "Xenobite Ardent": {
+      "id": "0x08E6FFC2474287BD"
+    }
+  },
+  "damage": {
+    "LAS-58 Talon": {
+      "id": "54"
+    }
+  },
+  "packages": {
+    "Pelican Gunship": {
+      "id": "0x131FE264B7380717",
+      "note": "the extraction Pelican's model (its LoadoutPackage record's package)"
+    }
+  },
+  "tags": {
+    "No Kill Credit": {
+      "id": "0x10000000",
+      "note": "the Pelican chin turret's: its kills credit nobody"
+    }
+  },
+  "traits": {
+    "Support Weapon": {
+      "id": "0x1",
+      "note": "bit 0: all 36 support weapons"
+    },
+    "Hellpod": {
+      "id": "0x2",
+      "note": "bit 1: delivered by hellpod (code 0x6ADF35)"
+    },
+    "Explosive": {
+      "id": "0x4",
+      "note": "bit 2: bombs, barrages, mines, grenade launchers"
+    },
+    "Backpack": {
+      "id": "0x8",
+      "note": "bit 3: backpacks, drones, weapons with a pack"
+    },
+    "Orbital": {
+      "id": "0x10",
+      "note": "bit 4: the orbitals"
+    },
+    "Vehicle": {
+      "id": "0x20",
+      "note": "bit 5: one per loadout (code 0x1896182)"
+    },
+    "Fire": {
+      "id": "0x40",
+      "note": "bit 6: every incendiary stratagem"
+    },
+    "Eagle": {
+      "id": "0x80",
+      "note": "bit 7: every Eagle (code 0x6ADFD5); name unconfirmed"
+    },
+    "Sentry": {
+      "id": "0x100",
+      "note": "bit 8: the automated sentries"
+    },
+    "Cargo": {
+      "id": "0x200",
+      "note": "bit 9: cargo containers and drills (code 0x6AB546); name inferred"
+    },
+    "Gas": {
+      "id": "0x400",
+      "note": "bit 10: the gas stratagems"
+    },
+    "Armor Piercing": {
+      "id": "0x800",
+      "note": "bit 11: AC, HMG, AMR, Laser Cannon, Strafing Run..."
+    },
+    "Anti-Tank": {
+      "constant": "ANTI_TANK",
+      "id": "0x1000",
+      "note": "bit 12: EAT, RR, Spear, Railgun, 500kg..."
+    },
+    "Trait 13": {
+      "id": "0x2000",
+      "note": "bit 13: Stalwart, Bullet Storm, Laser rover; name unknown"
+    },
+    "Crowd Control": {
+      "id": "0x4000",
+      "note": "bit 14: MG-43, Maxigun, MG and mortar sentries, mines, cluster bombs"
+    },
+    "Trait 15": {
+      "id": "0x8000",
+      "note": "bit 15: AC, HMG, MG-43, Epoch, Airburst, RR, Spear; name unknown"
+    },
+    "Expendable": {
+      "id": "0x10000",
+      "note": "bit 16: EAT, Commando, Bullet Storm"
+    },
+    "Heat": {
+      "id": "0x20000",
+      "note": "bit 17: Laser Cannon, laser sentry"
+    },
+    "Beam": {
+      "id": "0x40000",
+      "note": "bit 18: lasers: cannon, sentry, Orbital Laser, rover"
+    },
+    "Charge": {
+      "id": "0x80000",
+      "note": "bit 19: Railgun, Quasar, Arc Thrower, Epoch"
+    },
+    "Exosuit": {
+      "id": "0x100000",
+      "note": "bit 20: exosuit category: a new one replaces the loadout's (code 0x146E415)"
+    },
+    "FRV": {
+      "id": "0x200000",
+      "note": "bit 21: FRV category (code 0x146E30D)"
+    },
+    "Tank": {
+      "id": "0x400000",
+      "note": "bit 22: tank category (code 0x146E501)"
+    },
+    "Melee": {
+      "id": "0x800000",
+      "note": "bit 23: Chainsaw, Sledge, Flag"
+    },
+    "One Handed": {
+      "id": "0x1000000",
+      "note": "bit 24: the Flag"
+    },
+    "Guided": {
+      "id": "0x2000000",
+      "note": "bit 25: the Spears"
+    },
+    "Sticky": {
+      "id": "0x4000000",
+      "note": "bit 26: C4"
+    },
+    "Arc": {
+      "id": "0x8000000",
+      "note": "bit 27: Arc Thrower, Tesla Tower, De-Escalator, K-9"
+    },
+    "Stun": {
+      "id": "0x10000000",
+      "note": "bit 28: EMS Strike, EMS mortar"
+    }
+  },
+  "categories": {
+    "Offensive": {
+      "id": "1",
+      "note": "red: orbital and Eagle strikes"
+    },
+    "Mission": {
+      "id": "2",
+      "note": "mission stratagems"
+    },
+    "Supply": {
+      "id": "3",
+      "note": "blue: support weapons, backpacks, vehicles"
+    },
+    "Defensive": {
+      "id": "4",
+      "note": "green: sentries, emplacements, mines"
+    },
+    "Special": {
+      "id": "5",
+      "note": "special"
+    }
+  },
+  "beams": {
+    "Red": {
+      "id": "1"
+    },
+    "Blue": {
+      "id": "2"
+    },
+    "Yellow": {
+      "id": "3"
+    }
+  },
+  "boosters": {
+    "Vitality Enhancement": {
+      "id": "1",
+      "note": "the game's Booster Vitality"
+    },
+    "Stamina Enhancement": {
+      "id": "2",
+      "note": "the game's Booster Stamina"
+    },
+    "Muscle Enhancement": {
+      "id": "3",
+      "note": "the game's Booster MuscleEnhancement"
+    },
+    "UAV Recon Booster": {
+      "id": "4",
+      "note": "the game's Booster UAVRecon"
+    },
+    "Increased Reinforcement Budget": {
+      "id": "5",
+      "note": "the game's Booster IncreasedReinforcementBudget"
+    },
+    "Flexible Reinforcement Budget": {
+      "id": "6",
+      "note": "the game's Booster FlexibleReinforcementBudget"
+    },
+    "Hellpod Space Optimization": {
+      "id": "7",
+      "note": "the game's Booster HellpodSpaceOptimization"
+    },
+    "Localization Confusion": {
+      "id": "8",
+      "note": "the game's Booster LocalizationConfusion"
+    },
+    "Expert Extraction Pilot": {
+      "id": "9",
+      "note": "the game's Booster FastExtraction"
+    },
+    "Motivational Shocks": {
+      "id": "10",
+      "note": "the game's Booster SlowStunResistance"
+    },
+    "Experimental Infusion": {
+      "id": "11",
+      "note": "the game's Booster CombatDrugs"
+    },
+    "Firebomb Hellpods": {
+      "id": "12",
+      "note": "the game's Booster FieryDrop"
+    },
+    "Sample Scanner": {
+      "id": "13",
+      "note": "the game's Booster DoubleSampleChance"
+    },
+    "Dead Sprint": {
+      "id": "14",
+      "note": "the game's Booster DeathMarch"
+    },
+    "Armed Resupply Pods": {
+      "id": "15",
+      "note": "the game's Booster DefensiveAmmoPod"
+    },
+    "Sample Extricator": {
+      "id": "16",
+      "note": "the game's Booster BigEnemiesDropSamples"
+    },
+    "Stun Pods": {
+      "id": "17",
+      "note": "the game's Booster ShockPods"
+    },
+    "Concealed Insertion": {
+      "id": "18",
+      "note": "the game's Booster SmokePods"
+    },
+    "Integrated Extinguishers": {
+      "id": "19",
+      "note": "the game's Booster FireExtinguish"
+    },
+    "Surplus EAT Allocation": {
+      "id": "20",
+      "note": "the game's Booster FreeEAT"
+    }
+  }
+}

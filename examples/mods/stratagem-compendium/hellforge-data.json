@@ -1,0 +1,56 @@
+{
+  "format": 1,
+  "patches": [
+    {
+      "archives": [
+        "007e093ca718ca1a"
+      ],
+      "resources": [
+        {
+          "icon": "images/pelican_gatling_support.png",
+          "name": "skyeshade/compendium/icons/pelican_gatling_support"
+        },
+        {
+          "icon": "images/pelican_cannon_support.png",
+          "name": "skyeshade/compendium/icons/pelican_cannon_support"
+        },
+        {
+          "icon": "images/pelican_ems_support.png",
+          "name": "skyeshade/compendium/icons/pelican_ems_support"
+        },
+        {
+          "icon": "images/pelican_gas_support.png",
+          "name": "skyeshade/compendium/icons/pelican_gas_support"
+        },
+        {
+          "icon": "images/hmg_sentry.png",
+          "name": "skyeshade/compendium/icons/hmg_sentry"
+        },
+        {
+          "icon": "images/orbital_gas_barrage.png",
+          "name": "skyeshade/compendium/icons/orbital_gas_barrage"
+        },
+        {
+          "icon": "images/orbital_ems_barrage.png",
+          "name": "skyeshade/compendium/icons/orbital_ems_barrage"
+        },
+        {
+          "icon": "images/eat_cluster.png",
+          "name": "skyeshade/compendium/icons/eat_cluster"
+        },
+        {
+          "icon": "images/eat_gas.png",
+          "name": "skyeshade/compendium/icons/eat_gas"
+        },
+        {
+          "icon": "images/eat_ems.png",
+          "name": "skyeshade/compendium/icons/eat_ems"
+        },
+        {
+          "icon": "images/shredder_silo.png",
+          "name": "skyeshade/compendium/icons/shredder_silo"
+        }
+      ]
+    }
+  ]
+}

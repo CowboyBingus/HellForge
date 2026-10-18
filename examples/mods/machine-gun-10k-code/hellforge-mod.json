@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "id": "skyeshade.machine-gun-10k-code",
+  "name": "Machine Gun 10k (code)",
+  "version": "1.1.0",
+  "description": "The M-1000 Maxigun's backpack holds 10,000 rounds, written as a code mod against the HellForge mod SDK: it widens the engine's deposit_value network field from 10 to 14 bits (which no Lua mod can) and sets the backpack's capacity, starting ammo and resupply through named fields (SDK 6). Source in src/.",
+  "gameplay": true,
+  "code": { "dll": "machine_gun_10k.dll", "sdk": 6 }
+}

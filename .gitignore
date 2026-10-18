@@ -1,0 +1,16 @@
+.idea/
+**/bin/
+**/obj/
+artifacts/
+copies/
+*.user
+**/__pycache__/
+tools/
+
+# Built example mods (scripts/Build-Mod.ps1 rebuilds them)
+examples/mods/*/*.dll
+
+# Mod data built from the local game copy (game bytes): never committed
+examples/mods/*/data/
+examples/mods/*/build/
+CMakeUserPresets.json

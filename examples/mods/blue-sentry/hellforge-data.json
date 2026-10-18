@@ -1,0 +1,43 @@
+{
+  "format": 1,
+  "patches": [
+    {
+      "archives": ["154bd6143819df7d", "fc5b6bff0db90aab"],
+      "resources": [
+        {
+          "type": "unit",
+          "copy": "0x37CDE43876BA26BB",
+          "name": "skyeshade/blue_sentry/sentry",
+          "replace": [
+            { "from": "0xFEECE0654E8EDFD4", "to": "skyeshade/blue_sentry/sentry/paint_a", "at": ["0x264C"] },
+            { "from": "0xE2CC28D7270A0D46", "to": "skyeshade/blue_sentry/sentry/paint_b", "at": ["0x2654"] }
+          ]
+        },
+        {
+          "type": "material",
+          "copy": "0xFEECE0654E8EDFD4",
+          "name": "skyeshade/blue_sentry/sentry/paint_a",
+          "replace": [{ "from": "0xB8FA9DFE0197E863", "to": "skyeshade/blue_sentry/sentry/lut_a", "at": ["0x118"] }]
+        },
+        {
+          "type": "material",
+          "copy": "0xE2CC28D7270A0D46",
+          "name": "skyeshade/blue_sentry/sentry/paint_b",
+          "replace": [{ "from": "0xC2A3D69B57B143DC", "to": "skyeshade/blue_sentry/sentry/lut_b", "at": ["0x108"] }]
+        },
+        {
+          "type": "texture",
+          "copy": "0xB8FA9DFE0197E863",
+          "name": "skyeshade/blue_sentry/sentry/lut_a",
+          "lut": { "columns": { "0": [0.08, 0.22, 0.75], "2": [0.05, 0.14, 0.5], "5": [0.05, 0.14, 0.5], "6": [0.05, 0.14, 0.5] } }
+        },
+        {
+          "type": "texture",
+          "copy": "0xC2A3D69B57B143DC",
+          "name": "skyeshade/blue_sentry/sentry/lut_b",
+          "lut": { "columns": { "0": [0.08, 0.22, 0.75], "2": [0.05, 0.14, 0.5], "5": [0.05, 0.14, 0.5], "6": [0.05, 0.14, 0.5] } }
+        }
+      ]
+    }
+  ]
+}

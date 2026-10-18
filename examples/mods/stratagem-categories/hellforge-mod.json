@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "id": "hellforge.category-example",
+  "name": "Stratagem Category Example",
+  "version": "0.1.0",
+  "description": "Three custom stratagems in Experimental and Fire Support selection headings. SDK 8 example; native-screen validation pending.",
+  "gameplay": true,
+  "code": { "dll": "stratagem_categories.dll", "sdk": 8 }
+}
