@@ -61,6 +61,21 @@ static class CosmeticPacksTests
             check(ModCatalog.Digest([pack]) == "none", "Friends do not need the same cosmetic packs.");
         });
 
+        test("Cosmetic packs: an empty Include (a VANILLA choice) stages nothing; a folder outside the pack is still refused", () =>
+        {
+            var mods = Directory.CreateDirectory(Path.Combine(root, "vanilla-mods")).FullName;
+            var folder = Pack(mods, "reticles", "22222222-2222-3333-4444-555555555555");
+            var manifest = Path.Combine(folder, CosmeticPacks.ManifestName);
+            File.WriteAllText(manifest, File.ReadAllText(manifest).Replace("""{ "Name": "Rifle/A", "Include": ["Rifle A"] }""", """{ "Name": "VANILLA", "Include": [""] }"""));
+            var (loaded, problems) = ModCatalog.Load(mods);
+            check(problems.Count == 0 && loaded.Single().PackFolders.Select(Path.GetFileName).SequenceEqual(["Pistol"]),
+                "Loads; VANILLA (the default sub-option) adds no folder: " + string.Join(" | ", problems));
+
+            File.WriteAllText(manifest, File.ReadAllText(manifest).Replace("""["Pistol"]""", """["../elsewhere"]"""));
+            (loaded, problems) = ModCatalog.Load(mods);
+            check(loaded.Count == 0 && problems.Single().Contains("Pistol includes a folder outside the pack"), "Refused: " + string.Join(" | ", problems));
+        });
+
         test("The Mods page's order: gameplay then cosmetic, saved, new mods on top; sessions load it bottom first", () =>
         {
             var mods = Directory.CreateDirectory(Path.Combine(root, "order-mods")).FullName;
@@ -140,6 +155,39 @@ static class CosmeticPacksTests
             var (mods, loadProblems) = ModCatalog.Load(install.Mods);
             check(loadProblems.Count == 0 && mods.Single() is { Cosmetic: true, Archive: "zipped.zip" } p && p.PackFolders.Count == 2,
                 "Loaded from the zip: " + string.Join(" | ", loadProblems));
+        });
+
+        test("A .7z (as a .rar) is unpacked by Windows' tar and added as a folder: a pack with its files at the root, a mod in a folder", () =>
+        {
+            var install = new InstallLayout(Path.Combine(root, "pack-7z-install"));
+            install.Create("25480438");
+            Directory.CreateDirectory(install.Mods);
+            var source = Directory.CreateDirectory(Path.Combine(root, "pack-7z-source")).FullName;
+            var pack = Pack(source, "sevenzip", "33333333-2222-3333-4444-555555555555");
+            var mod = Directory.CreateDirectory(Path.Combine(source, "a-mod")).FullName;
+            File.WriteAllText(Path.Combine(mod, ModCatalog.ManifestName), """{"format":1,"id":"a.sevenzip","name":"Seven","version":"1","gameplay":true}""");
+            File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(mod, "data")).FullName, "9ba626afa44a3aa3.patch_0"), "mod");
+            static void SevenZip(string from, string what, string archive)
+            {
+                var tar = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe");
+                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tar) { ArgumentList = { "--format", "7zip", "-cf", archive, "-C", from, what }, UseShellExecute = false, CreateNoWindow = true })!;
+                process.WaitForExit();
+                if (process.ExitCode != 0) throw new InvalidOperationException("tar could not write " + archive);
+            }
+            var packArchive = Path.Combine(source, "Pack Download.7z");
+            var modArchive = Path.Combine(source, "a-mod.7z");
+            SevenZip(pack, ".", packArchive);
+            SevenZip(source, "a-mod", modArchive);
+
+            var (candidates, problems) = ModInstaller.Inspect(install, [packArchive, modArchive]);
+            check(problems.Count == 0 && candidates.Select(c => c.Id).SequenceEqual(["pack.33333333-2222-3333-4444-555555555555", "a.sevenzip"]) && candidates.All(c => !c.IsZip),
+                "Both are read: " + string.Join(" | ", problems));
+            foreach (var candidate in candidates) ModInstaller.Add(install, candidate);
+            var (mods, loadProblems) = ModCatalog.Load(install.Mods);
+            check(loadProblems.Count == 0 && Directory.Exists(Path.Combine(install.Mods, "Pack Download")) && Directory.Exists(Path.Combine(install.Mods, "a-mod")) &&
+                mods.Single(m => m.Cosmetic).PackFolders.Count == 2 && mods.Any(m => m.Id == "a.sevenzip"),
+                "Copied as folders (the pack named after its archive) and loaded: " + string.Join(" | ", loadProblems));
+            check(!Directory.EnumerateDirectories(install.Temp, "mod-unpacked-*").Any(), "The unpacked copies are gone.");
         });
     }
 }

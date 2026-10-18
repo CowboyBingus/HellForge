@@ -102,9 +102,12 @@ public static partial class CosmeticPacks
     {
         if (e.ValueKind != JsonValueKind.Object) throw new InvalidDataException("an option is not an object.");
         var name = Text(e, "Name") is { Length: > 0 } n ? n : throw new InvalidDataException("an option has no name.");
+        // an empty name includes nothing: packs list [""] for a choice that keeps the game's own look ("VANILLA", "Default")
         var include = e.TryGetProperty("Include", out var list) && list.ValueKind == JsonValueKind.Array
-            ? list.EnumerateArray().Select(i => i.ValueKind == JsonValueKind.String ? Inside(folder, i.GetString()) ?? throw new InvalidDataException($"{name} includes a folder outside the pack.")
-                : throw new InvalidDataException($"{name}'s Include lists something that is not a folder name.")).Select(p => Path.GetRelativePath(folder, p)).ToList()
+            ? list.EnumerateArray().Select(i => i.ValueKind == JsonValueKind.String ? i.GetString()!
+                : throw new InvalidDataException($"{name}'s Include lists something that is not a folder name.")).Where(i => !string.IsNullOrWhiteSpace(i))
+                .Select(i => Inside(folder, i) ?? throw new InvalidDataException($"{name} includes a folder outside the pack."))
+                .Select(p => Path.GetRelativePath(folder, p)).ToList()
             : [];
         var subs = new List<Option>();
         if (e.TryGetProperty("SubOptions", out var subList) && subList.ValueKind == JsonValueKind.Array)

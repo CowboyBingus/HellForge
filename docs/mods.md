@@ -576,7 +576,7 @@ verification and repair are unaffected.
 ### Cosmetic packs
 
 Packs in the community's format load as they are, without a `hellforge-mod.json`: a folder (or `.zip`; **Add mods...**
-also takes a `.rar`, unpacked with Windows' own `tar`) with a `manifest.json` and folders of patches, or just patches at
+also takes a `.rar` or `.7z`, unpacked with Windows' own `tar`) with a `manifest.json` and folders of patches, or just patches at
 its root:
 
 ```json

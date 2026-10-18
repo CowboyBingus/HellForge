@@ -411,7 +411,7 @@ public static class ModArchives
         if (Root(unpacked)) return unpacked;
         var folders = Directory.GetDirectories(unpacked);
         if (folders.Length == 1 && Directory.GetFiles(unpacked).Length == 0 && Root(folders[0])) return folders[0];
-        throw new InvalidDataException($"no {ModCatalog.ManifestName} (or a cosmetic pack's {CosmeticPacks.ManifestName}) at the zip's root or in its one top-level folder.");
+        throw new InvalidDataException($"no {ModCatalog.ManifestName} (or a cosmetic pack's {CosmeticPacks.ManifestName}) at the archive's root or in its one top-level folder.");
     }
 }
 

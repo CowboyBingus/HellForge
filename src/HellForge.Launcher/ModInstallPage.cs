@@ -23,10 +23,10 @@ public partial class MainWindow
         var install = new InstallLayout(paths.InstallRoot);
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Add mods: their .zip (or a pack's .rar), or a folder mod's hellforge-mod.json or a pack's manifest.json",
+            Title = "Add mods: their .zip (or .rar, .7z), or a folder mod's hellforge-mod.json or a pack's manifest.json",
             AllowMultiple = true,
-            FileTypeFilter = [new FilePickerFileType("Mods and cosmetic packs (.zip, .rar, hellforge-mod.json, manifest.json)")
-                { Patterns = ["*.zip", "*.rar", ModCatalog.ManifestName, CosmeticPacks.ManifestName] }]
+            FileTypeFilter = [new FilePickerFileType("Mods and cosmetic packs (.zip, .rar, .7z, hellforge-mod.json, manifest.json)")
+                { Patterns = ["*.zip", "*.rar", "*.7z", ModCatalog.ManifestName, CosmeticPacks.ManifestName] }]
         });
         var chosen = files.Select(f => f.TryGetLocalPath()).OfType<string>().ToList();
         if (chosen.Count == 0) return;

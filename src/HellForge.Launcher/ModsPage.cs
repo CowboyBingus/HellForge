@@ -113,7 +113,7 @@ public partial class MainWindow
         }
         var active = ModCatalog.Active(mods);
         ModsSummary.Text = mods.Count == 0 && problems.Count == 0
-            ? "No mods yet. Add mods... takes HellForge mods (their .zip, or a folder mod's hellforge-mod.json) and cosmetic packs (.zip, .rar or the pack's manifest.json), and copies them into the mods folder."
+            ? "No mods yet. Add mods... takes HellForge mods (their .zip, .rar or .7z, or a folder mod's hellforge-mod.json) and cosmetic packs (.zip, .rar, .7z or the pack's manifest.json), and copies them into the mods folder."
             : $"{active.Count} of {mods.Count} mod{(mods.Count == 1 ? "" : "s")} on. Drag a mod to change the order: the bottom one loads first, the top one wins. " +
               "Changes apply to the next session" + (modsLocked ? "; the running session keeps the mods it started with." : ".");
         var gameplay = active.Count(m => m.Gameplay);
@@ -137,7 +137,7 @@ public partial class MainWindow
             AddModGroup(mods, mods.Where(m => m.Gameplay).ToList(), "GAMEPLAY", "Friends need the same ones, in the same order.",
                 "No gameplay mods.", ref number);
             AddModGroup(mods, mods.Where(m => m.Cosmetic).ToList(), "COSMETIC", "Only on your PC: friends need not have the same ones.",
-                "No cosmetic mods. Add a cosmetic pack (its .zip, .rar or manifest.json) with Add mods...", ref number);
+                "No cosmetic mods. Add a cosmetic pack (its .zip, .rar, .7z or manifest.json) with Add mods...", ref number);
         }
         SetModsLocked(modsLocked);
     }

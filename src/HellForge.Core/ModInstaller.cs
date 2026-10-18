@@ -2,7 +2,7 @@ namespace HellForge.Core;
 
 // Adding and removing mods (the launcher's Mods page: ADD MODS, REMOVE). A mod comes as a zip (copied into mods/ as it
 // is: ModArchives unpacks it) or as a folder, chosen by its hellforge-mod.json (the folder is copied); a cosmetic pack
-// (CosmeticPacks) also by its manifest.json, or as a .rar, unpacked and copied as a folder. A mod whose id is
+// (CosmeticPacks) also by its manifest.json. A .rar or .7z of either is unpacked and copied as a folder. A mod whose id is
 // installed already replaces that one, so adding a newer zip updates a mod. Removing deletes the mod's zip or folder
 // from mods/: only there, never through a link. The mods HellForge ships come back by themselves (BundledMods), so the
 // page offers switching them off instead.
@@ -11,7 +11,10 @@ public static class ModInstaller
     // One mod to add: where it comes from, what it is, and the installed copy it replaces (its zip or folder), if any.
     public sealed record Candidate(string Source, bool IsZip, string Id, string Name, string Version, string? Replaces);
 
-    // Reads each chosen file (a .zip, or a hellforge-mod.json for its folder) without changing anything. A file that is
+    // The archives Windows' tar unpacks for us (Unpack), as a folder to copy: .NET reads only zips.
+    static readonly string[] TarArchives = [".rar", ".7z"];
+
+    // Reads each chosen file (a .zip, .rar or .7z, or a hellforge-mod.json for its folder) without changing anything. A file that is
     // not a mod is a problem, not an exception, so the others still go in.
     public static (List<Candidate> Mods, List<string> Problems) Inspect(InstallLayout install, IEnumerable<string> chosen)
     {
@@ -23,15 +26,15 @@ public static class ModInstaller
             try
             {
                 var isZip = path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
-                var isRar = path.EndsWith(".rar", StringComparison.OrdinalIgnoreCase);
+                var isTar = TarArchives.Any(e => path.EndsWith(e, StringComparison.OrdinalIgnoreCase));
                 var file = Path.GetFileName(path);
-                var source = isZip || isRar ? path : Path.GetDirectoryName(path)!;
-                if (!isZip && !isRar && !file.Equals(ModCatalog.ManifestName, StringComparison.OrdinalIgnoreCase) &&
+                var source = isZip || isTar ? path : Path.GetDirectoryName(path)!;
+                if (!isZip && !isTar && !file.Equals(ModCatalog.ManifestName, StringComparison.OrdinalIgnoreCase) &&
                     !file.Equals(CosmeticPacks.ManifestName, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException($"choose a mod's .zip (or .rar), its {ModCatalog.ManifestName}, or a cosmetic pack's {CosmeticPacks.ManifestName}.");
+                    throw new InvalidDataException($"choose a mod's .zip (or .rar, .7z), its {ModCatalog.ManifestName}, or a cosmetic pack's {CosmeticPacks.ManifestName}.");
                 if (LocalInstall.Within(source, install.Mods))
                     throw new InvalidDataException("it is in this installation's mods folder already.");
-                if (isRar) (source, isZip) = (ExtractRar(install, path), false); // a folder from here on, copied like one
+                if (isTar) source = Unpack(install, path); // a folder from here on, copied like one
                 var mod = isZip ? ReadZip(install, path) : ParseAny(source);
                 if (mods.Any(m => m.Id == mod.Id)) throw new InvalidDataException($"{mod.Id} is chosen twice.");
                 var current = installed.FirstOrDefault(m => m.Id == mod.Id);
@@ -71,9 +74,9 @@ public static class ModInstaller
             catch (IOException) { }
             throw;
         }
-        // a .rar's unpacked copy (ExtractRar) is not needed once the mod is in mods/
+        // a .rar's or .7z's unpacked copy (Unpack) is not needed once the mod is in mods/
         var extracted = Path.GetFullPath(mod.Source);
-        if (LocalInstall.Within(extracted, install.Temp) && Path.GetFileName(Path.GetDirectoryName(extracted) ?? "").StartsWith("mod-rar-", StringComparison.Ordinal))
+        if (LocalInstall.Within(extracted, install.Temp) && Path.GetFileName(Path.GetDirectoryName(extracted) ?? "").StartsWith("mod-unpacked-", StringComparison.Ordinal))
             try { Directory.Delete(Path.GetDirectoryName(extracted)!, recursive: true); } catch (IOException) { }
         return target;
     }
@@ -109,29 +112,33 @@ public static class ModInstaller
         : CosmeticPacks.IsPack(folder) ? CosmeticPacks.Parse(folder, CosmeticPacks.Choice.Default)
         : throw new InvalidDataException($"there is no {ModCatalog.ManifestName}, and it is not a cosmetic pack.");
 
-    // .NET reads no RAR: Windows' own tar (libarchive; Windows 11) unpacks it into the installation's temp, as a folder to
-    // copy. Where it cannot, the player unpacks it and adds the folder.
-    static string ExtractRar(InstallLayout install, string rar)
+    // .NET reads no RAR or 7z: Windows' own tar (libarchive; Windows 11) unpacks it into the installation's temp, as a
+    // folder to copy. tar refuses absolute and parent paths itself; links are refused here, so the copy reads nothing
+    // outside the archive. Where tar cannot unpack it, the player unpacks it and adds the folder.
+    static string Unpack(InstallLayout install, string archive)
     {
-        var target = Path.Combine(install.Temp, "mod-rar-" + Guid.NewGuid().ToString("N")[..8]);
+        var kind = Path.GetExtension(archive).ToLowerInvariant();
+        var target = Path.Combine(install.Temp, "mod-unpacked-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(target);
         var tar = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe");
         var start = new System.Diagnostics.ProcessStartInfo(tar) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
-        foreach (var a in new[] { "-xf", rar, "-C", target }) start.ArgumentList.Add(a);
+        foreach (var a in new[] { "-xf", archive, "-C", target }) start.ArgumentList.Add(a);
         try
         {
             using var process = System.Diagnostics.Process.Start(start) ?? throw new IOException("tar did not start.");
             var errors = process.StandardError.ReadToEndAsync();
             process.StandardOutput.ReadToEnd();
             process.WaitForExit();
-            if (process.ExitCode != 0) throw new InvalidDataException("Windows could not unpack it (" + errors.Result.Trim() + "): unpack the .rar yourself and add its folder.");
+            if (process.ExitCode != 0) throw new InvalidDataException($"Windows could not unpack it ({errors.Result.Trim()}): unpack the {kind} yourself and add its folder.");
         }
-        catch (System.ComponentModel.Win32Exception) { throw new InvalidDataException("Windows has no tar to unpack it with: unpack the .rar yourself and add its folder."); }
+        catch (System.ComponentModel.Win32Exception) { throw new InvalidDataException($"Windows has no tar to unpack it with: unpack the {kind} yourself and add its folder."); }
+        if (new DirectoryInfo(target).EnumerateFileSystemInfos("*", SearchOption.AllDirectories).Any(e => (e.Attributes & FileAttributes.ReparsePoint) != 0))
+            throw new InvalidDataException($"the {kind} contains a link; HellForge adds only plain files and folders.");
         var root = ModArchives.ManifestRoot(target);
         // the folder the mod is copied as: the archive's name when its files sit at its root
         if (root == target)
         {
-            var named = Path.Combine(install.Temp, "mod-rar-" + Guid.NewGuid().ToString("N")[..8], Path.GetFileNameWithoutExtension(rar));
+            var named = Path.Combine(install.Temp, "mod-unpacked-" + Guid.NewGuid().ToString("N")[..8], Path.GetFileNameWithoutExtension(archive));
             Directory.CreateDirectory(Path.GetDirectoryName(named)!);
             Directory.Move(target, named);
             root = named;
