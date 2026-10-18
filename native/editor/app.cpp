@@ -96,6 +96,7 @@ struct CatItem { bool group; std::string label; int nav; };
 std::vector<CatItem> g_cats;
 int g_cat = 1, g_obj = 0, g_field = 0;
 std::map<std::string, int> g_scroll, g_seen;
+float g_catScroll = 0; /* the category list's scroll, in units (its rows differ in height, so not a List) */
 struct { bool active = false; std::string text; } g_search;
 std::map<std::string, std::string> g_group;
 struct Pend { double value; bool reset; }; /* reset: back to the default when applied */
@@ -2253,20 +2254,54 @@ void DrawCategories(float y0, float h)
     g_cv.Rect(CAT_W - 1, y0, 1, h, LINE, 2);
     const MarkCache& marks = Markers();
     bool focused = g_focus == CATEGORIES;
-    float yy = 10;
+    const float rh = 31, headH = 24, gap = 10;
+    /* Taller than the panel (a short screen, a large UI scale): it scrolls, by the wheel or its scrollbar, and a category
+     * chosen with the keys is kept in view. Only whole rows are drawn, as in a List. */
+    float total = gap, selTop = 0;
+    for (int i = 0; i < (int)g_cats.size(); i++)
+    {
+        if (g_cats[i].group) { total += (i > 0 ? gap : 0) + headH; continue; }
+        if (i == g_cat) selTop = total;
+        total += rh;
+    }
+    total += gap;
+    float maxScroll = std::max(0.0f, total - h);
+    static int seen = -1;
+    if (seen != g_cat)
+    {
+        seen = g_cat;
+        if (selTop - gap < g_catScroll) g_catScroll = selTop - gap;
+        if (selTop + rh + gap > g_catScroll + h) g_catScroll = selTop + rh + gap - h;
+    }
+    float wheel = g_cv.Scroll(0, y0, CAT_W, h, ui::Id("cats", 7777));
+    if (wheel != 0) g_catScroll -= wheel * rh * 3;
+    float trackY = y0 + 2, trackH = h - 4, thumb = std::max(24.0f, trackH * std::min(1.0f, h / std::max(1.0f, total)));
+    if (g_drag.key == "cats")
+    {
+        if (!ImGui::IsMouseDown(0)) g_drag.key.clear();
+        else
+        {
+            float ux, uy;
+            g_cv.ToUnits(ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y, &ux, &uy);
+            g_catScroll = std::clamp((uy - trackY - thumb / 2) / std::max(1.0f, trackH - thumb), 0.0f, 1.0f) * maxScroll;
+        }
+    }
+    g_catScroll = std::clamp(g_catScroll, 0.0f, maxScroll);
+    auto inside = [&](float y, float rowH) { return y >= y0 && y + rowH <= y0 + h; };
+    float yy = gap - g_catScroll;
     for (int i = 0; i < (int)g_cats.size(); i++)
     {
         const CatItem& item = g_cats[i];
         if (item.group)
         {
-            yy += i > 0 ? 10 : 0;
-            g_cv.Text(item.label, 18, y0 + yy + 11, T(SZ_HEADING, FAINT, ui::TITLE));
-            yy += 24;
+            yy += i > 0 ? gap : 0;
+            if (inside(y0 + yy, headH)) g_cv.Text(item.label, 18, y0 + yy + 11, T(SZ_HEADING, FAINT, ui::TITLE));
+            yy += headH;
             continue;
         }
-        float rh = 31, y = y0 + yy;
+        float y = y0 + yy;
         yy += rh;
-        if (y + rh > y0 + h) continue;
+        if (!inside(y, rh)) continue;
         bool selected = i == g_cat;
         uint64_t id = ui::Id("cat", (uint64_t)i);
         const catalog::Nav& nav = g_catalog.navs[item.nav];
@@ -2283,6 +2318,17 @@ void DrawCategories(float y0, float h)
         float mx = DrawMarks(found != marks.navs.end() ? found->second : Marks{}, CAT_W - 28 - cw, y + rh / 2, 26);
         g_cv.Text(item.label, 22, y + rh / 2, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, std::min(CAT_W - 80, mx - 30)));
         if (g_cv.Hit(8, y, CAT_W - 16, rh, id)) { SelectCategory(i); g_focus = CATEGORIES; }
+    }
+    if (maxScroll > 0)
+    {
+        bool dragging = g_drag.key == "cats";
+        g_cv.Rect(CAT_W - 6, trackY, 3, trackH, LINE, 3);
+        g_cv.Rect(CAT_W - (dragging ? 8 : 6), trackY + (trackH - thumb) * (g_catScroll / maxScroll), dragging ? 5.0f : 3.0f, thumb,
+            (focused || dragging) ? GOLD : LINE_STRONG, 4);
+        if (g_cv.Hit(CAT_W - 16, y0, 14, h, ui::Id("cats", 8888)))
+        {
+            g_drag.key = "cats"; g_drag.trackY = trackY; g_drag.trackH = trackH; g_drag.thumb = thumb;
+        }
     }
 }
 
@@ -2961,6 +3007,88 @@ void DrawErrors()
 }
 
 
+/* ---- co-op: the values of content mods added ----
+ * They are this editor's own live edits (mod-stats.json), not Local Stats, so the session's backend, which plays the
+ * host's Local Stats, does not reach them. Joined, the editor takes its own off and applies the host's, which the backend
+ * writes beside them (host-mod-stats.json); back on its own, the host's go and its own come back. */
+std::map<const Row*, double> g_modLive; /* what the editor's live edits of mod content hold now */
+int g_modRole = -1;                     /* HF_SESSION_JOINER: they are the host's; else this machine's (-1: none yet) */
+std::string g_hostModText;              /* the host's file as last applied */
+ULONGLONG g_modCheck;
+
+std::vector<localstats::Entry> ModEntriesOf(const hfjson::Value& document)
+{
+    std::vector<localstats::Entry> out;
+    for (auto& category : document.members)
+        if (localstats::IsMod(category.first) && category.second.kind == hfjson::Value::Object)
+            for (auto& target : category.second.members)
+                for (auto& field : target.second.members)
+                    if (field.second.kind == hfjson::Value::Number) out.push_back({category.first, target.first, field.first, field.second.AsNumber()});
+    return out;
+}
+
+/* The game's mod content to these values; the editor's other live edits of it (and this machine's saved values, which an
+ * APPLY may have set since) undone. Returns how many were applied. */
+int ApplyModValues(const std::vector<localstats::Entry>& entries, const char* whose, const char* refused)
+{
+    const HfApi* api = g_host.api;
+    std::map<const Row*, double> want;
+    for (const localstats::Entry& e : entries)
+    {
+        if (!localstats::IsMod(e.category)) continue;
+        const Row* row = g_catalog.Entry(e.category, e.target, e.key);
+        if (row != nullptr && row->Live()) want[row] = row->unlimited && e.value == -1 ? 4294967295.0 : e.value;
+    }
+    std::set<const Row*> undo;
+    for (auto& held : g_modLive) undo.insert(held.first);
+    for (const localstats::Entry& e : localstats::Entries())
+        if (const Row* row = localstats::IsMod(e.category) ? g_catalog.Entry(e.category, e.target, e.key) : nullptr; row != nullptr && row->Live()) undo.insert(row);
+    int applied = 0, undone = 0;
+    for (const Row* row : undo)
+    {
+        if (want.count(row)) continue;
+        HfField field = FieldOf(row);
+        if (api->set_live(g_host.mod, row->ref, &field, nullptr, row->shared ? HF_LIVE_SHARED : 0)) undone++;
+    }
+    for (auto& [row, value] : want)
+    {
+        HfField field = FieldOf(row);
+        HfValue v{row->type, value, 0};
+        if (api->set_live(g_host.mod, row->ref, &field, &v, row->shared ? HF_LIVE_SHARED : 0)) applied++;
+        else SetError(row, Refusal(refused));
+    }
+    g_modLive = want;
+    g_live.clear();
+    if (g_modRole != -1 && (applied || undone)) api->log(g_host.mod, "editor: %s mod content values: %d applied, %d undone", whose, applied, undone);
+    return applied;
+}
+
+/* Joined: the host's values, read again each second (the backend rewrites the file when the host changes them). */
+void SyncModValues()
+{
+    if (g_session.role != HF_SESSION_JOINER)
+    {
+        if (g_modRole == HF_SESSION_JOINER)
+        {
+            g_modRole = (int)g_session.role;
+            g_hostModText.clear();
+            ApplyModValues(localstats::Entries(), "this machine's", "HellForge refused its saved value");
+        }
+        return;
+    }
+    ULONGLONG now = GetTickCount64();
+    if (g_modRole == HF_SESSION_JOINER && now < g_modCheck) return;
+    g_modCheck = now + 1000;
+    std::string text;
+    if (!hfjson::ReadFile(hfjson::Wide(g_host.modFolder) + L"\\host-mod-stats.json", &text)) text.clear(); /* none (yet) */
+    if (g_modRole == HF_SESSION_JOINER && text == g_hostModText) return;
+    hfjson::Value document;
+    if (!text.empty() && !hfjson::Parse(text, &document, nullptr)) return; /* being written: the next second */
+    g_hostModText = text;
+    g_modRole = HF_SESSION_JOINER;
+    ApplyModValues(ModEntriesOf(document), "the host's", "HellForge refused the host's value");
+}
+
 /* The layout for a screen: the interface size as large as still fits (full width, at least PANEL_MIN_H of height). */
 void Layout(float width, float height, float* ox, float* oy, float* s)
 {
@@ -3121,19 +3249,19 @@ void AddModContent()
         pages++;
         api->log(g_host.mod, "editor: %s gets a page (%s's, %d field(s) of its own)", name.c_str(), like->name.c_str(), (int)o->rows.size());
     }
-    /* their saved values, to the game: the stats pass does not know them */
-    int applied = 0;
-    for (const localstats::Entry& e : localstats::Entries())
-    {
-        if (!localstats::IsMod(e.category)) continue;
-        const Row* row = g_catalog.Entry(e.category, e.target, e.key);
-        if (row == nullptr || !row->Live()) continue;
-        HfField field = FieldOf(row);
-        HfValue v{row->type, row->unlimited && e.value == -1 ? 4294967295.0 : e.value, 0};
-        if (api->set_live(g_host.mod, row->ref, &field, &v, row->shared ? HF_LIVE_SHARED : 0)) applied++;
-        else SetError(row, Refusal("HellForge refused its saved value"));
-    }
+    /* their saved values, to the game: the stats pass does not know them (joined to a friend, Tick swaps in the host's) */
+    int applied = ApplyModValues(localstats::Entries(), "this machine's", "HellForge refused its saved value");
+    g_modRole = HF_SESSION_SOLO;
     if (pages || applied) api->log(g_host.mod, "editor: %d mod stratagem page(s), %d saved value(s) of them applied", pages, applied);
+}
+
+void Tick()
+{
+    if (!g_catalogOk || g_modRole == -1) return;
+    static ULONGLONG next;
+    ULONGLONG now = GetTickCount64();
+    if (now >= next) { next = now + 250; ReadSession(); }
+    SyncModValues();
 }
 
 float PixelScale(float width, float height)

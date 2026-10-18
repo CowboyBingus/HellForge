@@ -253,7 +253,8 @@ Declarative content makes conflicts visible instead of silent (unlike script mod
    **Built (2026-10-17):** the backend's `StatsShare` sends the host's Local Stats to
    admitted friends and on every change; joiners apply them through the live-edit pipe and get their own back on leave;
    `session` (SDK 6) tells mods solo, host or joiner, and a joiner's in-game editor is read-only. Not synced: boot-only
-   fields, arm swaps and perks. The two-PC test is still owed.
+   fields, arm swaps and perks. The editor's mod content values (`mod-stats.json`) go with them since 2026-10-18 (the
+   third field of `stats.set`); a first two-PC session found them missing (a joiner kept its own silo values).
 4. **MDK.** `templates/c-mod`, `hellforge new-mod <id>` (CLI and launcher button), one-command
    build and install, a reference generated from the header and mappings, a "first mod" guide. Next (decided
    2026-10-17); the reference generator is built now and fills in as the mappings grow.

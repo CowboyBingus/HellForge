@@ -22,6 +22,8 @@ void Init(const Host& host);
 void AddModContent();
 /* Pixels per 1080p unit for a screen: the editor's scale (the fonts are baked for it). */
 float PixelScale(float width, float height);
+/* Every frame, open or not (the window's lock held): the co-op role, and the mod content values it calls for. */
+void Tick();
 /* One frame: input, then drawing into the list. */
 void Frame(ImDrawList* list, float width, float height, float dt);
 void Opened();

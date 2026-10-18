@@ -254,6 +254,7 @@ static void Render(IDXGISwapChain3* swapChain)
         if (shown) editorapp::Opened(); else editorapp::Closed();
     }
     if (g_ready && g_saveFailed) { InterlockedExchange(&g_saveFailed, 0); editorapp::SaveStatus(false, g_saveStatus); }
+    if (g_ready) editorapp::Tick();
     if (g_ready && g_open)
     {
         DXGI_SWAP_CHAIN_DESC desc;

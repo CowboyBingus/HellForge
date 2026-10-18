@@ -52,10 +52,12 @@ static int g_resets;
 static int g_refuseCapacity; /* the big preset's test: magazine capacities refused (its errors) */
 static const char* LastLog(HfMod*) { return "set_live: test: magazine capacities are refused here"; }
 static const char* LogsFolder(HfMod*) { return g_logsFolder; }
+static double g_modCooldown = -2; /* the mod stratagem's cooldown as the editor last set it (-1: its edit undone) */
 static int SetLive(HfMod*, HfRef target, const HfField* field, const HfValue* value, uint32_t flags)
 {
     if (g_refuseCapacity && value && field && field->offset == 136) return 0;
     if (target == 150 && value && value->number == 150 && field && !strcmp(field->component, "StratagemDefinition")) g_modApplied++;
+    if (target == 150 && field && !strcmp(field->component, "StratagemDefinition")) g_modCooldown = value ? value->number : -1;
     g_lives++;
     if (value) g_lastLive = value->number;
     else if (flags & HF_LIVE_BASE) g_resets++;
@@ -195,8 +197,10 @@ int main(int argc, char** argv)
         snprintf(settings, sizeof settings, "%s\\editor-settings.json", g_folder);
         if (FILE* file = fopen(settings, "wb"))
         {
-            fputs("{\"open\":[\"stratagems/EXO-45 Patriot Exosuit|c|mounts\",\"stratagems/EXO-45 Patriot Exosuit|c|mount:EXO-45 Patriot Exosuit / left_gun\"],"
-                  "\"mounts\":{\"EXO-45 Patriot Exosuit|mount.slot_0\":2}}", file);
+            /* HELLFORGE_EDITOR_TEST_SCALE=1.5: the screenshots at that UI scale (the category list then outgrows its panel) */
+            const char* scale = getenv("HELLFORGE_EDITOR_TEST_SCALE");
+            fprintf(file, "{%s%s%s\"open\":[\"stratagems/EXO-45 Patriot Exosuit|c|mounts\",\"stratagems/EXO-45 Patriot Exosuit|c|mount:EXO-45 Patriot Exosuit / left_gun\"],"
+                  "\"mounts\":{\"EXO-45 Patriot Exosuit|mount.slot_0\":2}}", scale ? "\"ui_scale\":" : "", scale ? scale : "", scale ? "," : "");
             fclose(file);
         }
     }
@@ -499,7 +503,15 @@ int main(int argc, char** argv)
                 for (int i = 0; i < 4; i++) { Key(window, VK_F6); frames(3); } /* SEARCH, CHANGES, PRESETS, LOGS */
                 frames(10);
                 if (dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-logs.bmp"); Screenshot(shot, width, height); }
-                /* joined to a friend's lobby: the editor is greyed and read-only (a preset import or APPLY changes nothing) */
+                /* joined to a friend's lobby: the editor is greyed and read-only (a preset import or APPLY changes nothing), and
+                 * the mod stratagem's cooldown is the host's (host-mod-stats.json, which the session's backend writes) */
+                char hostMods[MAX_PATH];
+                snprintf(hostMods, sizeof hostMods, "%s\\host-mod-stats.json", g_folder);
+                if (FILE* file = fopen(hostMods, "wb"))
+                {
+                    fputs("{\"format\":1,\"mod:test/mod/hmg\":{\"test/mod/hmg\":{\"stratagem.cooldown\":90}}}", file);
+                    fclose(file);
+                }
                 g_sessionNow.role = HF_SESSION_JOINER; g_sessionNow.version = 1; snprintf(g_sessionNow.host, sizeof g_sessionNow.host, "Friend Host");
                 for (int i = 0; i < 2; i++) { Key(window, VK_F6); frames(3); } /* SETTINGS, BROWSE */
                 frames(10);
@@ -509,7 +521,12 @@ int main(int argc, char** argv)
                 Key(window, VK_HOME); frames(2); Key(window, VK_RETURN); frames(6); Key(window, VK_F9); frames(6);
                 printf("  read-only: %d import(s), %d write(s) while joined\n", g_presetImports - imports, g_lives - writes);
                 if (g_presetImports != imports || g_lives != writes) { puts("FAIL a joined editor changed something"); failures++; }
+                double joined = g_modCooldown;
                 g_sessionNow.role = HF_SESSION_SOLO; g_sessionNow.version = 2; g_sessionNow.host[0] = 0;
+                DeleteFileA(hostMods);
+                frames(30);
+                printf("  co-op mod values: the mod stratagem's cooldown %.0f while joined (the host's 90), %.0f after (its own 150)\n", joined, g_modCooldown);
+                if (joined != 90 || g_modCooldown != 150) { puts("FAIL the mod content values did not follow the co-op role"); failures++; }
             }
         }
     }
