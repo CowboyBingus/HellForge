@@ -116,9 +116,11 @@ public partial class MainWindow
             ? "No mods yet. Add mods... takes HellForge mods (their .zip, .rar or .7z, or a folder mod's hellforge-mod.json) and cosmetic packs (.zip, .rar, .7z or the pack's manifest.json), and copies them into the mods folder."
             : $"{active.Count} of {mods.Count} mod{(mods.Count == 1 ? "" : "s")} on. Drag a mod to change the order: the bottom one loads first, the top one wins. " +
               "Changes apply to the next session" + (modsLocked ? "; the running session keeps the mods it started with." : ".");
-        var gameplay = active.Count(m => m.Gameplay);
-        ModsDigestText.Text = gameplay == 0 ? "No gameplay mods: you can play with friends who have none."
-            : $"Modlist code {ModCatalog.Digest(ModCatalog.LoadOrder(active))[..8]}: friends need the same {gameplay} gameplay mod{(gameplay == 1 ? "" : "s")}; the order is up to you.";
+        // what friends compare (ModCatalog.Digest): not Local Stats, since in co-op everyone plays with the host's
+        var gameplay = active.Count(m => m.Gameplay && m.Id != ModCatalog.LocalStatsId);
+        var ownStats = active.Any(m => m.Id == ModCatalog.LocalStatsId) ? " Your Local Stats is not compared: in co-op everyone plays with the host's." : "";
+        ModsDigestText.Text = (gameplay == 0 ? "No gameplay mods to compare: you can play with friends who have none."
+            : $"Modlist code {ModCatalog.Digest(ModCatalog.LoadOrder(active))[..8]}: friends need the same {gameplay} gameplay mod{(gameplay == 1 ? "" : "s")}; the order is up to you.") + ownStats;
 
         // the folder's problems, and what the last Add mods refused (until the next one)
         var notices = problems.Concat(modsRefused.Select(p => "Not added: " + p)).ToList();
