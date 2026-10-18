@@ -111,6 +111,13 @@ public partial class MainWindow : Window
         EngineLogBox.IsCheckedChanged += (_, _) => ProfileStore.SaveEngineLog(paths, EngineLogBox.IsChecked == true);
         CrashDumpBox.IsChecked = ProfileStore.LoadCrashDump(paths);
         CrashDumpBox.IsCheckedChanged += (_, _) => ProfileStore.SaveCrashDump(paths, CrashDumpBox.IsChecked == true);
+        LaunchOptionsBox.Text = ProfileStore.LoadLaunchOptions(paths);
+        ShowLaunchOptionsProblem();
+        LaunchOptionsBox.TextChanged += (_, _) =>
+        {
+            ProfileStore.SaveLaunchOptions(paths, LaunchOptionsBox.Text ?? "");
+            ShowLaunchOptionsProblem();
+        };
 
         // Development: HELLFORGE_LAUNCHER_SHOT=<file.png> shows the play page as a session builds its mods (2 of 5), saves
         // it as a picture and closes (a look at the launcher without a session).
@@ -179,9 +186,18 @@ public partial class MainWindow : Window
         Append($"Profile: {profile.Name} (template {profile.Template}) in {profile.Folder}", LauncherLine);
         if (LocalPlayFabBox.IsChecked == true) Append("Experimental: local PlayFab is on.", Orange);
         if (SdkShimsBox.IsChecked == true) Append("Experimental: PlayFab SDK stand-ins are on.", Orange);
+        List<string> gameOptions;
+        try { gameOptions = HellForge.Core.GameLaunchOptions.Parse(LaunchOptionsBox.Text); }
+        catch (InvalidDataException error)
+        {
+            launchedUtc = default;
+            SetStatus("The launch options cannot be used.", Phase.Failed, failure: error.Message + " (Settings, Launch options)");
+            return;
+        }
+        if (gameOptions.Count > 0) Append("Launch options: " + HellForge.Core.GameLaunchOptions.CommandLine(gameOptions), LauncherLine);
         try
         {
-            runner.Start(paths, profile, LocalPlayFabBox.IsChecked == true, SdkShimsBox.IsChecked == true, LiveWarBox.IsChecked == true, EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true);
+            runner.Start(paths, profile, LocalPlayFabBox.IsChecked == true, SdkShimsBox.IsChecked == true, LiveWarBox.IsChecked == true, EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true, gameOptions);
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {
@@ -728,6 +744,16 @@ public partial class MainWindow : Window
         await runner.WaitForExitAsync(TimeSpan.FromSeconds(60));
         closeConfirmed = true;
         Close();
+    }
+
+    // What is wrong with the typed launch options, under their box (nothing when they can be used).
+    void ShowLaunchOptionsProblem()
+    {
+        string? problem = null;
+        try { HellForge.Core.GameLaunchOptions.Parse(LaunchOptionsBox.Text); }
+        catch (InvalidDataException error) { problem = error.Message; }
+        LaunchOptionsProblem.Text = problem;
+        LaunchOptionsProblem.IsVisible = problem != null;
     }
 
     static IBrush Solid(string color) => new ImmutableSolidColorBrush(Color.Parse(color));

@@ -343,6 +343,19 @@ Test("Session settings point every game path into the installation, per profile"
     catch (ArgumentException) { }
 });
 
+Test("Launch options are read as Steam takes them, and never set what a session sets itself", () =>
+{
+    Check(GameLaunchOptions.Parse("  ").Count == 0 && GameLaunchOptions.Parse(null).Count == 0, "Empty options are none.");
+    Check(GameLaunchOptions.Parse("--use-d3d11").SequenceEqual(["--use-d3d11"]), "One option.");
+    Check(GameLaunchOptions.Parse("%command% --use-d3d11  -x").SequenceEqual(["--use-d3d11", "-x"]), "Steam's %command% form.");
+    var spaced = GameLaunchOptions.Parse("--folder \"C:\\Some Folder\\\" -y");
+    Check(spaced.SequenceEqual(["--folder", "C:\\Some Folder\\", "-y"]) && GameLaunchOptions.CommandLine(spaced) == "--folder \"C:\\Some Folder\\\\\" -y",
+        "Quotes group, and are put back where needed: " + GameLaunchOptions.CommandLine(spaced));
+    foreach (var bad in new[] { "--bundle-dir C:\\other", "-x \"--BUNDLE-DIR\" y", "--bundle-dir=C:\\other", "PROTON_LOG=1 %command%", "%command% %command%",
+                 "\"open", "--a\n--b", new string('x', GameLaunchOptions.MaxLength + 1) })
+        Reject(() => GameLaunchOptions.Parse(bad));
+});
+
 ModTests.Register(Test, Check, Reject, root);
 StatsTests.Register(Test, Check, Reject, root);
 DataBuilderTests.Register(Test, Check, Reject, root);

@@ -138,33 +138,40 @@ static partial class ProfileStore
     public static bool LoadCrashDump(LauncherPaths paths) =>
         SessionFiles.ReadJson(paths.SettingsFile) is { } settings && SessionFiles.Text(settings, "crashDump") == "true";
 
+    // The game's launch options, as typed (GameLaunchOptions); empty unless set.
+    public static string LoadLaunchOptions(LauncherPaths paths) =>
+        SessionFiles.ReadJson(paths.SettingsFile) is { } settings ? SessionFiles.Text(settings, "launchOptions") : "";
+
     static bool LoadFlag(LauncherPaths paths, string name) =>
         SessionFiles.ReadJson(paths.SettingsFile) is not { } settings || SessionFiles.Text(settings, name) != "false";
 
     public static void SaveSelected(LauncherPaths paths, string name) =>
-        Save(paths, name, LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths));
+        Save(paths, name, LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
 
     public static void SaveLocalPlayFab(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), enabled, LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths));
+        Save(paths, LoadSelected(paths), enabled, LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
 
     public static void SaveSdkShims(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), enabled, LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths));
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), enabled, LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
 
     public static void SaveLiveWar(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), enabled, LoadEngineLog(paths), LoadCrashDump(paths));
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), enabled, LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
 
     public static void SaveCrashDump(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), enabled);
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), enabled, LoadLaunchOptions(paths));
 
     public static void SaveEngineLog(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), enabled, LoadCrashDump(paths));
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), enabled, LoadCrashDump(paths), LoadLaunchOptions(paths));
 
-    static void Save(LauncherPaths paths, string name, bool localPlayFab, bool sdkShims, bool liveWar, bool engineLog, bool crashDump)
+    public static void SaveLaunchOptions(LauncherPaths paths, string text) =>
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), text);
+
+    static void Save(LauncherPaths paths, string name, bool localPlayFab, bool sdkShims, bool liveWar, bool engineLog, bool crashDump, string launchOptions)
     {
         try
         {
             Directory.CreateDirectory(paths.HostRoot);
-            File.WriteAllText(paths.SettingsFile, JsonSerializer.Serialize(new { selectedProfile = name, localPlayFab, sdkShims, liveWar, engineLog, crashDump }, WriteOptions) + "\n");
+            File.WriteAllText(paths.SettingsFile, JsonSerializer.Serialize(new { selectedProfile = name, localPlayFab, sdkShims, liveWar, engineLog, crashDump, launchOptions }, WriteOptions) + "\n");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }  // Only a convenience.
     }
