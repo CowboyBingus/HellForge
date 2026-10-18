@@ -4,7 +4,7 @@
 your PC, loads mods into it (new stratagems, weapons, stats, difficulties) and lets you play solo or with friends who
 run HellForge too. It comes with an in-game editor (F8) and a C mod SDK with docs and examples.
 
-**Status: beta (0.1.0-beta.2)**, for modders first. Expect rough edges; the version and game build it targets are in the
+**Status: beta (0.1.0-beta.3)**, for modders first. Expect rough edges; the version and game build it targets are in the
 launcher's bottom-left corner.
 
 ## How it works
@@ -15,10 +15,13 @@ launcher's bottom-left corner.
   signed in to an account that owns the game.
 - **Offline.** The copy talks to a local backend on your PC instead of Arrowhead's online services; Windows Firewall
   rules block it from everything but this PC. It never connects to official servers, so it cannot be used to play online
-  with a modified game. The galactic war can follow the live war read-only from the community mirror
-  [api.helldivers2.dev](https://api.helldivers2.dev) (Settings > Galactic war).
+  with a modified game. The one multiplayer feature is co-op with your Steam friends (below). The galactic war can follow
+  the live war read-only from the community mirror [api.helldivers2.dev](https://api.helldivers2.dev) (Settings >
+  Galactic war).
 - **Profiles** are local. A new profile starts with every item unlocked; other templates can be picked.
-- **Co-op** is friends-only, between HellForge players, over Steam networking.
+- **Co-op with Steam friends** is the only multiplayer: you host or join friends from your Steam friends list who also run
+  HellForge, with the same gameplay mods (HellForge checks them before a join). There is no matchmaking, no public
+  lobbies and no play with the normal game's players.
 - Everything HellForge writes stays inside its folder, apart from the firewall rules and optional shortcuts.
 
 ## Install (players)
