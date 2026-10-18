@@ -47,7 +47,7 @@ public sealed record ModManifest(string Id, string Name, string Version, string 
     public CosmeticPacks.Pack? Pack { get; init; }
     public CosmeticPacks.Choice PackChoice { get; init; } = CosmeticPacks.Choice.Default;
     public IReadOnlyList<string> PackFolders { get; init; } = [];
-    // The Mods page's groups: gameplay mods (friends need the same ones, in the same order) and cosmetic ones.
+    // The Mods page's groups: gameplay mods (friends need the same ones; the same order is up to them) and cosmetic ones.
     public bool Cosmetic => !Gameplay;
     // The picture the Mods page shows for it (a manifest's "icon", a pack's IconPath): a file in its folder, or null.
     public string? Icon { get; init; }
@@ -289,9 +289,9 @@ public static partial class ModCatalog
     public static string Digest(IEnumerable<ModManifest> mods)
     {
         var lines = new StringBuilder();
-        // in the order given (a session's load order): friends need the same gameplay mods in the same order, since mods'
-        // new content is numbered in load order
-        foreach (var mod in mods.Where(m => m.Gameplay && m.Id != LocalStatsId))
+        // by id, whatever the load order: friends need the same gameplay mods, not the same order. A different order is
+        // the players' to sort out (which mod wins a conflict, and new stratagems and weapons are numbered in load order).
+        foreach (var mod in mods.Where(m => m.Gameplay && m.Id != LocalStatsId).OrderBy(m => m.Id, StringComparer.Ordinal))
         {
             lines.Append(mod.Id).Append('|').Append(mod.Version).Append('\n');
             if (mod.HasDataSpec) lines.Append("data-builder|").Append(ModDataBuilder.Version).Append('\n');

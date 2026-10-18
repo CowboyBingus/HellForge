@@ -9,8 +9,8 @@ using HellForge.Core;
 
 namespace HellForge.Launcher;
 
-// The Mods page: every mod in <installation>/mods as a row, in two groups: gameplay mods (friends need the same ones, in
-// the same order) and cosmetic ones (packs of game patches; only on this PC). Within a group a row is dragged anywhere
+// The Mods page: every mod in <installation>/mods as a row, in two groups: gameplay mods (friends need the same ones;
+// the order is up to them) and cosmetic ones (packs of game patches; only on this PC). Within a group a row is dragged anywhere
 // on it into order: the bottom mod loads first, so the top one wins where two change the same thing (ModCatalog.
 // LoadOrder). Switches, the order and each pack's options are saved in hellforge-mods.json (ModSettings). A session
 // loads the enabled mods when it starts, so the page is locked while one runs (docs/mods.md). The page follows the
@@ -118,7 +118,7 @@ public partial class MainWindow
               "Changes apply to the next session" + (modsLocked ? "; the running session keeps the mods it started with." : ".");
         var gameplay = active.Count(m => m.Gameplay);
         ModsDigestText.Text = gameplay == 0 ? "No gameplay mods: you can play with friends who have none."
-            : $"Modlist code {ModCatalog.Digest(ModCatalog.LoadOrder(active))[..8]}: friends need the same {gameplay} gameplay mod{(gameplay == 1 ? "" : "s")}, in the same order.";
+            : $"Modlist code {ModCatalog.Digest(ModCatalog.LoadOrder(active))[..8]}: friends need the same {gameplay} gameplay mod{(gameplay == 1 ? "" : "s")}; the order is up to you.";
 
         // the folder's problems, and what the last Add mods refused (until the next one)
         var notices = problems.Concat(modsRefused.Select(p => "Not added: " + p)).ToList();
@@ -134,7 +134,7 @@ public partial class MainWindow
         if (mods.Count > 0)
         {
             var number = 0;
-            AddModGroup(mods, mods.Where(m => m.Gameplay).ToList(), "GAMEPLAY", "Friends need the same ones, in the same order.",
+            AddModGroup(mods, mods.Where(m => m.Gameplay).ToList(), "GAMEPLAY", "Friends need the same ones; keeping the same order avoids surprises.",
                 "No gameplay mods.", ref number);
             AddModGroup(mods, mods.Where(m => m.Cosmetic).ToList(), "COSMETIC", "Only on your PC: friends need not have the same ones.",
                 "No cosmetic mods. Add a cosmetic pack (its .zip, .rar, .7z or manifest.json) with Add mods...", ref number);

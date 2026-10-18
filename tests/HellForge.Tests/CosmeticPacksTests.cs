@@ -98,7 +98,8 @@ static class CosmeticPacksTests
             check(listed.Single(m => m.Id == "a.one").Icon == Path.Combine(mods, "a.one", "icon.png") && listed.Single(m => m.Id == "a.two").Icon == null,
                 "A manifest's icon is a file in its own folder, never outside it.");
             var gameplay = listed.Where(m => m.Gameplay).ToList();
-            check(ModCatalog.Digest(gameplay) != ModCatalog.Digest(Enumerable.Reverse(gameplay)), "The modlist code follows the gameplay order.");
+            check(ModCatalog.Digest(gameplay) == ModCatalog.Digest(Enumerable.Reverse(gameplay)), "The modlist code does not depend on the gameplay order.");
+            check(ModCatalog.Digest(gameplay) != ModCatalog.Digest(gameplay.Skip(1)), "It still needs the same gameplay mods.");
             check(ModCatalog.Digest(listed) == ModCatalog.Digest(listed.Where(m => m.Gameplay)), "Cosmetic packs are not in it, wherever they sit.");
         });
 
