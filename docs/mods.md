@@ -19,12 +19,15 @@ and the modlist code friends must match.
 **Load order.** Rows are dragged from anywhere on them (or moved with ⋮ Move up / Move down) within their group. The
 page follows the mods folder: a mod copied in or deleted there shows at once. The
 **bottom mod loads first and the top one last**, as in the community's mod managers: where two mods change the same
-thing, the higher one wins (its data patches get the higher numbers, its stats apply later, its code loads later).
+thing, the higher one wins (its data patches get the higher numbers, its stats and its code's edits apply later). Code
+mods are set up in the order of their ids, the same on every machine, so what they add is numbered alike for friends
+who load them in another order.
 Sessions load and stage mods in this order (`ModCatalog.LoadOrder`). Mods new to the page go to the top of their
 group. The editor's Local Stats stays at the top, so what you edit in game applies last. The modlist code compares the
 gameplay mods, not their order, and not the cosmetic group. Friends who order the same mods differently can still play
-together, but that is theirs to sort out: a conflict goes to a different mod on each machine, and new stratagems,
-weapons and projectiles are numbered in load order, so they may not match.
+together, but that is theirs to sort out: a conflict goes to a different mod on each machine. What mods add
+(stratagems, weapons, entities, projectiles, damage types, abilities, behaviours) is numbered alike whatever the order:
+code mods are set up in the order of their ids, and added entities are numbered by their resource ids.
 
 Switches, the order and packs' options are saved in `mods/hellforge-mods.json`
 (`{"format":1,"disabled":[ids],"order":[ids, top first],"packs":{id:{"off":[options],"sub":{option:variant}}}}`;
@@ -191,8 +194,8 @@ api->add_weapon(mod, &rifle);
   base's projectile. The research is in `artifacts/projectile-registry/FINDINGS.md`; the code in
   `native/mod-loader/projectiles.c` and `damage.c`.
 - **Multiplayer.** Every machine fires its own copy of a hand-held weapon's shots from its own data, so friends with the
-  same mods (the modlist gate) fire the same projectile; types and ids are numbered in mod load order on every machine,
-  so friends should also keep the same order (the gate does not check it).
+  same mods (the modlist gate) fire the same projectile; types and ids are numbered in the mods' set-up order (by mod
+  id), the same on every machine whatever its load order.
 - **Sounds.** `HfWeapon.sound_from` (a vanilla weapon's loadout id, such as `HF_ITEM_LAS16_SICKLE`) gives the weapon
   that weapon's firing sounds: its own `ProjectileWeaponComponentData` record takes the donor's sound events (shot,
   loops, fire modes, secondary, silenced). The donor's sound banks must load with the weapon, so the mod's data puts
@@ -238,7 +241,7 @@ uint32_t type = api->add_stratagem(mod, &gatling);
   both. The image follows the stratagem pack's format: red where the icon takes its category's colour, green where it
   is white (the in-game editor draws it that way too).
 - **Multiplayer.** Peers exchange stratagem types as numbers, so every player must run the same mods: the modlist gate
-  ensures it, and types are numbered in mod load order.
+  ensures it, and types are numbered in the mods' set-up order (by mod id), the same on every machine.
 - **Payload.** `payload` / `payload_count` name what a call spawns, and `package` what it loads for the mission. A
   Pelican drop (a base of delivery kind 3, such as `HF_STRATAGEM_EXO45_PATRIOT`) spawns `payload[1]` carrying
   `payload[0]`; `{0, pelican}` sends an empty Pelican.

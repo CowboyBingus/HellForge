@@ -41,6 +41,10 @@ comes back only if an editor ever has to create new content without code.
    (the project's rule since the weapon registry).
 6. **Refuse loudly.** A name that does not resolve, a field outside the reviewed layout or a guard that fails is
    reported in the launcher and the session log with the mod and line, never silently skipped.
+7. **Co-op by default.** What a mod adds works in co-op without the mod doing anything for it, as the game's own
+   stratagems do: every player's game numbers it alike, whatever their load order, and it rides the game's own sync
+   (calls, entities, behaviour stages, abilities). A mod only reaches for HellForge's message channel (phase 7) for
+   state of its own the game has no place for.
 
 ## Mappings
 
@@ -175,7 +179,7 @@ types, ranges) and shows errors with file and line; the loader runs it like a co
 
 Declarative content makes conflicts visible instead of silent (unlike script mods that overwrite tables at run time):
 
-- **Isolation first:** mod content is `modid:name`, numbered in load order, and new content owns copies of its records
+- **Isolation first:** mod content is `modid:name`, numbered alike on every machine, and new content owns copies of its records
   (`own_components`), so most mods never share data.
 - **Deferred edits know every writer:** before applying, the loader has every mod's edits. Two mods setting the same
   shared field are reported in the launcher (both mods, the field, the winner) and resolved by a stated rule: load
@@ -353,6 +357,29 @@ Declarative content makes conflicts visible instead of silent (unlike script mod
      logs report conflicts today).
 6. **Editor (HellRaiser).** Catalog pickers, icon import and export over the stats data; creating new content
    without code would bring back a content format (or generate a C mod from a template), decided then.
+7. **Co-op sync for mod content (decided 2026-10-18).** The first co-op sessions with custom stratagems found three
+   kinds of desync, each where HellForge's additions did not fit the game's own sync:
+   - *Numbering.* Ids handed out in registration order differ between players who load the same mods in another
+     order (allowed since the modlist code ignores order): a friend's Pelican arrived on the others' machines as
+     another mod's entity. Since engine 0.1.4 added entities' network types and short ids follow their resource ids,
+     and code mods are set up in the order of their ids (stratagem types, abilities, behaviours, projectiles and damage
+     types numbered alike); their deferred edits still apply in load order, so the top mod still wins a conflict.
+   - *Local-only logic.* HellForge's silo countdown launched the missile only where it was fired; the others heard
+     the countdown and saw no missile. Since engine 0.1.4 it follows the game's own silo: the machine in charge of the
+     missile (the one that called the silo in) launches it, the game carries the launch to everyone, and the others
+     play the countdown. The rule for HellForge's own code: what changes the game runs where the game runs it.
+   - *New behaviours.* A Pelican flown by a new behaviour (`add_behaviour`) flew only for the player who called it;
+     the others saw it on the ground. The game runs a behaviour on the machine in charge of it; the others apply the
+     stages and fields it sends and resume from them. Since engine 0.1.4 a new behaviour resumes as the behaviour it
+     extends, and its flight target is sent as the base's is. Still open: the Pelican turning to face its target and
+     a custom aim height, which only the machine in charge sees.
+   Then, for state the game has no place for (a laser's marked point, a custom turret's chosen target, a mod's own
+   timers): `is_authority(entity)` (whether this machine is the one in charge of an entity: logic that changes the
+   game runs there, the others follow) and a message channel between the same mod on every player's machine
+   (`send`, and an event for what arrives), carried between the players' backends over the Steam link co-op already
+   uses. HellForge's own countdown and turret code use it first, as the examples. A "Co-op" section in the modding
+   docs says what is automatic and when a mod needs the channel. Tests: two load orders give the same numbering; a
+   stratagem of each kind (entity, behaviour, ability) syncs between two backends.
 
 ## Research plan (feeds the mappings)
 

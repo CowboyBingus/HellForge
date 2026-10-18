@@ -152,6 +152,24 @@ public partial class MainWindow : Window
         ShowProfile();
         InitializeSetup();
         poll.Start();
+        PruneSessionLogs();
+    }
+
+    // Only the newest SessionLogs.Keep sessions' logs stay (crash dumps and engine logs added up to gigabytes): when the
+    // launcher opens and when a session ends, never while one runs. In the background: the first time can be many GB.
+    void PruneSessionLogs()
+    {
+        if (runner.IsRunning) return;
+        var sessions = paths.RunsFolder;
+        _ = Task.Run(() =>
+        {
+            try { return HellForge.Core.SessionLogs.Prune(sessions); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException) { return null; }
+        }).ContinueWith(done =>
+        {
+            if (done.Result is { Removed: > 0 } pruned)
+                Dispatcher.UIThread.Post(() => Append($"Removed the logs of {pruned.Removed} older session(s) ({pruned.Bytes / 1e6:0} MB); the newest {HellForge.Core.SessionLogs.Keep} stay.", LauncherLine));
+        }, TaskScheduler.Default);
     }
 
     void Start()
@@ -255,7 +273,9 @@ public partial class MainWindow : Window
             // Mods are built before the script writes its first result.json: their progress shows from the start.
             else if (!stopRequested && ShowModBuilds(out var built)) RenderSteps(BuildStep, false, built);
         }
-        if (runner.CollectExited() && runDirectory == null)
+        var runnerExited = runner.CollectExited();
+        if (runnerExited) PruneSessionLogs();
+        if (runnerExited && runDirectory == null)
         {
             if (stopRequested)
             {

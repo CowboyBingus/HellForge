@@ -345,6 +345,27 @@ Test("Session settings point every game path into the installation, per profile"
     catch (ArgumentException) { }
 });
 
+Test("Session logs: only the newest ten earlier sessions stay; other folders are never touched", () =>
+{
+    var sessions = Directory.CreateDirectory(Path.Combine(root, "prune-sessions")).FullName;
+    var start = new DateTime(2026, 10, 18, 12, 0, 0, DateTimeKind.Utc);
+    var runs = Enumerable.Range(0, 13).Select(i => Guid.NewGuid().ToString("N")).ToList();
+    for (var i = 0; i < runs.Count; i++)
+    {
+        var run = Directory.CreateDirectory(Path.Combine(sessions, runs[i])).FullName;
+        File.WriteAllText(Path.Combine(run, "result.json"), new string('x', 1000));
+        Directory.SetCreationTimeUtc(run, start.AddMinutes(i)); /* runs[0] the oldest */
+    }
+    var other = Directory.CreateDirectory(Path.Combine(sessions, "keep-me")).FullName;
+    Directory.SetCreationTimeUtc(other, start.AddDays(-1));
+    var pruned = SessionLogs.Prune(sessions);
+    var left = Directory.GetDirectories(sessions).Select(Path.GetFileName).ToHashSet();
+    Check(pruned.Removed == 3 && pruned.Bytes == 3000 && pruned.Skipped == 0, $"Three removed: {pruned}");
+    Check(runs.Take(3).All(r => !left.Contains(r)) && runs.Skip(3).All(left.Contains) && left.Contains("keep-me"),
+        "The three oldest sessions went; the ten newest and the other folder stayed: " + string.Join(", ", left));
+    Check(SessionLogs.Prune(sessions).Removed == 0 && SessionLogs.Prune(Path.Combine(root, "no-such-folder")).Removed == 0, "Nothing more to remove.");
+});
+
 Test("Launch options are read as Steam takes them, and never set what a session sets itself", () =>
 {
     Check(GameLaunchOptions.Parse("  ").Count == 0 && GameLaunchOptions.Parse(null).Count == 0, "Empty options are none.");
