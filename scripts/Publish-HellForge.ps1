@@ -1,13 +1,13 @@
 # Publishes HellForge into an installation's app folder: the launcher, command-line tool and Steam ownership probe as
 # self-contained Windows builds (no .NET installation needed), the HellForge engine (its session runner, local backend,
-# mod loader and stand-ins, and the network block and ownership scripts: a package built from the closed HellForge-Engine
-# repository, pinned in engine.lock.json), the mod SDK, the bundled mods and the profile templates. Everything else in the
+# mod loader and stand-ins, and the network block and ownership scripts: engine/hellforge-engine-<version>.zip, built from
+# the closed HellForge-Engine repository and pinned in engine.lock.json), the mod SDK, the bundled mods and the profile
+# templates. Everything else in the
 # installation (game, user data, profiles, logs) is left alone. The new app is staged in the installation's temp folder
 # and swapped in at the end.
 # -PayloadFolder instead writes the same files (app\ and the top-level program) into a folder for scripts/Package-HellForge.ps1.
-# -EnginePackage: the engine package to use (a HellForge-Engine build); without it the pinned one, from
-# artifacts/engine-packages or downloaded from engine.lock.json's url. Either must match the pin's SHA-256 unless
-# -UnpinnedEngine is given (a local engine build under test).
+# -EnginePackage: the engine package to use (a HellForge-Engine build); without it the pinned one in engine/. Either must
+# match the pin's SHA-256 unless -UnpinnedEngine is given (a local engine build under test).
 param([string]$InstallRoot,[string]$PayloadFolder,[string]$EnginePackage,[switch]$UnpinnedEngine)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -31,13 +31,8 @@ if($InstallRoot){
 # The engine package: pinned, every file checked against its engine.json.
 $lock=Get-Content -LiteralPath (Join-Path $project 'engine.lock.json') -Raw|ConvertFrom-Json
 if(-not $EnginePackage){
-    $EnginePackage=Join-Path $project ('artifacts/engine-packages/'+$lock.file)
-    if(-not(Test-Path -LiteralPath $EnginePackage)){
-        if(-not $lock.url){throw 'No engine package: build one in HellForge-Engine (scripts/Build-Engine.ps1) and pass -EnginePackage.'}
-        New-Item -ItemType Directory (Split-Path -Parent $EnginePackage) -Force|Out-Null
-        Invoke-WebRequest -Uri $lock.url -OutFile ($EnginePackage+'.partial') -UseBasicParsing
-        Move-Item -LiteralPath ($EnginePackage+'.partial') -Destination $EnginePackage -Force
-    }
+    $EnginePackage=Join-Path $project ('engine/'+$lock.file)
+    if(-not(Test-Path -LiteralPath $EnginePackage)){throw ('The engine package is missing: engine/'+$lock.file)}
 }
 $EnginePackage=[IO.Path]::GetFullPath($EnginePackage)
 $engineHash=(Get-FileHash -LiteralPath $EnginePackage).Hash

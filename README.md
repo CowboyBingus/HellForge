@@ -94,8 +94,9 @@ Windows 10 or 11, the .NET 10 SDK, and HELLDIVERS 2 installed through Steam.
 
 This repository is HellForge's open part: the launcher, setup, command-line tool, the mod SDK, its docs and examples, the
 in-game editor and the mod tooling. The engine (the session runner, the local backend, the mod loader and the SDK
-stand-ins) is closed and comes as a package of built binaries, pinned by SHA-256 in `engine.lock.json`
-(`LICENSE-ENGINE.txt` inside it); `scripts/Publish-HellForge.ps1` checks it and puts it into the app. Mods are built
+stand-ins) is closed and comes as a package of built binaries, `engine/hellforge-engine-<version>.zip`, pinned by
+SHA-256 in `engine.lock.json` (`LICENSE-ENGINE.txt` inside it); `scripts/Publish-HellForge.ps1` checks it and puts it
+into the app. Mods are built
 against the SDK headers here and do not need the engine's sources.
 
 `Launch.cmd` builds and opens the launcher from the repository. Downloads are pinned by SHA-256 and kept in the ignored

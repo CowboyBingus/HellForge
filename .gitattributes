@@ -2,3 +2,5 @@
 # bytes must not change with the platform or core.autocrlf). Windows command scripts keep CRLF.
 * text=auto eol=lf
 *.cmd text eol=crlf
+# The engine package: built binaries, never converted.
+*.zip binary
