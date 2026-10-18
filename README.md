@@ -12,7 +12,7 @@ launcher's bottom-left corner.
 - **Your own game.** Setup copies HELLDIVERS 2 from your Steam library into HellForge's folder and checks every file
   against Steam's hashes. No game files are distributed, and your normal Steam game is never changed.
 - **Steam ownership.** A genuine Steam ownership check runs at setup and before every launch: Steam must be running and
-  signed in to an account that owns the game.
+  signed in to an account that owns the game or has it through Steam Family Sharing.
 - **Offline.** The copy talks to a local backend on your PC instead of Arrowhead's online services; Windows Firewall
   rules block it from everything but this PC. It never connects to official servers, so it cannot be used to play online
   with a modified game. The one multiplayer feature is co-op with your Steam friends (below). The galactic war can follow
@@ -26,7 +26,7 @@ launcher's bottom-left corner.
 
 ## Install (players)
 
-**You need:** Windows 10 or 11 (64-bit); Steam running and signed in to an account that owns HELLDIVERS 2; about 25 GB
+**You need:** Windows 10 or 11 (64-bit); Steam running and signed in to an account that owns HELLDIVERS 2 (or has it through Steam Family Sharing); about 25 GB
 free on the drive you install to (about 50 GB in total if Steam has to download the supported build first); permission
 to approve one Windows administrator prompt; and **Windows Firewall switched on** for every network type, because
 HellForge keeps its copy of the game offline with Windows Firewall rules (security suites such as Norton or
@@ -43,7 +43,7 @@ wizard:
    pinned in `supported-build.json`) to paste into the Steam console (`steam://open/console`), watches
    `<Steam>/steamapps/content/app_553850/` and continues when every depot is complete, then copies from there and
    can delete the download. The normal game is not touched;
-2. confirms with Steam that the signed-in account owns the game;
+2. confirms with Steam that the signed-in account owns the game, or has it through Steam Family Sharing;
 3. copies the game's 154 depot files (about 24 GB) from your own Steam library, each checked against Steam's hashes;
    mods and other files in the Steam folder are not copied, and an interrupted copy continues where it stopped;
 4. adds the firewall block for this folder's copy (the only Windows administrator prompt);

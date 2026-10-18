@@ -366,7 +366,7 @@
                 <TextBlock TextWrapping="Wrap" Classes="muted"
                            Text="The copied game is blocked from the internet by permanent Windows firewall rules for its own files (the normal game and Steam are not affected). Settings > Installation > Uninstall HellForge removes them with the rest." />
                 <TextBlock TextWrapping="Wrap" Classes="muted"
-                           Text="A Steam ownership check runs before every launch, so Steam must be running and signed in to an account that owns the game." />
+                           Text="A Steam ownership check runs before every launch, so Steam must be running and signed in to an account that owns the game or has it through Steam Family Sharing." />
                 <TextBlock TextWrapping="Wrap" Classes="muted"
                            Text="A personal, offline research project. Not affiliated with or endorsed by Arrowhead Game Studios or Sony Interactive Entertainment." />
                 <TextBlock x:Name="PlatformText" Classes="muted" FontSize="12" Margin="0,6,0,0" />

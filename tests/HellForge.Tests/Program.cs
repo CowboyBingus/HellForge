@@ -37,12 +37,14 @@ void Test(string name, Action action)
     return (manifest, source, home);
 }
 
-Test("Steam ownership requires the correct app, live subscription, matching owner, and no shared or temporary mode", () =>
+Test("Steam ownership requires the correct app, live subscription, the owner or Steam Family Sharing, and no temporary mode", () =>
 {
     var valid = new SteamOwnershipObservation(553850, true, true, true, false, false, false);
     Check(SteamOwnershipPolicy.ConfirmsCurrentClientOwner(valid), "Live matching owner rejected.");
+    var borrowed = valid with { SameOwner = false, FamilyShared = true };
+    Check(SteamOwnershipPolicy.ConfirmsCurrentClientOwner(borrowed), "A family member's shared licence rejected.");
     foreach (var rejected in new[] { valid with { AppId = 480 }, valid with { LoggedOn = false },
-        valid with { Subscribed = false }, valid with { SameOwner = false }, valid with { FamilyShared = true },
+        valid with { Subscribed = false }, valid with { SameOwner = false }, borrowed with { Subscribed = false },
         valid with { FreeWeekend = true }, valid with { Cafe = true } })
         Check(!SteamOwnershipPolicy.ConfirmsCurrentClientOwner(rejected), "Incomplete ownership observation accepted.");
 });

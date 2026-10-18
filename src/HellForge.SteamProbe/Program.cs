@@ -42,7 +42,7 @@ try
             checkedUtc = DateTime.UtcNow, appId, loggedOn, subscribed, sameOwner, familyShared = shared, freeWeekend, cafe,
             localClientOwnershipConfirmed = confirmed, serverVerified = false, permanentLicenseProven = false,
             readyToLaunchGame = false, librarySha256 = args[1],
-            scope = "Live client API subscription and owner match. Not a signed portable receipt or publisher-side verification."
+            scope = "Live client API subscription, and owner match or Steam Family Sharing. Not a signed portable receipt or publisher-side verification."
         }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine(confirmed ? "Local Steam client subscription and owner match confirmed." : "Ownership remains unverified.");
         return confirmed ? 0 : 2;
