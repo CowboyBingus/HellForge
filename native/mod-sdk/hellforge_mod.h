@@ -699,7 +699,9 @@ typedef struct HfApi
     int (*write_u32_if)(HfMod* mod, uintptr_t address, uint32_t expect, uint32_t value);
 
     /* Detours the function at `target` to `detour`; *original receives a pointer that calls the original code.
-     * 0 on success. Hooks stay for the session. */
+     * 0 on success. Hooks stay for the session. Code another overlay already redirected (its jump stub in allocated
+     * memory, where MinHook finds no room) is chained: the stub's address becomes the detour, the overlay's code the
+     * original. */
     int (*hook)(HfMod* mod, uintptr_t target, void* detour, void** original);
 
     /* Network field types by name (after HF_EVENT_NETWORK_READY). get: 0 and *type filled, or 1. set_bits widens an
