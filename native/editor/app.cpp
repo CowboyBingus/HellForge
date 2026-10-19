@@ -2608,6 +2608,8 @@ void DrawStatus(float y, float h)
             if (row->also.size() > 2) names += " +" + std::to_string(row->also.size() - 2);
             g_cv.Text("also changes " + names, x + 10, cy, T(SZ_SMALL, PENDING, ui::BODY, ui::LEFT, std::max(40.0f, maxw - x - 10)));
         }
+        else if (!row->note.empty())
+            g_cv.Text(row->note, x + 10, cy, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, std::max(40.0f, maxw - x - 10)));
         return;
     }
     const char* text = g_view == SEARCH ? "Every word must match, in any order. Enter or a click opens the object in BROWSE." :

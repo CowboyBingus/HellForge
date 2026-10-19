@@ -262,123 +262,193 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | `armor` | +0x2E0 | u32 | respawn? | zone.armor (unverified) |
 | `health_2f0` | +0x2F0 | i32 | respawn? | zone.health (unverified) |
 | `affects_main_health` | +0x300 | f32 | respawn? | Damage forwarded to main health (ratio) (unverified) |
+| `zone_0_affected_by_explosions` | +0x34B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_0_explosive_damage_percentage` | +0x34C | f32 | respawn? | Explosion damage taken (unverified) |
 | `damage_multiplier_3` | +0x4F4 | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps_3` | +0x4F8 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance_3` | +0x4FC | f32 | respawn? | Durable damage share (unverified) |
 | `armor_2` | +0x508 | u32 | respawn? | Shield plate armor (unverified) |
 | `health_2` | +0x518 | i32 | respawn? | Shield plate health (unverified) |
 | `zone_1_affects_main_health` | +0x528 | f32 | respawn? | Affects main health (unverified) |
+| `zone_1_affected_by_explosions` | +0x573 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_1_explosive_damage_percentage` | +0x574 | f32 | respawn? | Explosion damage taken (unverified) |
 | `damage_multiplier` | +0x71C | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps` | +0x720 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance` | +0x724 | f32 | respawn? | Durable damage share (unverified) |
 | `zone_2_armor` | +0x730 | u32 | respawn? | Armor (unverified) |
 | `zone_2_health` | +0x740 | i32 | respawn? | Health (unverified) |
 | `zone_2_affects_main_health` | +0x750 | f32 | respawn? | Affects main health (unverified) |
+| `zone_2_affected_by_explosions` | +0x79B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_2_explosive_damage_percentage` | +0x79C | f32 | respawn? | Explosion damage taken (unverified) |
 | `damage_multiplier_2` | +0x944 | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps_2` | +0x948 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance_2` | +0x94C | f32 | respawn? | Durable damage share (unverified) |
 | `zone_3_armor` | +0x958 | u32 | respawn? | Armor (unverified) |
 | `zone_3_health` | +0x968 | i32 | respawn? | Health (unverified) |
 | `zone_3_affects_main_health` | +0x978 | f32 | respawn? | Affects main health (unverified) |
+| `zone_3_affected_by_explosions` | +0x9C3 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_3_explosive_damage_percentage` | +0x9C4 | f32 | respawn? | Explosion damage taken (unverified) |
 | `damage_multiplier_5` | +0xB6C | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps_5` | +0xB70 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance_5` | +0xB74 | f32 | respawn? | Durable damage share (unverified) |
 | `zone_4_armor` | +0xB80 | u32 | respawn? | Armor (unverified) |
 | `zone_4_health` | +0xB90 | i32 | respawn? | Health (unverified) |
 | `zone_4_affects_main_health` | +0xBA0 | f32 | respawn? | Affects main health (unverified) |
+| `zone_4_affected_by_explosions` | +0xBEB | u8 | respawn? | Own explosion share (unverified) |
+| `zone_4_explosive_damage_percentage` | +0xBEC | f32 | respawn? | Explosion damage taken (unverified) |
 | `damage_multiplier_6` | +0xD94 | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps_6` | +0xD98 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance_6` | +0xD9C | f32 | respawn? | Durable damage share (unverified) |
 | `zone_5_armor` | +0xDA8 | u32 | respawn? | Armor (unverified) |
 | `zone_5_health` | +0xDB8 | i32 | respawn? | Health (unverified) |
 | `zone_5_affects_main_health` | +0xDC8 | f32 | respawn? | Affects main health (unverified) |
+| `zone_5_affected_by_explosions` | +0xE13 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_5_explosive_damage_percentage` | +0xE14 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_6_armor` | +0xFD0 | u32 | respawn? | Armor (unverified) |
 | `zone_6_health` | +0xFE0 | i32 | respawn? | Health (unverified) |
 | `zone_6_affects_main_health` | +0xFF0 | f32 | respawn? | Affects main health (unverified) |
+| `zone_6_affected_by_explosions` | +0x103B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_6_explosive_damage_percentage` | +0x103C | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_7_armor` | +0x11F8 | u32 | respawn? | Armor (unverified) |
 | `zone_7_health` | +0x1208 | i32 | respawn? | Health (unverified) |
 | `zone_7_affects_main_health` | +0x1218 | f32 | respawn? | Affects main health (unverified) |
+| `zone_7_affected_by_explosions` | +0x1263 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_7_explosive_damage_percentage` | +0x1264 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_8_armor` | +0x1420 | u32 | respawn? | Armor (unverified) |
 | `zone_8_health` | +0x1430 | i32 | respawn? | Health (unverified) |
 | `zone_8_affects_main_health` | +0x1440 | f32 | respawn? | Affects main health (unverified) |
+| `zone_8_affected_by_explosions` | +0x148B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_8_explosive_damage_percentage` | +0x148C | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_9_armor` | +0x1648 | u32 | respawn? | Armor (unverified) |
 | `zone_9_health` | +0x1658 | i32 | respawn? | Health (unverified) |
 | `zone_9_affects_main_health` | +0x1668 | f32 | respawn? | Affects main health (unverified) |
+| `zone_9_affected_by_explosions` | +0x16B3 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_9_explosive_damage_percentage` | +0x16B4 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_10_armor` | +0x1870 | u32 | respawn? | Armor (unverified) |
 | `zone_10_health` | +0x1880 | i32 | respawn? | Health (unverified) |
 | `zone_10_affects_main_health` | +0x1890 | f32 | respawn? | Affects main health (unverified) |
+| `zone_10_affected_by_explosions` | +0x18DB | u8 | respawn? | Own explosion share (unverified) |
+| `zone_10_explosive_damage_percentage` | +0x18DC | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_11_armor` | +0x1A98 | u32 | respawn? | Armor (unverified) |
 | `zone_11_health` | +0x1AA8 | i32 | respawn? | Health (unverified) |
 | `zone_11_affects_main_health` | +0x1AB8 | f32 | respawn? | Affects main health (unverified) |
+| `zone_11_affected_by_explosions` | +0x1B03 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_11_explosive_damage_percentage` | +0x1B04 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_12_armor` | +0x1CC0 | u32 | respawn? | Armor (unverified) |
 | `zone_12_health` | +0x1CD0 | i32 | respawn? | Health (unverified) |
 | `zone_12_affects_main_health` | +0x1CE0 | f32 | respawn? | Affects main health (unverified) |
+| `zone_12_affected_by_explosions` | +0x1D2B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_12_explosive_damage_percentage` | +0x1D2C | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_13_armor` | +0x1EE8 | u32 | respawn? | Armor (unverified) |
 | `zone_13_health` | +0x1EF8 | i32 | respawn? | Health (unverified) |
 | `zone_13_affects_main_health` | +0x1F08 | f32 | respawn? | Affects main health (unverified) |
+| `zone_13_affected_by_explosions` | +0x1F53 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_13_explosive_damage_percentage` | +0x1F54 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_14_armor` | +0x2110 | u32 | respawn? | Armor (unverified) |
 | `zone_14_health` | +0x2120 | i32 | respawn? | Health (unverified) |
 | `zone_14_affects_main_health` | +0x2130 | f32 | respawn? | Affects main health (unverified) |
+| `zone_14_affected_by_explosions` | +0x217B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_14_explosive_damage_percentage` | +0x217C | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_15_armor` | +0x2338 | u32 | respawn? | Armor (unverified) |
 | `zone_15_health` | +0x2348 | i32 | respawn? | Health (unverified) |
 | `zone_15_affects_main_health` | +0x2358 | f32 | respawn? | Affects main health (unverified) |
+| `zone_15_affected_by_explosions` | +0x23A3 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_15_explosive_damage_percentage` | +0x23A4 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_16_armor` | +0x2560 | u32 | respawn? | Armor (unverified) |
 | `zone_16_health` | +0x2570 | i32 | respawn? | Health (unverified) |
 | `zone_16_affects_main_health` | +0x2580 | f32 | respawn? | Affects main health (unverified) |
+| `zone_16_affected_by_explosions` | +0x25CB | u8 | respawn? | Own explosion share (unverified) |
+| `zone_16_explosive_damage_percentage` | +0x25CC | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_17_armor` | +0x2788 | u32 | respawn? | Armor (unverified) |
 | `zone_17_health` | +0x2798 | i32 | respawn? | Health (unverified) |
 | `zone_17_affects_main_health` | +0x27A8 | f32 | respawn? | Affects main health (unverified) |
+| `zone_17_affected_by_explosions` | +0x27F3 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_17_explosive_damage_percentage` | +0x27F4 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_18_armor` | +0x29B0 | u32 | respawn? | Armor (unverified) |
 | `zone_18_health` | +0x29C0 | i32 | respawn? | Health (unverified) |
 | `zone_18_affects_main_health` | +0x29D0 | f32 | respawn? | Affects main health (unverified) |
+| `zone_18_affected_by_explosions` | +0x2A1B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_18_explosive_damage_percentage` | +0x2A1C | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_19_armor` | +0x2BD8 | u32 | respawn? | Armor (unverified) |
 | `zone_19_health` | +0x2BE8 | i32 | respawn? | Health (unverified) |
 | `zone_19_affects_main_health` | +0x2BF8 | f32 | respawn? | Affects main health (unverified) |
+| `zone_19_affected_by_explosions` | +0x2C43 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_19_explosive_damage_percentage` | +0x2C44 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_20_armor` | +0x2E00 | u32 | respawn? | Armor (unverified) |
 | `zone_20_health` | +0x2E10 | i32 | respawn? | Health (unverified) |
 | `zone_20_affects_main_health` | +0x2E20 | f32 | respawn? | Affects main health (unverified) |
+| `zone_20_affected_by_explosions` | +0x2E6B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_20_explosive_damage_percentage` | +0x2E6C | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_21_armor` | +0x3028 | u32 | respawn? | Armor (unverified) |
 | `zone_21_health` | +0x3038 | i32 | respawn? | Health (unverified) |
 | `zone_21_affects_main_health` | +0x3048 | f32 | respawn? | Affects main health (unverified) |
+| `zone_21_affected_by_explosions` | +0x3093 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_21_explosive_damage_percentage` | +0x3094 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_22_armor` | +0x3250 | u32 | respawn? | Armor (unverified) |
 | `zone_22_health` | +0x3260 | i32 | respawn? | Health (unverified) |
 | `zone_22_affects_main_health` | +0x3270 | f32 | respawn? | Affects main health (unverified) |
+| `zone_22_affected_by_explosions` | +0x32BB | u8 | respawn? | Own explosion share (unverified) |
+| `zone_22_explosive_damage_percentage` | +0x32BC | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_23_armor` | +0x3478 | u32 | respawn? | Armor (unverified) |
 | `zone_23_health` | +0x3488 | i32 | respawn? | Health (unverified) |
 | `zone_23_affects_main_health` | +0x3498 | f32 | respawn? | Affects main health (unverified) |
+| `zone_23_affected_by_explosions` | +0x34E3 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_23_explosive_damage_percentage` | +0x34E4 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_24_armor` | +0x36A0 | u32 | respawn? | Armor (unverified) |
 | `zone_24_health` | +0x36B0 | i32 | respawn? | Health (unverified) |
 | `zone_24_affects_main_health` | +0x36C0 | f32 | respawn? | Affects main health (unverified) |
+| `zone_24_affected_by_explosions` | +0x370B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_24_explosive_damage_percentage` | +0x370C | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_25_armor` | +0x38C8 | u32 | respawn? | Armor (unverified) |
 | `zone_25_health` | +0x38D8 | i32 | respawn? | Health (unverified) |
 | `zone_25_affects_main_health` | +0x38E8 | f32 | respawn? | Affects main health (unverified) |
+| `zone_25_affected_by_explosions` | +0x3933 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_25_explosive_damage_percentage` | +0x3934 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_26_armor` | +0x3AF0 | u32 | respawn? | Armor (unverified) |
 | `zone_26_health` | +0x3B00 | i32 | respawn? | Health (unverified) |
 | `zone_26_affects_main_health` | +0x3B10 | f32 | respawn? | Affects main health (unverified) |
+| `zone_26_affected_by_explosions` | +0x3B5B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_26_explosive_damage_percentage` | +0x3B5C | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_27_armor` | +0x3D18 | u32 | respawn? | Armor (unverified) |
 | `zone_27_health` | +0x3D28 | i32 | respawn? | Health (unverified) |
 | `zone_27_affects_main_health` | +0x3D38 | f32 | respawn? | Affects main health (unverified) |
+| `zone_27_affected_by_explosions` | +0x3D83 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_27_explosive_damage_percentage` | +0x3D84 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_28_armor` | +0x3F40 | u32 | respawn? | Armor (unverified) |
 | `zone_28_health` | +0x3F50 | i32 | respawn? | Health (unverified) |
 | `zone_28_affects_main_health` | +0x3F60 | f32 | respawn? | Affects main health (unverified) |
+| `zone_28_affected_by_explosions` | +0x3FAB | u8 | respawn? | Own explosion share (unverified) |
+| `zone_28_explosive_damage_percentage` | +0x3FAC | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_29_armor` | +0x4168 | u32 | respawn? | Armor (unverified) |
 | `zone_29_health` | +0x4178 | i32 | respawn? | Health (unverified) |
 | `zone_29_affects_main_health` | +0x4188 | f32 | respawn? | Affects main health (unverified) |
+| `zone_29_affected_by_explosions` | +0x41D3 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_29_explosive_damage_percentage` | +0x41D4 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_30_armor` | +0x4390 | u32 | respawn? | Armor (unverified) |
 | `zone_30_health` | +0x43A0 | i32 | respawn? | Health (unverified) |
 | `zone_30_affects_main_health` | +0x43B0 | f32 | respawn? | Affects main health (unverified) |
+| `zone_30_affected_by_explosions` | +0x43FB | u8 | respawn? | Own explosion share (unverified) |
+| `zone_30_explosive_damage_percentage` | +0x43FC | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_31_armor` | +0x45B8 | u32 | respawn? | Armor (unverified) |
 | `zone_31_health` | +0x45C8 | i32 | respawn? | Health (unverified) |
 | `zone_31_affects_main_health` | +0x45D8 | f32 | respawn? | Affects main health (unverified) |
+| `zone_31_affected_by_explosions` | +0x4623 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_31_explosive_damage_percentage` | +0x4624 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_32_armor` | +0x47E0 | u32 | respawn? | Armor (unverified) |
 | `zone_32_health` | +0x47F0 | i32 | respawn? | Health (unverified) |
 | `zone_32_affects_main_health` | +0x4800 | f32 | respawn? | Affects main health (unverified) |
+| `zone_32_affected_by_explosions` | +0x484B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_32_explosive_damage_percentage` | +0x484C | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_33_armor` | +0x4A08 | u32 | respawn? | Armor (unverified) |
 | `zone_33_health` | +0x4A18 | i32 | respawn? | Health (unverified) |
 | `zone_33_affects_main_health` | +0x4A28 | f32 | respawn? | Affects main health (unverified) |
+| `zone_33_affected_by_explosions` | +0x4A73 | u8 | respawn? | Own explosion share (unverified) |
+| `zone_33_explosive_damage_percentage` | +0x4A74 | f32 | respawn? | Explosion damage taken (unverified) |
 | `zone_34_armor` | +0x4C30 | u32 | respawn? | Armor (unverified) |
 | `zone_34_health` | +0x4C40 | i32 | respawn? | Health (unverified) |
 | `zone_34_affects_main_health` | +0x4C50 | f32 | respawn? | Affects main health (unverified) |
+| `zone_34_affected_by_explosions` | +0x4C9B | u8 | respawn? | Own explosion share (unverified) |
+| `zone_34_explosive_damage_percentage` | +0x4C9C | f32 | respawn? | Explosion damage taken (unverified) |
 
 ### HfJumppack
 

@@ -206,12 +206,38 @@ static class StatsTests
             check(patriot.Select(s => s.Title).SequenceEqual(["Hellpod / Call-in", "Weapon · Left gun", "Weapon · Right gun", "Health & Armor", "Damage Zones"]),
                 "Patriot page: " + string.Join(", ", patriot.Select(s => s.Title)));
             check(patriot[4].Groups.Select(g => g.Title).Take(4).SequenceEqual(["Zone 0", "Zone 1", "Cockpit rear", "Hips"]) &&
-                patriot[4].Groups.All(g => g.Rows.Count == 3), "Zones by their native names, armor, health and share each.");
+                patriot[4].Groups.All(g => g.Rows.Count == 5), "Zones by their native names, armor, health and share each, and their explosion share.");
             var fields = StatsSchema.Current.Targets["vehicles"]["EXO-45 Patriot Exosuit"].Fields;
             check(fields["zone_2.armor"] is { Component: "HealthComponentData", Offset: 1840 } && fields["rotation.turn_speed"].Component == "RotationComponentData",
                 "Zone fields at +736 + 552 per zone; the exosuit's rotation.");
             check(StatsCatalog.Sections(Vehicle("TD-110 Maelstrom")).Any(s => s.Title == "Weapon · Main cannon") &&
                 StatsCatalog.Sections(Vehicle("EXO-55 Breakthrough Exosuit")).Any(s => s.Title == "Shield · Left gun"), "Mount labels as HD2R Editor's.");
+        });
+        test("Field parity: what the catalogues lack, on the item's own records and rows (mappings/parity.json)", () =>
+        {
+            var weapons = StatsSchema.Current.Targets["weapons"];
+            var arbitrator = weapons["AR-11 Arbitrator / underbarrel"].Fields;
+            check(arbitrator["projectile.pellet_count"] is { Kind: "ProjectileSettings", Record: 198 } && arbitrator["damage.standard_damage"] is { Kind: "DamageInfo", Record: 161 } &&
+                arbitrator["damage.status_1_type"].Record == 161 && arbitrator["weapon.sway"] is { Component: "WeaponDataComponentData", Record: 251, Offset: 104 },
+                "The Arbitrator's underbarrel: its buckshot's projectile and damage rows, status slots, and its handling.");
+            check(weapons["AR/GL-21 One-Two / underbarrel"].Fields["explosion.primary.impact.inner_radius"] is { Kind: "ExplosionSettings", Record: 327 } &&
+                weapons["SMG/FLAM-34 Stoker / underbarrel"].Fields.ContainsKey("damage.standard_damage"),
+                "The One-Two's grenade has the GP-31's rows; the Stoker's spray its damage type.");
+            check(weapons["PLAS-101 Purifier"].Fields["charge.level_2"] is { Component: "WeaponChargeComponentData", Record: 4, Offset: 24 } &&
+                weapons["PLAS-15 Loyalist"].Fields.ContainsKey("charge.damage_multiplier_min") && !weapons["PLAS-1 Scorcher"].Fields.Keys.Any(k => k.StartsWith("charge.")),
+                "Charge on the plasma weapons that charge (not the Scorcher).");
+            check(weapons["AX/ARC-3 K-9 / gun"].Fields["weapon.fire_rate"] is { Component: "ArcWeaponComponentData", Offset: 4 } &&
+                !weapons["ARC-3 Arc Thrower"].Fields.Values.Any(f => f.Component == "ArcWeaponComponentData"), "The K-9's rate of fire; the Arc Thrower has none (charge).");
+            foreach (var name in new[] { "EXO-45 Patriot Exosuit / right_gun", "E/MG-101 HMG Emplacement / weapon", "M-102 Gunner FRV / gun", "TD-220 Bastion MK XVI / attach_tank_gun" })
+                check(weapons[name].Fields.ContainsKey("weapon.sway") && weapons[name].Fields["weapon.recoil_climb_vertical"].Offset == 32, name + ": sway and recoil.");
+            var bastion = StatsSchema.Current.Targets["vehicles"]["TD-220 Bastion MK XVI"].Fields;
+            check(bastion["entity.explosive_damage_percentage"] is { Offset: 388, Note: not null } && bastion["zone_0.explosive_damage_percentage"].Offset == 844 &&
+                bastion["zone_0.affected_by_explosions"] is { Offset: 843, Storage: "u8" }, "Explosion shares: the default zone's and each zone's own, with its flag.");
+            var shield = StatsSchema.Current.Targets["backpacks"]["SH-20 Ballistic Shield Backpack"].Fields;
+            check(shield["zone.explosive_damage_percentage"].Offset == 844 && shield["entity.explosive_damage_percentage"].Record == 292, "The ballistic shield's explosion shares.");
+            var row = EditorCatalog.Build()["objects"]!.AsArray().Single(o => o!["name"]!.GetValue<string>() == "SH-20 Ballistic Shield Backpack")!["page"]!.AsArray()
+                .SelectMany(c => c!["subs"]!.AsArray()).SelectMany(p => p!["rows"]!.AsArray()).Single(r => r!["key"]!.GetValue<string>() == "zone.affected_by_explosions")!;
+            check(row["note"] != null && row["values"]!.AsArray().Count == 2 && row["component"]!.GetValue<string>() == "HealthComponentData", "Its editor row: live, No / Yes, with its note.");
         });
         test("Weapon pages carry their attachments; the explosions have pages of their own", () =>
         {

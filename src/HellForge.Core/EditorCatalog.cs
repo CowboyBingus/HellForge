@@ -457,6 +457,7 @@ public static class EditorCatalog
             json["base"] = ammunition["projectile"]!.GetValue<long>();
             json["note"] = $"Swapped on the default ammunition ({ammunition["item"]}), which every weapon that equips it shares";
         }
+        if (f.Note != null && json["note"] == null) json["note"] = f.Note;
         Hd2rKeys(json, row, item);
         var swap = SwapKey(row.Part);
         if (swap != null && row.Key != swap && f.Kind is "ProjectileSettings" or "DamageInfo" or "ExplosionSettings" or "StatusEffectSettings" or "ArcSettings" &&

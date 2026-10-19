@@ -44,7 +44,12 @@ def main():
     melee_extra = {name: {'fields': {('%s:%s' % (z['key'], f['id'])): {'kind': f['kind'], 'component': f.get('component', ''), 'offset': f['offset'],
                                                                         'storage': f['storage'], 'name': f['label']}
                                      for z in w['zones'] + [{'key': 'tuning', 'fields': w['tuning']}] for f in z['fields']}} for name, w in melee.items()}
-    for cat, targets in list(schema['targets'].items()) + [('vehicles-extra', extra), ('melee-extra', melee_extra)]:
+    # the fields HellForge adds where the catalogues stop short (mappings/parity.json, added to the schema at load)
+    parity = json.loads((ROOT / 'mappings/parity.json').read_text(encoding='utf-8'))['targets']
+    parity_extra = {f'{category}/{name}': {'fields': {f['key']: {'kind': f['kind'], 'component': f['component'], 'offset': f['offset'],
+                                                                 'storage': f['storage'], 'name': f['label']} for f in fields}}
+                    for category, targets in parity.items() for name, fields in targets.items()}
+    for cat, targets in list(schema['targets'].items()) + [('vehicles-extra', extra), ('melee-extra', melee_extra), ('parity-extra', parity_extra)]:
         for tname, t in targets.items():
             for key, f in t['fields'].items():
                 kind = f['kind']
@@ -96,7 +101,10 @@ def main():
                 last = key.split('.')
                 # a slot of a list ("presentation.traits.1", "fire_rate.modes.x"): named with its list
                 last = '_'.join(last[-2:]) if len(last) > 1 and (last[-1].isdigit() or last[-1] in ('x', 'y', 'z')) else last[-1]
-                base = re.sub(r'[^a-z0-9_]', '_', (key.replace('.', '_') if cat == 'vehicles-extra' else last).lower()) or 'field'
+                zoned = cat == 'vehicles-extra' or (cat == 'parity-extra' and key.startswith('zone'))  # "zone_3_armor"
+                if cat == 'parity-extra' and key.startswith('zone.'):
+                    key = 'zone_%d%s' % ((off - 520) // 552, key[4:])  # a page's single zone, by its number
+                base = re.sub(r'[^a-z0-9_]', '_', (key.replace('.', '_') if zoned else last).lower()) or 'field'
                 if base[0].isdigit():
                     base = 'f_' + base
                 field = base

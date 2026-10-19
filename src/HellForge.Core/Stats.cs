@@ -20,6 +20,8 @@ public sealed record StatsField(string Name, string Kind, string Component, stri
     public JsonElement Options { get; init; }
     public IEnumerable<(double Value, string Label)> Choices => Options.ValueKind == JsonValueKind.Array
         ? Options.EnumerateArray().Select(o => (o[0].GetDouble(), o[1].GetString() ?? "")) : [];
+    // What the editor says about it under the page (when it applies, what a sentinel value means), or null.
+    public string? Note { get; init; }
     // The bytes as HD2R Editor's preset keys name them (mappings/hd2r-keys.json, scripts/ExportHd2rKeys.py).
     public string Hd2rAddress => Kind switch
     {
@@ -59,6 +61,7 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
         Vehicles(schema);
         Attachments(schema);
         Melee(schema);
+        Parity(schema);
         References(schema);
         return schema;
     });
@@ -118,8 +121,9 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
                 }
                 var slots = new HashSet<string>(StringComparer.Ordinal);
                 if (category == "damage") slots.Add("");
-                // a mounted weapon shows all four slots of every damage type it deals (HD2R Editor's vehicle weapons)
-                if (category == "weapons" && target.Slot == "mounted")
+                // a mounted weapon shows all four slots of every damage type it deals (HD2R Editor's vehicle weapons), and
+                // so does an underbarrel (its damage rows come from mappings/parity.json, with no blocked slots to follow)
+                if (category == "weapons" && target.Slot is "mounted" or "underbarrel")
                     foreach (var k in fields.Where(f => f.Value.Kind == "DamageInfo").Select(f => f.Key))
                         slots.Add(k.Contains('.') ? k[..(k.LastIndexOf('.') + 1)] : "");
                 foreach (var key in target.Blocked.Keys.ToList())
@@ -245,14 +249,47 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
                 var field = new StatsField(f.GetProperty("label").GetString()!, "component", f.GetProperty("component").GetString()!,
                     f.GetProperty("resource").GetString()!, f.GetProperty("record").GetInt64(), f.GetProperty("offset").GetInt32(),
                     f.GetProperty("storage").GetString()!, Number(f, "min"), Number(f, "max"), null, false, true)
-                { Order = ++order, Section = f.GetProperty("section").GetString() };
+                { Order = ++order, Section = f.GetProperty("section").GetString(), Note = Text(f, "note") };
                 var key = f.GetProperty("key").GetString()!;
                 target.Blocked.Remove(key);
                 if (taken.Add(field.Hd2rAddress) && !target.Fields.ContainsKey(key)) target.Fields[key] = field;
-                else if (target.Fields.TryGetValue(key, out var kept)) target.Fields[key] = kept with { Section = field.Section };
+                else if (target.Fields.TryGetValue(key, out var kept)) target.Fields[key] = kept with { Section = field.Section, Note = kept.Note ?? field.Note };
             }
         }
     }
+
+    // The fields HellForge adds where HD2Runtime's catalogues stop short (mappings/parity.json, scripts/ExportFieldParity.py):
+    // a like item's fields on this item's own records and rows: an underbarrel's projectile and damage, a vehicle weapon's
+    // sway and recoil, the Purifier's and Loyalist's charge, the K-9's rate of fire, and the explosion damage shares of
+    // everything with a health record. A field whose bytes the target shows already is left out.
+    static void Parity(StatsSchema schema)
+    {
+        using var stream = typeof(StatsSchema).Assembly.GetManifestResourceStream("HellForge.Core.mappings.parity.json")!;
+        using var json = JsonDocument.Parse(stream);
+        foreach (var category in json.RootElement.GetProperty("targets").EnumerateObject())
+            foreach (var t in category.Value.EnumerateObject())
+            {
+                if (!schema.Targets.TryGetValue(category.Name, out var targets) || !targets.TryGetValue(t.Name, out var target)) continue;
+                var taken = target.Fields.Values.Select(f => f.Hd2rAddress).ToHashSet(StringComparer.Ordinal);
+                var order = target.Fields.Values.Select(f => f.Order).DefaultIfEmpty(0).Max();
+                foreach (var f in t.Value.EnumerateArray())
+                {
+                    var field = new StatsField(f.GetProperty("label").GetString()!, f.GetProperty("kind").GetString()!, f.GetProperty("component").GetString()!,
+                        f.GetProperty("resource").GetString()!, f.GetProperty("record").GetInt64(), f.GetProperty("offset").GetInt32(),
+                        f.GetProperty("storage").GetString()!, Number(f, "min"), Number(f, "max"), Text(f, "unit"), f.GetProperty("shared").GetBoolean(), true)
+                    {
+                        Order = ++order, Section = Text(f, "section"), Note = Text(f, "note"),
+                        Options = f.TryGetProperty("options", out var options) ? options.Clone() : default,
+                    };
+                    var key = f.GetProperty("key").GetString()!;
+                    target.Blocked.Remove(key);
+                    if (taken.Add(field.Hd2rAddress) && !target.Fields.ContainsKey(key)) target.Fields[key] = field;
+                }
+            }
+    }
+
+    static double? Number(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+    static string? Text(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
     // The weapons' attachments (mappings/attachments.json; HD2R Editor's Magazines, Muzzles, Optics and Underbarrels):
     // every attachment a weapon's slots offer, its stats as entity deltas ("attachment.<slot>.<id>.<field>"), shared by

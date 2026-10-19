@@ -774,7 +774,10 @@ typedef struct HfHealth
     int32_t health_2f0;                          /* +0x2F0 zone.health (unverified) [respawn?] */
     uint8_t _unknown_2F4[12];
     float affects_main_health;                   /* +0x300 Damage forwarded to main health (ratio) (unverified) [respawn?] */
-    uint8_t _unknown_304[496];
+    uint8_t _unknown_304[71];
+    uint8_t zone_0_affected_by_explosions;       /* +0x34B Own explosion share (unverified) [respawn?] */
+    float zone_0_explosive_damage_percentage;    /* +0x34C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_350[420];
     uint32_t damage_multiplier_3;                /* +0x4F4 Damage multiplier (unverified) [respawn?] */
     uint32_t damage_multiplier_dps_3;            /* +0x4F8 Damage over time multiplier (unverified) [respawn?] */
     float durable_resistance_3;                  /* +0x4FC Durable damage share (unverified) [respawn?] */
@@ -784,7 +787,10 @@ typedef struct HfHealth
     int32_t health_2;                            /* +0x518 Shield plate health (unverified) [respawn?] */
     uint8_t _unknown_51C[12];
     float zone_1_affects_main_health;            /* +0x528 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_52C[496];
+    uint8_t _unknown_52C[71];
+    uint8_t zone_1_affected_by_explosions;       /* +0x573 Own explosion share (unverified) [respawn?] */
+    float zone_1_explosive_damage_percentage;    /* +0x574 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_578[420];
     uint32_t damage_multiplier;                  /* +0x71C Damage multiplier (unverified) [respawn?] */
     uint32_t damage_multiplier_dps;              /* +0x720 Damage over time multiplier (unverified) [respawn?] */
     float durable_resistance;                    /* +0x724 Durable damage share (unverified) [respawn?] */
@@ -794,7 +800,10 @@ typedef struct HfHealth
     int32_t zone_2_health;                       /* +0x740 Health (unverified) [respawn?] */
     uint8_t _unknown_744[12];
     float zone_2_affects_main_health;            /* +0x750 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_754[496];
+    uint8_t _unknown_754[71];
+    uint8_t zone_2_affected_by_explosions;       /* +0x79B Own explosion share (unverified) [respawn?] */
+    float zone_2_explosive_damage_percentage;    /* +0x79C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_7A0[420];
     uint32_t damage_multiplier_2;                /* +0x944 Damage multiplier (unverified) [respawn?] */
     uint32_t damage_multiplier_dps_2;            /* +0x948 Damage over time multiplier (unverified) [respawn?] */
     float durable_resistance_2;                  /* +0x94C Durable damage share (unverified) [respawn?] */
@@ -804,7 +813,10 @@ typedef struct HfHealth
     int32_t zone_3_health;                       /* +0x968 Health (unverified) [respawn?] */
     uint8_t _unknown_96C[12];
     float zone_3_affects_main_health;            /* +0x978 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_97C[496];
+    uint8_t _unknown_97C[71];
+    uint8_t zone_3_affected_by_explosions;       /* +0x9C3 Own explosion share (unverified) [respawn?] */
+    float zone_3_explosive_damage_percentage;    /* +0x9C4 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_9C8[420];
     uint32_t damage_multiplier_5;                /* +0xB6C Damage multiplier (unverified) [respawn?] */
     uint32_t damage_multiplier_dps_5;            /* +0xB70 Damage over time multiplier (unverified) [respawn?] */
     float durable_resistance_5;                  /* +0xB74 Durable damage share (unverified) [respawn?] */
@@ -814,7 +826,10 @@ typedef struct HfHealth
     int32_t zone_4_health;                       /* +0xB90 Health (unverified) [respawn?] */
     uint8_t _unknown_B94[12];
     float zone_4_affects_main_health;            /* +0xBA0 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_BA4[496];
+    uint8_t _unknown_BA4[71];
+    uint8_t zone_4_affected_by_explosions;       /* +0xBEB Own explosion share (unverified) [respawn?] */
+    float zone_4_explosive_damage_percentage;    /* +0xBEC Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_BF0[420];
     uint32_t damage_multiplier_6;                /* +0xD94 Damage multiplier (unverified) [respawn?] */
     uint32_t damage_multiplier_dps_6;            /* +0xD98 Damage over time multiplier (unverified) [respawn?] */
     float durable_resistance_6;                  /* +0xD9C Durable damage share (unverified) [respawn?] */
@@ -824,181 +839,271 @@ typedef struct HfHealth
     int32_t zone_5_health;                       /* +0xDB8 Health (unverified) [respawn?] */
     uint8_t _unknown_DBC[12];
     float zone_5_affects_main_health;            /* +0xDC8 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_DCC[516];
+    uint8_t _unknown_DCC[71];
+    uint8_t zone_5_affected_by_explosions;       /* +0xE13 Own explosion share (unverified) [respawn?] */
+    float zone_5_explosive_damage_percentage;    /* +0xE14 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_E18[440];
     uint32_t zone_6_armor;                       /* +0xFD0 Armor (unverified) [respawn?] */
     uint8_t _unknown_FD4[12];
     int32_t zone_6_health;                       /* +0xFE0 Health (unverified) [respawn?] */
     uint8_t _unknown_FE4[12];
     float zone_6_affects_main_health;            /* +0xFF0 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_FF4[516];
+    uint8_t _unknown_FF4[71];
+    uint8_t zone_6_affected_by_explosions;       /* +0x103B Own explosion share (unverified) [respawn?] */
+    float zone_6_explosive_damage_percentage;    /* +0x103C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_1040[440];
     uint32_t zone_7_armor;                       /* +0x11F8 Armor (unverified) [respawn?] */
     uint8_t _unknown_11FC[12];
     int32_t zone_7_health;                       /* +0x1208 Health (unverified) [respawn?] */
     uint8_t _unknown_120C[12];
     float zone_7_affects_main_health;            /* +0x1218 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_121C[516];
+    uint8_t _unknown_121C[71];
+    uint8_t zone_7_affected_by_explosions;       /* +0x1263 Own explosion share (unverified) [respawn?] */
+    float zone_7_explosive_damage_percentage;    /* +0x1264 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_1268[440];
     uint32_t zone_8_armor;                       /* +0x1420 Armor (unverified) [respawn?] */
     uint8_t _unknown_1424[12];
     int32_t zone_8_health;                       /* +0x1430 Health (unverified) [respawn?] */
     uint8_t _unknown_1434[12];
     float zone_8_affects_main_health;            /* +0x1440 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_1444[516];
+    uint8_t _unknown_1444[71];
+    uint8_t zone_8_affected_by_explosions;       /* +0x148B Own explosion share (unverified) [respawn?] */
+    float zone_8_explosive_damage_percentage;    /* +0x148C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_1490[440];
     uint32_t zone_9_armor;                       /* +0x1648 Armor (unverified) [respawn?] */
     uint8_t _unknown_164C[12];
     int32_t zone_9_health;                       /* +0x1658 Health (unverified) [respawn?] */
     uint8_t _unknown_165C[12];
     float zone_9_affects_main_health;            /* +0x1668 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_166C[516];
+    uint8_t _unknown_166C[71];
+    uint8_t zone_9_affected_by_explosions;       /* +0x16B3 Own explosion share (unverified) [respawn?] */
+    float zone_9_explosive_damage_percentage;    /* +0x16B4 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_16B8[440];
     uint32_t zone_10_armor;                      /* +0x1870 Armor (unverified) [respawn?] */
     uint8_t _unknown_1874[12];
     int32_t zone_10_health;                      /* +0x1880 Health (unverified) [respawn?] */
     uint8_t _unknown_1884[12];
     float zone_10_affects_main_health;           /* +0x1890 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_1894[516];
+    uint8_t _unknown_1894[71];
+    uint8_t zone_10_affected_by_explosions;      /* +0x18DB Own explosion share (unverified) [respawn?] */
+    float zone_10_explosive_damage_percentage;   /* +0x18DC Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_18E0[440];
     uint32_t zone_11_armor;                      /* +0x1A98 Armor (unverified) [respawn?] */
     uint8_t _unknown_1A9C[12];
     int32_t zone_11_health;                      /* +0x1AA8 Health (unverified) [respawn?] */
     uint8_t _unknown_1AAC[12];
     float zone_11_affects_main_health;           /* +0x1AB8 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_1ABC[516];
+    uint8_t _unknown_1ABC[71];
+    uint8_t zone_11_affected_by_explosions;      /* +0x1B03 Own explosion share (unverified) [respawn?] */
+    float zone_11_explosive_damage_percentage;   /* +0x1B04 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_1B08[440];
     uint32_t zone_12_armor;                      /* +0x1CC0 Armor (unverified) [respawn?] */
     uint8_t _unknown_1CC4[12];
     int32_t zone_12_health;                      /* +0x1CD0 Health (unverified) [respawn?] */
     uint8_t _unknown_1CD4[12];
     float zone_12_affects_main_health;           /* +0x1CE0 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_1CE4[516];
+    uint8_t _unknown_1CE4[71];
+    uint8_t zone_12_affected_by_explosions;      /* +0x1D2B Own explosion share (unverified) [respawn?] */
+    float zone_12_explosive_damage_percentage;   /* +0x1D2C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_1D30[440];
     uint32_t zone_13_armor;                      /* +0x1EE8 Armor (unverified) [respawn?] */
     uint8_t _unknown_1EEC[12];
     int32_t zone_13_health;                      /* +0x1EF8 Health (unverified) [respawn?] */
     uint8_t _unknown_1EFC[12];
     float zone_13_affects_main_health;           /* +0x1F08 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_1F0C[516];
+    uint8_t _unknown_1F0C[71];
+    uint8_t zone_13_affected_by_explosions;      /* +0x1F53 Own explosion share (unverified) [respawn?] */
+    float zone_13_explosive_damage_percentage;   /* +0x1F54 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_1F58[440];
     uint32_t zone_14_armor;                      /* +0x2110 Armor (unverified) [respawn?] */
     uint8_t _unknown_2114[12];
     int32_t zone_14_health;                      /* +0x2120 Health (unverified) [respawn?] */
     uint8_t _unknown_2124[12];
     float zone_14_affects_main_health;           /* +0x2130 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_2134[516];
+    uint8_t _unknown_2134[71];
+    uint8_t zone_14_affected_by_explosions;      /* +0x217B Own explosion share (unverified) [respawn?] */
+    float zone_14_explosive_damage_percentage;   /* +0x217C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_2180[440];
     uint32_t zone_15_armor;                      /* +0x2338 Armor (unverified) [respawn?] */
     uint8_t _unknown_233C[12];
     int32_t zone_15_health;                      /* +0x2348 Health (unverified) [respawn?] */
     uint8_t _unknown_234C[12];
     float zone_15_affects_main_health;           /* +0x2358 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_235C[516];
+    uint8_t _unknown_235C[71];
+    uint8_t zone_15_affected_by_explosions;      /* +0x23A3 Own explosion share (unverified) [respawn?] */
+    float zone_15_explosive_damage_percentage;   /* +0x23A4 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_23A8[440];
     uint32_t zone_16_armor;                      /* +0x2560 Armor (unverified) [respawn?] */
     uint8_t _unknown_2564[12];
     int32_t zone_16_health;                      /* +0x2570 Health (unverified) [respawn?] */
     uint8_t _unknown_2574[12];
     float zone_16_affects_main_health;           /* +0x2580 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_2584[516];
+    uint8_t _unknown_2584[71];
+    uint8_t zone_16_affected_by_explosions;      /* +0x25CB Own explosion share (unverified) [respawn?] */
+    float zone_16_explosive_damage_percentage;   /* +0x25CC Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_25D0[440];
     uint32_t zone_17_armor;                      /* +0x2788 Armor (unverified) [respawn?] */
     uint8_t _unknown_278C[12];
     int32_t zone_17_health;                      /* +0x2798 Health (unverified) [respawn?] */
     uint8_t _unknown_279C[12];
     float zone_17_affects_main_health;           /* +0x27A8 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_27AC[516];
+    uint8_t _unknown_27AC[71];
+    uint8_t zone_17_affected_by_explosions;      /* +0x27F3 Own explosion share (unverified) [respawn?] */
+    float zone_17_explosive_damage_percentage;   /* +0x27F4 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_27F8[440];
     uint32_t zone_18_armor;                      /* +0x29B0 Armor (unverified) [respawn?] */
     uint8_t _unknown_29B4[12];
     int32_t zone_18_health;                      /* +0x29C0 Health (unverified) [respawn?] */
     uint8_t _unknown_29C4[12];
     float zone_18_affects_main_health;           /* +0x29D0 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_29D4[516];
+    uint8_t _unknown_29D4[71];
+    uint8_t zone_18_affected_by_explosions;      /* +0x2A1B Own explosion share (unverified) [respawn?] */
+    float zone_18_explosive_damage_percentage;   /* +0x2A1C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_2A20[440];
     uint32_t zone_19_armor;                      /* +0x2BD8 Armor (unverified) [respawn?] */
     uint8_t _unknown_2BDC[12];
     int32_t zone_19_health;                      /* +0x2BE8 Health (unverified) [respawn?] */
     uint8_t _unknown_2BEC[12];
     float zone_19_affects_main_health;           /* +0x2BF8 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_2BFC[516];
+    uint8_t _unknown_2BFC[71];
+    uint8_t zone_19_affected_by_explosions;      /* +0x2C43 Own explosion share (unverified) [respawn?] */
+    float zone_19_explosive_damage_percentage;   /* +0x2C44 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_2C48[440];
     uint32_t zone_20_armor;                      /* +0x2E00 Armor (unverified) [respawn?] */
     uint8_t _unknown_2E04[12];
     int32_t zone_20_health;                      /* +0x2E10 Health (unverified) [respawn?] */
     uint8_t _unknown_2E14[12];
     float zone_20_affects_main_health;           /* +0x2E20 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_2E24[516];
+    uint8_t _unknown_2E24[71];
+    uint8_t zone_20_affected_by_explosions;      /* +0x2E6B Own explosion share (unverified) [respawn?] */
+    float zone_20_explosive_damage_percentage;   /* +0x2E6C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_2E70[440];
     uint32_t zone_21_armor;                      /* +0x3028 Armor (unverified) [respawn?] */
     uint8_t _unknown_302C[12];
     int32_t zone_21_health;                      /* +0x3038 Health (unverified) [respawn?] */
     uint8_t _unknown_303C[12];
     float zone_21_affects_main_health;           /* +0x3048 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_304C[516];
+    uint8_t _unknown_304C[71];
+    uint8_t zone_21_affected_by_explosions;      /* +0x3093 Own explosion share (unverified) [respawn?] */
+    float zone_21_explosive_damage_percentage;   /* +0x3094 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_3098[440];
     uint32_t zone_22_armor;                      /* +0x3250 Armor (unverified) [respawn?] */
     uint8_t _unknown_3254[12];
     int32_t zone_22_health;                      /* +0x3260 Health (unverified) [respawn?] */
     uint8_t _unknown_3264[12];
     float zone_22_affects_main_health;           /* +0x3270 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_3274[516];
+    uint8_t _unknown_3274[71];
+    uint8_t zone_22_affected_by_explosions;      /* +0x32BB Own explosion share (unverified) [respawn?] */
+    float zone_22_explosive_damage_percentage;   /* +0x32BC Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_32C0[440];
     uint32_t zone_23_armor;                      /* +0x3478 Armor (unverified) [respawn?] */
     uint8_t _unknown_347C[12];
     int32_t zone_23_health;                      /* +0x3488 Health (unverified) [respawn?] */
     uint8_t _unknown_348C[12];
     float zone_23_affects_main_health;           /* +0x3498 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_349C[516];
+    uint8_t _unknown_349C[71];
+    uint8_t zone_23_affected_by_explosions;      /* +0x34E3 Own explosion share (unverified) [respawn?] */
+    float zone_23_explosive_damage_percentage;   /* +0x34E4 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_34E8[440];
     uint32_t zone_24_armor;                      /* +0x36A0 Armor (unverified) [respawn?] */
     uint8_t _unknown_36A4[12];
     int32_t zone_24_health;                      /* +0x36B0 Health (unverified) [respawn?] */
     uint8_t _unknown_36B4[12];
     float zone_24_affects_main_health;           /* +0x36C0 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_36C4[516];
+    uint8_t _unknown_36C4[71];
+    uint8_t zone_24_affected_by_explosions;      /* +0x370B Own explosion share (unverified) [respawn?] */
+    float zone_24_explosive_damage_percentage;   /* +0x370C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_3710[440];
     uint32_t zone_25_armor;                      /* +0x38C8 Armor (unverified) [respawn?] */
     uint8_t _unknown_38CC[12];
     int32_t zone_25_health;                      /* +0x38D8 Health (unverified) [respawn?] */
     uint8_t _unknown_38DC[12];
     float zone_25_affects_main_health;           /* +0x38E8 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_38EC[516];
+    uint8_t _unknown_38EC[71];
+    uint8_t zone_25_affected_by_explosions;      /* +0x3933 Own explosion share (unverified) [respawn?] */
+    float zone_25_explosive_damage_percentage;   /* +0x3934 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_3938[440];
     uint32_t zone_26_armor;                      /* +0x3AF0 Armor (unverified) [respawn?] */
     uint8_t _unknown_3AF4[12];
     int32_t zone_26_health;                      /* +0x3B00 Health (unverified) [respawn?] */
     uint8_t _unknown_3B04[12];
     float zone_26_affects_main_health;           /* +0x3B10 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_3B14[516];
+    uint8_t _unknown_3B14[71];
+    uint8_t zone_26_affected_by_explosions;      /* +0x3B5B Own explosion share (unverified) [respawn?] */
+    float zone_26_explosive_damage_percentage;   /* +0x3B5C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_3B60[440];
     uint32_t zone_27_armor;                      /* +0x3D18 Armor (unverified) [respawn?] */
     uint8_t _unknown_3D1C[12];
     int32_t zone_27_health;                      /* +0x3D28 Health (unverified) [respawn?] */
     uint8_t _unknown_3D2C[12];
     float zone_27_affects_main_health;           /* +0x3D38 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_3D3C[516];
+    uint8_t _unknown_3D3C[71];
+    uint8_t zone_27_affected_by_explosions;      /* +0x3D83 Own explosion share (unverified) [respawn?] */
+    float zone_27_explosive_damage_percentage;   /* +0x3D84 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_3D88[440];
     uint32_t zone_28_armor;                      /* +0x3F40 Armor (unverified) [respawn?] */
     uint8_t _unknown_3F44[12];
     int32_t zone_28_health;                      /* +0x3F50 Health (unverified) [respawn?] */
     uint8_t _unknown_3F54[12];
     float zone_28_affects_main_health;           /* +0x3F60 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_3F64[516];
+    uint8_t _unknown_3F64[71];
+    uint8_t zone_28_affected_by_explosions;      /* +0x3FAB Own explosion share (unverified) [respawn?] */
+    float zone_28_explosive_damage_percentage;   /* +0x3FAC Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_3FB0[440];
     uint32_t zone_29_armor;                      /* +0x4168 Armor (unverified) [respawn?] */
     uint8_t _unknown_416C[12];
     int32_t zone_29_health;                      /* +0x4178 Health (unverified) [respawn?] */
     uint8_t _unknown_417C[12];
     float zone_29_affects_main_health;           /* +0x4188 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_418C[516];
+    uint8_t _unknown_418C[71];
+    uint8_t zone_29_affected_by_explosions;      /* +0x41D3 Own explosion share (unverified) [respawn?] */
+    float zone_29_explosive_damage_percentage;   /* +0x41D4 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_41D8[440];
     uint32_t zone_30_armor;                      /* +0x4390 Armor (unverified) [respawn?] */
     uint8_t _unknown_4394[12];
     int32_t zone_30_health;                      /* +0x43A0 Health (unverified) [respawn?] */
     uint8_t _unknown_43A4[12];
     float zone_30_affects_main_health;           /* +0x43B0 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_43B4[516];
+    uint8_t _unknown_43B4[71];
+    uint8_t zone_30_affected_by_explosions;      /* +0x43FB Own explosion share (unverified) [respawn?] */
+    float zone_30_explosive_damage_percentage;   /* +0x43FC Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_4400[440];
     uint32_t zone_31_armor;                      /* +0x45B8 Armor (unverified) [respawn?] */
     uint8_t _unknown_45BC[12];
     int32_t zone_31_health;                      /* +0x45C8 Health (unverified) [respawn?] */
     uint8_t _unknown_45CC[12];
     float zone_31_affects_main_health;           /* +0x45D8 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_45DC[516];
+    uint8_t _unknown_45DC[71];
+    uint8_t zone_31_affected_by_explosions;      /* +0x4623 Own explosion share (unverified) [respawn?] */
+    float zone_31_explosive_damage_percentage;   /* +0x4624 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_4628[440];
     uint32_t zone_32_armor;                      /* +0x47E0 Armor (unverified) [respawn?] */
     uint8_t _unknown_47E4[12];
     int32_t zone_32_health;                      /* +0x47F0 Health (unverified) [respawn?] */
     uint8_t _unknown_47F4[12];
     float zone_32_affects_main_health;           /* +0x4800 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_4804[516];
+    uint8_t _unknown_4804[71];
+    uint8_t zone_32_affected_by_explosions;      /* +0x484B Own explosion share (unverified) [respawn?] */
+    float zone_32_explosive_damage_percentage;   /* +0x484C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_4850[440];
     uint32_t zone_33_armor;                      /* +0x4A08 Armor (unverified) [respawn?] */
     uint8_t _unknown_4A0C[12];
     int32_t zone_33_health;                      /* +0x4A18 Health (unverified) [respawn?] */
     uint8_t _unknown_4A1C[12];
     float zone_33_affects_main_health;           /* +0x4A28 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_4A2C[516];
+    uint8_t _unknown_4A2C[71];
+    uint8_t zone_33_affected_by_explosions;      /* +0x4A73 Own explosion share (unverified) [respawn?] */
+    float zone_33_explosive_damage_percentage;   /* +0x4A74 Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_4A78[440];
     uint32_t zone_34_armor;                      /* +0x4C30 Armor (unverified) [respawn?] */
     uint8_t _unknown_4C34[12];
     int32_t zone_34_health;                      /* +0x4C40 Health (unverified) [respawn?] */
     uint8_t _unknown_4C44[12];
     float zone_34_affects_main_health;           /* +0x4C50 Affects main health (unverified) [respawn?] */
-    uint8_t _unknown_4C54[2556];
+    uint8_t _unknown_4C54[71];
+    uint8_t zone_34_affected_by_explosions;      /* +0x4C9B Own explosion share (unverified) [respawn?] */
+    float zone_34_explosive_damage_percentage;   /* +0x4C9C Explosion damage taken (unverified) [respawn?] */
+    uint8_t _unknown_4CA0[2480];
 } HfHealth;
 HF_ASSERT_SIZE(HfHealth, 22096);
 HF_ASSERT_OFFSET(HfHealth, health, 0);
@@ -1019,6 +1124,10 @@ HF_ASSERT_OFFSET(HfHealth, health_2f0, 752);
 #define HF_TYPE_Health_health_2f0 HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, affects_main_health, 768);
 #define HF_TYPE_Health_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_0_affected_by_explosions, 843);
+#define HF_TYPE_Health_zone_0_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_0_explosive_damage_percentage, 844);
+#define HF_TYPE_Health_zone_0_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier_3, 1268);
 #define HF_TYPE_Health_damage_multiplier_3 HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier_dps_3, 1272);
@@ -1031,6 +1140,10 @@ HF_ASSERT_OFFSET(HfHealth, health_2, 1304);
 #define HF_TYPE_Health_health_2 HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_1_affects_main_health, 1320);
 #define HF_TYPE_Health_zone_1_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_1_affected_by_explosions, 1395);
+#define HF_TYPE_Health_zone_1_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_1_explosive_damage_percentage, 1396);
+#define HF_TYPE_Health_zone_1_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier, 1820);
 #define HF_TYPE_Health_damage_multiplier HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier_dps, 1824);
@@ -1043,6 +1156,10 @@ HF_ASSERT_OFFSET(HfHealth, zone_2_health, 1856);
 #define HF_TYPE_Health_zone_2_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_2_affects_main_health, 1872);
 #define HF_TYPE_Health_zone_2_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_2_affected_by_explosions, 1947);
+#define HF_TYPE_Health_zone_2_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_2_explosive_damage_percentage, 1948);
+#define HF_TYPE_Health_zone_2_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier_2, 2372);
 #define HF_TYPE_Health_damage_multiplier_2 HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier_dps_2, 2376);
@@ -1055,6 +1172,10 @@ HF_ASSERT_OFFSET(HfHealth, zone_3_health, 2408);
 #define HF_TYPE_Health_zone_3_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_3_affects_main_health, 2424);
 #define HF_TYPE_Health_zone_3_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_3_affected_by_explosions, 2499);
+#define HF_TYPE_Health_zone_3_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_3_explosive_damage_percentage, 2500);
+#define HF_TYPE_Health_zone_3_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier_5, 2924);
 #define HF_TYPE_Health_damage_multiplier_5 HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier_dps_5, 2928);
@@ -1067,6 +1188,10 @@ HF_ASSERT_OFFSET(HfHealth, zone_4_health, 2960);
 #define HF_TYPE_Health_zone_4_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_4_affects_main_health, 2976);
 #define HF_TYPE_Health_zone_4_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_4_affected_by_explosions, 3051);
+#define HF_TYPE_Health_zone_4_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_4_explosive_damage_percentage, 3052);
+#define HF_TYPE_Health_zone_4_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier_6, 3476);
 #define HF_TYPE_Health_damage_multiplier_6 HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, damage_multiplier_dps_6, 3480);
@@ -1079,180 +1204,300 @@ HF_ASSERT_OFFSET(HfHealth, zone_5_health, 3512);
 #define HF_TYPE_Health_zone_5_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_5_affects_main_health, 3528);
 #define HF_TYPE_Health_zone_5_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_5_affected_by_explosions, 3603);
+#define HF_TYPE_Health_zone_5_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_5_explosive_damage_percentage, 3604);
+#define HF_TYPE_Health_zone_5_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_6_armor, 4048);
 #define HF_TYPE_Health_zone_6_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_6_health, 4064);
 #define HF_TYPE_Health_zone_6_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_6_affects_main_health, 4080);
 #define HF_TYPE_Health_zone_6_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_6_affected_by_explosions, 4155);
+#define HF_TYPE_Health_zone_6_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_6_explosive_damage_percentage, 4156);
+#define HF_TYPE_Health_zone_6_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_7_armor, 4600);
 #define HF_TYPE_Health_zone_7_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_7_health, 4616);
 #define HF_TYPE_Health_zone_7_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_7_affects_main_health, 4632);
 #define HF_TYPE_Health_zone_7_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_7_affected_by_explosions, 4707);
+#define HF_TYPE_Health_zone_7_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_7_explosive_damage_percentage, 4708);
+#define HF_TYPE_Health_zone_7_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_8_armor, 5152);
 #define HF_TYPE_Health_zone_8_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_8_health, 5168);
 #define HF_TYPE_Health_zone_8_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_8_affects_main_health, 5184);
 #define HF_TYPE_Health_zone_8_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_8_affected_by_explosions, 5259);
+#define HF_TYPE_Health_zone_8_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_8_explosive_damage_percentage, 5260);
+#define HF_TYPE_Health_zone_8_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_9_armor, 5704);
 #define HF_TYPE_Health_zone_9_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_9_health, 5720);
 #define HF_TYPE_Health_zone_9_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_9_affects_main_health, 5736);
 #define HF_TYPE_Health_zone_9_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_9_affected_by_explosions, 5811);
+#define HF_TYPE_Health_zone_9_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_9_explosive_damage_percentage, 5812);
+#define HF_TYPE_Health_zone_9_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_10_armor, 6256);
 #define HF_TYPE_Health_zone_10_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_10_health, 6272);
 #define HF_TYPE_Health_zone_10_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_10_affects_main_health, 6288);
 #define HF_TYPE_Health_zone_10_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_10_affected_by_explosions, 6363);
+#define HF_TYPE_Health_zone_10_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_10_explosive_damage_percentage, 6364);
+#define HF_TYPE_Health_zone_10_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_11_armor, 6808);
 #define HF_TYPE_Health_zone_11_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_11_health, 6824);
 #define HF_TYPE_Health_zone_11_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_11_affects_main_health, 6840);
 #define HF_TYPE_Health_zone_11_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_11_affected_by_explosions, 6915);
+#define HF_TYPE_Health_zone_11_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_11_explosive_damage_percentage, 6916);
+#define HF_TYPE_Health_zone_11_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_12_armor, 7360);
 #define HF_TYPE_Health_zone_12_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_12_health, 7376);
 #define HF_TYPE_Health_zone_12_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_12_affects_main_health, 7392);
 #define HF_TYPE_Health_zone_12_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_12_affected_by_explosions, 7467);
+#define HF_TYPE_Health_zone_12_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_12_explosive_damage_percentage, 7468);
+#define HF_TYPE_Health_zone_12_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_13_armor, 7912);
 #define HF_TYPE_Health_zone_13_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_13_health, 7928);
 #define HF_TYPE_Health_zone_13_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_13_affects_main_health, 7944);
 #define HF_TYPE_Health_zone_13_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_13_affected_by_explosions, 8019);
+#define HF_TYPE_Health_zone_13_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_13_explosive_damage_percentage, 8020);
+#define HF_TYPE_Health_zone_13_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_14_armor, 8464);
 #define HF_TYPE_Health_zone_14_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_14_health, 8480);
 #define HF_TYPE_Health_zone_14_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_14_affects_main_health, 8496);
 #define HF_TYPE_Health_zone_14_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_14_affected_by_explosions, 8571);
+#define HF_TYPE_Health_zone_14_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_14_explosive_damage_percentage, 8572);
+#define HF_TYPE_Health_zone_14_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_15_armor, 9016);
 #define HF_TYPE_Health_zone_15_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_15_health, 9032);
 #define HF_TYPE_Health_zone_15_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_15_affects_main_health, 9048);
 #define HF_TYPE_Health_zone_15_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_15_affected_by_explosions, 9123);
+#define HF_TYPE_Health_zone_15_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_15_explosive_damage_percentage, 9124);
+#define HF_TYPE_Health_zone_15_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_16_armor, 9568);
 #define HF_TYPE_Health_zone_16_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_16_health, 9584);
 #define HF_TYPE_Health_zone_16_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_16_affects_main_health, 9600);
 #define HF_TYPE_Health_zone_16_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_16_affected_by_explosions, 9675);
+#define HF_TYPE_Health_zone_16_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_16_explosive_damage_percentage, 9676);
+#define HF_TYPE_Health_zone_16_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_17_armor, 10120);
 #define HF_TYPE_Health_zone_17_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_17_health, 10136);
 #define HF_TYPE_Health_zone_17_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_17_affects_main_health, 10152);
 #define HF_TYPE_Health_zone_17_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_17_affected_by_explosions, 10227);
+#define HF_TYPE_Health_zone_17_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_17_explosive_damage_percentage, 10228);
+#define HF_TYPE_Health_zone_17_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_18_armor, 10672);
 #define HF_TYPE_Health_zone_18_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_18_health, 10688);
 #define HF_TYPE_Health_zone_18_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_18_affects_main_health, 10704);
 #define HF_TYPE_Health_zone_18_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_18_affected_by_explosions, 10779);
+#define HF_TYPE_Health_zone_18_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_18_explosive_damage_percentage, 10780);
+#define HF_TYPE_Health_zone_18_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_19_armor, 11224);
 #define HF_TYPE_Health_zone_19_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_19_health, 11240);
 #define HF_TYPE_Health_zone_19_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_19_affects_main_health, 11256);
 #define HF_TYPE_Health_zone_19_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_19_affected_by_explosions, 11331);
+#define HF_TYPE_Health_zone_19_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_19_explosive_damage_percentage, 11332);
+#define HF_TYPE_Health_zone_19_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_20_armor, 11776);
 #define HF_TYPE_Health_zone_20_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_20_health, 11792);
 #define HF_TYPE_Health_zone_20_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_20_affects_main_health, 11808);
 #define HF_TYPE_Health_zone_20_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_20_affected_by_explosions, 11883);
+#define HF_TYPE_Health_zone_20_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_20_explosive_damage_percentage, 11884);
+#define HF_TYPE_Health_zone_20_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_21_armor, 12328);
 #define HF_TYPE_Health_zone_21_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_21_health, 12344);
 #define HF_TYPE_Health_zone_21_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_21_affects_main_health, 12360);
 #define HF_TYPE_Health_zone_21_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_21_affected_by_explosions, 12435);
+#define HF_TYPE_Health_zone_21_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_21_explosive_damage_percentage, 12436);
+#define HF_TYPE_Health_zone_21_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_22_armor, 12880);
 #define HF_TYPE_Health_zone_22_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_22_health, 12896);
 #define HF_TYPE_Health_zone_22_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_22_affects_main_health, 12912);
 #define HF_TYPE_Health_zone_22_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_22_affected_by_explosions, 12987);
+#define HF_TYPE_Health_zone_22_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_22_explosive_damage_percentage, 12988);
+#define HF_TYPE_Health_zone_22_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_23_armor, 13432);
 #define HF_TYPE_Health_zone_23_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_23_health, 13448);
 #define HF_TYPE_Health_zone_23_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_23_affects_main_health, 13464);
 #define HF_TYPE_Health_zone_23_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_23_affected_by_explosions, 13539);
+#define HF_TYPE_Health_zone_23_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_23_explosive_damage_percentage, 13540);
+#define HF_TYPE_Health_zone_23_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_24_armor, 13984);
 #define HF_TYPE_Health_zone_24_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_24_health, 14000);
 #define HF_TYPE_Health_zone_24_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_24_affects_main_health, 14016);
 #define HF_TYPE_Health_zone_24_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_24_affected_by_explosions, 14091);
+#define HF_TYPE_Health_zone_24_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_24_explosive_damage_percentage, 14092);
+#define HF_TYPE_Health_zone_24_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_25_armor, 14536);
 #define HF_TYPE_Health_zone_25_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_25_health, 14552);
 #define HF_TYPE_Health_zone_25_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_25_affects_main_health, 14568);
 #define HF_TYPE_Health_zone_25_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_25_affected_by_explosions, 14643);
+#define HF_TYPE_Health_zone_25_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_25_explosive_damage_percentage, 14644);
+#define HF_TYPE_Health_zone_25_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_26_armor, 15088);
 #define HF_TYPE_Health_zone_26_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_26_health, 15104);
 #define HF_TYPE_Health_zone_26_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_26_affects_main_health, 15120);
 #define HF_TYPE_Health_zone_26_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_26_affected_by_explosions, 15195);
+#define HF_TYPE_Health_zone_26_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_26_explosive_damage_percentage, 15196);
+#define HF_TYPE_Health_zone_26_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_27_armor, 15640);
 #define HF_TYPE_Health_zone_27_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_27_health, 15656);
 #define HF_TYPE_Health_zone_27_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_27_affects_main_health, 15672);
 #define HF_TYPE_Health_zone_27_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_27_affected_by_explosions, 15747);
+#define HF_TYPE_Health_zone_27_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_27_explosive_damage_percentage, 15748);
+#define HF_TYPE_Health_zone_27_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_28_armor, 16192);
 #define HF_TYPE_Health_zone_28_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_28_health, 16208);
 #define HF_TYPE_Health_zone_28_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_28_affects_main_health, 16224);
 #define HF_TYPE_Health_zone_28_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_28_affected_by_explosions, 16299);
+#define HF_TYPE_Health_zone_28_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_28_explosive_damage_percentage, 16300);
+#define HF_TYPE_Health_zone_28_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_29_armor, 16744);
 #define HF_TYPE_Health_zone_29_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_29_health, 16760);
 #define HF_TYPE_Health_zone_29_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_29_affects_main_health, 16776);
 #define HF_TYPE_Health_zone_29_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_29_affected_by_explosions, 16851);
+#define HF_TYPE_Health_zone_29_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_29_explosive_damage_percentage, 16852);
+#define HF_TYPE_Health_zone_29_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_30_armor, 17296);
 #define HF_TYPE_Health_zone_30_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_30_health, 17312);
 #define HF_TYPE_Health_zone_30_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_30_affects_main_health, 17328);
 #define HF_TYPE_Health_zone_30_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_30_affected_by_explosions, 17403);
+#define HF_TYPE_Health_zone_30_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_30_explosive_damage_percentage, 17404);
+#define HF_TYPE_Health_zone_30_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_31_armor, 17848);
 #define HF_TYPE_Health_zone_31_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_31_health, 17864);
 #define HF_TYPE_Health_zone_31_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_31_affects_main_health, 17880);
 #define HF_TYPE_Health_zone_31_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_31_affected_by_explosions, 17955);
+#define HF_TYPE_Health_zone_31_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_31_explosive_damage_percentage, 17956);
+#define HF_TYPE_Health_zone_31_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_32_armor, 18400);
 #define HF_TYPE_Health_zone_32_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_32_health, 18416);
 #define HF_TYPE_Health_zone_32_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_32_affects_main_health, 18432);
 #define HF_TYPE_Health_zone_32_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_32_affected_by_explosions, 18507);
+#define HF_TYPE_Health_zone_32_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_32_explosive_damage_percentage, 18508);
+#define HF_TYPE_Health_zone_32_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_33_armor, 18952);
 #define HF_TYPE_Health_zone_33_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_33_health, 18968);
 #define HF_TYPE_Health_zone_33_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_33_affects_main_health, 18984);
 #define HF_TYPE_Health_zone_33_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_33_affected_by_explosions, 19059);
+#define HF_TYPE_Health_zone_33_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_33_explosive_damage_percentage, 19060);
+#define HF_TYPE_Health_zone_33_explosive_damage_percentage HF_TYPE_F32
 HF_ASSERT_OFFSET(HfHealth, zone_34_armor, 19504);
 #define HF_TYPE_Health_zone_34_armor HF_TYPE_U32
 HF_ASSERT_OFFSET(HfHealth, zone_34_health, 19520);
 #define HF_TYPE_Health_zone_34_health HF_TYPE_I32
 HF_ASSERT_OFFSET(HfHealth, zone_34_affects_main_health, 19536);
 #define HF_TYPE_Health_zone_34_affects_main_health HF_TYPE_F32
+HF_ASSERT_OFFSET(HfHealth, zone_34_affected_by_explosions, 19611);
+#define HF_TYPE_Health_zone_34_affected_by_explosions HF_TYPE_U8
+HF_ASSERT_OFFSET(HfHealth, zone_34_explosive_damage_percentage, 19612);
+#define HF_TYPE_Health_zone_34_explosive_damage_percentage HF_TYPE_F32
 
 /* JumppackComponentData (component 264, 280-byte records): (from the stats schema) */
 #define HfJumppack_INFO "JumppackComponentData", 25480438u
