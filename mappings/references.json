@@ -9651,6 +9651,24 @@
       ]
     }
   ],
+  "rowCopies": [
+    {
+      "category": "throwables",
+      "target": "G-109 Urchin",
+      "key": "throwable.pulse_explosion",
+      "label": "Pulse explosion payload",
+      "table": "ExplosionSettings",
+      "row": 369,
+      "offset": 4,
+      "size": 148,
+      "default": 369,
+      "allowed": [
+        369,
+        227,
+        407
+      ]
+    }
+  ],
   "explosionFields": [
     {
       "id": "explosion.inner_radius",

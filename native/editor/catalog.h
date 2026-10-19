@@ -20,6 +20,7 @@ struct Row
     std::string component;                    /* set_live / get_live: the component record or settings table ("" none) */
     uint64_t ref = 0;                         /* the target: an entity's resource id or a table row id */
     uint32_t offset = 0;                      /* an entity delta's is its data offset (past 65535) */
+    uint32_t size = 0;                        /* a whole-row copy's bytes (choice "rowcopy") */
     uint32_t type = 0;                        /* HF_TYPE_F32, _U32 or _I32 */
     bool hasMin = false, hasMax = false;
     double min = 0, max = 0;

@@ -4004,6 +4004,14 @@
           "verified": false,
           "source": "stats-schema charge.burst_interval_seconds"
         },
+        "overcharge_explosion": {
+          "offset": 200,
+          "type": "u32",
+          "meaning": "Overcharge explosion",
+          "verified": false,
+          "source": "stats-schema charge.overcharge_explosion",
+          "ref": "explosion"
+        },
         "overcharge_limit_seconds": {
           "offset": 208,
           "type": "f32",

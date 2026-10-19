@@ -120,8 +120,20 @@ bool g_hostMountsShown;
 bool Locked();
 const std::map<std::string, double>& Mounts() { return g_hostMountsShown ? g_hostMounts : g_mounts; }
 std::string MountKey(const Row* row) { return row->target + "|" + row->key; }
-bool IsMount(const Row* row) { return row->choice == "mount" || row->choice == "pod" || row->choice == "podcount"; }
+bool IsMount(const Row* row) { return row->choice == "mount" || row->choice == "pod" || row->choice == "podcount" || row->choice == "rowcopy"; }
 bool IsPod(const Row* row) { return row->choice == "pod" || row->choice == "podcount"; }
+/* The armory's displayed armor penetration (HD2R Editor's row): which armor penetration trait the weapon's five trait
+ * slots hold. Not kept anywhere itself: shown from the slots, and a pick is staged on the slot that holds one, else the
+ * first empty one (ApSlot), so the trait slots are what Local Stats saves. */
+bool IsApLabel(const Row* row) { return row->choice == "aplabel"; }
+std::vector<const Row*> TraitRows(const Row* row)
+{
+    std::vector<const Row*> out;
+    for (const Row* r : row->object->rows)
+        if (r->target == row->target && r->key.rfind("presentation.traits.", 0) == 0) out.push_back(r);
+    std::sort(out.begin(), out.end(), [](const Row* a, const Row* b) { return a->key < b->key; });
+    return out;
+}
 double ChoiceGet(const Row* row)
 {
     if (!IsMount(row)) return Locked() ? -1 : g_choice[ChoiceIndex(row)];
@@ -263,6 +275,17 @@ void SendPassives()
 LiveState& Live(const Row* row, bool fresh = false)
 {
     LiveState& s = g_live[row];
+    if (IsApLabel(row))
+    {
+        s.read = true; s.now = s.base = 0; s.mod.clear();
+        for (const Row* t : TraitRows(row))
+        {
+            const LiveState& ts = Live(t, fresh);
+            if (ts.read && ts.now != 0 && row->OptionOf(ts.now)) s.now = ts.now;
+            if (ts.read && ts.base != 0 && row->OptionOf(ts.base)) s.base = ts.base;
+        }
+        return s;
+    }
     if (!row->choice.empty())
     {
         s.read = true; s.now = ChoiceGet(row); s.mod.clear();
@@ -325,6 +348,7 @@ std::string Format(const Row* row, double v)
 /* A saved value of the row's bytes (its own entry, else a sibling's on the same bytes). */
 bool Saved(const Row* row, double* value, const Row** holder = nullptr)
 {
+    if (IsApLabel(row)) return false;
     if (!row->choice.empty()) { *value = ChoiceGet(row); if (holder) *holder = row; return ChoiceSaved(row); }
     auto get = [&](const Row* r) {
         if (!localstats::Get(r->category, r->target, r->key, value)) return false;
@@ -370,6 +394,20 @@ RowView ViewOf(const Row* row, bool withPending = true)
 RowView ViewOfNow(const Row* row, bool withPending)
 {
     RowView v;
+    if (IsApLabel(row))
+    {
+        bool staged = false;
+        v.has = v.hasBase = true;
+        for (const Row* t : TraitRows(row))
+        {
+            RowView tv = ViewOf(t, withPending);
+            if (tv.value != 0 && row->OptionOf(tv.value)) v.value = tv.value;
+            if (tv.hasBase && tv.base != 0 && row->OptionOf(tv.base)) v.base = tv.base;
+            staged = staged || tv.source == STAGED;
+        }
+        v.source = staged ? STAGED : v.value != v.base ? EDITED : GAME;
+        return v;
+    }
     LiveState& live = Live(row);
     double saved;
     /* joined: Saved answers with the host's saved changes, which the game holds (attachments' from the next respawn) */
@@ -554,9 +592,25 @@ void Arrow(float x, float cy, bool down, ImU32 colour)
     else g_cv.Chevron(x + 3.5f, cy - 5.5f, x + 9, cy, x + 3.5f, cy + 5.5f, colour, 3, t);
 }
 
+/* The trait slot an AP pick goes to: the one holding an armor penetration trait, else (a new one) the first empty one. */
+const Row* ApSlot(const Row* row, double value)
+{
+    auto traits = TraitRows(row);
+    for (const Row* t : traits) if (double v = ViewOf(t).value; v != 0 && row->OptionOf(v)) return t;
+    if (value == 0) return nullptr;
+    for (const Row* t : traits) if (ViewOf(t).value == 0) return t;
+    return nullptr;
+}
+
 void Stage(const Row* row, double value)
 {
     if (RefuseLocked()) return;
+    if (IsApLabel(row))
+    {
+        if (const Row* slot = ApSlot(row, value)) Stage(slot, value);
+        else if (value != 0) Toast("Every trait slot holds a trait: empty one first, then pick the armor penetration", ERROR_);
+        return;
+    }
     for (const Row* s : g_catalog.Siblings(row)) if (s != row) g_pending.erase(s);
     RowView applied = ViewOf(row, false);
     if (applied.has && Same(row, value, applied.value)) g_pending.erase(row);
@@ -578,6 +632,7 @@ void Stage(const Row* row, double value)
 bool StageReset(const Row* row)
 {
     if (RefuseLocked()) return false;
+    if (IsApLabel(row)) { const Row* slot = ApSlot(row, 0); return slot != nullptr && StageReset(slot); }
     double saved;
     for (const Row* s : g_catalog.Siblings(row)) g_pending.erase(s);
     g_markVersion++;
@@ -587,8 +642,19 @@ bool StageReset(const Row* row)
 }
 
 /* A mount slot's or hellpod row's choice to the game (its option's entity, or a count), or back to its vanilla one. */
+bool HasCopyRow() { return g_host.api->size >= offsetof(HfApi, copy_row) + sizeof(void*) && g_host.api->copy_row != nullptr; }
 void SendMount(const Row* row)
 {
+    if (row->choice == "rowcopy") /* another explosion's settings over the row (SDK 9 copy_row), or its own back */
+    {
+        auto chosen = Mounts().find(MountKey(row));
+        const Row::Option* o = chosen != Mounts().end() ? row->OptionOf(chosen->second) : nullptr;
+        uint64_t from = o == nullptr || o == &row->options[0] ? 0 : (uint64_t)o->value;
+        if (!HasCopyRow() || g_host.api->copy_row(g_host.mod, row->component.c_str(), row->ref, from, row->offset, row->size) == 0)
+            SetError(row, HasCopyRow() ? Refusal("HellForge refused the copy") : "this HellForge has no copy_row");
+        else ClearError(row);
+        return;
+    }
     bool wide = row->type == HF_TYPE_U64;
     HfField field{row->component.c_str(), g_layout, (uint16_t)row->offset, (uint16_t)(wide ? 8 : 4), row->type, 0};
     auto chosen = Mounts().find(MountKey(row));
@@ -1496,6 +1562,17 @@ bool PresetStructured(const Row* row, const Row::Hd2rAs& as, const hfjson::Value
         }
         *why = "not a value of this kind"; return false;
     };
+    /* a pod slot's pickup ({ref: pickup, id} or "empty") or a name (a mounted weapon's id, a charge weapon whose
+     * overcharge explosion it takes): the option it names */
+    if (as.kind == "pickup" || as.kind == "named")
+    {
+        std::string id = v.kind == hfjson::Value::String ? v.Str() :
+            as.kind == "pickup" && v.kind == hfjson::Value::Object && v.GetString("ref") == "pickup" ? v.GetString("id") : "";
+        auto found = as.names.find(id);
+        if (found == as.names.end()) { *why = id.empty() ? "not a value of this kind" : "'" + id + "' is not one HellForge offers here"; return false; }
+        *out = found->second;
+        return true;
+    }
     double n = 0;
     if (as.kind == "slots")
     {
@@ -1634,6 +1711,20 @@ hfjson::Value PresetEncodeStructured(const std::string& key, const Row::Hd2rAs& 
     if (as.kind == "bool") return hfjson::Value::MakeBool(values.begin()->second != 0);
     if (as.kind == "reticle") return hfjson::Value::MakeBool(values.begin()->second != RETICLE_OFF);
     if (as.kind == "enum") return hfjson::Value::MakeNumber(values.begin()->second, true);
+    if (as.kind == "pickup" || as.kind == "named")
+    {
+        for (auto& [k, v] : as.names)
+            if (v == values.begin()->second)
+            {
+                if (as.kind == "named" || k == "empty") return hfjson::Value::MakeString(k);
+                hfjson::Value pickup;
+                pickup.kind = hfjson::Value::Object;
+                pickup.members.emplace_back("ref", hfjson::Value::MakeString("pickup"));
+                pickup.members.emplace_back("id", hfjson::Value::MakeString(k));
+                return pickup;
+            }
+        return list;
+    }
     if (as.kind != "slots") return list; /* "ap": the traits carry its bytes */
     list.kind = hfjson::Value::Array;
     std::vector<std::pair<int, double>> slots;
@@ -2614,7 +2705,8 @@ void DrawStatus(float y, float h)
             RowView v = ViewOf(row);
             const Row::Option* o = row->OptionOf(v.value);
             std::string text = o && !o->note.empty() ? o->label + ": " + o->note : row->note;
-            if (IsMount(row)) text += IsPod(row) ? "   [applies to pods called in after it]" : "   [applies to vehicles called in after it]";
+            if (IsMount(row)) text += row->choice == "rowcopy" ? "   [applies now]" : IsPod(row) ? "   [applies to pods called in after it]" :
+                "   [applies to vehicles called in after it]";
             else if (HasPassives())
             {
                 HfPassives state;
@@ -3219,16 +3311,10 @@ void Init(const Host& host)
     }
     g_cat = g_cats.size() > 1 ? 1 : 0;
     g_logs.source = g_logSource == 1 ? 1 : 0;
-    for (auto& r : g_catalog.rows) if (!r.choice.empty()) g_choiceRows.push_back(&r);
+    for (auto& r : g_catalog.rows) if (!r.choice.empty() && !IsApLabel(&r)) g_choiceRows.push_back(&r);
     if (g_choice[0] >= 0 || g_choice[1] >= 0) SendPassives(); /* the armor perks kept from last time */
-    for (auto& m : g_mounts) /* the arm swaps kept from last time */
-    {
-        size_t bar = m.first.find('|');
-        if (bar == std::string::npos) continue;
-        const Row* row = g_catalog.Entry("mounts", m.first.substr(0, bar), m.first.substr(bar + 1));
-        if (row == nullptr) row = g_catalog.Entry("pods", m.first.substr(0, bar), m.first.substr(bar + 1));
-        if (row != nullptr) SendMount(row);
-    }
+    for (const Row* row : g_choiceRows) /* the arm swaps, pods and row copies kept from last time (a row several pages show is sent for each: the same value) */
+        if (IsMount(row) && g_mounts.count(MountKey(row))) SendMount(row);
     host.api->log(host.mod, "editor: %s; %d game icons%s", g_catalogOk ? (std::to_string(g_catalog.objects.size()) + " objects, " +
         std::to_string(g_catalog.rows.size()) + " fields").c_str() : g_catalogError.c_str(), iconCount,
         HasGetLive() ? "" : "; this HellForge has no get_live (values are not shown)");

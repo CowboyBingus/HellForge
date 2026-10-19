@@ -213,6 +213,38 @@ static class StatsTests
             check(StatsCatalog.Sections(Vehicle("TD-110 Maelstrom")).Any(s => s.Title == "Weapon · Main cannon") &&
                 StatsCatalog.Sections(Vehicle("EXO-55 Breakthrough Exosuit")).Any(s => s.Title == "Shield · Left gun"), "Mount labels as HD2R Editor's.");
         });
+        test("HD2R Editor's last rows: the displayed armor penetration, overcharge and pulse explosions, one-off fields, preset keys", () =>
+        {
+            var objects = EditorCatalog.Build()["objects"]!.AsArray().Select(o => o!).ToList();
+            List<JsonNode> RowsOf(string name) => objects.Single(o => o["name"]!.GetValue<string>() == name)["page"]!.AsArray()
+                .SelectMany(c => c!["subs"]!.AsArray()).SelectMany(s => s!["rows"]!.AsArray()).Select(r => r!).ToList();
+            var torcher = RowsOf("FLAM-66 Torcher");
+            var ap = torcher.Single(r => r["key"]!.GetValue<string>() == "presentation.armor_penetration");
+            check(ap["choice"]!.GetValue<string>() == "aplabel" && ap["options"]!.AsArray().Count == 6 && ap["hd2r"]![0]!.GetValue<string>() == "pw|FLAM-66 Torcher|presentation.armor_penetration" &&
+                torcher.Where(r => r["key"]!.GetValue<string>().StartsWith("presentation.traits.")).All(r => r["hd2rAs"] == null ||
+                    !r["hd2rAs"]!.AsObject().Any(k => k.Value!["kind"]!.GetValue<string>() == "ap")),
+                "Every weapon's displayed armor penetration is a row of its own, with HD2R's key (the Torcher had none to link to).");
+            var epoch = RowsOf("PLAS-45 Epoch").Single(r => r["key"]!.GetValue<string>() == "charge.overcharge_explosion");
+            check(epoch["pick"]!.GetValue<string>() == "explosion" && epoch["offset"]!.GetValue<int>() == 200 &&
+                epoch["hd2rAs"]!.AsObject().Single().Value!["names"]!["RS-422 Railgun"]!.GetValue<long>() == 326, "The Epoch's overcharge explosion: a picker, its preset naming a charge weapon.");
+            var pulse = RowsOf("G-109 Urchin").Single(r => r["key"]!.GetValue<string>() == "throwable.pulse_explosion");
+            check(pulse["choice"]!.GetValue<string>() == "rowcopy" && pulse["size"]!.GetValue<int>() == 148 && pulse["ref"]!.GetValue<string>() == "369" &&
+                pulse["options"]!.AsArray().Count == 3 && pulse["hd2rKind"]!.GetValue<string>() == "explosion", "The Urchin's pulse explosion: a whole-row copy from its three donors.");
+            check(RowsOf("SH-51 Directional Shield").Count(r => r["key"]!.GetValue<string>() is "entity.armor" or "entity.armor_deployed" or "shield.radius") == 3 &&
+                RowsOf("B-100 Portable Hellbomb").Any(r => r["key"]!.GetValue<string>() == "deposit.capacity") &&
+                RowsOf("AR/GL-21 One-Two").Single(r => r["key"]!.GetValue<string>() == "weapon.default_fire_mode")["values"]!.AsArray().Count == 2 &&
+                RowsOf("A/G-16 Gatling Sentry").Any(r => r["key"]!.GetValue<string>() == "attack.primary.projectile") &&
+                RowsOf("AX/ARC-3 K-9").Any(r => r["key"]!.GetValue<string>() == "entity.armor"), "The one-off fields: shields, the Hellbomb's deposit, the One-Two's default mode, a sentry's projectile, drone armor.");
+            var patriotSlot = RowsOf("EXO-45 Patriot Exosuit").First(r => r["key"]!.GetValue<string>() == "mount.slot_0");
+            var podSlot = RowsOf("M-105 Stalwart").Single(r => r["key"]!.GetValue<string>() == "pod.slot_1");
+            check(patriotSlot["hd2rKind"]!.GetValue<string>() == "named" && podSlot["hd2rKind"]!.GetValue<string>() == "pickup" &&
+                podSlot["hd2rAs"]!.AsObject().Single().Value!["names"]!["empty"]!.GetValue<int>() == 0, "Arm swaps and pod slots carry HD2R's preset keys.");
+            var shear = StatsSchema.Current.Targets["weapons"]["LAS-22 Shear"];
+            check(shear.Fields.ContainsKey("attachment.magazine.laser_heatsink_charge_standard_heatsink.heat.cool_per_second") &&
+                shear.Fields.ContainsKey("attachment.magazine.laser_heatsink_charge_standard_heatsink.heat.heat_per_second") &&
+                shear.Aliases["attachment.magazine.laser_heatsink_charge_standard_heatsink.er_second"] == "attachment.magazine.laser_heatsink_charge_standard_heatsink.heat.heat_per_second",
+                "A heatsink's fields keep their whole ids (the cooling rate no longer shares a key); old keys stay aliases.");
+        });
         test("Hellpod payloads: a call-in's pod slots and spawn count, with the reviewed pickups by kind", () =>
         {
             var objects = EditorCatalog.Build()["objects"]!.AsArray().Select(o => o!).ToList();

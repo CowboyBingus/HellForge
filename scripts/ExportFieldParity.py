@@ -167,6 +167,60 @@ def main(dev6, out):
                 for key in DAMAGE_KEYS:
                     add('weapons', name, entry(key, torcher[key], record=damage))
 
+    # overcharge explosion (WeaponCharge +200, an ExplosionType; set off when "explode at overcharge" is on): on every
+    # weapon that shows that flag (HD2R Editor's Epoch and Railgun row; the Accelerator's, the Purifier's, the Loyalist's)
+    overcharge = {}  # each charge weapon's own overcharge explosion, by name (HD2R Editor presets name the weapon)
+    for name, t in weapons.items():
+        flagged = [f for k, f in t['fields'].items() if k == 'charge.explode_at_overcharge'] or \
+            [e for e in added.get('weapons', {}).get(name, []) if e['key'] == 'charge.explode_at_overcharge']
+        if flagged:
+            f = flagged[0]
+            add('weapons', name, {'key': 'charge.overcharge_explosion', 'label': 'Overcharge explosion', 'kind': 'component',
+                                  'component': 'WeaponChargeComponentData', 'resource': f['resource'], 'record': f['record'], 'offset': 200,
+                                  'storage': 'u32', 'min': None, 'max': None, 'unit': None, 'shared': False, 'ref': 'explosion',
+                                  'note': 'Set off when the overcharge time is reached, while "Explode when the overcharge time is reached" is Yes'})
+            overcharge[name] = struct.unpack_from('<I', tables.component('WeaponChargeComponentData').raw(f['record']), 200)[0]
+
+    # HD2R Editor's one-off fields the catalogues lack (its rows on the same bytes)
+    def health_of(name):
+        return sorted({(f['resource'], f['record']) for f in targets['backpacks'][name]['fields'].values() if f.get('component') == 'HealthComponentData'},
+                      key=lambda rr: rr[1])
+    armor = {'kind': 'component', 'component': 'HealthComponentData', 'offset': 280, 'storage': 'u32', 'min': 0, 'max': 10, 'unit': 'armor_class',
+             'shared': False}
+    for name in ('AX/AR-23 Guard Dog', 'AX/ARC-3 K-9', 'AX/FLAM-75 Hot Dog', 'AX/LAS-5 Rover', 'AX/TX-13 Dog Breath'):
+        (resource, record), = health_of(name)
+        add('backpacks', name, dict(armor, key='entity.armor', label='Drone armor', resource=resource, record=record))
+    (resource, record), = health_of('SH-20 Ballistic Shield Backpack')
+    add('backpacks', 'SH-20 Ballistic Shield Backpack', dict(armor, key='entity.armor', label='Armor (default zone)', resource=resource, record=record,
+        note='The default zone\'s: hits on the shield plate use its zone\'s armor (Damage zones)'))
+    sh51 = {f['record']: f['resource'] for f in targets['backpacks']['SH-51 Directional Shield']['fields'].values() if f.get('component') == 'HealthComponentData'}
+    add('backpacks', 'SH-51 Directional Shield', dict(armor, key='entity.armor', label='Armor (backpack)', resource=sh51[296], record=296))
+    add('backpacks', 'SH-51 Directional Shield', dict(armor, key='entity.armor_deployed', label='Armor (deployed shield)', resource=sh51[80], record=80))
+    shield = targets['backpacks']['SH-51 Directional Shield']['fields']['shield.recharge_rate']
+    add('backpacks', 'SH-51 Directional Shield', {'key': 'shield.radius', 'label': 'Shield radius', 'kind': 'component', 'component': 'ShieldComponentData',
+        'resource': shield['resource'], 'record': shield['record'], 'offset': 0, 'storage': 'f32', 'min': 0.1, 'max': 100, 'unit': 'meters', 'shared': False})
+    deposit = tables.component('DepositComponentData')
+    owner = deposit.owners(9)
+    if len(owner) == 1:
+        supply = targets['backpacks']['B-1 Supply Pack']['fields']
+        for key, label in (('deposit.capacity', 'Capacity'), ('deposit.start_amount', 'Amount at call-in'), ('deposit.refill_amount', 'Restored by resupply')):
+            f = supply[key]
+            add('backpacks', 'B-100 Portable Hellbomb', entry(key, f, label=label, resource='0x%016X' % owner[0], record=9, unit=None))
+    resource, record = owner_of('AR/GL-21 One-Two', 'WeaponDataComponentData')
+    modes = struct.unpack_from('<3I', tables.component('WeaponDataComponentData').raw(record), 144)
+    names = dict(liberator['fire_mode.modes.1']['options'])
+    add('weapons', 'AR/GL-21 One-Two', {'key': 'weapon.default_fire_mode', 'label': 'Default fire mode', 'kind': 'component',
+        'component': 'WeaponDataComponentData', 'resource': resource, 'record': record, 'offset': 144, 'storage': 'u32', 'min': None, 'max': None,
+        'unit': None, 'shared': False, 'options': [[m, names.get(m, str(m))] for m in sorted(set(modes)) if m in (1, 2)],  # Automatic, Single
+        'note': "Its own fire modes only, reordered (HD2R Editor: the weapon's other fire-control data is not understood)"})
+    for name in ('A/G-16 Gatling Sentry / weapon', 'A/MG-43 Machine Gun Sentry / weapon'):
+        sentry = {'A/G-16 Gatling Sentry / weapon': '0xEF85D6CF58E31D70', 'A/MG-43 Machine Gun Sentry / weapon': '0x37CDE43876BA26BB'}[name]
+        record = tables.entity(int(sentry, 16)).get('ProjectileWeaponComponentData')
+        if record is not None:
+            add('weapons', name, {'key': 'attack.primary.projectile', 'label': 'Projectile', 'kind': 'component',
+                'component': 'ProjectileWeaponComponentData', 'resource': sentry, 'record': record, 'offset': 0, 'storage': 'u32',
+                'min': None, 'max': None, 'unit': None, 'shared': False, 'ref': 'projectile'})
+
     # explosions: every target with a health record
     def explosion_fields(category, name, resource, record, zones, section=None, zone_sections=None):
         raw = tables.component('HealthComponentData').raw(record)
@@ -211,7 +265,8 @@ def main(dev6, out):
     count = sum(len(fs) for c in added.values() for fs in c.values())
     data = {'format': 1, 'build': '25480438',
             'note': 'Fields the editor adds where HD2Runtime 0.40.1 catalogues stop short (scripts/ExportFieldParity.py).',
-            'targets': {c: {n: added[c][n] for n in sorted(added[c])} for c in sorted(added)}}
+            'targets': {c: {n: added[c][n] for n in sorted(added[c])} for c in sorted(added)},
+            'overchargeExplosions': dict(sorted(overcharge.items()))}
     Path(out).write_text(json.dumps(data, indent=1, ensure_ascii=False) + '\n', encoding='utf-8', newline='\n')
     print(f'{count} fields on {sum(len(c) for c in added.values())} targets')
 

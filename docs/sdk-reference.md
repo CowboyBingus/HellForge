@@ -87,6 +87,7 @@ end; a mod checks `hf->version`.
 ### SDK 9
 
 - **`set_stat`** `int (HfMod* mod, const HfStat* stat, const HfValue* value, uint32_t flags)`: Changes a stats field set_live cannot reach (an entity delta: an attachment's or a default magazine's stats; a status multiplier), the fields get_stat reads, live, in the place a stats file writes it at boot. value NULL: back to its value from before this session's live change, or with HF_LIVE_BASE to its base (get_stat's). Returns HF_APPLIES_RESPAWN (a weapon takes an attachment's value when it is next built, expected) or 0 (the mod's log says why). Check hf->size before calling.
+- **`copy_row`** `int (HfMod* mod, const char* table, uint64_t row, uint64_t from, uint32_t offset, uint32_t size)`: A settings row's bytes (offset, size) replaced live by another row's of the same table, for the rows HellForge's catalogue names (mappings/references.json "rowCopies": the G-109 Urchin's pulse explosion), from the donors listed there, once the donor's packages are resident (it waits for them). from 0 puts the row's own bytes back. Returns HF_APPLIES_NOW or 0 (the mod's log says why). Check hf->size before calling.
 
 ## Components
 
@@ -688,6 +689,7 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | `explode_at_overcharge` | +0xB9 | u8 | respawn? | Explode when the overcharge time is reached (unverified) |
 | `burst_shots` | +0xBC | u32 | respawn? | Shots per charge (shots) (unverified) |
 | `burst_interval_seconds` | +0xC0 | f32 | respawn? | Delay between shots of one charge (seconds) (unverified) |
+| `overcharge_explosion` | +0xC8 | u32 | respawn? | Overcharge explosion (unverified) (an explosion reference) |
 | `overcharge_limit_seconds` | +0xD0 | f32 | respawn? | Overcharge hold limit (seconds) (unverified) |
 
 ### HfWeaponReload

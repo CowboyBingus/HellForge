@@ -289,6 +289,22 @@ def main(runtime, out_json, out_header):
         pod_racks.append({'rack': rname, 'resource': rk['resource'], 'record': rk['recordIndex'], 'shared': bool(rk.get('shared')),
                           'consumers': [c['name'] for c in rk['consumers']], 'spawnCount': rk['spawnCount'], 'slots': slots})
 
+    # Whole-row copies (HD2R Editor's G-109 Urchin "Pulse explosion"): a field that is an explosion row's settings as raw
+    # bytes, set by copying another catalogued explosion's over it. The row, the bytes, its own explosion and the
+    # explosions HD2Runtime allows there, by type.
+    row_copies = []
+    for tname, th in sorted(read_table(domains / 'throwable_authoring.lua')['throwables'].items()):
+        for path, tgt in sorted((th.get('targets') or {}).items()):
+            for fid, f in sorted((tgt.get('fields') or {}).items()):
+                b = f.get('backing') or {}
+                if b.get('storage') != 'bytes' or b.get('settings') != 'explosion' or not f.get('allowedValues'):
+                    continue
+                types = [explosions[x]['type'] for x in f['allowedValues'] if x in explosions]
+                row_copies.append({'category': 'throwables', 'target': tname, 'key': fid, 'label': f.get('displayName') or fid,
+                                   'table': 'ExplosionSettings', 'row': b['recordType'], 'offset': b['offset'], 'size': b['width'],
+                                   'default': explosions[f['currentDefault']]['type'] if f.get('currentDefault') in explosions else b['recordType'],
+                                   'allowed': types})
+
     # Packages mods load for sounds no catalogue entry carries (HfAbility.package): the Launch ICBM objective's, whose bank
     # obj_gen_icbm holds the ICBM launch sequence (HD2Runtime research/sound-events: the bank ships in this package).
     used.setdefault('0x20BDEC2A51065E1F', 'packages/content/gen_icbm (the Launch ICBM objective: its launch sounds)')
@@ -302,7 +318,7 @@ def main(runtime, out_json, out_header):
         'projectiles': sorted(projectiles.values(), key=lambda r: r['type']),
         'explosions': explosion_rows, 'statuses': status_rows, 'ammunition': ammunition, 'hosts': hosts, 'refused': refused,
         'payload': payload_info, 'programmable': dict(sorted(programmable.items())),
-        'mountedWeapons': mounted, 'mountSlots': mount_slots, 'pickups': pickups, 'podRacks': pod_racks,
+        'mountedWeapons': mounted, 'mountSlots': mount_slots, 'pickups': pickups, 'podRacks': pod_racks, 'rowCopies': row_copies,
         # HD2R Editor's explosion pages: the fields every catalogued explosion shows (its row, or its damage type's)
         'explosionFields': [{'id': f['id'], 'backing': f['backing'], 'offset': f['offset'], 'storage': f['storage'], 'min': f.get('min'),
                              'max': f.get('max'), 'unit': f.get('unit')} for f in read_table(domains / 'explosion_catalogue.lua')['fields']],
@@ -390,7 +406,15 @@ def main(runtime, out_json, out_header):
         for sl in r['slots']:
             vanilla = int(pickups[sl['default']]['resource'], 16) if sl['default'] != 'empty' else 0
             h.append(f'    {{0x{int(r["resource"], 16):016X}ull, {sl["slot"] - 1}, 0x{vanilla:016X}ull}}, /* {r["rack"]} slot {sl["slot"]} */')
-    h += ['};', '/* Status effects a damage type can apply */', 'static const uint32_t kRefStatuses[] = {']
+    h += ['};', '/* Settings rows a copy of another row may replace: table, row, bytes, the rows allowed as donors (kRefRowDonors) */',
+          'typedef struct RefRowCopy { const char* table; uint32_t row, offset, size; uint16_t first, count; } RefRowCopy;',
+          'static const RefRowCopy kRefRowCopies[] = {']
+    donors = []
+    for r in row_copies:
+        h.append(f'    {{"{r["table"]}", {r["row"]}u, {r["offset"]}u, {r["size"]}u, {len(donors)}, {len(r["allowed"])}}}, /* {r["target"]}: {r["label"]} */')
+        donors += r['allowed']
+    h += ['    {0}};' if not row_copies else '};', 'static const uint32_t kRefRowDonors[] = {', '    ' + ', '.join(f'{d}u' for d in donors or [0]) + '};']
+    h += ['/* Status effects a damage type can apply */', 'static const uint32_t kRefStatuses[] = {']
     h.append('    ' + ', '.join(f'{r["type"]}u' for r in status_rows if r['attachable']) + '};')
     Path(out_header).write_text('\n'.join(h) + '\n', encoding='utf-8', newline='\n')
     print(f'{len(data["projectiles"])} projectile donors, {len(explosion_rows)} explosions '

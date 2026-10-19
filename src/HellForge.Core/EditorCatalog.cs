@@ -108,6 +108,37 @@ public static class EditorCatalog
         return byAddress;
     });
 
+    // HD2R Editor rows with no native address that HellForge holds another way (hd2r-keys.json "unaddressed": pod payloads,
+    // arm swaps, the overcharge explosion, the default magazine's reload): the key on an object whose key ends so.
+    static string? Unaddressed(string objectName, string suffix) =>
+        Hd2rData.Value["unaddressed"]?.AsObject().Select(k => k.Key).FirstOrDefault(k => k.Split('|')[1] == objectName && k.EndsWith(suffix, StringComparison.Ordinal));
+
+    // A key on a choice row whose preset value is a name (a mounted weapon's id, a weapon's name) or a pickup.
+    static void Hd2rNamed(JsonObject row, string key, string kind, JsonObject names)
+    {
+        row["hd2r"] = new JsonArray(key);
+        row["hd2rKind"] = kind;
+        row["hd2rAs"] = new JsonObject { [key] = new JsonObject { ["kind"] = kind, ["slot"] = 0, ["names"] = names } };
+    }
+
+    static readonly Lazy<JsonNode> ParityData = new(() =>
+    {
+        using var stream = typeof(EditorCatalog).Assembly.GetManifestResourceStream("HellForge.Core.mappings.parity.json")!;
+        return JsonNode.Parse(stream)!;
+    });
+
+    // A weapon's default magazine's reload row key (HD2R Editor's "reload.default_magazine"), or null.
+    static readonly Lazy<Dictionary<string, string>> DefaultReload = new(() =>
+    {
+        using var stream = typeof(EditorCatalog).Assembly.GetManifestResourceStream("HellForge.Core.mappings.attachments.json")!;
+        var root = JsonNode.Parse(stream)!;
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (weapon, slots) in root["weapons"]!.AsObject())
+            if (slots!["magazine"]?["default"]?.GetValue<string>() is { } id)
+                map[weapon] = $"attachment.magazine.{id.Split('/')[^2].Replace('-', '_')}.reload_duration";
+        return map;
+    });
+
     static JsonObject Hd2rValues()
     {
         var statuses = new JsonObject();
@@ -123,6 +154,8 @@ public static class EditorCatalog
     static void Hd2rKeys(JsonObject json, StatsRow row, StatsItem item)
     {
         if (!Hd2rByAddress.Value.TryGetValue(row.Field.Hd2rAddress, out var keys)) return;
+        keys = keys.Where(k => k.Kind != "ap").ToList(); /* the displayed armor penetration: its own row (ApLabelRow) */
+        if (keys.Count == 0) return;
         var names = new HashSet<string>(item.Parts.Select(p => p.Target).Append(item.Name), StringComparer.Ordinal);
         var ordered = keys.OrderBy(k => names.Contains(k.Object) ? 0 : 1).ThenBy(k => k.Field == row.Key ? 0 : 1).ThenBy(k => k.Key, StringComparer.Ordinal).ToList();
         // bytes many items share (a melee hit volume, ~100 weapons): each item's row carries its own keys only
@@ -263,6 +296,12 @@ public static class EditorCatalog
                 first = false;
             }
             AddSlot(slot, s["untested"] != null ? "Shield arm" : label, s["resource"]!.GetValue<string>(), options, s["untested"]?.GetValue<string>());
+            if (Unaddressed(vehicle, $"-mount-slot-{slot}:mount.weapon") is { } mountKey) /* a preset names the mounted weapon */
+            {
+                var names = new JsonObject();
+                foreach (var id in s["allowed"]!.AsArray().Select(a => a!.GetValue<string>())) names[id] = ids.IndexOf(id);
+                Hd2rNamed((JsonObject)rows[^1]!, mountKey, "named", names);
+            }
         }
         void AddSlot(int slot, string label, string resource, JsonArray options, string? warning)
         {
@@ -347,9 +386,16 @@ public static class EditorCatalog
                 foreach (var (id, p) in pickups.Where(p => p.Key != vanilla))
                     options.Add(Option(ids.IndexOf(id) + 1, p!["name"]!.GetValue<string>(), p["resource"]!.GetValue<string>(),
                         PickupGroups.GetValueOrDefault(p["category"]!.GetValue<string>(), "Other"), NoteOf(id)));
-                rows.Add(Row($"Slot {k}", $"pod.slot_{k}", (k - 1) * 64, "u64", options,
+                var podRow = Row($"Slot {k}", $"pod.slot_{k}", (k - 1) * 64, "u64", options,
                     "What the pod opens with in this slot (HD2R Editor's pod payload): pods called in after it carry it." +
-                    (shared ? $" The rack is shared: {string.Join(", ", consumers)} change with it." : "")));
+                    (shared ? $" The rack is shared: {string.Join(", ", consumers)} change with it." : ""));
+                if (Unaddressed(item.Name, $"|pod|payload.slot_{k}") is { } podKey)
+                {
+                    var names = new JsonObject { ["empty"] = 0 };
+                    foreach (var id in ids) names[id] = ids.IndexOf(id) + 1;
+                    Hd2rNamed(podRow, podKey, "pickup", names);
+                }
+                rows.Add(podRow);
             }
             var count = rack["spawnCount"]!.GetValue<int>();
             var counts = new JsonArray(new[] { count }.Concat(Enumerable.Range(1, 4).Where(n => n != count))
@@ -363,6 +409,80 @@ public static class EditorCatalog
             });
         }
         return new JsonObject { ["title"] = "Hellpod Payload", ["key"] = "c|pods", ["flat"] = racks.Count == 1, ["plain"] = false, ["prefix"] = null, ["subs"] = subs };
+    }
+
+    // Whole-row copies (HD2R Editor's G-109 Urchin "Pulse explosion"; mappings/references.json "rowCopies"): a choice of the
+    // explosions whose settings replace the item's own explosion row (SDK 9 copy_row), its own first. Kept in the editor's
+    // settings with the arm swaps and pods: applied live, back at every boot, the host's in co-op.
+    static JsonObject? RowCopyCategory(StatsItem item)
+    {
+        var copies = ReferenceData.Value["rowCopies"]?.AsArray().Select(r => r!)
+            .Where(r => r["target"]!.GetValue<string>() == item.Name && item.Parts.Any(p => p.Category == r["category"]!.GetValue<string>())).ToList() ?? [];
+        if (copies.Count == 0) return null;
+        var labels = ReferenceData.Value["explosions"]!.AsArray().Select(x => x!).GroupBy(x => x["type"]!.GetValue<long>())
+            .ToDictionary(g => g.Key, g => g.First()["label"]!.GetValue<string>());
+        var rows = new JsonArray();
+        foreach (var c in copies)
+        {
+            var own = c["default"]!.GetValue<long>();
+            var options = new JsonArray();
+            foreach (var type in new[] { own }.Concat(c["allowed"]!.AsArray().Select(a => a!.GetValue<long>()).Where(t => t != own)))
+                options.Add(new JsonObject
+                {
+                    ["value"] = type, ["label"] = labels.GetValueOrDefault(type, $"Explosion {type}") + (type == own ? " (vanilla)" : ""),
+                    ["note"] = type == own ? "its own explosion" : $"explosion {type}'s settings copied over its own (loads its packages first)",
+                });
+            rows.Add(new JsonObject
+            {
+                ["label"] = c["label"]!.DeepClone(), ["cat"] = c["category"]!.DeepClone(), ["target"] = item.Name, ["key"] = c["key"]!.DeepClone(),
+                ["choice"] = "rowcopy", ["component"] = c["table"]!.DeepClone(), ["ref"] = c["row"]!.GetValue<long>().ToString(CultureInfo.InvariantCulture),
+                ["offset"] = c["offset"]!.DeepClone(), ["size"] = c["size"]!.DeepClone(), ["type"] = "u32", ["min"] = null, ["max"] = null, ["unit"] = null,
+                ["applies"] = "now", ["verified"] = false, ["unverified"] = true, ["shared"] = true, ["also"] = null,
+                ["link"] = $"rowcopy|{item.Name}|{c["key"]}", ["options"] = options,
+                ["note"] = "Another explosion's whole settings over its own (HD2R Editor's pulse explosion): its explosion rows show the copy. Untested in game.",
+            });
+            if (Hd2rData.Value["keys"]!.AsObject().Select(k => k.Key).FirstOrDefault(k => k.Split('|')[1] == item.Name && k.EndsWith(":" + c["key"]!.GetValue<string>(), StringComparison.Ordinal)) is { } pulseKey)
+            {
+                rows[^1]!["hd2r"] = new JsonArray(pulseKey);
+                rows[^1]!["hd2rKind"] = "explosion"; /* a preset's {ref: explosion, id}: its type, the option's value */
+            }
+        }
+        var part = new JsonObject { ["title"] = "Pulse", ["key"] = "c|rowcopy|Pulse", ["fold"] = false, ["prefix"] = null, ["rows"] = rows };
+        return new JsonObject { ["title"] = "Pulse", ["key"] = "c|rowcopy", ["flat"] = true, ["plain"] = false, ["prefix"] = null, ["subs"] = new JsonArray(part) };
+    }
+
+    // The armory's displayed armor penetration (HD2R Editor's "Displayed armor penetration"): which of the armor
+    // penetration traits the weapon's trait slots hold (LoadoutEntryComponentData +12, five u32), or none. A choice row
+    // after the slots; the editor stages a pick on the slot that holds one, else the first empty slot, so the trait
+    // slots stay what is saved. HD2R presets' AP label key is on it (by the AP trait's name), for every weapon.
+    static readonly (string Name, uint Trait)[] ApTraits =
+        [("light", 300892437), ("medium", 3085090887), ("heavy", 658390125), ("light_anti_tank", 612466998), ("anti_tank", 3591930318)];
+
+    static JsonObject? ApLabelRow(JsonObject trait5, StatsItem item, StatsRow row)
+    {
+        if (row.Part.Category != "weapons" || trait5["values"] is not JsonArray values) return null;
+        var labels = values.Select(v => v!).ToDictionary(v => v["value"]!.GetValue<double>(), v => v["label"]!.GetValue<string>());
+        var options = new JsonArray(new JsonObject { ["value"] = 0, ["label"] = "None", ["note"] = "no armor penetration trait in the armory" });
+        foreach (var (name, trait) in ApTraits)
+            if (labels.TryGetValue(trait, out var label))
+                options.Add(new JsonObject { ["value"] = trait, ["label"] = label, ["note"] = "the armory shows " + label.ToLowerInvariant() });
+        var target = row.Part.Target;
+        var family = StatsSchema.Current.Targets["weapons"][target].Slot == "support" ? "sp|" + target + "|sw|" : "pw|" + target + "|";
+        var key = Hd2rData.Value["slots"]!.AsObject().Where(s => s.Value!["kind"]!.GetValue<string>() == "ap" && s.Key.Split('|')[1] == target)
+            .Select(s => s.Key).FirstOrDefault() ?? family + "presentation.armor_penetration";
+        var names = new JsonObject { ["none"] = 0 };
+        foreach (var (name, trait) in ApTraits) names[name] = trait;
+        return new JsonObject
+        {
+            ["label"] = "Displayed armor penetration", ["cat"] = trait5["cat"]!.DeepClone(), ["target"] = target, ["key"] = "presentation.armor_penetration",
+            ["choice"] = "aplabel", ["component"] = trait5["component"]?.DeepClone(), ["ref"] = trait5["ref"]?.DeepClone(), ["offset"] = 12, ["type"] = "u32",
+            ["min"] = null, ["max"] = null, ["unit"] = null, ["applies"] = trait5["applies"]!.DeepClone(), ["verified"] = false, ["unverified"] = true,
+            ["shared"] = trait5["shared"]!.DeepClone(), ["also"] = null, ["link"] = "aplabel|" + target,
+            ["note"] = "What armor penetration the armory shows (a trait only: the weapon's damage decides the real one). Written into the trait slot that holds one, else the first empty slot.",
+            ["options"] = options,
+            ["hd2r"] = new JsonArray(key), ["hd2rKind"] = "ap",
+            ["hd2rAs"] = new JsonObject { [key] = new JsonObject { ["kind"] = "ap", ["slot"] = 0, ["names"] = names } },
+        };
     }
 
     // The mount slot holding a vehicle page's weapon part (its own weapon), or null.
@@ -407,13 +527,15 @@ public static class EditorCatalog
                 {
                     ["title"] = g.Title, ["key"] = key + "|" + g.Title, ["fold"] = fold,
                     ["prefix"] = fold ? FoldPrefix(g.Title, g.Rows[0].Label) : null,
-                    ["rows"] = new JsonArray(g.Rows.Select(r => (JsonNode)WithMount(Row(r, item), item, r)).ToArray()),
+                    ["rows"] = new JsonArray(g.Rows.SelectMany(r => r.Key == "presentation.traits.5" && ApLabelRow(Row(r, item), item, r) is { } ap
+                        ? new JsonNode[] { WithMount(Row(r, item), item, r), ap } : [WithMount(Row(r, item), item, r)]).ToArray()),
                 });
             }
             page.Add(new JsonObject { ["title"] = section.Title, ["key"] = key, ["flat"] = flat, ["plain"] = plain, ["prefix"] = prefix, ["subs"] = subs });
         }
         if (MountCategory(item) is { } mountCategory)
             page.Insert(page.Count > 0 && page[0]!["key"]!.GetValue<string>() == "c|call_in" ? 1 : 0, mountCategory);
+        if (RowCopyCategory(item) is { } rowCopyCategory) page.Add(rowCopyCategory);
         if (PodCategory(item) is { } podCategory)
         {
             var callIn = page.Select((c, i) => (c, i)).FirstOrDefault(p => p.c!["key"]!.GetValue<string>() == "c|call_in");
@@ -548,6 +670,14 @@ public static class EditorCatalog
         }
         if (f.Note != null && json["note"] == null) json["note"] = f.Note;
         Hd2rKeys(json, row, item);
+        if (row.Key == "charge.overcharge_explosion" && Unaddressed(row.Part.Target, "|charge.overcharge_explosion") is { } over)
+            Hd2rNamed(json, over, "named", (JsonObject)ParityData.Value["overchargeExplosions"]!.DeepClone()); /* a preset names the weapon */
+        if (row.Part.Category == "weapons" && DefaultReload.Value.GetValueOrDefault(row.Part.Target) == row.Key &&
+            Unaddressed(row.Part.Target, "|reload.default_magazine") is { } reload)
+        {
+            if (json["hd2r"] is not JsonArray list) { json["hd2r"] = list = []; json["hd2rKind"] = "number"; }
+            list.Add(reload);
+        }
         var swap = SwapKey(row.Part);
         if (swap != null && row.Key != swap && f.Kind is "ProjectileSettings" or "DamageInfo" or "ExplosionSettings" or "StatusEffectSettings" or "ArcSettings" &&
             MainRound(row.Key))

@@ -46,8 +46,9 @@ def main():
                                      for z in w['zones'] + [{'key': 'tuning', 'fields': w['tuning']}] for f in z['fields']}} for name, w in melee.items()}
     # the fields HellForge adds where the catalogues stop short (mappings/parity.json, added to the schema at load)
     parity = json.loads((ROOT / 'mappings/parity.json').read_text(encoding='utf-8'))['targets']
-    parity_extra = {f'{category}/{name}': {'fields': {f['key']: {'kind': f['kind'], 'component': f['component'], 'offset': f['offset'],
-                                                                 'storage': f['storage'], 'name': f['label']} for f in fields}}
+    parity_extra = {f'{category}/{name}': {'fields': {f['key']: dict({'kind': f['kind'], 'component': f['component'], 'offset': f['offset'],
+                                                                      'storage': f['storage'], 'name': f['label']}, **({'ref': f['ref']} if f.get('ref') else {}))
+                                                      for f in fields}}
                     for category, targets in parity.items() for name, fields in targets.items()}
     for cat, targets in list(schema['targets'].items()) + [('vehicles-extra', extra), ('melee-extra', melee_extra), ('parity-extra', parity_extra)]:
         for tname, t in targets.items():

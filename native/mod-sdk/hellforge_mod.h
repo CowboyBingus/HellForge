@@ -854,6 +854,11 @@ typedef struct HfApi
      * HF_APPLIES_RESPAWN (a weapon takes an attachment's value when it is next built, expected) or 0 (the mod's log says
      * why). Check hf->size before calling. */
     int (*set_stat)(HfMod* mod, const HfStat* stat, const HfValue* value, uint32_t flags);
+    /* A settings row's bytes (offset, size) replaced live by another row's of the same table, for the rows HellForge's
+     * catalogue names (mappings/references.json "rowCopies": the G-109 Urchin's pulse explosion), from the donors listed
+     * there, once the donor's packages are resident (it waits for them). from 0 puts the row's own bytes back. Returns
+     * HF_APPLIES_NOW or 0 (the mod's log says why). Check hf->size before calling. */
+    int (*copy_row)(HfMod* mod, const char* table, uint64_t row, uint64_t from, uint32_t offset, uint32_t size);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

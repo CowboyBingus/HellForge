@@ -209,6 +209,7 @@ bool Load(const std::wstring& path, Catalog* out, std::string* error)
                                     if (const Value* also = r.Find("also"); also != nullptr && also->kind == Value::Array)
                                         for (const Value& a : also->items) row.also.push_back(a.Str());
                                     row.choice = r.GetString("choice");
+                                    row.size = (uint32_t)r.GetNumber("size", 0);
                                     row.note = r.GetString("note");
                                     if (const Value* options = r.Find("options"); options != nullptr && options->kind == Value::Array)
                                         for (const Value& o : options->items)

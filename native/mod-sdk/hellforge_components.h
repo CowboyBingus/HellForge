@@ -1999,7 +1999,9 @@ typedef struct HfWeaponCharge
     uint8_t _unknown_BA[2];
     uint32_t burst_shots;                        /* +0xBC Shots per charge (shots) (unverified) [respawn?] */
     float burst_interval_seconds;                /* +0xC0 Delay between shots of one charge (seconds) (unverified) [respawn?] */
-    uint8_t _unknown_C4[12];
+    uint8_t _unknown_C4[4];
+    uint32_t overcharge_explosion;               /* +0xC8 Overcharge explosion (unverified) [respawn?] */
+    uint8_t _unknown_CC[4];
     float overcharge_limit_seconds;              /* +0xD0 Overcharge hold limit (seconds) (unverified) [respawn?] */
     uint8_t _unknown_D4[4];
 } HfWeaponCharge;
@@ -2034,6 +2036,8 @@ HF_ASSERT_OFFSET(HfWeaponCharge, burst_shots, 188);
 #define HF_TYPE_WeaponCharge_burst_shots HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponCharge, burst_interval_seconds, 192);
 #define HF_TYPE_WeaponCharge_burst_interval_seconds HF_TYPE_F32
+HF_ASSERT_OFFSET(HfWeaponCharge, overcharge_explosion, 200);
+#define HF_TYPE_WeaponCharge_overcharge_explosion HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponCharge, overcharge_limit_seconds, 208);
 #define HF_TYPE_WeaponCharge_overcharge_limit_seconds HF_TYPE_F32
 

@@ -8,6 +8,20 @@
     {
      "kind": "component",
      "component": "HealthComponentData",
+     "offset": 280,
+     "storage": "u32",
+     "min": 0,
+     "max": 10,
+     "unit": "armor_class",
+     "shared": false,
+     "key": "entity.armor",
+     "label": "Drone armor",
+     "resource": "0xA0FF2F9A0CA6992A",
+     "record": 299
+    },
+    {
+     "kind": "component",
+     "component": "HealthComponentData",
      "resource": "0xA0FF2F9A0CA6992A",
      "record": 299,
      "unit": "multiplier",
@@ -62,6 +76,20 @@
     }
    ],
    "AX/ARC-3 K-9": [
+    {
+     "kind": "component",
+     "component": "HealthComponentData",
+     "offset": 280,
+     "storage": "u32",
+     "min": 0,
+     "max": 10,
+     "unit": "armor_class",
+     "shared": false,
+     "key": "entity.armor",
+     "label": "Drone armor",
+     "resource": "0x4B071633584E4594",
+     "record": 304
+    },
     {
      "kind": "component",
      "component": "HealthComponentData",
@@ -122,6 +150,20 @@
     {
      "kind": "component",
      "component": "HealthComponentData",
+     "offset": 280,
+     "storage": "u32",
+     "min": 0,
+     "max": 10,
+     "unit": "armor_class",
+     "shared": false,
+     "key": "entity.armor",
+     "label": "Drone armor",
+     "resource": "0x979E9BC6D48D1FC6",
+     "record": 297
+    },
+    {
+     "kind": "component",
+     "component": "HealthComponentData",
      "resource": "0x979E9BC6D48D1FC6",
      "record": 297,
      "unit": "multiplier",
@@ -176,6 +218,20 @@
     }
    ],
    "AX/LAS-5 Rover": [
+    {
+     "kind": "component",
+     "component": "HealthComponentData",
+     "offset": 280,
+     "storage": "u32",
+     "min": 0,
+     "max": 10,
+     "unit": "armor_class",
+     "shared": false,
+     "key": "entity.armor",
+     "label": "Drone armor",
+     "resource": "0x5BEEC97F4C7F4AE9",
+     "record": 303
+    },
     {
      "kind": "component",
      "component": "HealthComponentData",
@@ -236,6 +292,20 @@
     {
      "kind": "component",
      "component": "HealthComponentData",
+     "offset": 280,
+     "storage": "u32",
+     "min": 0,
+     "max": 10,
+     "unit": "armor_class",
+     "shared": false,
+     "key": "entity.armor",
+     "label": "Drone armor",
+     "resource": "0xB9BAF571FC8F9959",
+     "record": 298
+    },
+    {
+     "kind": "component",
+     "component": "HealthComponentData",
      "resource": "0xB9BAF571FC8F9959",
      "record": 298,
      "unit": "multiplier",
@@ -289,7 +359,66 @@
      "note": "Used while \"Own explosion share\" is Yes (3.4e38 = unset: the default share)"
     }
    ],
+   "B-100 Portable Hellbomb": [
+    {
+     "key": "deposit.capacity",
+     "label": "Capacity",
+     "kind": "component",
+     "component": "DepositComponentData",
+     "resource": "0x9ACE8638421ABC8E",
+     "record": 9,
+     "offset": 0,
+     "storage": "u32",
+     "min": 1,
+     "max": 1023,
+     "unit": null,
+     "shared": false
+    },
+    {
+     "key": "deposit.start_amount",
+     "label": "Amount at call-in",
+     "kind": "component",
+     "component": "DepositComponentData",
+     "resource": "0x9ACE8638421ABC8E",
+     "record": 9,
+     "offset": 4,
+     "storage": "i32",
+     "min": -1,
+     "max": 1023,
+     "unit": null,
+     "shared": false
+    },
+    {
+     "key": "deposit.refill_amount",
+     "label": "Restored by resupply",
+     "kind": "component",
+     "component": "DepositComponentData",
+     "resource": "0x9ACE8638421ABC8E",
+     "record": 9,
+     "offset": 8,
+     "storage": "u32",
+     "min": 0,
+     "max": 1023,
+     "unit": null,
+     "shared": false
+    }
+   ],
    "SH-20 Ballistic Shield Backpack": [
+    {
+     "kind": "component",
+     "component": "HealthComponentData",
+     "offset": 280,
+     "storage": "u32",
+     "min": 0,
+     "max": 10,
+     "unit": "armor_class",
+     "shared": false,
+     "key": "entity.armor",
+     "label": "Armor (default zone)",
+     "resource": "0x967ED15E0BAE363B",
+     "record": 292,
+     "note": "The default zone's: hits on the shield plate use its zone's armor (Damage zones)"
+    },
     {
      "kind": "component",
      "component": "HealthComponentData",
@@ -347,6 +476,48 @@
     }
    ],
    "SH-51 Directional Shield": [
+    {
+     "kind": "component",
+     "component": "HealthComponentData",
+     "offset": 280,
+     "storage": "u32",
+     "min": 0,
+     "max": 10,
+     "unit": "armor_class",
+     "shared": false,
+     "key": "entity.armor",
+     "label": "Armor (backpack)",
+     "resource": "0xA4E796F84801B40A",
+     "record": 296
+    },
+    {
+     "kind": "component",
+     "component": "HealthComponentData",
+     "offset": 280,
+     "storage": "u32",
+     "min": 0,
+     "max": 10,
+     "unit": "armor_class",
+     "shared": false,
+     "key": "entity.armor_deployed",
+     "label": "Armor (deployed shield)",
+     "resource": "0xB56FA3F5510000AB",
+     "record": 80
+    },
+    {
+     "key": "shield.radius",
+     "label": "Shield radius",
+     "kind": "component",
+     "component": "ShieldComponentData",
+     "resource": "0xB56FA3F5510000AB",
+     "record": 4,
+     "offset": 0,
+     "storage": "f32",
+     "min": 0.1,
+     "max": 100,
+     "unit": "meters",
+     "shared": false
+    },
     {
      "kind": "component",
      "component": "HealthComponentData",
@@ -11033,6 +11204,23 @@
      "shared": false
     }
    ],
+   "A/G-16 Gatling Sentry / weapon": [
+    {
+     "key": "attack.primary.projectile",
+     "label": "Projectile",
+     "kind": "component",
+     "component": "ProjectileWeaponComponentData",
+     "resource": "0xEF85D6CF58E31D70",
+     "record": 153,
+     "offset": 0,
+     "storage": "u32",
+     "min": null,
+     "max": null,
+     "unit": null,
+     "shared": false,
+     "ref": "projectile"
+    }
+   ],
    "A/GM-17 Gas Mortar Sentry / weapon": [
     {
      "key": "weapon.sway",
@@ -11319,6 +11507,23 @@
      "max": null,
      "unit": "degrees_per_second",
      "shared": false
+    }
+   ],
+   "A/MG-43 Machine Gun Sentry / weapon": [
+    {
+     "key": "attack.primary.projectile",
+     "label": "Projectile",
+     "kind": "component",
+     "component": "ProjectileWeaponComponentData",
+     "resource": "0x37CDE43876BA26BB",
+     "record": 156,
+     "offset": 0,
+     "storage": "u32",
+     "min": null,
+     "max": null,
+     "unit": null,
+     "shared": false,
+     "ref": "projectile"
     }
    ],
    "A/MLS-4X Rocket Sentry / weapon": [
@@ -11743,6 +11948,33 @@
      "max": 1000,
      "unit": "factor",
      "shared": true
+    }
+   ],
+   "AR/GL-21 One-Two": [
+    {
+     "key": "weapon.default_fire_mode",
+     "label": "Default fire mode",
+     "kind": "component",
+     "component": "WeaponDataComponentData",
+     "resource": "0xA955C4EA6F6D4203",
+     "record": 273,
+     "offset": 144,
+     "storage": "u32",
+     "min": null,
+     "max": null,
+     "unit": null,
+     "shared": false,
+     "options": [
+      [
+       1,
+       "Automatic"
+      ],
+      [
+       2,
+       "Single"
+      ]
+     ],
+     "note": "Its own fire modes only, reordered (HD2R Editor: the weapon's other fire-control data is not understood)"
     }
    ],
    "AR/GL-21 One-Two / underbarrel": [
@@ -14376,6 +14608,22 @@
      "max": 60,
      "unit": "seconds",
      "shared": false
+    },
+    {
+     "key": "charge.overcharge_explosion",
+     "label": "Overcharge explosion",
+     "kind": "component",
+     "component": "WeaponChargeComponentData",
+     "resource": "0xFB3A19078694708A",
+     "record": 4,
+     "offset": 200,
+     "storage": "u32",
+     "min": null,
+     "max": null,
+     "unit": null,
+     "shared": false,
+     "ref": "explosion",
+     "note": "Set off when the overcharge time is reached, while \"Explode when the overcharge time is reached\" is Yes"
     }
    ],
    "PLAS-15 Loyalist": [
@@ -14594,6 +14842,76 @@
      "max": 60,
      "unit": "seconds",
      "shared": false
+    },
+    {
+     "key": "charge.overcharge_explosion",
+     "label": "Overcharge explosion",
+     "kind": "component",
+     "component": "WeaponChargeComponentData",
+     "resource": "0xAA69A60D74A3EC54",
+     "record": 5,
+     "offset": 200,
+     "storage": "u32",
+     "min": null,
+     "max": null,
+     "unit": null,
+     "shared": false,
+     "ref": "explosion",
+     "note": "Set off when the overcharge time is reached, while \"Explode when the overcharge time is reached\" is Yes"
+    }
+   ],
+   "PLAS-39 Accelerator Rifle": [
+    {
+     "key": "charge.overcharge_explosion",
+     "label": "Overcharge explosion",
+     "kind": "component",
+     "component": "WeaponChargeComponentData",
+     "resource": "0x30061F91AF477F5E",
+     "record": 2,
+     "offset": 200,
+     "storage": "u32",
+     "min": null,
+     "max": null,
+     "unit": null,
+     "shared": false,
+     "ref": "explosion",
+     "note": "Set off when the overcharge time is reached, while \"Explode when the overcharge time is reached\" is Yes"
+    }
+   ],
+   "PLAS-45 Epoch": [
+    {
+     "key": "charge.overcharge_explosion",
+     "label": "Overcharge explosion",
+     "kind": "component",
+     "component": "WeaponChargeComponentData",
+     "resource": "0xE8D5F49AD7780E54",
+     "record": 8,
+     "offset": 200,
+     "storage": "u32",
+     "min": null,
+     "max": null,
+     "unit": null,
+     "shared": false,
+     "ref": "explosion",
+     "note": "Set off when the overcharge time is reached, while \"Explode when the overcharge time is reached\" is Yes"
+    }
+   ],
+   "RS-422 Railgun": [
+    {
+     "key": "charge.overcharge_explosion",
+     "label": "Overcharge explosion",
+     "kind": "component",
+     "component": "WeaponChargeComponentData",
+     "resource": "0x2E9D0BDC48B09E60",
+     "record": 9,
+     "offset": 200,
+     "storage": "u32",
+     "min": null,
+     "max": null,
+     "unit": null,
+     "shared": false,
+     "ref": "explosion",
+     "note": "Set off when the overcharge time is reached, while \"Explode when the overcharge time is reached\" is Yes"
     }
    ],
    "SMG/FLAM-34 Stoker / underbarrel": [
@@ -15372,5 +15690,12 @@
     }
    ]
   }
+ },
+ "overchargeExplosions": {
+  "PLAS-101 Purifier": 269,
+  "PLAS-15 Loyalist": 269,
+  "PLAS-39 Accelerator Rifle": 326,
+  "PLAS-45 Epoch": 321,
+  "RS-422 Railgun": 326
  }
 }

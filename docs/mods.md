@@ -940,6 +940,13 @@ deferred edits, with the same checks and conflict reports.
   editor keeps the choices with the arm swaps, so they come back at every boot and follow the host in co-op. Untested
   in game except the pairs HD2Runtime proved (a Grenade Box in the Resupply and MG-43 pods, an EAT-700 in the
   Stalwart's slot 2), which the picker marks.
+- **Whole-row copies** (SDK 9, `copy_row(mod, table, row, from, offset, size)`): a settings row's bytes replaced live by
+  another row's of the same table, for the rows `mappings/references.json` `rowCopies` names (HD2R Editor's G-109 Urchin
+  pulse explosion: one of three explosions' settings over its own), from the donors listed there, once the donor's
+  packages are resident; `from` 0 puts its own bytes back. The in-game editor keeps the choice with the arm swaps.
+- **The armory's displayed armor penetration** is a choice row after a weapon's trait slots (HD2R Editor's): None or an
+  armor penetration trait, written into the slot that holds one, else the first empty slot. It changes only what the
+  armory shows; the weapon's damage decides its real armor penetration.
 - **Co-op** (docs/multiplayer.md step 5): a joiner plays with the host's Local Stats, including attachments, the
   in-game editor's mod content values, its arm swaps (Mounted Weapons) and hellpod payloads, and its editor shows the
   host's changes read-only. Armor perks stay solo only.

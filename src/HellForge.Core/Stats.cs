@@ -323,7 +323,14 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
                             f.GetProperty("storage").GetString()!, Number(f, "min"), Number(f, "max"), Text(f, "unit"), true, true)
                         { Order = order++, Section = section };
                         if (!taken.Add(field.Hd2rAddress)) continue;
-                        target.Fields[$"attachment.{slot.Name}.{slug}.{f.GetProperty("id").GetString()!["attachment.".Length..]}"] = field;
+                        // the field id past "attachment." (a magazine's "attachment.capacity"); a heatsink's own ids ("heat.cool_per_second")
+                        // whole. Before 0.1.6 those lost their first 11 characters too, so two heat fields shared a key ("er_second",
+                        // the last one kept): those keys stay aliases, so values saved under them still load.
+                        var fieldId = f.GetProperty("id").GetString()!;
+                        var key = $"attachment.{slot.Name}.{slug}.{(fieldId.StartsWith("attachment.", StringComparison.Ordinal) ? fieldId["attachment.".Length..] : fieldId)}";
+                        target.Fields[key] = field;
+                        if (!fieldId.StartsWith("attachment.", StringComparison.Ordinal) && fieldId.Length > "attachment.".Length)
+                            target.Aliases[$"attachment.{slot.Name}.{slug}.{fieldId["attachment.".Length..]}"] = key;
                     }
                 }
         }

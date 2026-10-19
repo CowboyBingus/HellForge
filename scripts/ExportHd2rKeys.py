@@ -177,6 +177,8 @@ class Row:
 
 NUMERIC = ("number", "integer")
 # Row kinds whose values HellForge's stats file cannot hold (it takes one number per field).
+# Field ids of rows with no native address that HellForge's editor holds another way (keys kept as "unaddressed")
+LINKED = {"payload.entity", "mount.weapon", "charge.overcharge_explosion", "attachment.reload_duration", "stratagem.calldown_code"}
 NOT_SCALAR = {"traits", "fire_modes", "fire_rates", "ap_label", "boolean", "enum", "code", "mount", "beam", "pickup", "overcharge"}
 VALUE_KINDS = {"boolean": "boolean", "status_reference": "status", "fire_mode_set": "fire_modes", "fire_rate_set": "fire_rates",
                "trait_set": "traits", "armor_penetration_label": "ap_label", "enum": "enum",
@@ -258,7 +260,11 @@ def build_rows(D):
                 if isinstance(f.get("currentDefault"), (int, float)) and f.get("editable") is not False:
                     addr = ("EntityDelta", "%s:%s" % (f.get("component"), f.get("componentOffset")), f.get("dataOffset"))
                     add(base + "mag:%s|%s" % (aid, fid), "pw", fid, "number", addr, [("weapons", name)], "attachment")
-        add(base + "reload.default_magazine", "pw", "attachment.reload_duration", "number", None, [("weapons", name)], "attachment")
+        # (catalog.lua player_rows 757-768: only where its reload timing names a default magazine with a reload duration)
+        default = next((f["reloadTiming"]["defaultAttachment"] for f in lst(entry.get("fields")) if isinstance(f.get("reloadTiming"), dict)
+                        and isinstance(f["reloadTiming"].get("defaultAttachment"), str)), None)
+        if default and "attachment.reload_duration" in dct(dct(dct(AT["attachments"]).get(default)).get("fields")):
+            add(base + "reload.default_magazine", "pw", "attachment.reload_duration", "number", None, [("weapons", name)], "attachment")
 
     # catalogue explosions (catalogue_explosion_rows 1032-1073; explosion_field_row 1013): '<eid>|<field id>'
     def explosion_rows(prefix, family, owner, roles, home):
@@ -529,7 +535,7 @@ def main(runtime, out):
     rows = build_rows(D)
     refs = json.loads((REPO / "mappings" / "references.json").read_text(encoding="utf-8"))
     ammo = {a["weapon"]: a for a in refs["ammunition"]}
-    keys, slots = {}, {}
+    keys, slots, unaddressed = {}, {}, {}
     for key, row in sorted(rows.items()):
         addr = row.addr
         if row.note == "ammunition":  # the default ammunition's entity delta (references.json)
@@ -542,6 +548,10 @@ def main(runtime, out):
             slots[key] = dict(s_, field=row.sid)
             continue
         if a is None or row.kind in NOT_SCALAR:
+            # rows HellForge holds another way (pod payloads, arm swaps, the overcharge explosion, the default magazine's
+            # reload, call-in codes): their keys, kind and field id, for EditorCatalog to put on those rows
+            if row.sid in LINKED:
+                unaddressed[key] = [row.kind, row.sid]
             continue
         keys[key] = [a, row.kind, row.sid]
     # armor perk values and the passive choices (mappings/armor-perks.json; the editor's settings)
@@ -563,7 +573,7 @@ def main(runtime, out):
             explosions.setdefault(alias, explosions[eid])
     data = {"format": 1, "editor": "1.0.0", "runtime": "0.40.0",
             "note": "HD2R Editor preset keys and the bytes they edit (scripts/ExportHd2rKeys.py from HD2Runtime 0.40.1).",
-            "keys": keys, "slots": slots, "outputs": outputs, "explosions": explosions}
+            "keys": keys, "slots": slots, "unaddressed": unaddressed, "outputs": outputs, "explosions": explosions}
     Path(out).write_text(json.dumps(data, indent=0, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     kinds = collections.Counter(v[1] for v in keys.values())
     print("%d keys (%s), %d slot keys (%s), %d outputs, %d explosions" % (len(keys), ", ".join("%s %d" % kv for kv in sorted(kinds.items())), len(slots),

@@ -40,7 +40,7 @@ static class EditorTests
                         foreach (var r in p["rows"]!.AsArray().Select(r => r!.AsObject()))
                         {
                             rows++;
-                            if (r["choice"] != null) { check(r["options"]!.AsArray().Count > (r["choice"]!.GetValue<string>() is "mount" or "podcount" ? 1 : 20), "A choice row lists its options."); continue; }
+                            if (r["choice"] != null) { check(r["options"]!.AsArray().Count > (r["choice"]!.GetValue<string>() is "mount" or "podcount" or "aplabel" or "rowcopy" ? 1 : 20), "A choice row lists its options."); continue; }
                             var field = StatsSchema.Current.Targets[r["cat"]!.GetValue<string>()][r["target"]!.GetValue<string>()].Fields[r["key"]!.GetValue<string>()];
                             var component = r["component"]?.GetValue<string>();
                             if (component == null) { check(field.Kind is "EntityDelta" or "StatusMultiplier" && r["applies"]!.GetValue<string>() == "boot", "Only entity deltas and status multipliers are saved without live editing."); continue; }
@@ -135,9 +135,10 @@ static class EditorTests
             JsonNode Row(string key) => rows.Single(r => r["key"]!.GetValue<string>() == key);
             var trait1 = Row("presentation.traits.1");
             check(trait1["values"]!.AsArray().Count > 10 && trait1["hd2rAs"]!["pw|AR-23 Liberator|presentation.traits"]!["kind"]!.GetValue<string>() == "slots" &&
-                trait1["hd2rAs"]!["pw|AR-23 Liberator|presentation.armor_penetration"]!["kind"]!.GetValue<string>() == "ap" &&
+                trait1["hd2rAs"]!["pw|AR-23 Liberator|presentation.armor_penetration"] == null &&
+                Row("presentation.armor_penetration")["hd2rAs"]!["pw|AR-23 Liberator|presentation.armor_penetration"]!["kind"]!.GetValue<string>() == "ap" &&
                 Row("presentation.traits.2")["hd2rAs"]!["pw|AR-23 Liberator|presentation.traits"]!["slot"]!.GetValue<int>() == 1,
-                "Trait slots carry the preset's traits list (slot by slot) and its armor penetration label (the slot holding it).");
+                "Trait slots carry the preset's traits list (slot by slot); its armor penetration label is the displayed armor penetration row's.");
             check(Row("fire_mode.modes.1")["values"] != null && Row("weapon.fire_rate")["hd2rAs"]!["pw|AR-23 Liberator|fire_rate.modes"]!["slot"]!.GetValue<int>() == 1,
                 "Fire mode slots pick from the weapon's modes; the fire rate is the rate list's middle slot.");
             var magazine = rows.First(r => r["key"]!.GetValue<string>().StartsWith("attachment.magazine.", StringComparison.Ordinal));

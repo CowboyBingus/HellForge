@@ -101498,6 +101498,1284 @@
 "field": "stratagem.rearm_pool"
 }
 },
+"unaddressed": {
+"pw|AR-23 Liberator|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|AR-23A Liberator Carbine|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|AR-23C Liberator Concussive|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|AR-23P Liberator Penetrator|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|AR-59 Suppressor|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|MP-98 Knight|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|P-19 Redeemer|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|P-2 Peacemaker|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|R-4 Hyena|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|R-72 Censor|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|SG-225 Breaker|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|SG-225IE Breaker Incendiary|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|SG-225SP Breaker Spray&Pray|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|SMG-203 Gallant|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|SMG-37 Defender|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|SMG-72 Pummeler|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"pw|SMG/FLAM-34 Stoker|reload.default_magazine": [
+"number",
+"attachment.reload_duration"
+],
+"rs|Resupply|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"rs|Resupply|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"rs|Resupply|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"rs|Resupply|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"rs|Resupply|st|stratagem:resupply:resupply_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|AX/AR-23 Guard Dog|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/AR-23 Guard Dog|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/AR-23 Guard Dog|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/AR-23 Guard Dog|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/AR-23 Guard Dog|st|stratagem:ax_ar_23_guard_dog:ax_ar_23_guard_dog_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|AX/ARC-3 K-9|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/ARC-3 K-9|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/ARC-3 K-9|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/ARC-3 K-9|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/ARC-3 K-9|st|stratagem:ax_arc_3_k_9:ax_arc_3_k_9_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|AX/FLAM-75 Hot Dog|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/FLAM-75 Hot Dog|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/FLAM-75 Hot Dog|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/FLAM-75 Hot Dog|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/FLAM-75 Hot Dog|st|stratagem:ax_flam_75_hot_dog:ax_flam_75_hot_dog_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|AX/LAS-5 Rover|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/LAS-5 Rover|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/LAS-5 Rover|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/LAS-5 Rover|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/LAS-5 Rover|st|stratagem:ax_las_5_rover:ax_las_5_rover_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|AX/TX-13 Dog Breath|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/TX-13 Dog Breath|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/TX-13 Dog Breath|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/TX-13 Dog Breath|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|AX/TX-13 Dog Breath|st|stratagem:ax_tx_13_dog_breath:ax_tx_13_dog_breath_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|B-1 Supply Pack|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|B-1 Supply Pack|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|B-1 Supply Pack|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|B-1 Supply Pack|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|B-1 Supply Pack|st|stratagem:b_1_supply_pack:b_1_supply_pack_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|B-100 Portable Hellbomb|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|B-100 Portable Hellbomb|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|B-100 Portable Hellbomb|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|B-100 Portable Hellbomb|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|B-100 Portable Hellbomb|st|stratagem:b_100_portable_hellbomb:b_100_portable_hellbomb_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|LIFT-182 Warp Pack|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-182 Warp Pack|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-182 Warp Pack|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-182 Warp Pack|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-182 Warp Pack|st|stratagem:lift_182_warp_pack:lift_182_warp_pack_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|LIFT-850 Jump Pack|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-850 Jump Pack|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-850 Jump Pack|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-850 Jump Pack|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-850 Jump Pack|st|stratagem:lift_850_jump_pack:lift_850_jump_pack_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|LIFT-860 Hover Pack|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-860 Hover Pack|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-860 Hover Pack|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-860 Hover Pack|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|LIFT-860 Hover Pack|st|stratagem:lift_860_hover_pack:lift_860_hover_pack_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|SH-20 Ballistic Shield Backpack|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-20 Ballistic Shield Backpack|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-20 Ballistic Shield Backpack|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-20 Ballistic Shield Backpack|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-20 Ballistic Shield Backpack|st|stratagem:sh_20_ballistic_shield_backpack:sh_20_ballistic_shield_backpack_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|SH-32 Shield Generator Pack|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-32 Shield Generator Pack|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-32 Shield Generator Pack|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-32 Shield Generator Pack|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-32 Shield Generator Pack|st|stratagem:sh_32_shield_generator_pack:sh_32_shield_generator_pack_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sb|SH-51 Directional Shield|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-51 Directional Shield|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-51 Directional Shield|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-51 Directional Shield|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sb|SH-51 Directional Shield|st|stratagem:sh_51_directional_shield:sh_51_directional_shield_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|40-K Meltagun|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|40-K Meltagun|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|40-K Meltagun|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|40-K Meltagun|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|40-K Meltagun|st|stratagem:40_k_meltagun:40_k_meltagun_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|AC-8 Autocannon|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|AC-8 Autocannon|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|AC-8 Autocannon|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|AC-8 Autocannon|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|AC-8 Autocannon|st|stratagem:ac_8_autocannon:ac_8_autocannon_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|APW-1 Anti-Materiel Rifle|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|APW-1 Anti-Materiel Rifle|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|APW-1 Anti-Materiel Rifle|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|APW-1 Anti-Materiel Rifle|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|APW-1 Anti-Materiel Rifle|st|stratagem:apw_1_anti_materiel_rifle:apw_1_anti_materiel_rifle_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|ARC-3 Arc Thrower|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|ARC-3 Arc Thrower|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|ARC-3 Arc Thrower|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|ARC-3 Arc Thrower|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|ARC-3 Arc Thrower|st|stratagem:arc_3_arc_thrower:arc_3_arc_thrower_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|B/FLAM-80 Cremator|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|B/FLAM-80 Cremator|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|B/FLAM-80 Cremator|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|B/FLAM-80 Cremator|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|B/FLAM-80 Cremator|st|stratagem:b_flam_80_cremator:b_flam_80_cremator_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|B/MD C4 Pack|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|B/MD C4 Pack|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|B/MD C4 Pack|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|B/MD C4 Pack|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|B/MD C4 Pack|st|stratagem:b_md_c4_pack:b_md_c4_pack_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|CQC-1 One True Flag|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-1 One True Flag|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-1 One True Flag|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-1 One True Flag|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-1 One True Flag|st|stratagem:cqc_1_one_true_flag:cqc_1_one_true_flag_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|CQC-20 Breaching Hammer|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-20 Breaching Hammer|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-20 Breaching Hammer|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-20 Breaching Hammer|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-20 Breaching Hammer|st|stratagem:cqc_20_breaching_hammer:cqc_20_breaching_hammer_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|CQC-9 Defoliation Tool|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-9 Defoliation Tool|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-9 Defoliation Tool|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-9 Defoliation Tool|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|CQC-9 Defoliation Tool|st|stratagem:cqc_9_defoliation_tool:cqc_9_defoliation_tool_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|EAT-17 Expendable Anti-Tank|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-17 Expendable Anti-Tank|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-17 Expendable Anti-Tank|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-17 Expendable Anti-Tank|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-17 Expendable Anti-Tank|st|stratagem:eat_17_expendable_anti_tank:eat_17_expendable_anti_tank_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|EAT-411 Leveller|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-411 Leveller|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-411 Leveller|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-411 Leveller|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-411 Leveller|st|stratagem:eat_411_leveller:eat_411_leveller_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|EAT-700 Expendable Napalm|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-700 Expendable Napalm|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-700 Expendable Napalm|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-700 Expendable Napalm|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|EAT-700 Expendable Napalm|st|stratagem:eat_700_expendable_napalm:eat_700_expendable_napalm_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|FAF-14 Spear|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|FAF-14 Spear|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|FAF-14 Spear|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|FAF-14 Spear|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|FAF-14 Spear|st|stratagem:faf_14_spear:faf_14_spear_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|FLAM-40 Flamethrower|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|FLAM-40 Flamethrower|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|FLAM-40 Flamethrower|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|FLAM-40 Flamethrower|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|FLAM-40 Flamethrower|st|stratagem:flam_40_flamethrower:flam_40_flamethrower_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|GL-21 Grenade Launcher|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-21 Grenade Launcher|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-21 Grenade Launcher|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-21 Grenade Launcher|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-21 Grenade Launcher|st|stratagem:gl_21_grenade_launcher:gl_21_grenade_launcher_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|GL-28 Belt-Fed Grenade Launcher|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-28 Belt-Fed Grenade Launcher|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-28 Belt-Fed Grenade Launcher|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-28 Belt-Fed Grenade Launcher|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-28 Belt-Fed Grenade Launcher|st|stratagem:gl_28_belt_fed_grenade_launcher:gl_28_belt_fed_grenade_launcher_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|GL-52 De-Escalator|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-52 De-Escalator|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-52 De-Escalator|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-52 De-Escalator|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|GL-52 De-Escalator|st|stratagem:gl_52_de_escalator:gl_52_de_escalator_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|GR-8 Recoilless Rifle|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|GR-8 Recoilless Rifle|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|GR-8 Recoilless Rifle|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|GR-8 Recoilless Rifle|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|GR-8 Recoilless Rifle|st|stratagem:gr_8_recoilless_rifle:gr_8_recoilless_rifle_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|LAS-98 Laser Cannon|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|LAS-98 Laser Cannon|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|LAS-98 Laser Cannon|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|LAS-98 Laser Cannon|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|LAS-98 Laser Cannon|st|stratagem:las_98_laser_cannon:las_98_laser_cannon_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|LAS-99 Quasar Cannon|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|LAS-99 Quasar Cannon|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|LAS-99 Quasar Cannon|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|LAS-99 Quasar Cannon|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|LAS-99 Quasar Cannon|st|stratagem:las_99_quasar_cannon:las_99_quasar_cannon_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|M-1000 Maxigun|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|M-1000 Maxigun|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|M-1000 Maxigun|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|M-1000 Maxigun|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|M-1000 Maxigun|st|stratagem:m_1000_maxigun:m_1000_maxigun_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|M-105 Stalwart|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|M-105 Stalwart|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|M-105 Stalwart|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|M-105 Stalwart|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|M-105 Stalwart|st|stratagem:m_105_stalwart:m_105_stalwart_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|MG-206 Heavy Machine Gun|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|MG-206 Heavy Machine Gun|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|MG-206 Heavy Machine Gun|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|MG-206 Heavy Machine Gun|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|MG-206 Heavy Machine Gun|st|stratagem:mg_206_heavy_machine_gun:mg_206_heavy_machine_gun_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|MG-43 Machine Gun|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|MG-43 Machine Gun|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|MG-43 Machine Gun|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|MG-43 Machine Gun|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|MG-43 Machine Gun|st|stratagem:mg_43_machine_gun:mg_43_machine_gun_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|MGX-42 Bullet Storm|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|MGX-42 Bullet Storm|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|MGX-42 Bullet Storm|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|MGX-42 Bullet Storm|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|MGX-42 Bullet Storm|st|stratagem:mgx_42_bullet_storm:mgx_42_bullet_storm_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|MLS-4X Commando|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|MLS-4X Commando|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|MLS-4X Commando|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|MLS-4X Commando|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|MLS-4X Commando|st|stratagem:mls_4x_commando:mls_4x_commando_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|MS-11 Solo Silo|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|MS-11 Solo Silo|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|MS-11 Solo Silo|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|MS-11 Solo Silo|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|MS-11 Solo Silo|st|stratagem:ms_11_solo_silo:ms_11_solo_silo_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|PLAS-45 Epoch|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|PLAS-45 Epoch|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|PLAS-45 Epoch|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|PLAS-45 Epoch|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|PLAS-45 Epoch|st|stratagem:plas_45_epoch:plas_45_epoch_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|PLAS-45 Epoch|sw|charge.overcharge_explosion": [
+"overcharge",
+"charge.overcharge_explosion"
+],
+"sp|RL-77 Airburst Rocket Launcher|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|RL-77 Airburst Rocket Launcher|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|RL-77 Airburst Rocket Launcher|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|RL-77 Airburst Rocket Launcher|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|RL-77 Airburst Rocket Launcher|st|stratagem:rl_77_airburst_rocket_launcher:rl_77_airburst_rocket_launcher_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|RS-422 Railgun|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|RS-422 Railgun|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|RS-422 Railgun|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|RS-422 Railgun|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|RS-422 Railgun|st|stratagem:rs_422_railgun:rs_422_railgun_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|RS-422 Railgun|sw|charge.overcharge_explosion": [
+"overcharge",
+"charge.overcharge_explosion"
+],
+"sp|S-11 Speargun|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|S-11 Speargun|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|S-11 Speargun|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|S-11 Speargun|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|S-11 Speargun|st|stratagem:s_11_speargun:s_11_speargun_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|StA-X3 W.A.S.P. Launcher|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|StA-X3 W.A.S.P. Launcher|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|StA-X3 W.A.S.P. Launcher|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|StA-X3 W.A.S.P. Launcher|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|StA-X3 W.A.S.P. Launcher|st|stratagem:sta_x3_w_a_s_p_launcher:sta_x3_w_a_s_p_launcher_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"sp|TX-41 Sterilizer|pod|payload.slot_1": [
+"pickup",
+"payload.entity"
+],
+"sp|TX-41 Sterilizer|pod|payload.slot_2": [
+"pickup",
+"payload.entity"
+],
+"sp|TX-41 Sterilizer|pod|payload.slot_3": [
+"pickup",
+"payload.entity"
+],
+"sp|TX-41 Sterilizer|pod|payload.slot_4": [
+"pickup",
+"payload.entity"
+],
+"sp|TX-41 Sterilizer|st|stratagem:tx_41_sterilizer:tx_41_sterilizer_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/AC-8 Autocannon Sentry|stratagem:a_ac_8_autocannon_sentry:a_ac_8_autocannon_sentry_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/ARC-3 Tesla Tower|stratagem:a_arc_3_tesla_tower:a_arc_3_tesla_tower_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/FLAM-40 Flame Sentry|stratagem:a_flam_40_flame_sentry:a_flam_40_flame_sentry_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/G-16 Gatling Sentry|stratagem:a_g_16_gatling_sentry:a_g_16_gatling_sentry_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/GM-17 Gas Mortar Sentry|stratagem:a_gm_17_gas_mortar_sentry:a_gm_17_gas_mortar_sentry_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/LAS-98 Laser Sentry|stratagem:a_las_98_laser_sentry:a_las_98_laser_sentry_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/M-12 Mortar Sentry|stratagem:a_m_12_mortar_sentry:a_m_12_mortar_sentry_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/M-23 EMS Mortar Sentry|stratagem:a_m_23_ems_mortar_sentry:a_m_23_ems_mortar_sentry_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/MG-43 Machine Gun Sentry|stratagem:a_mg_43_machine_gun_sentry:a_mg_43_machine_gun_sentry_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|A/MLS-4X Rocket Sentry|stratagem:a_mls_4x_rocket_sentry:a_mls_4x_rocket_sentry_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|E/AT-12 Anti-Tank Emplacement|stratagem:e_at_12_anti_tank_emplacement:e_at_12_anti_tank_emplacement_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|E/GL-21 Grenadier Battlement|stratagem:e_gl_21_grenadier_battlement:e_gl_21_grenadier_battlement_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|E/MG-101 HMG Emplacement|stratagem:e_mg_101_hmg_emplacement:e_mg_101_hmg_emplacement_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Eagle 110mm Rocket Pods|stratagem:eagle_110mm_rocket_pods:eagle_110mm_rocket_pods_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Eagle 500kg Bomb|stratagem:eagle_500kg_bomb:eagle_500kg_bomb_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Eagle Airstrike|stratagem:eagle_airstrike:eagle_airstrike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Eagle Cluster Bomb|stratagem:eagle_cluster_bomb:eagle_cluster_bomb_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Eagle Gas Airstrike|stratagem:eagle_gas_airstrike:eagle_gas_airstrike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Eagle Napalm Airstrike|stratagem:eagle_napalm_airstrike:eagle_napalm_airstrike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Eagle Smoke Strike|stratagem:eagle_smoke_strike:eagle_smoke_strike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Eagle Strafing Run|stratagem:eagle_strafing_run:eagle_strafing_run_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|FX-12 Shield Generator Relay|stratagem:fx_12_shield_generator_relay:fx_12_shield_generator_relay_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|MD-17 Anti-Tank Mines|stratagem:md_17_anti_tank_mines:md_17_anti_tank_mines_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|MD-6 Anti-Personnel Minefield|stratagem:md_6_anti_personnel_minefield:md_6_anti_personnel_minefield_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|MD-8 Gas Mines|stratagem:md_8_gas_mines:md_8_gas_mines_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|MD-I4 Incendiary Mines|stratagem:md_i4_incendiary_mines:md_i4_incendiary_mines_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital 120mm HE Barrage|stratagem:orbital_120mm_he_barrage:orbital_120mm_he_barrage_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital 380mm HE Barrage|stratagem:orbital_380mm_he_barrage:orbital_380mm_he_barrage_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital Airburst Strike|stratagem:orbital_airburst_strike:orbital_airburst_strike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital EMS Strike|stratagem:orbital_ems_strike:orbital_ems_strike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital Gas Strike|stratagem:orbital_gas_strike:orbital_gas_strike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital Gatling Barrage|stratagem:orbital_gatling_barrage:orbital_gatling_barrage_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital Laser|stratagem:orbital_laser:orbital_laser_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital Napalm Barrage|stratagem:orbital_napalm_barrage:orbital_napalm_barrage_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital Precision Strike|stratagem:orbital_precision_strike:orbital_precision_strike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital Railcannon Strike|stratagem:orbital_railcannon_strike:orbital_railcannon_strike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital Smoke Strike|stratagem:orbital_smoke_strike:orbital_smoke_strike_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"st|Orbital Walking Barrage|stratagem:orbital_walking_barrage:orbital_walking_barrage_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|EXO-45 Patriot Exosuit|st|stratagem:exo_45_patriot_exosuit:exo_45_patriot_exosuit_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|EXO-45 Patriot Exosuit|vh|vehicle:exo-45-patriot-exosuit:exo-45-patriot-exosuit-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|EXO-45 Patriot Exosuit|vh|vehicle:exo-45-patriot-exosuit:exo-45-patriot-exosuit-mount-slot-1:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|EXO-49 Emancipator Exosuit|st|stratagem:exo_49_emancipator_exosuit:exo_49_emancipator_exosuit_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|EXO-49 Emancipator Exosuit|vh|vehicle:exo-49-emancipator-exosuit:exo-49-emancipator-exosuit-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|EXO-49 Emancipator Exosuit|vh|vehicle:exo-49-emancipator-exosuit:exo-49-emancipator-exosuit-mount-slot-1:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|EXO-51 Lumberer Exosuit|st|stratagem:exo_51_lumberer_exosuit:exo_51_lumberer_exosuit_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|EXO-51 Lumberer Exosuit|vh|vehicle:exo-51-lumberer-exosuit:exo-51-lumberer-exosuit-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|EXO-51 Lumberer Exosuit|vh|vehicle:exo-51-lumberer-exosuit:exo-51-lumberer-exosuit-mount-slot-1:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|EXO-55 Breakthrough Exosuit|st|stratagem:exo_55_breakthrough_exosuit:exo_55_breakthrough_exosuit_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|EXO-55 Breakthrough Exosuit|vh|vehicle:exo-55-breakthrough-exosuit:exo-55-breakthrough-exosuit-mount-slot-1:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|FRV (Super Earth variant)|vh|vehicle:frv-super-earth-variant:frv-super-earth-variant-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|GATER Oil Rig|vh|vehicle:gater-oil-rig:gater-oil-rig-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|M-102 Gunner FRV|st|stratagem:m_102_gunner_frv:m_102_gunner_frv_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|M-102 Gunner FRV|vh|vehicle:m-102-gunner-frv:m-102-gunner-frv-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|M-103 Supply FRV|st|stratagem:m_103_supply_frv:m_103_supply_frv_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|M-103 Supply FRV|vh|vehicle:m-103-supply-frv:m-103-supply-frv-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|M-104 Incinerator FRV|st|stratagem:m_104_incinerator_frv:m_104_incinerator_frv_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|M-104 Incinerator FRV|vh|vehicle:m-104-incinerator-frv:m-104-incinerator-frv-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|TD-110 Maelstrom|st|stratagem:td_110_maelstrom:td_110_maelstrom_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|TD-110 Maelstrom|vh|vehicle:td-110-maelstrom:td-110-maelstrom-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|TD-110 Maelstrom|vh|vehicle:td-110-maelstrom:td-110-maelstrom-mount-slot-2:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|TD-110 Maelstrom|vh|vehicle:td-110-maelstrom:td-110-maelstrom-mount-slot-3:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|TD-110 Maelstrom|vh|vehicle:td-110-maelstrom:td-110-maelstrom-mount-slot-4:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|TD-220 Bastion MK XVI|st|stratagem:td_220_bastion_mk_xvi:td_220_bastion_mk_xvi_stratagem:stratagem.calldown_code": [
+"code",
+"stratagem.calldown_code"
+],
+"ve|TD-220 Bastion MK XVI|vh|vehicle:td-220-bastion-mk-xvi:td-220-bastion-mk-xvi-mount-slot-0:mount.weapon": [
+"mount",
+"mount.weapon"
+],
+"ve|TD-220 Bastion MK XVI|vh|vehicle:td-220-bastion-mk-xvi:td-220-bastion-mk-xvi-mount-slot-1:mount.weapon": [
+"mount",
+"mount.weapon"
+]
+},
 "outputs": {
 "output/v1/projectile/a-gm-17-gas-mortar-sentry-projectile-342": 342,
 "output/v1/projectile/a-m-12-mortar-sentry-projectile-346": 346,
