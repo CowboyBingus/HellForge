@@ -56,9 +56,12 @@ controls) stay in each profile's `userdata\profiles\<name>\cloud\` instead of th
 normal game shares. Outside the folder there are only the network block
 and the optional shortcuts. To uninstall: Settings > Installation > **Uninstall HellForge** removes the network block and shortcuts, then deletes the folder (game copy, profiles, mods and all) once the launcher has closed. Start HellForge with `HellForge.exe` at the top of the folder. Running `HellForge-Setup.exe` on an existing
 installation updates the app and keeps the game, profiles and settings; Settings > Installation > Check and repair
-re-verifies the copy. Two mods are bundled, built: the in-game editor (F8) and the Hell Forge difficulty (level 11).
-Before each session they are put into `mods\hellforge-editor` and `mods\hell-forge` (switch either off on the Mods
-page), the editor's icons and fonts and the difficulty's icon made from the copy. No game files are distributed: every player's setup copies from their own Steam installation
+re-verifies the copy. Three mods are bundled, built: the in-game editor (F8), the Hell Forge difficulty (level 11) and
+Vanilla Plus (small fixes: beacons stick, hellpods steer over any ground, reinforcements drop at their beacon). Before
+each session they are put into `mods\hellforge-editor`, `mods\hell-forge` and `mods\vanilla-plus` (switch any off on
+the Mods page), the editor's icons and fonts and the difficulty's icon made from the copy. An update brings their new
+versions; an older copy downloaded separately (another folder, or a zip) is moved to `mods-retired` and the editor's
+settings and presets come along. No game files are distributed: every player's setup copies from their own Steam installation
 or from Steam's own download of the supported build on their account. An installation keeps working when Steam later
 updates the normal game: sessions check the copy, not the Steam installation. Each HellForge release targets one HD2 build.
 

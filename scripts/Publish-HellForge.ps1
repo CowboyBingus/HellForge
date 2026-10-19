@@ -107,17 +107,22 @@ if(-not(Test-Path -LiteralPath (Join-Path $sdkTarget 'examples/mods/stratagem-co
 if($LASTEXITCODE){throw 'Building the in-game editor failed.'}
 $editorTarget=New-Item -ItemType Directory (Join-Path $staging 'bundled-mods/hellforge-editor')
 foreach($name in @('hellforge_editor.dll','hellforge-mod.json','icon.png','imgui-LICENSE.txt')){Copy-Item -LiteralPath (Join-Path $project ('artifacts/editor/hellforge-editor/'+$name)) -Destination $editorTarget}
-# Difficulty 11 (Hell Forge), bundled built so players need no compiler: its tracked files but src/ (the source ships in
-# app/sdk/examples/mods/hell-forge), and the DLL. Its icon is made by its data spec from each player's game copy.
-$hellForge=Join-Path $project 'examples/mods/hell-forge'
-& (Join-Path $PSScriptRoot 'Build-Mod.ps1') $hellForge|Out-Null
-$hellForgeTarget=Join-Path $staging 'bundled-mods/hell-forge'
-foreach($file in @(git -C $project ls-files 'examples/mods/hell-forge')|Where-Object {$_ -notlike 'examples/mods/hell-forge/src/*'}){
-    $destination=Join-Path $hellForgeTarget $file.Substring('examples/mods/hell-forge/'.Length)
-    New-Item -ItemType Directory (Split-Path -Parent $destination) -Force|Out-Null
-    Copy-Item -LiteralPath (Join-Path $project $file) -Destination $destination
+# Difficulty 11 (Hell Forge) and Vanilla Plus, bundled built so players need no compiler: their tracked files but src/ (the
+# source ships in app/sdk/examples/mods/<name>), and the DLL their manifest names. Hell Forge's icon is made by its data
+# spec from each player's game copy.
+foreach($name in @('hell-forge','vanilla-plus')){
+    $mod=Join-Path $project ('examples/mods/'+$name)
+    & (Join-Path $PSScriptRoot 'Build-Mod.ps1') $mod|Out-Null
+    $target=Join-Path $staging ('bundled-mods/'+$name)
+    foreach($file in @(git -C $project ls-files ('examples/mods/'+$name))|Where-Object {$_ -notlike ('examples/mods/'+$name+'/src/*')}){
+        $destination=Join-Path $target $file.Substring(('examples/mods/'+$name+'/').Length)
+        New-Item -ItemType Directory (Split-Path -Parent $destination) -Force|Out-Null
+        Copy-Item -LiteralPath (Join-Path $project $file) -Destination $destination
+    }
+    $dll=(Get-Content -Raw -LiteralPath (Join-Path $mod 'hellforge-mod.json')|ConvertFrom-Json).code.dll
+    if(-not(Test-Path -LiteralPath (Join-Path $mod $dll))){throw ('Building the bundled mod '+$name+' failed.')}
+    Copy-Item -LiteralPath (Join-Path $mod $dll) -Destination $target
 }
-Copy-Item -LiteralPath (Join-Path $hellForge 'hell_forge.dll') -Destination $hellForgeTarget
 Copy-Item -LiteralPath (Join-Path $project 'data/profile-templates.json') -Destination $staging
 Copy-Item -LiteralPath (Join-Path $project 'data/progression-data.json') -Destination $staging
 # "HellForge.exe" at the top of the installation starts app\launcher\HellForge.Launcher.exe (native/launcher-stub).
