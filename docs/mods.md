@@ -930,9 +930,19 @@ deferred edits, with the same checks and conflict reports.
   else the game's). It returns `HF_APPLIES_RESPAWN`: the game reads an attachment's delta when it builds the weapon, so
   a change is expected from the next respawn or re-equip (not yet confirmed in game). The in-game editor applies its
   attachment and magazine changes this way (and saves them, so they hold from every boot).
+- **Hellpod payloads** (HD2R Editor's pod rows): a support weapon's, backpack's, expendable's or Resupply's call-in
+  page has a Hellpod Payload category: what its pod opens with in slots 1 to 4 (`HellpodRack.slot0_item` ..
+  `slot3_item`, a `"pickup"` reference: the slot's vanilla item, nothing, or a pickup HD2Runtime reviewed, by kind:
+  support weapons, backpacks, ammo, stims, grenades, supplies; `mappings/references.json` `pickups`, `podRacks`) and how
+  many of them spawn (`spawn_count`, 1 to 4). The loader writes a pickup once its package is resident, and only over
+  the slot's vanilla item or a pickup it put there; a mod's own racks are not checked. Pods called in after the change
+  carry it; a rack several call-ins share (the EAT-17's and the Surplus EAT booster's) changes for all of them. The
+  editor keeps the choices with the arm swaps, so they come back at every boot and follow the host in co-op. Untested
+  in game except the pairs HD2Runtime proved (a Grenade Box in the Resupply and MG-43 pods, an EAT-700 in the
+  Stalwart's slot 2), which the picker marks.
 - **Co-op** (docs/multiplayer.md step 5): a joiner plays with the host's Local Stats, including attachments, the
-  in-game editor's mod content values and its arm swaps (Mounted Weapons), and its editor shows the host's changes
-  read-only. Armor perks stay solo only.
+  in-game editor's mod content values, its arm swaps (Mounted Weapons) and hellpod payloads, and its editor shows the
+  host's changes read-only. Armor perks stay solo only.
 
 ### Game events (SDK 7)
 

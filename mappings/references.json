@@ -15,8 +15,10 @@
     "0x10A7605527187EF5": "packages/generated/loadout/jet_rifle",
     "0x11BBDF8CE39E5FC5": "packages/generated/loadout/rocket_turret",
     "0x12CE4BC7CDDAF51C": "packages/generated/loadout/mine_launcher_tank",
+    "0x15EB7241C3616351": "packages/generated/loadout/recoilless_rifle_backpack",
     "0x1721EEE4581A9C54": "packages/generated/loadout/zipper_grenade",
     "0x1B006880AC88D1CD": "packages/generated/loadout/caustic_dart_gun",
+    "0x1DFE6F7A3C7EBEFB": "packages/generated/loadout/hover_backpack",
     "0x1E33CC1600FF38F3": "packages/generated/loadout/eagle_airstrike",
     "0x1E6C958B95568DD7": "packages/generated/loadout/orbital_stun",
     "0x20BDEC2A51065E1F": "packages/content/gen_icbm (the Launch ICBM objective: its launch sounds)",
@@ -31,23 +33,34 @@
     "0x28812689506A3E9C": "packages/generated/loadout/remote_explosives",
     "0x2947AFE42093062F": "packages/generated/loadout/mini_missile_silo",
     "0x2A5298E1C2F70C82": "packages/generated/loadout/pistol_nacho",
+    "0x2A9FB8F5D0576EAE": "packages/generated/loadout/arc_thrower",
     "0x2CB3F69AB9BC1297": "packages/generated/loadout/sticky_stun_grenade",
     "0x2F1147605182C6AB": "packages/generated/loadout/at_explosive_grenade",
     "0x2FE755E42B659F64": "packages/generated/loadout/assault_shotgun_incendiary",
+    "0x31894C33C4ED1E2A": "packages/generated/loadout/shotgun_doublebarrel",
+    "0x32CB44321DA1B5A0": "packages/generated/loadout/drone_laser_rifle_backpack",
     "0x335A97FA3774906E": "packages/generated/loadout/mine_launcher_incendiary",
     "0x346D785D6CA13FF4": "packages/generated/loadout/hellbomb_backpack",
     "0x351506BB55187CF9": "packages/generated/loadout/sniper_rifle_helghast",
+    "0x35F4CA4FA00D380A": "packages/generated/loadout/drone_gas_projector_backpack",
     "0x3752BFA96CAD0109": "packages/generated/loadout/bug_thumper",
+    "0x39DDD2E6F131C873": "packages/generated/loadout/melee_sledge_hammer",
     "0x3A49B4448EAA94FE": "packages/generated/loadout/laser_rifle",
     "0x3C14455D53DB72FE": "unnamed loadout package of TED-63 Dynamite (detonation) explosion",
+    "0x3E78581FDAB81A73": "packages/generated/loadout/jumppack_backpack",
     "0x40F2A2CE5C20418F": "packages/generated/loadout/assault_rifle_helghast",
     "0x44DD33AF0EF2B0D1": "packages/generated/loadout/shotgun_nacho",
     "0x4666692B63185121": "packages/generated/loadout/mortar_turret_staticfield",
     "0x4709331E1A3C3AC9": "packages/generated/loadout/assault_rifle_whisper",
+    "0x47B43A883CAAE42C": "packages/generated/loadout/energy_shield_backpack",
+    "0x49875503E219E80D": "packages/generated/loadout/automatic_cannon_backpack",
+    "0x49DE16E1343250E4": "packages/generated/loadout/survival_shovel",
     "0x49F1972458F7CCEC": "packages/generated/loadout/assault_rifle_grenadier",
     "0x4B0DBC466E9DBCA1": "unnamed loadout package of TD-220 Bastion MK XVI attach_tank_gun weapon",
+    "0x4D4C26C04A220CAA": "packages/generated/loadout/ammo_rack",
     "0x4E381ABCE2D425E8": "packages/generated/loadout/eagle_missile",
     "0x4FEE9CC13C0B4CEC": "packages/generated/loadout/grenade_launcher_tactical",
+    "0x519980A75EBD50AD": "packages/generated/loadout/ammo_backpack",
     "0x530BB611A14B6CE3": "unnamed loadout package of FAF-14 Spear (impact) explosion",
     "0x534C2C49CA10D168": "unnamed loadout package of TD-110 Maelstrom attach_tank_gun weapon",
     "0x543FF1FF0BD82B44": "packages/generated/loadout/flashbang",
@@ -70,18 +83,24 @@
     "0x6DB0C562C2BC10B3": "packages/generated/loadout/laser_rifle_long",
     "0x70D708E5FD627493": "packages/generated/loadout/harpoon_gun",
     "0x71D9EA5D656B09B8": "packages/generated/loadout/mortar_turret_gas",
+    "0x731ACEC30A1A6FAC": "packages/generated/loadout/medic_backpack",
+    "0x750605CFC0173701": "packages/generated/loadout/chemgun",
     "0x7580E5AE368440AE": "packages/generated/loadout/frag_grenade",
     "0x77214A2DEC1D0518": "packages/generated/loadout/stun_gun_mount",
     "0x784671F2B3A4DA79": "packages/generated/loadout/flamethrower",
     "0x7D72A031B0B3C618": "packages/generated/loadout/orbital_gatling_barrage",
     "0x7DE417DB7552D9FC": "packages/generated/loadout/combat_walker_breacher",
     "0x7F37DB9B767844C2": "packages/generated/loadout/railgun",
+    "0x80FEA3C0A4B22FFB": "packages/generated/loadout/ammo_box",
+    "0x819BB56E51AC28C8": "packages/generated/loadout/health_pack",
     "0x82751A054BDFD075": "packages/generated/loadout/assault_rifle_karbin",
     "0x82DCD83D81A385F3": "packages/generated/loadout/laser_pistol",
+    "0x82EC28278BF9B79A": "packages/generated/loadout/drone_flamethrower_backpack",
     "0x8C5A99A9A40D5B8D": "packages/generated/loadout/mortar_turret",
     "0x8F295B4D04C3A06C": "packages/generated/loadout/lmg_stalwart",
     "0x902C54AFB4ED396F": "packages/generated/loadout/heavy_mg",
     "0x933148104D23A322": "packages/generated/loadout/pump_shotgun_trench",
+    "0x93FA804787551C15": "packages/generated/loadout/directional_energy_shield_backpack",
     "0x9494C346E564D15F": "packages/generated/loadout/smg_helghast",
     "0x94EAEAFFD878DD6D": "packages/generated/loadout/smg_solvent",
     "0x9514615D563612F1": "packages/generated/loadout/pistol_shark",
@@ -93,23 +112,29 @@
     "0x9BFA7EB1324C29A5": "unnamed objective package (effect) of the Cyborg Production Unit explosion",
     "0x9CEED8AE1331D7BF": "packages/generated/loadout/volley_gun",
     "0xA13286AE8FF3B593": "unnamed loadout package of TD-220 Bastion MK XVI attach_tank_gun_mg weapon",
+    "0xA14F1A98C80575AF": "packages/generated/loadout/drone_assault_rifle_backpack",
     "0xA275324AE43DFD50": "packages/generated/loadout/smg_flamer",
     "0xA4946425B2C70017": "packages/generated/loadout/mine_launcher",
     "0xA66D7CF238070CA7": "packages/generated/loadout/battle_rifle",
     "0xA7B23B55209766AE": "packages/generated/loadout/plasma_blaster",
+    "0xAAA4485C0B8A76ED": "packages/generated/loadout/shoulder_mounted_camera",
     "0xAE4F2E79B546847C": "packages/generated/loadout/energy_weapon_shark",
     "0xB2C627B3BA7E0C0A": "unnamed loadout package of M-1000 Maxigun Backpack",
     "0xB2D139F78A2E2120": "packages/generated/loadout/impact_incendiary_grenade",
     "0xB3983AA88D96FA0A": "packages/generated/loadout/molotov_grenade",
     "0xB47514AE19A494F0": "packages/generated/loadout/magnum_pistol",
+    "0xB75F652BED19144A": "packages/generated/loadout/expendable_machinegun",
     "0xB779A2F9D0928E03": "packages/generated/loadout/cricket_pistol",
     "0xBA40A2814D01BDA0": "packages/generated/loadout/crossbow_greyfax",
     "0xBBA76437A1C00C1E": "unnamed loadout package of B/MD C4 Pack (detonation) explosion",
     "0xBD90B4FCCB70622C": "packages/generated/loadout/smoke_grenade",
+    "0xBE6C260FADCB8719": "packages/generated/loadout/drone_mg_backpack",
     "0xBF35E874AC3A3B5A": "packages/generated/loadout/orbital_smoke",
     "0xBFE4D006CC25A01E": "packages/generated/loadout/eagle_rocket",
     "0xC0052E5B38E18C33": "packages/generated/loadout/laser_guided_missile_launcher",
+    "0xC024A2E8AE639757": "packages/generated/loadout/machinegun",
     "0xC0C7278D9F015EE7": "packages/generated/loadout/orbital_walking_barrage",
+    "0xC40E3B3FA79052EC": "packages/generated/loadout/melee_flag",
     "0xC46CF24278594A7D": "packages/generated/loadout/assault_rifle_patriot",
     "0xC51F160470B34AE3": "packages/generated/loadout/plasma_rifle",
     "0xC5A05D09369D0670": "packages/generated/loadout/assault_shotgun",
@@ -127,14 +152,18 @@
     "0xDDCEA5FDD4071767": "packages/generated/loadout/arc_grenade",
     "0xDE456F55554ABB56": "packages/generated/loadout/eagle_napalm",
     "0xDE96CD7CC69628BC": "packages/generated/loadout/lat_oneshot",
+    "0xDF16F5C644EDC2B1": "unnamed loadout package of B/FLAM-80 Cremator Backpack",
     "0xDFB81F9917285965": "packages/generated/loadout/sticky_grenade",
     "0xE0807831D6F456C8": "packages/generated/loadout/jet_rifle_phoenix",
     "0xE0D35FE7CE80E3F0": "packages/generated/loadout/smg_nacho",
+    "0xE12F82D7C0C7BC63": "packages/generated/loadout/air_burst_rocket_backpack",
     "0xE566E3AAF90DB459": "packages/generated/loadout/pump_shotgun",
+    "0xE62AB45BAD7F6CA3": "packages/generated/loadout/guard_dog_stun_backpack",
     "0xE72D3E9B05C3DB0B": "packages/generated/loadout/combat_walker_obsidian",
     "0xE829D44FB5653EC4": "packages/generated/loadout/battle_rifle_ceremonial",
     "0xEA6967F8565A2D76": "packages/generated/loadout/sniper_rifle",
     "0xEBC7888CF3886E91": "unnamed loadout package of AR-2 Coyote",
+    "0xEEEBC5FD26FE0F40": "packages/generated/loadout/melee_chainsaw_greatsword",
     "0xEF8EDB7B47D8F0B3": "packages/generated/loadout/mine_launcher_gas",
     "0xF111FA26003C0DE9": "packages/generated/loadout/shield_grenade",
     "0xF24CFA612428175B": "unnamed loadout package of GL-28 Belt-Fed Grenade Launcher Backpack",
@@ -148,6 +177,8 @@
     "0xFAE34ACB79502F53": "packages/generated/loadout/luring_mine",
     "0xFB0EBE9BDEE158D6": "packages/generated/loadout/samples_uranium",
     "0xFB48DE3E9D5F187C": "packages/generated/loadout/ammo_rack_mounted_turret",
+    "0xFC1A5BF2F3FF15DF": "packages/generated/loadout/ballistic_shield_backpack",
+    "0xFC5DA76769AFF15D": "packages/generated/loadout/grenade_box",
     "0xFD3EEF9A0329B2C2": "packages/generated/loadout/assault_rifle_nacho",
     "0xFDE8230C79315087": "packages/generated/loadout/expendable_massive_rocket_launcher",
     "0xFE3EF44300E4A1E2": "packages/generated/loadout/orbital_barrage"
@@ -7280,6 +7311,2344 @@
         "mounted-weapon/v1/unnamed-mounted-weapon/ffd507e9cb88f3b7"
       ],
       "untested": "HD2Runtime offers no swap for the shield arm: swapping it is untested (the shield may keep or lose its behaviour)."
+    }
+  ],
+  "pickups": {
+    "pickup/v1/ammo-box-pod/096e2d589f69f1ae": {
+      "resource": "0x49119612EB284A48",
+      "name": "Ammo Box (pod)",
+      "category": "ammo",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": null
+    },
+    "pickup/v1/ammo-box-world/e04feddc177e2ee8": {
+      "resource": "0x79CCFFD281E3F3A9",
+      "name": "Ammo Box (world)",
+      "category": "ammo",
+      "compatibility": "UNVERIFIED_REFERENCE",
+      "alwaysResident": false,
+      "package": "0x80FEA3C0A4B22FFB"
+    },
+    "pickup/v1/ax-ar-23-guard-dog/f2a968ff969e8851": {
+      "resource": "0x255EBC5767D7CEEC",
+      "name": "AX/AR-23 Guard Dog",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xBE6C260FADCB8719"
+    },
+    "pickup/v1/ax-arc-3-k-9/2701a5699bf3dca4": {
+      "resource": "0xC28DA712B12E3DFA",
+      "name": "AX/ARC-3 K-9",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xE62AB45BAD7F6CA3"
+    },
+    "pickup/v1/ax-flam-75-hot-dog/85f0ae4ff885e1ea": {
+      "resource": "0x3015626AA69F8D4D",
+      "name": "AX/FLAM-75 Hot Dog",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x82EC28278BF9B79A"
+    },
+    "pickup/v1/ax-las-5-rover/68f5082608688c3d": {
+      "resource": "0xAF9B683CCB6DDC02",
+      "name": "AX/LAS-5 Rover",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x32CB44321DA1B5A0"
+    },
+    "pickup/v1/ax-tx-13-dog-breath/9d3211c27232ca30": {
+      "resource": "0xBFFCB4CD971A8EDA",
+      "name": "AX/TX-13 Dog Breath",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x35F4CA4FA00D380A"
+    },
+    "pickup/v1/air-burst-rocket-backpack/004ba933ad94ea53": {
+      "resource": "0xE75CD68E858A12AC",
+      "name": "Air Burst Rocket Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xE12F82D7C0C7BC63"
+    },
+    "pickup/v1/automatic-cannon-backpack/2c5bd6b88a4e6c81": {
+      "resource": "0xE60AE045E0090F4C",
+      "name": "Automatic Cannon Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x49875503E219E80D"
+    },
+    "pickup/v1/b-1-supply-pack/6fa0c4410a746c16": {
+      "resource": "0x4EF9A47109239A58",
+      "name": "B-1 Supply Pack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x519980A75EBD50AD"
+    },
+    "pickup/v1/b-100-portable-hellbomb/89b274a08860b067": {
+      "resource": "0x9ACE8638421ABC8E",
+      "name": "B-100 Portable Hellbomb",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x346D785D6CA13FF4"
+    },
+    "pickup/v1/b-flam-80-cremator-backpack/d86ed0d6992bfe27": {
+      "resource": "0x43EB1C3C1A1860E0",
+      "name": "B/FLAM-80 Cremator Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xDF16F5C644EDC2B1"
+    },
+    "pickup/v1/ballistic-shield-backpack-small/aea030f4b0955a61": {
+      "resource": "0x5F9AEAC72B738298",
+      "name": "Ballistic Shield Backpack Small",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xFC1A5BF2F3FF15DF"
+    },
+    "pickup/v1/c4-charge-backpack/e8e6f1b9fa26429f": {
+      "resource": "0x2A18F81C44A26771",
+      "name": "C4 Charge Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xBBA76437A1C00C1E"
+    },
+    "pickup/v1/drone-assault-rifle-backpack/48653c862c4e062d": {
+      "resource": "0xE88A5AA58ABB9D81",
+      "name": "Drone Assault Rifle Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xA14F1A98C80575AF"
+    },
+    "pickup/v1/faf-missile-launcher-backpack/6cd4eb768919be66": {
+      "resource": "0x8EC3026B5F2E579A",
+      "name": "Faf Missile Launcher Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x530BB611A14B6CE3"
+    },
+    "pickup/v1/faf-missile-launcher-helghast-backpack/37483bdc55d2976e": {
+      "resource": "0xB8FEB0CC191C1EF3",
+      "name": "Faf Missile Launcher Helghast Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x5795E99A988D10B7"
+    },
+    "pickup/v1/gl-28-belt-fed-grenade-launcher-backpack/317c655c1db40880": {
+      "resource": "0xBB4B15B588F974FD",
+      "name": "GL-28 Belt-Fed Grenade Launcher Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xF24CFA612428175B"
+    },
+    "pickup/v1/lift-182-warp-pack/c91c7644668b03b9": {
+      "resource": "0xB49756795D9B0E68",
+      "name": "LIFT-182 Warp Pack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x68F670405A504F68"
+    },
+    "pickup/v1/lift-850-jump-pack/020db07511df1f84": {
+      "resource": "0x59C5CA839449B379",
+      "name": "LIFT-850 Jump Pack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x3E78581FDAB81A73"
+    },
+    "pickup/v1/lift-860-hover-pack/9a4849fb1c7c3653": {
+      "resource": "0x5EC80F4F1CDB66CF",
+      "name": "LIFT-860 Hover Pack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x1DFE6F7A3C7EBEFB"
+    },
+    "pickup/v1/m-1000-maxigun-backpack/8b639add8bbad44b": {
+      "resource": "0x056DE1C5E21E723E",
+      "name": "M-1000 Maxigun Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xB2C627B3BA7E0C0A"
+    },
+    "pickup/v1/medic-backpack-pod/20da54d45b013681": {
+      "resource": "0x0A55E504092B981D",
+      "name": "Medic Backpack (pod)",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x731ACEC30A1A6FAC"
+    },
+    "pickup/v1/recoilless-rifle-backpack/b2d8465b1b0ec213": {
+      "resource": "0x96DFC6542AA22980",
+      "name": "Recoilless Rifle Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x15EB7241C3616351"
+    },
+    "pickup/v1/sh-20-ballistic-shield-backpack/6d6ecaed72093bc3": {
+      "resource": "0x967ED15E0BAE363B",
+      "name": "SH-20 Ballistic Shield Backpack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xFC1A5BF2F3FF15DF"
+    },
+    "pickup/v1/sh-32-shield-generator-pack/435379ff1c10c0a6": {
+      "resource": "0x12C8D71AC3897A5C",
+      "name": "SH-32 Shield Generator Pack",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x47B43A883CAAE42C"
+    },
+    "pickup/v1/sh-51-directional-shield/9ed7190ede69bca8": {
+      "resource": "0xA4E796F84801B40A",
+      "name": "SH-51 Directional Shield",
+      "category": "backpack",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x93FA804787551C15"
+    },
+    "pickup/v1/grenade-box/5ad3b36a5d3adbb7": {
+      "resource": "0x97AF34FBF093409C",
+      "name": "Grenade Box",
+      "category": "grenade",
+      "compatibility": "UNVERIFIED_REFERENCE",
+      "alwaysResident": false,
+      "package": "0xFC5DA76769AFF15D"
+    },
+    "pickup/v1/health-pack-pod/0a29abd61fc5ed70": {
+      "resource": "0x3B8D16C646A729A8",
+      "name": "Health Pack (pod)",
+      "category": "stim",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": null
+    },
+    "pickup/v1/health-pack-world/2b29702c93c39319": {
+      "resource": "0xB4CA4C5B922F7965",
+      "name": "Health Pack (world)",
+      "category": "stim",
+      "compatibility": "UNVERIFIED_REFERENCE",
+      "alwaysResident": false,
+      "package": "0x819BB56E51AC28C8"
+    },
+    "pickup/v1/supply-box/d0e8fed8c01ceb1f": {
+      "resource": "0xA94913CA014F7579",
+      "name": "Supply Box",
+      "category": "supply",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": true,
+      "package": "0x4D4C26C04A220CAA"
+    },
+    "pickup/v1/40-k-meltagun/07b0e863dc2c82fa": {
+      "resource": "0x6CFCC7F8801A0266",
+      "name": "40-K Meltagun",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xAE4F2E79B546847C"
+    },
+    "pickup/v1/ac-8-autocannon/58e7cf0743e30df4": {
+      "resource": "0xA8CFFB316F0B5C5F",
+      "name": "AC-8 Autocannon",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x6AD7CC21015A5F85"
+    },
+    "pickup/v1/apw-1-anti-materiel-rifle/3e89c8aedaec3cdb": {
+      "resource": "0x89C5493E08CA4207",
+      "name": "APW-1 Anti-Materiel Rifle",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xEA6967F8565A2D76"
+    },
+    "pickup/v1/arc-3-arc-thrower/ffb100733bda6a6c": {
+      "resource": "0x96DE9CD50F7306E6",
+      "name": "ARC-3 Arc Thrower",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x2A9FB8F5D0576EAE"
+    },
+    "pickup/v1/b-flam-80-cremator/b56502291503ca52": {
+      "resource": "0x78A8185F63A70795",
+      "name": "B/FLAM-80 Cremator",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xDF16F5C644EDC2B1"
+    },
+    "pickup/v1/c4-charge-detonator/1e00f9e59579f80d": {
+      "resource": "0x51F50D6321F52F3D",
+      "name": "C4 Charge Detonator",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xBBA76437A1C00C1E"
+    },
+    "pickup/v1/cqc-1-one-true-flag/678572ccf8b0bfef": {
+      "resource": "0xB0F1B354BA1D38D8",
+      "name": "CQC-1 One True Flag",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xC40E3B3FA79052EC"
+    },
+    "pickup/v1/cqc-20-breaching-hammer/b1febc3085a29800": {
+      "resource": "0x5F3EC9BDA2BD8553",
+      "name": "CQC-20 Breaching Hammer",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x39DDD2E6F131C873"
+    },
+    "pickup/v1/cqc-72-entrenchment-tool/8fd0959b02006cb6": {
+      "resource": "0xE85E623F93F96FB3",
+      "name": "CQC-72 Entrenchment Tool",
+      "category": "support_weapon",
+      "compatibility": "UNVERIFIED_REFERENCE",
+      "alwaysResident": false,
+      "package": "0x49DE16E1343250E4"
+    },
+    "pickup/v1/cqc-9-defoliation-tool/6e14b35412a40c40": {
+      "resource": "0xBF4CFD2AEABFB5A4",
+      "name": "CQC-9 Defoliation Tool",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xEEEBC5FD26FE0F40"
+    },
+    "pickup/v1/cargo-backpack/aaf9f3f85632c55f": {
+      "resource": "0xC5BCBC1F64B68B9C",
+      "name": "Cargo Backpack",
+      "category": "support_weapon",
+      "compatibility": "UNVERIFIED_REFERENCE",
+      "alwaysResident": false,
+      "package": null
+    },
+    "pickup/v1/eat-17-expendable-anti-tank/aaf1f6d08281fd7a": {
+      "resource": "0x80932FA0ED6901D3",
+      "name": "EAT-17 Expendable Anti-Tank",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xDE96CD7CC69628BC"
+    },
+    "pickup/v1/eat-411-leveller/bbd78065df92b6eb": {
+      "resource": "0x7617642765AC38C7",
+      "name": "EAT-411 Leveller",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xFDE8230C79315087"
+    },
+    "pickup/v1/eat-700-expendable-napalm/bff4b15f31d35c94": {
+      "resource": "0xB2B5E0D185605F9E",
+      "name": "EAT-700 Expendable Napalm",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x5D68E55823ACD1BF"
+    },
+    "pickup/v1/faf-14-spear/eedf1b3a064edb4b": {
+      "resource": "0x25AA2FD4643CF4EE",
+      "name": "FAF-14 Spear",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x530BB611A14B6CE3"
+    },
+    "pickup/v1/flam-40-flamethrower/b4d4c9c15a828fde": {
+      "resource": "0x39AB99895147A3BF",
+      "name": "FLAM-40 Flamethrower",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x784671F2B3A4DA79"
+    },
+    "pickup/v1/gl-21-grenade-launcher/879bce2fb521f366": {
+      "resource": "0x02EECD0B1FA49630",
+      "name": "GL-21 Grenade Launcher",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x0089BBE3E284FCAA"
+    },
+    "pickup/v1/gl-28-belt-fed-grenade-launcher/9d0dcf93794536d9": {
+      "resource": "0x88C2D09AD85A7C9F",
+      "name": "GL-28 Belt-Fed Grenade Launcher",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xF24CFA612428175B"
+    },
+    "pickup/v1/gl-52-de-escalator/b19094bd6849cfb9": {
+      "resource": "0xFE3B29B2CFA63F9B",
+      "name": "GL-52 De-Escalator",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x4FEE9CC13C0B4CEC"
+    },
+    "pickup/v1/gr-8-recoilless-rifle/c3681a5430f8eaa8": {
+      "resource": "0x9F80D67A12A7E40F",
+      "name": "GR-8 Recoilless Rifle",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x6CA87637EAEB5923"
+    },
+    "pickup/v1/las-98-laser-cannon/c6013cfe0815b790": {
+      "resource": "0xD54B9505C0F72873",
+      "name": "LAS-98 Laser Cannon",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xCF1ACDE501CCFA1B"
+    },
+    "pickup/v1/las-99-quasar-cannon/ecf60a71601fe1ef": {
+      "resource": "0x35A61296619CC47E",
+      "name": "LAS-99 Quasar Cannon",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xCF1ACDE501CCFA1B"
+    },
+    "pickup/v1/m-1000-maxigun/39a8b72741b5c776": {
+      "resource": "0x43A58CB89CFA197C",
+      "name": "M-1000 Maxigun",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xB2C627B3BA7E0C0A"
+    },
+    "pickup/v1/m-105-stalwart/e173c48b267c2b90": {
+      "resource": "0xA6A735ACCB4A327F",
+      "name": "M-105 Stalwart",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x8F295B4D04C3A06C"
+    },
+    "pickup/v1/mg-206-heavy-machine-gun-pod/7e824a240e1c41ae": {
+      "resource": "0x2152D5147B0AC418",
+      "name": "MG-206 Heavy Machine Gun (pod)",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x902C54AFB4ED396F"
+    },
+    "pickup/v1/mg-206-heavy-machine-gun-world/0246d57537315684": {
+      "resource": "0x085C1EDB038EC24E",
+      "name": "MG-206 Heavy Machine Gun (world)",
+      "category": "support_weapon",
+      "compatibility": "UNVERIFIED_REFERENCE",
+      "alwaysResident": false,
+      "package": "0x902C54AFB4ED396F"
+    },
+    "pickup/v1/mg-43-machine-gun/7547c36fdd511b37": {
+      "resource": "0x11C27D3BABB38956",
+      "name": "MG-43 Machine Gun",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xC024A2E8AE639757"
+    },
+    "pickup/v1/mgx-42-bullet-storm/0dda469c7b4c3976": {
+      "resource": "0xB16C9D490AA59B77",
+      "name": "MGX-42 Bullet Storm",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xB75F652BED19144A"
+    },
+    "pickup/v1/mls-4x-commando/78d49586093f64c1": {
+      "resource": "0x5990123D142B16CB",
+      "name": "MLS-4X Commando",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xC0052E5B38E18C33"
+    },
+    "pickup/v1/medic-backpack-world/2c6175621ff0419c": {
+      "resource": "0x7CAE1BE9DBD3A56D",
+      "name": "Medic Backpack (world)",
+      "category": "support_weapon",
+      "compatibility": "UNVERIFIED_REFERENCE",
+      "alwaysResident": false,
+      "package": null
+    },
+    "pickup/v1/plas-45-epoch/f8f83fe309af696b": {
+      "resource": "0xE8D5F49AD7780E54",
+      "name": "PLAS-45 Epoch",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xA7B23B55209766AE"
+    },
+    "pickup/v1/rl-77-airburst-rocket-launcher/0eef82a268ed6eec": {
+      "resource": "0x26E40437EA275296",
+      "name": "RL-77 Airburst Rocket Launcher",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xF7646E79610C124D"
+    },
+    "pickup/v1/rs-422-railgun/d0d22102ee2cf244": {
+      "resource": "0x2E9D0BDC48B09E60",
+      "name": "RS-422 Railgun",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x7F37DB9B767844C2"
+    },
+    "pickup/v1/s-11-speargun/08be7186c997da64": {
+      "resource": "0x3828E2051AA9E897",
+      "name": "S-11 Speargun",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x70D708E5FD627493"
+    },
+    "pickup/v1/sg-88-break-action-shotgun/48a87a88282a580c": {
+      "resource": "0x52071F49263415E4",
+      "name": "SG-88 Break-Action Shotgun",
+      "category": "support_weapon",
+      "compatibility": "UNVERIFIED_REFERENCE",
+      "alwaysResident": false,
+      "package": "0x31894C33C4ED1E2A"
+    },
+    "pickup/v1/shoulder-mounted-camera/8818f67168ea7970": {
+      "resource": "0x372481E910C05A76",
+      "name": "Shoulder Mounted Camera",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0xAAA4485C0B8A76ED"
+    },
+    "pickup/v1/sta-x3-w-a-s-p-launcher/db5ac2b41c5e4fee": {
+      "resource": "0xCC786F6491FE7E65",
+      "name": "StA-X3 W.A.S.P. Launcher",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x5795E99A988D10B7"
+    },
+    "pickup/v1/tx-41-sterilizer/3e57897e03c89547": {
+      "resource": "0x88F61AFFF48AC8A4",
+      "name": "TX-41 Sterilizer",
+      "category": "support_weapon",
+      "compatibility": "SCHEMA_COMPATIBLE",
+      "alwaysResident": false,
+      "package": "0x750605CFC0173701"
+    }
+  },
+  "podRacks": [
+    {
+      "rack": "40-K Meltagun pod",
+      "resource": "0x4E52F730432CDB1E",
+      "record": 24,
+      "shared": false,
+      "consumers": [
+        "40-K Meltagun"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/40-k-meltagun/07b0e863dc2c82fa",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "AC-8 Autocannon pod",
+      "resource": "0x5F41C4DCABE95421",
+      "record": 4,
+      "shared": false,
+      "consumers": [
+        "AC-8 Autocannon"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/ac-8-autocannon/58e7cf0743e30df4",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/automatic-cannon-backpack/2c5bd6b88a4e6c81",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "pickup/v1/ac-8-autocannon/58e7cf0743e30df4",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "pickup/v1/automatic-cannon-backpack/2c5bd6b88a4e6c81",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "APW-1 Anti-Materiel Rifle pod",
+      "resource": "0x891ADA7D553B69DB",
+      "record": 59,
+      "shared": false,
+      "consumers": [
+        "APW-1 Anti-Materiel Rifle"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/apw-1-anti-materiel-rifle/3e89c8aedaec3cdb",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/apw-1-anti-materiel-rifle/3e89c8aedaec3cdb",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "ARC-3 Arc Thrower pod",
+      "resource": "0x4CF9D9B3F6813F52",
+      "record": 3,
+      "shared": false,
+      "consumers": [
+        "ARC-3 Arc Thrower"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/arc-3-arc-thrower/ffb100733bda6a6c",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/arc-3-arc-thrower/ffb100733bda6a6c",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "AX/AR-23 Guard Dog pod",
+      "resource": "0x0807D288AD22601B",
+      "record": 21,
+      "shared": false,
+      "consumers": [
+        "AX/AR-23 Guard Dog"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/ax-ar-23-guard-dog/f2a968ff969e8851",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/ax-ar-23-guard-dog/f2a968ff969e8851",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "AX/ARC-3 K-9 pod",
+      "resource": "0x72DB04413D4AB0F0",
+      "record": 22,
+      "shared": false,
+      "consumers": [
+        "AX/ARC-3 K-9"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/ax-arc-3-k-9/2701a5699bf3dca4",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/ax-arc-3-k-9/2701a5699bf3dca4",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "AX/FLAM-75 Hot Dog pod",
+      "resource": "0x41436D438139F786",
+      "record": 18,
+      "shared": false,
+      "consumers": [
+        "AX/FLAM-75 Hot Dog"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/ax-flam-75-hot-dog/85f0ae4ff885e1ea",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/ax-flam-75-hot-dog/85f0ae4ff885e1ea",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "AX/LAS-5 Rover pod",
+      "resource": "0xDE6F09BC8EAEBE27",
+      "record": 20,
+      "shared": false,
+      "consumers": [
+        "AX/LAS-5 Rover"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/ax-las-5-rover/68f5082608688c3d",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/ax-las-5-rover/68f5082608688c3d",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "AX/TX-13 Dog Breath pod",
+      "resource": "0xD8E278355CF29EF4",
+      "record": 19,
+      "shared": false,
+      "consumers": [
+        "AX/TX-13 Dog Breath"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/ax-tx-13-dog-breath/9d3211c27232ca30",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/ax-tx-13-dog-breath/9d3211c27232ca30",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "B-1 Supply Pack pod",
+      "resource": "0x31400A6A3003E29C",
+      "record": 2,
+      "shared": false,
+      "consumers": [
+        "B-1 Supply Pack"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/b-1-supply-pack/6fa0c4410a746c16",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/b-1-supply-pack/6fa0c4410a746c16",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "B-100 Portable Hellbomb pod",
+      "resource": "0x77C52E494527AA8A",
+      "record": 36,
+      "shared": true,
+      "consumers": [
+        "B-100 Portable Hellbomb",
+        "Portable Hellbomb (mission)"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/b-100-portable-hellbomb/89b274a08860b067",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/b-100-portable-hellbomb/89b274a08860b067",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "B/FLAM-80 Cremator pod",
+      "resource": "0xCA4F3FC268F449D5",
+      "record": 34,
+      "shared": false,
+      "consumers": [
+        "B/FLAM-80 Cremator"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/b-flam-80-cremator/b56502291503ca52",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/b-flam-80-cremator-backpack/d86ed0d6992bfe27",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "B/MD C4 Pack pod",
+      "resource": "0x0AC9CDDBE8C64851",
+      "record": 9,
+      "shared": false,
+      "consumers": [
+        "B/MD C4 Pack"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/c4-charge-detonator/1e00f9e59579f80d",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/c4-charge-backpack/e8e6f1b9fa26429f",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "CQC-1 One True Flag pod",
+      "resource": "0xEB95609DCBAD53FE",
+      "record": 50,
+      "shared": false,
+      "consumers": [
+        "CQC-1 One True Flag"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/cqc-1-one-true-flag/678572ccf8b0bfef",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "CQC-20 Breaching Hammer pod",
+      "resource": "0x8DB8B823889324F9",
+      "record": 51,
+      "shared": false,
+      "consumers": [
+        "CQC-20 Breaching Hammer"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/cqc-20-breaching-hammer/b1febc3085a29800",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "CQC-9 Defoliation Tool pod",
+      "resource": "0x7FA006885812A756",
+      "record": 49,
+      "shared": false,
+      "consumers": [
+        "CQC-9 Defoliation Tool"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/cqc-9-defoliation-tool/6e14b35412a40c40",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "EAT-17 Expendable Anti-Tank pod",
+      "resource": "0x0DC7A18342B62BEC",
+      "record": 44,
+      "shared": true,
+      "consumers": [
+        "EAT-17 Expendable Anti-Tank",
+        "Surplus EAT Allocation (granted stratagem)"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/eat-17-expendable-anti-tank/aaf1f6d08281fd7a",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/eat-17-expendable-anti-tank/aaf1f6d08281fd7a",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "EAT-411 Leveller pod",
+      "resource": "0x8A9E543022C18092",
+      "record": 26,
+      "shared": false,
+      "consumers": [
+        "EAT-411 Leveller"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/eat-411-leveller/bbd78065df92b6eb",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "empty",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "EAT-700 Expendable Napalm pod",
+      "resource": "0x20AAFC3A504D2E5F",
+      "record": 27,
+      "shared": false,
+      "consumers": [
+        "EAT-700 Expendable Napalm"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/eat-700-expendable-napalm/bff4b15f31d35c94",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/eat-700-expendable-napalm/bff4b15f31d35c94",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "FAF-14 Spear pod",
+      "resource": "0xC57F85252B7D853B",
+      "record": 28,
+      "shared": false,
+      "consumers": [
+        "FAF-14 Spear"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/faf-14-spear/eedf1b3a064edb4b",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/faf-missile-launcher-backpack/6cd4eb768919be66",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "pickup/v1/faf-14-spear/eedf1b3a064edb4b",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "pickup/v1/faf-missile-launcher-backpack/6cd4eb768919be66",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "FLAM-40 Flamethrower pod",
+      "resource": "0xE90F771A36FB441E",
+      "record": 30,
+      "shared": false,
+      "consumers": [
+        "FLAM-40 Flamethrower"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/flam-40-flamethrower/b4d4c9c15a828fde",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/flam-40-flamethrower/b4d4c9c15a828fde",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "GL-21 Grenade Launcher pod",
+      "resource": "0x20225DEE487C9F5F",
+      "record": 31,
+      "shared": false,
+      "consumers": [
+        "GL-21 Grenade Launcher"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/gl-21-grenade-launcher/879bce2fb521f366",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/gl-21-grenade-launcher/879bce2fb521f366",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "GL-28 Belt-Fed Grenade Launcher pod",
+      "resource": "0xB7791DA91F13488C",
+      "record": 8,
+      "shared": false,
+      "consumers": [
+        "GL-28 Belt-Fed Grenade Launcher"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/gl-28-belt-fed-grenade-launcher/9d0dcf93794536d9",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/gl-28-belt-fed-grenade-launcher-backpack/317c655c1db40880",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "GL-52 De-Escalator pod",
+      "resource": "0x2F67BF9C4F560C02",
+      "record": 32,
+      "shared": false,
+      "consumers": [
+        "GL-52 De-Escalator"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/gl-52-de-escalator/b19094bd6849cfb9",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "GR-8 Recoilless Rifle pod",
+      "resource": "0xDDEE9646723E09D3",
+      "record": 56,
+      "shared": false,
+      "consumers": [
+        "GR-8 Recoilless Rifle"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/gr-8-recoilless-rifle/c3681a5430f8eaa8",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/recoilless-rifle-backpack/b2d8465b1b0ec213",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "pickup/v1/gr-8-recoilless-rifle/c3681a5430f8eaa8",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "pickup/v1/recoilless-rifle-backpack/b2d8465b1b0ec213",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "Health Pack Rack pod",
+      "resource": "0xAF04113302F5621D",
+      "record": 67,
+      "shared": true,
+      "consumers": [
+        "Health Pack Rack",
+        "Health Pack Rack (reward variant)"
+      ],
+      "spawnCount": 4,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/health-pack-pod/0a29abd61fc5ed70",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/health-pack-pod/0a29abd61fc5ed70",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "pickup/v1/health-pack-pod/0a29abd61fc5ed70",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "pickup/v1/health-pack-pod/0a29abd61fc5ed70",
+          "active": true,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "LAS-98 Laser Cannon pod",
+      "resource": "0xFDE262593307CA2F",
+      "record": 41,
+      "shared": false,
+      "consumers": [
+        "LAS-98 Laser Cannon"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/las-98-laser-cannon/c6013cfe0815b790",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/las-98-laser-cannon/c6013cfe0815b790",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "LAS-99 Quasar Cannon pod",
+      "resource": "0x67AC082FF6D142F3",
+      "record": 43,
+      "shared": false,
+      "consumers": [
+        "LAS-99 Quasar Cannon"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/las-99-quasar-cannon/ecf60a71601fe1ef",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/las-99-quasar-cannon/ecf60a71601fe1ef",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "LIFT-182 Warp Pack pod",
+      "resource": "0x4C7E4680FF843A1B",
+      "record": 16,
+      "shared": false,
+      "consumers": [
+        "LIFT-182 Warp Pack"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/lift-182-warp-pack/c91c7644668b03b9",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/lift-182-warp-pack/c91c7644668b03b9",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "LIFT-850 Jump Pack pod",
+      "resource": "0x61353DF120F27732",
+      "record": 40,
+      "shared": true,
+      "consumers": [
+        "LIFT-850 Jump Pack",
+        "LIFT-850 Jump Pack (reward variant)"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/lift-850-jump-pack/020db07511df1f84",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/lift-850-jump-pack/020db07511df1f84",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "LIFT-860 Hover Pack pod",
+      "resource": "0x52DCE8A110418742",
+      "record": 37,
+      "shared": false,
+      "consumers": [
+        "LIFT-860 Hover Pack"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/lift-860-hover-pack/9a4849fb1c7c3653",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/lift-860-hover-pack/9a4849fb1c7c3653",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "M-1000 Maxigun pod",
+      "resource": "0x73B63D637973C7A4",
+      "record": 52,
+      "shared": false,
+      "consumers": [
+        "M-1000 Maxigun"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/m-1000-maxigun/39a8b72741b5c776",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/m-1000-maxigun-backpack/8b639add8bbad44b",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "M-105 Stalwart pod",
+      "resource": "0x31C4DD88C1450282",
+      "record": 45,
+      "shared": false,
+      "consumers": [
+        "M-105 Stalwart"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/m-105-stalwart/e173c48b267c2b90",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/m-105-stalwart/e173c48b267c2b90",
+          "active": false,
+          "tested": [
+            "pickup/v1/eat-700-expendable-napalm/bff4b15f31d35c94"
+          ]
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "MG-206 Heavy Machine Gun pod",
+      "resource": "0x0FD8B759412815DD",
+      "record": 35,
+      "shared": false,
+      "consumers": [
+        "MG-206 Heavy Machine Gun"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/mg-206-heavy-machine-gun-pod/7e824a240e1c41ae",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/mg-206-heavy-machine-gun-pod/7e824a240e1c41ae",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "MG-43 Machine Gun pod",
+      "resource": "0x94C5114EBA59AA21",
+      "record": 46,
+      "shared": true,
+      "consumers": [
+        "MG-43 Machine Gun",
+        "MG-43 Machine Gun (reward variant)"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/mg-43-machine-gun/7547c36fdd511b37",
+          "active": true,
+          "tested": [
+            "pickup/v1/grenade-box/5ad3b36a5d3adbb7"
+          ]
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/mg-43-machine-gun/7547c36fdd511b37",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "MGX-42 Bullet Storm pod",
+      "resource": "0xC87555EED1E9F092",
+      "record": 25,
+      "shared": false,
+      "consumers": [
+        "MGX-42 Bullet Storm"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/mgx-42-bullet-storm/0dda469c7b4c3976",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/mgx-42-bullet-storm/0dda469c7b4c3976",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "MLS-4X Commando pod",
+      "resource": "0xA0E691598F32932F",
+      "record": 42,
+      "shared": false,
+      "consumers": [
+        "MLS-4X Commando"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/mls-4x-commando/78d49586093f64c1",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/mls-4x-commando/78d49586093f64c1",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "Medic Backpack (reward variant) pod",
+      "resource": "0xB3F6EC87073AAFEC",
+      "record": 48,
+      "shared": false,
+      "consumers": [
+        "Medic Backpack (reward variant)"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/medic-backpack-pod/20da54d45b013681",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/medic-backpack-pod/20da54d45b013681",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "PLAS-45 Epoch pod",
+      "resource": "0x46B9E3BE0AE9972E",
+      "record": 54,
+      "shared": false,
+      "consumers": [
+        "PLAS-45 Epoch"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/plas-45-epoch/f8f83fe309af696b",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/plas-45-epoch/f8f83fe309af696b",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "RL-77 Airburst Rocket Launcher pod",
+      "resource": "0xCA6E81E2B3E22B18",
+      "record": 1,
+      "shared": false,
+      "consumers": [
+        "RL-77 Airburst Rocket Launcher"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/rl-77-airburst-rocket-launcher/0eef82a268ed6eec",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/air-burst-rocket-backpack/004ba933ad94ea53",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "pickup/v1/rl-77-airburst-rocket-launcher/0eef82a268ed6eec",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "pickup/v1/air-burst-rocket-backpack/004ba933ad94ea53",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "RS-422 Railgun pod",
+      "resource": "0xB62620AE2CD89F49",
+      "record": 55,
+      "shared": false,
+      "consumers": [
+        "RS-422 Railgun"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/rs-422-railgun/d0d22102ee2cf244",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/rs-422-railgun/d0d22102ee2cf244",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "Resupply pod",
+      "resource": "0x5052EC6A928CCF1A",
+      "record": 65,
+      "shared": true,
+      "consumers": [
+        "Resupply",
+        "Resupply (reward variant)"
+      ],
+      "spawnCount": 4,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/supply-box/d0e8fed8c01ceb1f",
+          "active": true,
+          "tested": [
+            "pickup/v1/grenade-box/5ad3b36a5d3adbb7"
+          ]
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/supply-box/d0e8fed8c01ceb1f",
+          "active": true,
+          "tested": [
+            "pickup/v1/grenade-box/5ad3b36a5d3adbb7"
+          ]
+        },
+        {
+          "slot": 3,
+          "default": "pickup/v1/supply-box/d0e8fed8c01ceb1f",
+          "active": true,
+          "tested": [
+            "pickup/v1/grenade-box/5ad3b36a5d3adbb7"
+          ]
+        },
+        {
+          "slot": 4,
+          "default": "pickup/v1/supply-box/d0e8fed8c01ceb1f",
+          "active": true,
+          "tested": [
+            "pickup/v1/grenade-box/5ad3b36a5d3adbb7"
+          ]
+        }
+      ]
+    },
+    {
+      "rack": "S-11 Speargun pod",
+      "resource": "0x5CAF553BA7EA1429",
+      "record": 33,
+      "shared": false,
+      "consumers": [
+        "S-11 Speargun"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/s-11-speargun/08be7186c997da64",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/s-11-speargun/08be7186c997da64",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "SH-20 Ballistic Shield Backpack pod",
+      "resource": "0x3A50B58B0553056A",
+      "record": 5,
+      "shared": false,
+      "consumers": [
+        "SH-20 Ballistic Shield Backpack"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/sh-20-ballistic-shield-backpack/6d6ecaed72093bc3",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/sh-20-ballistic-shield-backpack/6d6ecaed72093bc3",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "SH-32 Shield Generator Pack pod",
+      "resource": "0xF88D61A8FE1E0766",
+      "record": 23,
+      "shared": false,
+      "consumers": [
+        "SH-32 Shield Generator Pack"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/sh-32-shield-generator-pack/435379ff1c10c0a6",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/sh-32-shield-generator-pack/435379ff1c10c0a6",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "SH-51 Directional Shield pod",
+      "resource": "0x09183066C4EBCE28",
+      "record": 15,
+      "shared": false,
+      "consumers": [
+        "SH-51 Directional Shield"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/sh-51-directional-shield/9ed7190ede69bca8",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "Shoulder Mounted Camera pod",
+      "resource": "0x9DE2C3A3C9A6353E",
+      "record": 58,
+      "shared": false,
+      "consumers": [
+        "Shoulder Mounted Camera"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/shoulder-mounted-camera/8818f67168ea7970",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/shoulder-mounted-camera/8818f67168ea7970",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "StA-X3 W.A.S.P. Launcher pod",
+      "resource": "0x0A60397B7409995E",
+      "record": 29,
+      "shared": false,
+      "consumers": [
+        "StA-X3 W.A.S.P. Launcher"
+      ],
+      "spawnCount": 2,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/sta-x3-w-a-s-p-launcher/db5ac2b41c5e4fee",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/faf-missile-launcher-helghast-backpack/37483bdc55d2976e",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "pickup/v1/sta-x3-w-a-s-p-launcher/db5ac2b41c5e4fee",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "pickup/v1/faf-missile-launcher-helghast-backpack/37483bdc55d2976e",
+          "active": false,
+          "tested": []
+        }
+      ]
+    },
+    {
+      "rack": "TX-41 Sterilizer pod",
+      "resource": "0xBBD57DF3E5B15ED8",
+      "record": 11,
+      "shared": false,
+      "consumers": [
+        "TX-41 Sterilizer"
+      ],
+      "spawnCount": 1,
+      "slots": [
+        {
+          "slot": 1,
+          "default": "pickup/v1/tx-41-sterilizer/3e57897e03c89547",
+          "active": true,
+          "tested": []
+        },
+        {
+          "slot": 2,
+          "default": "pickup/v1/tx-41-sterilizer/3e57897e03c89547",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 3,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        },
+        {
+          "slot": 4,
+          "default": "empty",
+          "active": false,
+          "tested": []
+        }
+      ]
     }
   ],
   "explosionFields": [

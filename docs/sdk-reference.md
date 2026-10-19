@@ -792,18 +792,18 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 
 ### HfHellpodRack
 
-`HellpodRackComponentData`: component 155, 568-byte records. HellpodRackComponentData (fields from the stats schema).
+`HellpodRackComponentData`: component 155, 568-byte records. a call-in's hellpod rack: eight 64-byte slots (the item each delivers), and how many spawn (+556).
 
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
-| `slot0_item` | +0x00 | u64 | respawn? | slot 0: the entity it delivers (0: none) |
-| `slot1_item` | +0x40 | u64 | respawn? | slot 1: the entity it delivers (0: none) |
-| `slot2_item` | +0x80 | u64 | respawn? | slot 2: the entity it delivers (0: none) (unverified) |
-| `slot3_item` | +0xC0 | u64 | respawn? | slot 3: the entity it delivers (0: none) (unverified) |
-| `slot4_item` | +0x100 | u64 | respawn? | slot 4: the entity it delivers (0: none) (unverified) |
-| `slot5_item` | +0x140 | u64 | respawn? | slot 5: the entity it delivers (0: none) (unverified) |
-| `slot6_item` | +0x180 | u64 | respawn? | slot 6: the entity it delivers (0: none) (unverified) |
-| `slot7_item` | +0x1C0 | u64 | respawn? | slot 7: the entity it delivers (0: none) (unverified) |
+| `slot0_item` | +0x00 | u64 | respawn? | slot 0: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (a pickup reference) |
+| `slot1_item` | +0x40 | u64 | respawn? | slot 1: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (a pickup reference) |
+| `slot2_item` | +0x80 | u64 | respawn? | slot 2: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) (a pickup reference) |
+| `slot3_item` | +0xC0 | u64 | respawn? | slot 3: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) (a pickup reference) |
+| `slot4_item` | +0x100 | u64 | respawn? | slot 4: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) (a pickup reference) |
+| `slot5_item` | +0x140 | u64 | respawn? | slot 5: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) (a pickup reference) |
+| `slot6_item` | +0x180 | u64 | respawn? | slot 6: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) (a pickup reference) |
+| `slot7_item` | +0x1C0 | u64 | respawn? | slot 7: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) (a pickup reference) |
 | `spawn_count` | +0x22C | u32 | respawn? | Items spawned (unverified) |
 
 ### HfAvatar

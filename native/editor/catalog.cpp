@@ -215,6 +215,7 @@ bool Load(const std::wstring& path, Catalog* out, std::string* error)
                                         {
                                             row.options.push_back({o.GetNumber("value"), o.GetString("label"), o.GetString("icon"), o.GetString("note")});
                                             row.options.back().target = o.GetString("target");
+                                            row.options.back().group = o.GetString("group");
                                             std::string resource = o.GetString("resource");
                                             if (resource.rfind("0x", 0) == 0) row.options.back().resource = strtoull(resource.c_str() + 2, nullptr, 16);
                                         }

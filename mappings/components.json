@@ -4512,7 +4512,7 @@
       "index": 155,
       "stride": 568,
       "layout": "25480438",
-      "meaning": "HellpodRackComponentData (fields from the stats schema)",
+      "meaning": "a call-in's hellpod rack: eight 64-byte slots (the item each delivers), and how many spawn (+556)",
       "applies": "respawn",
       "appliesVerified": false,
       "appliesSource": "a component record: read when the entity is made",
@@ -4520,58 +4520,66 @@
         "slot0_item": {
           "offset": 0,
           "type": "u64",
-          "meaning": "slot 0: the entity it delivers (0: none)",
+          "meaning": "slot 0: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3",
           "verified": true,
-          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)",
+          "ref": "pickup"
         },
         "slot1_item": {
           "offset": 64,
           "type": "u64",
-          "meaning": "slot 1: the entity it delivers (0: none)",
+          "meaning": "slot 1: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3",
           "verified": true,
-          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)",
+          "ref": "pickup"
         },
         "slot2_item": {
           "offset": 128,
           "type": "u64",
-          "meaning": "slot 2: the entity it delivers (0: none)",
+          "meaning": "slot 2: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3",
           "verified": false,
-          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)",
+          "ref": "pickup"
         },
         "slot3_item": {
           "offset": 192,
           "type": "u64",
-          "meaning": "slot 3: the entity it delivers (0: none)",
+          "meaning": "slot 3: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3",
           "verified": false,
-          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)",
+          "ref": "pickup"
         },
         "slot4_item": {
           "offset": 256,
           "type": "u64",
-          "meaning": "slot 4: the entity it delivers (0: none)",
+          "meaning": "slot 4: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3",
           "verified": false,
-          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)",
+          "ref": "pickup"
         },
         "slot5_item": {
           "offset": 320,
           "type": "u64",
-          "meaning": "slot 5: the entity it delivers (0: none)",
+          "meaning": "slot 5: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3",
           "verified": false,
-          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)",
+          "ref": "pickup"
         },
         "slot6_item": {
           "offset": 384,
           "type": "u64",
-          "meaning": "slot 6: the entity it delivers (0: none)",
+          "meaning": "slot 6: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3",
           "verified": false,
-          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)",
+          "ref": "pickup"
         },
         "slot7_item": {
           "offset": 448,
           "type": "u64",
-          "meaning": "slot 7: the entity it delivers (0: none)",
+          "meaning": "slot 7: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3",
           "verified": false,
-          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)"
+          "source": "HD2Runtime 0.40.1 research/support-weapon-runtime, custom-payloads (the EAT-17 rack: slots 0 and 1, the Solo Silo: missile, remote)",
+          "ref": "pickup"
         },
         "spawn_count": {
           "offset": 556,

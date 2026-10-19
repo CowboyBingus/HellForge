@@ -108,8 +108,9 @@ double g_choice[2] = {-1, -1};
 struct PickEntry { bool header = false; double value = 0; std::string label, note, icon; std::vector<std::string> warnings; };
 struct { bool on = false; const Row* row = nullptr; int index = 0; std::string filter; std::vector<PickEntry> entries; } g_picker;
 int ChoiceIndex(const Row* row) { return row->choice == "second" ? 1 : 0; }
-/* The arm swaps (a vehicle's Mounted Weapons): the option chosen per slot ("<vehicle>|mount.slot_N"), kept in the
- * editor's settings ("mounts") and applied live (set_live, the slot's u64) from Init on. */
+/* The arm swaps (a vehicle's Mounted Weapons) and the hellpod payloads (a call-in's pod: its slots and how many spawn):
+ * the option chosen per row ("<vehicle>|mount.slot_N", "<rack>|pod.slot_N", "<rack>|pod.count"), kept in the editor's
+ * settings ("mounts") and applied live (set_live: a slot's u64 entity, the count's u32) from Init on. */
 std::map<std::string, double> g_mounts;
 /* Joined to a friend's lobby: the host's arm swaps (host-mounts.json, which the session's backend writes), applied and
  * shown in place of this machine's; the armor perks are solo only (with other players the loader gives everyone the
@@ -119,7 +120,8 @@ bool g_hostMountsShown;
 bool Locked();
 const std::map<std::string, double>& Mounts() { return g_hostMountsShown ? g_hostMounts : g_mounts; }
 std::string MountKey(const Row* row) { return row->target + "|" + row->key; }
-bool IsMount(const Row* row) { return row->choice == "mount"; }
+bool IsMount(const Row* row) { return row->choice == "mount" || row->choice == "pod" || row->choice == "podcount"; }
+bool IsPod(const Row* row) { return row->choice == "pod" || row->choice == "podcount"; }
 double ChoiceGet(const Row* row)
 {
     if (!IsMount(row)) return Locked() ? -1 : g_choice[ChoiceIndex(row)];
@@ -584,18 +586,19 @@ bool StageReset(const Row* row)
     return true;
 }
 
-/* A mount slot's choice to the game (its option's entity), or back to its vanilla weapon. */
+/* A mount slot's or hellpod row's choice to the game (its option's entity, or a count), or back to its vanilla one. */
 void SendMount(const Row* row)
 {
-    HfField field{"MountComponentData", g_layout, (uint16_t)row->offset, 8, HF_TYPE_U64, 0};
+    bool wide = row->type == HF_TYPE_U64;
+    HfField field{row->component.c_str(), g_layout, (uint16_t)row->offset, (uint16_t)(wide ? 8 : 4), row->type, 0};
     auto chosen = Mounts().find(MountKey(row));
     const Row::Option* o = chosen != Mounts().end() ? row->OptionOf(chosen->second) : nullptr;
     int applies;
-    if (o == nullptr || o == &row->options[0]) applies = g_host.api->set_live(g_host.mod, row->ref, &field, nullptr, 0);
+    if (o == nullptr || o == &row->options[0]) applies = g_host.api->set_live(g_host.mod, row->ref, &field, nullptr, row->shared ? HF_LIVE_SHARED : 0);
     else
     {
-        HfValue v{HF_TYPE_U64, 0, o->resource};
-        applies = g_host.api->set_live(g_host.mod, row->ref, &field, &v, 0);
+        HfValue v = wide ? HfValue{HF_TYPE_U64, 0, o->resource} : HfValue{row->type, o->value, 0};
+        applies = g_host.api->set_live(g_host.mod, row->ref, &field, &v, row->shared ? HF_LIVE_SHARED : 0);
     }
     if (applies == 0) SetError(row, Refusal("HellForge refused the swap"));
     else ClearError(row);
@@ -1245,7 +1248,13 @@ void PickerFill()
     auto match = [&](const std::string& text) { return filter.empty() || Lower(text).find(filter) != std::string::npos; };
     if (!row->choice.empty())
     {
-        for (auto& o : row->options) if (match(o.label + " " + o.note)) out.push_back({false, o.value, o.label, o.note, o.icon});
+        std::string group;
+        for (auto& o : row->options)
+        {
+            if (!match(o.label + " " + o.group + " " + o.note)) continue;
+            if (!o.group.empty() && o.group != group) { group = o.group; out.push_back({true, 0, group}); } /* a pod's pickups by kind */
+            out.push_back({false, o.value, o.label, o.note, o.icon});
+        }
         return;
     }
     if (row->Valued())
@@ -2605,7 +2614,7 @@ void DrawStatus(float y, float h)
             RowView v = ViewOf(row);
             const Row::Option* o = row->OptionOf(v.value);
             std::string text = o && !o->note.empty() ? o->label + ": " + o->note : row->note;
-            if (IsMount(row)) text += "   [applies to vehicles called in after it]";
+            if (IsMount(row)) text += IsPod(row) ? "   [applies to pods called in after it]" : "   [applies to vehicles called in after it]";
             else if (HasPassives())
             {
                 HfPassives state;
@@ -3216,7 +3225,9 @@ void Init(const Host& host)
     {
         size_t bar = m.first.find('|');
         if (bar == std::string::npos) continue;
-        if (const Row* row = g_catalog.Entry("mounts", m.first.substr(0, bar), m.first.substr(bar + 1))) SendMount(row);
+        const Row* row = g_catalog.Entry("mounts", m.first.substr(0, bar), m.first.substr(bar + 1));
+        if (row == nullptr) row = g_catalog.Entry("pods", m.first.substr(0, bar), m.first.substr(bar + 1));
+        if (row != nullptr) SendMount(row);
     }
     host.api->log(host.mod, "editor: %s; %d game icons%s", g_catalogOk ? (std::to_string(g_catalog.objects.size()) + " objects, " +
         std::to_string(g_catalog.rows.size()) + " fields").c_str() : g_catalogError.c_str(), iconCount,

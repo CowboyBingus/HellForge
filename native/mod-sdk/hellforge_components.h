@@ -2296,25 +2296,25 @@ HF_ASSERT_OFFSET(HfLoadoutEntry, traits_4, 24);
 HF_ASSERT_OFFSET(HfLoadoutEntry, traits_5, 28);
 #define HF_TYPE_LoadoutEntry_traits_5 HF_TYPE_U32
 
-/* HellpodRackComponentData (component 155, 568-byte records): HellpodRackComponentData (fields from the stats schema) */
+/* HellpodRackComponentData (component 155, 568-byte records): a call-in's hellpod rack: eight 64-byte slots (the item each delivers), and how many spawn (+556) */
 #define HfHellpodRack_INFO "HellpodRackComponentData", 25480438u
 typedef struct HfHellpodRack
 {
-    uint64_t slot0_item;                         /* +0x00 slot 0: the entity it delivers (0: none) [respawn?] */
+    uint64_t slot0_item;                         /* +0x00 slot 0: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 [respawn?] */
     uint8_t _unknown_08[56];
-    uint64_t slot1_item;                         /* +0x40 slot 1: the entity it delivers (0: none) [respawn?] */
+    uint64_t slot1_item;                         /* +0x40 slot 1: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 [respawn?] */
     uint8_t _unknown_48[56];
-    uint64_t slot2_item;                         /* +0x80 slot 2: the entity it delivers (0: none) (unverified) [respawn?] */
+    uint64_t slot2_item;                         /* +0x80 slot 2: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) [respawn?] */
     uint8_t _unknown_88[56];
-    uint64_t slot3_item;                         /* +0xC0 slot 3: the entity it delivers (0: none) (unverified) [respawn?] */
+    uint64_t slot3_item;                         /* +0xC0 slot 3: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) [respawn?] */
     uint8_t _unknown_C8[56];
-    uint64_t slot4_item;                         /* +0x100 slot 4: the entity it delivers (0: none) (unverified) [respawn?] */
+    uint64_t slot4_item;                         /* +0x100 slot 4: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) [respawn?] */
     uint8_t _unknown_108[56];
-    uint64_t slot5_item;                         /* +0x140 slot 5: the entity it delivers (0: none) (unverified) [respawn?] */
+    uint64_t slot5_item;                         /* +0x140 slot 5: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) [respawn?] */
     uint8_t _unknown_148[56];
-    uint64_t slot6_item;                         /* +0x180 slot 6: the entity it delivers (0: none) (unverified) [respawn?] */
+    uint64_t slot6_item;                         /* +0x180 slot 6: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) [respawn?] */
     uint8_t _unknown_188[56];
-    uint64_t slot7_item;                         /* +0x1C0 slot 7: the entity it delivers (0: none) (unverified) [respawn?] */
+    uint64_t slot7_item;                         /* +0x1C0 slot 7: the entity it delivers (0: none); a vanilla rack takes a reviewed pickup (mappings/references.json pickups) in slots 0-3 (unverified) [respawn?] */
     uint8_t _unknown_1C8[100];
     uint32_t spawn_count;                        /* +0x22C Items spawned (unverified) [respawn?] */
     uint8_t _unknown_230[8];

@@ -281,6 +281,90 @@ public static class EditorCatalog
         return new JsonObject { ["title"] = "Mounted Weapons", ["key"] = "c|mounts", ["flat"] = true, ["plain"] = false, ["prefix"] = null, ["subs"] = new JsonArray(part) };
     }
 
+    // A call-in's hellpod (HD2R Editor's pod payload rows): what its pod opens with, a choice row per slot 1-4 of its rack
+    // (HellpodRackComponentData slot k +64k, a u64: the item's entity) offering its vanilla item, nothing, and every
+    // pickup HD2Runtime reviewed (support weapons, backpacks, ammo, stims, grenades, supplies) by kind, and how many of
+    // the slots spawn (+556, 1-4). Kept in the editor's settings like the arm swaps, applied live (pods called in after
+    // it) and shared with friends in co-op. A rack several call-ins use (the EAT-17's, the Surplus EAT booster's) is one.
+    static readonly Dictionary<string, string> PickupGroups = new(StringComparer.Ordinal)
+    {
+        ["support_weapon"] = "Support weapons", ["backpack"] = "Backpacks", ["ammo"] = "Ammo", ["stim"] = "Stims", ["grenade"] = "Grenades",
+        ["supply"] = "Supplies",
+    };
+
+    static JsonObject? PodCategory(StatsItem item)
+    {
+        var racks = ReferenceData.Value["podRacks"]?.AsArray().Select(r => r!).Where(r => r["consumers"]!.AsArray()
+            .Any(c => c!.GetValue<string>() is var n && (n == item.Name || n == item.Name + " (granted stratagem)"))).ToList() ?? [];
+        if (racks.Count == 0) return null;
+        var pickups = ReferenceData.Value["pickups"]!.AsObject();
+        var ids = pickups.Select(p => p.Key).ToList();
+        var packages = ReferenceData.Value["packages"]!.AsObject();
+        var subs = new JsonArray();
+        foreach (var rack in racks)
+        {
+            var name = rack["rack"]!.GetValue<string>();
+            var resource = rack["resource"]!.GetValue<string>();
+            var consumers = rack["consumers"]!.AsArray().Select(c => c!.GetValue<string>()).ToList();
+            var shared = rack["shared"]!.GetValue<bool>();
+            var also = consumers.Where(c => c != item.Name && c != item.Name + " (granted stratagem)").ToList();
+            var rows = new JsonArray();
+            JsonObject Row(string label, string key, int offset, string type, JsonArray options, string note) => new()
+            {
+                ["label"] = label, ["cat"] = "pods", ["target"] = name, ["key"] = key, ["choice"] = key == "pod.count" ? "podcount" : "pod",
+                ["component"] = "HellpodRackComponentData", ["ref"] = resource, ["offset"] = offset, ["type"] = type,
+                ["min"] = null, ["max"] = null, ["unit"] = null, ["applies"] = "respawn", ["verified"] = false, ["unverified"] = true,
+                ["shared"] = shared, ["also"] = also.Count > 0 ? new JsonArray(also.Select(a => (JsonNode)a).ToArray()) : null,
+                ["link"] = $"pod|{name}|{key}", ["note"] = note, ["options"] = options,
+            };
+            JsonObject Option(int value, string label, string? resourceHex, string group, string note) => new()
+            {
+                ["value"] = value, ["label"] = label, ["resource"] = resourceHex, ["group"] = group, ["note"] = note,
+            };
+            foreach (var slot in rack["slots"]!.AsArray().Select(s => s!))
+            {
+                var k = slot["slot"]!.GetValue<int>();
+                var vanilla = slot["default"]!.GetValue<string>();
+                var tested = slot["tested"]!.AsArray().Select(t => t!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+                var options = new JsonArray();
+                string NoteOf(string id)
+                {
+                    var p = pickups[id]!;
+                    var notes = new List<string>();
+                    if (tested.Contains(id)) notes.Add("proven in this slot in game");
+                    else notes.Add(p["compatibility"]!.GetValue<string>() == "UNVERIFIED_REFERENCE" ? "no vanilla pod delivers it: untested" : "untested in this pod");
+                    if (p["package"]?.GetValue<string>() is { } package && !p["alwaysResident"]!.GetValue<bool>())
+                        notes.Add("loads its package first" + (packages[package]?.GetValue<string>() is { } pn && !pn.StartsWith("unnamed", StringComparison.Ordinal) ? $" ({pn.Split('/')[^1]})" : ""));
+                    return string.Join(" · ", notes);
+                }
+                if (vanilla == "empty") options.Add(Option(0, "Empty (vanilla)", "0x0", "", "the slot delivers nothing"));
+                else
+                {
+                    var p = pickups[vanilla]!;
+                    options.Add(Option(ids.IndexOf(vanilla) + 1, p["name"]!.GetValue<string>() + " (vanilla)", p["resource"]!.GetValue<string>(), "", "what this pod opens with"));
+                    options.Add(Option(0, "Empty", "0x0", "", "the slot delivers nothing"));
+                }
+                foreach (var (id, p) in pickups.Where(p => p.Key != vanilla))
+                    options.Add(Option(ids.IndexOf(id) + 1, p!["name"]!.GetValue<string>(), p["resource"]!.GetValue<string>(),
+                        PickupGroups.GetValueOrDefault(p["category"]!.GetValue<string>(), "Other"), NoteOf(id)));
+                rows.Add(Row($"Slot {k}", $"pod.slot_{k}", (k - 1) * 64, "u64", options,
+                    "What the pod opens with in this slot (HD2R Editor's pod payload): pods called in after it carry it." +
+                    (shared ? $" The rack is shared: {string.Join(", ", consumers)} change with it." : "")));
+            }
+            var count = rack["spawnCount"]!.GetValue<int>();
+            var counts = new JsonArray(new[] { count }.Concat(Enumerable.Range(1, 4).Where(n => n != count))
+                .Select(n => (JsonNode)Option(n, n + (n == 1 ? " item" : " items") + (n == count ? " (vanilla)" : ""), null, "",
+                    n == count ? "the game's own" : $"slots 1 to {n} spawn")).ToArray());
+            rows.Add(Row("Items spawned", "pod.count", 556, "u32", counts,
+                "How many of the slots above spawn (the first N): untested in game (HD2Runtime: vanilla racks use 1, 2, 4 and 6)."));
+            subs.Add(new JsonObject
+            {
+                ["title"] = racks.Count > 1 ? name : "Hellpod Payload", ["key"] = "c|pods|" + name, ["fold"] = false, ["prefix"] = null, ["rows"] = rows,
+            });
+        }
+        return new JsonObject { ["title"] = "Hellpod Payload", ["key"] = "c|pods", ["flat"] = racks.Count == 1, ["plain"] = false, ["prefix"] = null, ["subs"] = subs };
+    }
+
     // The mount slot holding a vehicle page's weapon part (its own weapon), or null.
     static string? MountSlotOf(StatsItem item, StatsPart part)
     {
@@ -330,6 +414,11 @@ public static class EditorCatalog
         }
         if (MountCategory(item) is { } mountCategory)
             page.Insert(page.Count > 0 && page[0]!["key"]!.GetValue<string>() == "c|call_in" ? 1 : 0, mountCategory);
+        if (PodCategory(item) is { } podCategory)
+        {
+            var callIn = page.Select((c, i) => (c, i)).FirstOrDefault(p => p.c!["key"]!.GetValue<string>() == "c|call_in");
+            page.Insert(callIn.c != null ? callIn.i + 1 : page.Count, podCategory); /* right after the call-in */
+        }
         // A weapon HD2R Editor offers no projectile swap for: why (shown on its page).
         var refused = item.Parts.Where(p => p.Category == "weapons").Select(p => ReferenceData.Value["refused"]![p.Target]).FirstOrDefault(r => r != null);
         return new JsonObject

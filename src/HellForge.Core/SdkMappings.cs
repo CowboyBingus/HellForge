@@ -63,7 +63,7 @@ public sealed class SdkMappings
     public required IReadOnlyList<SdkContent> Content { get; init; }
 
     public static readonly string[] AppliesValues = ["now", "respawn", "mission"];
-    public static readonly string[] RefValues = ["projectile", "explosion", "status", "damage", "mount"];
+    public static readonly string[] RefValues = ["projectile", "explosion", "status", "damage", "mount", "pickup"];
 
     // The field a stats-schema field is (by component or table kind, offset and storage): itself, or one element of an
     // array field of that type. Null if the mappings do not have it.
@@ -138,7 +138,7 @@ public sealed class SdkMappings
                     AppliesVerified = v.TryGetProperty("applies", out _) ? v.TryGetProperty("appliesVerified", out _) && Bool(v, "appliesVerified") : appliesVerified,
                     Ref = v.TryGetProperty("ref", out _) ? Text(v, "ref") : null
                 };
-                if (field.Ref != null && (!RefValues.Contains(field.Ref) || type != (field.Ref == "mount" ? "u64" : "u32") || count != 1))
+                if (field.Ref != null && (!RefValues.Contains(field.Ref) || type != (field.Ref is "mount" or "pickup" ? "u64" : "u32") || count != 1))
                     throw new InvalidDataException($"{at}: ref must be projectile, explosion, status or damage on a single u32, or mount on a u64.");
                 if (count < 1 || field.Offset < 0 || field.Offset + field.Size > stride || field.Offset % Math.Min(TypeSize(type), 4) != 0)
                     throw new InvalidDataException($"{at}: outside the {stride}-byte record or misaligned.");

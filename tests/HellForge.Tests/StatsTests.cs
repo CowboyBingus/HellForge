@@ -213,6 +213,28 @@ static class StatsTests
             check(StatsCatalog.Sections(Vehicle("TD-110 Maelstrom")).Any(s => s.Title == "Weapon · Main cannon") &&
                 StatsCatalog.Sections(Vehicle("EXO-55 Breakthrough Exosuit")).Any(s => s.Title == "Shield · Left gun"), "Mount labels as HD2R Editor's.");
         });
+        test("Hellpod payloads: a call-in's pod slots and spawn count, with the reviewed pickups by kind", () =>
+        {
+            var objects = EditorCatalog.Build()["objects"]!.AsArray().Select(o => o!).ToList();
+            JsonArray Rows(string name) => objects.Single(o => o["name"]!.GetValue<string>() == name)["page"]!.AsArray()
+                .Single(c => c!["key"]!.GetValue<string>() == "c|pods")!["subs"]!.AsArray().SelectMany(s => s!["rows"]!.AsArray()).Aggregate(new JsonArray(), (a, r) => { a.Add(r!.DeepClone()); return a; });
+            var stalwart = Rows("M-105 Stalwart");
+            var slot = stalwart.Single(r => r!["key"]!.GetValue<string>() == "pod.slot_1")!;
+            var options = slot["options"]!.AsArray();
+            check(slot["component"]!.GetValue<string>() == "HellpodRackComponentData" && slot["type"]!.GetValue<string>() == "u64" && slot["choice"]!.GetValue<string>() == "pod" &&
+                options[0]!["label"]!.GetValue<string>().EndsWith("(vanilla)") && options.Any(o => o!["label"]!.GetValue<string>() == "Empty") &&
+                options.Any(o => o!["group"]?.GetValue<string>() == "Backpacks") && options.Count > 60, "Slot 1: its vanilla item first, empty, and the pickups by kind.");
+            var count = stalwart.Single(r => r!["key"]!.GetValue<string>() == "pod.count")!;
+            check(count["offset"]!.GetValue<int>() == 556 && count["type"]!.GetValue<string>() == "u32" && count["options"]!.AsArray().Count == 4, "Items spawned: 1 to 4.");
+            var eat = Rows("Surplus EAT Allocation").Single(r => r!["key"]!.GetValue<string>() == "pod.slot_1")!;
+            check(eat["shared"]!.GetValue<bool>() && eat["target"]!.GetValue<string>() == "EAT-17 Expendable Anti-Tank pod" &&
+                eat["also"]!.AsArray().Any(a => a!.GetValue<string>() == "EAT-17 Expendable Anti-Tank"), "The booster's granted stratagem shares the EAT-17's rack.");
+            var tested = Rows("Resupply").Single(r => r!["key"]!.GetValue<string>() == "pod.slot_1")!["options"]!.AsArray()
+                .Single(o => o!["label"]!.GetValue<string>() == "Grenade Box")!;
+            check(tested["note"]!.GetValue<string>().Contains("proven in this slot"), "A pickup a live test proved in that slot says so.");
+            check(!objects.Any(o => o["name"]!.GetValue<string>() == "MS-11 Solo Silo" && o["page"]!.AsArray().Any(c => c!["key"]!.GetValue<string>() == "c|pods")),
+                "A rack that delivers a deployable (the Solo Silo) has none.");
+        });
         test("Field parity: what the catalogues lack, on the item's own records and rows (mappings/parity.json)", () =>
         {
             var weapons = StatsSchema.Current.Targets["weapons"];

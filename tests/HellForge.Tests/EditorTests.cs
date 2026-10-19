@@ -40,7 +40,7 @@ static class EditorTests
                         foreach (var r in p["rows"]!.AsArray().Select(r => r!.AsObject()))
                         {
                             rows++;
-                            if (r["choice"] != null) { check(r["options"]!.AsArray().Count > (r["choice"]!.GetValue<string>() == "mount" ? 1 : 20), "A choice row lists its options."); continue; }
+                            if (r["choice"] != null) { check(r["options"]!.AsArray().Count > (r["choice"]!.GetValue<string>() is "mount" or "podcount" ? 1 : 20), "A choice row lists its options."); continue; }
                             var field = StatsSchema.Current.Targets[r["cat"]!.GetValue<string>()][r["target"]!.GetValue<string>()].Fields[r["key"]!.GetValue<string>()];
                             var component = r["component"]?.GetValue<string>();
                             if (component == null) { check(field.Kind is "EntityDelta" or "StatusMultiplier" && r["applies"]!.GetValue<string>() == "boot", "Only entity deltas and status multipliers are saved without live editing."); continue; }
@@ -99,7 +99,8 @@ static class EditorTests
                 "The EXO-55's shield arm can be swapped too (untested; HD2Runtime offers no swap for it).");
             JsonNode Booster(string name) => objects.Single(o => o["name"]!.GetValue<string>() == name);
             var firebomb = Booster("Firebomb Hellpods")["page"]!.AsArray().SelectMany(c => c!["subs"]!.AsArray()).SelectMany(s => s!["rows"]!.AsArray()).Select(r => r!).ToList();
-            var eat = Booster("Surplus EAT Allocation")["page"]!.AsArray().SelectMany(c => c!["subs"]!.AsArray()).SelectMany(s => s!["rows"]!.AsArray()).Single()!;
+            var eat = Booster("Surplus EAT Allocation")["page"]!.AsArray().SelectMany(c => c!["subs"]!.AsArray()).SelectMany(s => s!["rows"]!.AsArray())
+                .Single(r => r!["choice"] == null)!; /* its granted stratagem's uses; its pod's rows beside it */
             check(objects.Count(o => o["category"]!.GetValue<string>() == "boosters") == 20 &&
                 firebomb.Any(r => r["component"]!.GetValue<string>() == "ExplosionSettings" && r["ref"]!.GetValue<string>() == "83" && r["offset"]!.GetValue<int>() == 16) &&
                 eat["component"]!.GetValue<string>() == "StratagemDefinition" && eat["ref"]!.GetValue<string>() == "15" && eat["unlimited"] == null,

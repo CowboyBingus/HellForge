@@ -266,6 +266,29 @@ def main(runtime, out_json, out_header):
                             'allowed': [sid] + other['allowed'], 'untested': 'HD2Runtime offers no swap for the shield arm: swapping it is untested '
                                                                            '(the shield may keep or lose its behaviour).'})
 
+    # Hellpod payloads (HD2R Editor's pod rows; HD2Runtime pod_payload_authoring): what a call-in's pod opens with, a
+    # rack entity's HellpodRackComponentData slots 1-4 (+64 per slot: the item's entity resource) and its count of spawned
+    # slots (+556). Each writable rack with the stratagems that call it in, its slots' vanilla items and the pickups a
+    # live test proved in exactly that slot; the reviewed pickups (support weapons, backpacks, ammo, stims, grenades,
+    # supplies) with the package each needs (dependencies 'pickup/<id>').
+    pods = read_table(domains / 'pod_payload_authoring.lua')
+    pickups = {}
+    for pid_, pk in sorted(pods['pickups'].items(), key=lambda kv: (kv[1]['category'], kv[1]['name'])):
+        pickups[pid_] = {'resource': pk['resource'], 'name': pk['name'], 'category': pk['category'], 'compatibility': pk['compatibility'],
+                         'alwaysResident': bool(pk.get('alwaysResident')), 'package': package('pickup/' + pid_)}
+    pod_racks = []
+    for rname, rk in sorted(pods['racks'].items()):
+        if not rk.get('writable'):
+            continue
+        slots = []
+        for k in range(1, int(pods['authoredSlots']) + 1):
+            sl = rk['slots'].get(str(k)) or {}
+            current = sl.get('current', 'empty')
+            slots.append({'slot': k, 'default': current if current in pickups else 'empty', 'active': bool(sl.get('active')),
+                          'tested': sorted(x for x in (sl.get('live') or {}) if x in pickups)})
+        pod_racks.append({'rack': rname, 'resource': rk['resource'], 'record': rk['recordIndex'], 'shared': bool(rk.get('shared')),
+                          'consumers': [c['name'] for c in rk['consumers']], 'spawnCount': rk['spawnCount'], 'slots': slots})
+
     # Packages mods load for sounds no catalogue entry carries (HfAbility.package): the Launch ICBM objective's, whose bank
     # obj_gen_icbm holds the ICBM launch sequence (HD2Runtime research/sound-events: the bank ships in this package).
     used.setdefault('0x20BDEC2A51065E1F', 'packages/content/gen_icbm (the Launch ICBM objective: its launch sounds)')
@@ -279,7 +302,7 @@ def main(runtime, out_json, out_header):
         'projectiles': sorted(projectiles.values(), key=lambda r: r['type']),
         'explosions': explosion_rows, 'statuses': status_rows, 'ammunition': ammunition, 'hosts': hosts, 'refused': refused,
         'payload': payload_info, 'programmable': dict(sorted(programmable.items())),
-        'mountedWeapons': mounted, 'mountSlots': mount_slots,
+        'mountedWeapons': mounted, 'mountSlots': mount_slots, 'pickups': pickups, 'podRacks': pod_racks,
         # HD2R Editor's explosion pages: the fields every catalogued explosion shows (its row, or its damage type's)
         'explosionFields': [{'id': f['id'], 'backing': f['backing'], 'offset': f['offset'], 'storage': f['storage'], 'min': f.get('min'),
                              'max': f.get('max'), 'unit': f.get('unit')} for f in read_table(domains / 'explosion_catalogue.lua')['fields']],
@@ -357,12 +380,22 @@ def main(runtime, out_json, out_header):
         allowed_list += [mids.index(a) for a in s['allowed']]
     h += ['};', '/* the first of a slot\'s is its vanilla occupant */', 'static const uint16_t kRefMountAllowed[] = {']
     h += ['    ' + ', '.join(str(i) for i in allowed_list[k:k + 24]) + ',' for k in range(0, len(allowed_list), 24)]
+    h += ['};', '/* Pickups a hellpod slot can hold: entity resource, package (index + 1; 0 none) */',
+          'typedef struct RefPickup { uint64_t resource; uint16_t package; } RefPickup;', 'static const RefPickup kRefPickups[] = {']
+    for pid_, pk in pickups.items():
+        h.append(f'    {{0x{int(pk["resource"], 16):016X}ull, {index[pk["package"]] if pk["package"] else 0}}}, /* {pk["name"]} */')
+    h += ['};', '/* Hellpod rack slots HellForge may change: the rack entity, the slot (0-3: +64 each), its vanilla item (0: empty) */',
+          'typedef struct RefPodSlot { uint64_t rack; uint32_t slot; uint64_t vanilla; } RefPodSlot;', 'static const RefPodSlot kRefPodSlots[] = {']
+    for r in pod_racks:
+        for sl in r['slots']:
+            vanilla = int(pickups[sl['default']]['resource'], 16) if sl['default'] != 'empty' else 0
+            h.append(f'    {{0x{int(r["resource"], 16):016X}ull, {sl["slot"] - 1}, 0x{vanilla:016X}ull}}, /* {r["rack"]} slot {sl["slot"]} */')
     h += ['};', '/* Status effects a damage type can apply */', 'static const uint32_t kRefStatuses[] = {']
     h.append('    ' + ', '.join(f'{r["type"]}u' for r in status_rows if r['attachable']) + '};')
     Path(out_header).write_text('\n'.join(h) + '\n', encoding='utf-8', newline='\n')
     print(f'{len(data["projectiles"])} projectile donors, {len(explosion_rows)} explosions '
           f'({sum(1 for r in explosion_rows if "payload" in r)} payload options), {len(status_rows)} statuses, {len(programmable)} programmable, '
-          f'{len(ammunition)} ammunition weapons, {len(hosts)} swap hosts, {len(ids)} packages')
+          f'{len(ammunition)} ammunition weapons, {len(hosts)} swap hosts, {len(pickups)} pickups for {len(pod_racks)} pod racks, {len(ids)} packages')
 
 
 if __name__ == '__main__':
