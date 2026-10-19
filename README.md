@@ -4,7 +4,7 @@
 your PC, loads mods into it (new stratagems, weapons, stats, difficulties) and lets you play solo or with friends who
 run HellForge too. It comes with an in-game editor (F8) and a C mod SDK with docs and examples.
 
-**Status: beta (0.1.3-beta)**, for modders first. Expect rough edges; the version and game build it targets are in the
+**Status: beta (0.1.4-beta)**, for modders first. Expect rough edges; the version and game build it targets are in the
 launcher's bottom-left corner.
 
 ## How it works
