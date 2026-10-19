@@ -105,6 +105,23 @@ int main()
     localstats::Remove("mod:you/mod/sentry", "you/mod/sentry", "turret.yaw_speed");
     localstats::Remove("mod:you/mod/sentry", "you/mod/sentry", "stratagem.cooldown");
     Check(localstats::Save(mods, &error) && Read(modFile).find("you/mod") == std::string::npos, "mod entries are removed");
+
+    /* Joined to a friend's lobby: the host's saved changes are what Get and Entries show; this machine's stay in its file
+     * and come back with ShowOwn. */
+    double own = 0;
+    Check(localstats::Get("weapons", "AR-23 Liberator", "weapon.fire_rate", &own) && own == 999, "this machine's value before joining");
+    unsigned version = localstats::Version();
+    localstats::ShowHost("{\"format\":1,\"weapons\":{\"AR-23 Liberator\":{\"weapon.recoil\":5}}}",
+        "{\"format\":1,\"mod:host/mod/silo\":{\"host/mod/silo\":{\"stratagem.cooldown\":60}}}");
+    Check(localstats::ShowingHost() && localstats::Version() != version, "joined: the host's are shown");
+    Check(!localstats::Get("weapons", "AR-23 Liberator", "weapon.fire_rate", &got) && localstats::Get("weapons", "AR-23 Liberator", "weapon.recoil", &got) && got == 5 &&
+        localstats::Get("mod:host/mod/silo", "host/mod/silo", "stratagem.cooldown", &got) && got == 60, "Get answers with the host's, not this machine's");
+    Check(localstats::Entries().size() == 2 && localstats::OwnEntries().size() == 1 && localstats::OwnEntries()[0].value == 999,
+        "Entries are the host's; OwnEntries this machine's");
+    localstats::ShowHost("", "not json");
+    Check(localstats::ShowingHost() && localstats::Entries().empty(), "no host file yet (or a broken one): nothing shown");
+    localstats::ShowOwn();
+    Check(!localstats::ShowingHost() && localstats::Get("weapons", "AR-23 Liberator", "weapon.fire_rate", &got) && got == 999, "back on its own: this machine's");
     DeleteFileA(modFile.c_str());
 
     DeleteFileA(stats.c_str()); DeleteFileA(manifest.c_str()); RemoveDirectoryA(folder.c_str());

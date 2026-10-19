@@ -18,9 +18,41 @@ Value g_saved;                           /* the file as last read or written */
 Value g_modSaved;                        /* the mod content file (mod-stats.json), as last read or written */
 std::wstring g_modPath;
 unsigned g_version = 1;
+bool g_hostShown;                        /* joined: Get and Entries show the host's */
+Value g_hostSaved, g_hostModSaved;       /* the host's Local Stats file and mod content values */
 
 bool ModCategory(const std::string& category) { return category.rfind("mod:", 0) == 0; }
 Value& DocumentOf(const std::string& category) { return ModCategory(category) ? g_modSaved : g_saved; }
+const Value& ShownOf(const std::string& category)
+{
+    if (!g_hostShown) return DocumentOf(category);
+    return ModCategory(category) ? g_hostModSaved : g_hostSaved;
+}
+
+std::vector<localstats::Entry> EntriesOf(std::initializer_list<const Value*> documents)
+{
+    std::vector<localstats::Entry> out;
+    for (const Value* document : documents)
+        for (auto& category : document->members)
+            if (category.second.kind == Value::Object)
+                for (auto& target : category.second.members)
+                    for (auto& field : target.second.members)
+                        if (field.second.kind == Value::Number) out.push_back({category.first, target.first, field.first, field.second.AsNumber()});
+    return out;
+}
+
+/* A host's file as the backend wrote it ("" none): an object, or empty when it is not one. */
+Value HostDocument(const std::string& text)
+{
+    Value document;
+    std::string why;
+    if (text.empty() || !hfjson::Parse(text, &document, &why) || document.kind != Value::Object)
+    {
+        document.kind = Value::Object;
+        document.members.clear();
+    }
+    return document;
+}
 
 void ReadModDocument(Value* document)
 {
@@ -122,7 +154,7 @@ void Remove(const std::string& category, const std::string& target, const std::s
 bool Get(const std::string& category, const std::string& target, const std::string& key, double* value)
 {
     std::lock_guard<std::mutex> hold(g_lock);
-    const Value* c = DocumentOf(category).Find(category);
+    const Value* c = ShownOf(category).Find(category);
     const Value* t = c ? c->Find(target) : nullptr;
     const Value* v = t ? t->Find(key) : nullptr;
     if (v == nullptr || v->kind != Value::Number) return false;
@@ -133,14 +165,39 @@ bool Get(const std::string& category, const std::string& target, const std::stri
 std::vector<Entry> Entries()
 {
     std::lock_guard<std::mutex> hold(g_lock);
-    std::vector<Entry> out;
-    for (const Value* document : {&g_saved, &g_modSaved})
-        for (auto& category : document->members)
-            if (category.second.kind == Value::Object)
-                for (auto& target : category.second.members)
-                    for (auto& field : target.second.members)
-                        if (field.second.kind == Value::Number) out.push_back({category.first, target.first, field.first, field.second.AsNumber()});
-    return out;
+    return g_hostShown ? EntriesOf({&g_hostSaved, &g_hostModSaved}) : EntriesOf({&g_saved, &g_modSaved});
+}
+
+std::vector<Entry> OwnEntries()
+{
+    std::lock_guard<std::mutex> hold(g_lock);
+    return EntriesOf({&g_saved, &g_modSaved});
+}
+
+void ShowHost(const std::string& stats, const std::string& mods)
+{
+    Value document = HostDocument(stats), modDocument = HostDocument(mods);
+    std::lock_guard<std::mutex> hold(g_lock);
+    g_hostSaved = document;
+    g_hostModSaved = modDocument;
+    g_hostShown = true;
+    g_version++;
+}
+
+void ShowOwn()
+{
+    std::lock_guard<std::mutex> hold(g_lock);
+    if (!g_hostShown) return;
+    g_hostShown = false;
+    g_hostSaved = Value();
+    g_hostModSaved = Value();
+    g_version++;
+}
+
+bool ShowingHost()
+{
+    std::lock_guard<std::mutex> hold(g_lock);
+    return g_hostShown;
 }
 
 unsigned Version()

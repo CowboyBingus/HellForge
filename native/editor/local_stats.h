@@ -22,6 +22,14 @@ void Set(const std::string& category, const std::string& target, const std::stri
 void Remove(const std::string& category, const std::string& target, const std::string& key);
 bool Get(const std::string& category, const std::string& target, const std::string& key, double* value);
 std::vector<Entry> Entries();
+// Joined to a friend's lobby: what Get and Entries show are the host's saved changes instead (its Local Stats file and
+// mod content values, as the session's backend writes them beside the editor: host-stats.json, host-mod-stats.json),
+// until ShowOwn. Set, Remove and Save still work on this machine's own files.
+void ShowHost(const std::string& stats, const std::string& mods);
+void ShowOwn();
+bool ShowingHost();
+// This machine's own saved (and queued) changes, whichever are shown.
+std::vector<Entry> OwnEntries();
 // Changes when what Get and Entries show changes.
 unsigned Version();
 bool Pending();

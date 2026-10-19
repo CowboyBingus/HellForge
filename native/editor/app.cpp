@@ -355,7 +355,9 @@ RowView ViewOfNow(const Row* row, bool withPending)
     RowView v;
     LiveState& live = Live(row);
     double saved;
-    bool isSaved = !Locked() && Saved(row, &saved); /* joined: the game holds the host's values, not this machine's file */
+    /* joined: Saved answers with the host's saved changes, which the game holds; not a boot-only field's (attachments),
+     * which live editing does not reach, so this game keeps its own */
+    bool isSaved = Saved(row, &saved) && (!Locked() || row->Live() || !row->choice.empty());
     if (live.read)
     {
         v.has = true; v.hasBase = true; v.base = live.base; v.holder = live.mod;
@@ -693,8 +695,8 @@ const std::vector<const Row*>& SavedRows()
     if (stats == now && version == g_markVersion && !out.empty()) return out;
     stats = now; version = g_markVersion;
     out.clear();
-    for (auto& e : localstats::Entries())
-        if (const Row* row = g_catalog.Entry(e.category, e.target, e.key)) out.push_back(row);
+    for (auto& e : localstats::Entries()) /* joined: the host's, but its boot-only fields (ViewOfNow) */
+        if (const Row* row = g_catalog.Entry(e.category, e.target, e.key); row != nullptr && (!Locked() || row->Live())) out.push_back(row);
     for (const Row* row : g_choiceRows) if (ChoiceSaved(row)) out.push_back(row);
     return out;
 }
@@ -2225,7 +2227,7 @@ void DrawHeader(int errors, int active)
     for (int v = 0; v < VIEW_COUNT; v++)
     {
         std::string label = VIEW_LABELS[v];
-        if (v == CHANGES && !Locked()) { int n = (int)Changes().size(); if (n > 0) label += "  " + std::to_string(n); }
+        if (v == CHANGES) { int n = (int)Changes().size(); if (n > 0) label += "  " + std::to_string(n); }
         float w = g_cv.Measure(label, SZ_TAB, ui::TITLE) + 22;
         uint64_t id = ui::Id("tab", (uint64_t)v);
         bool selected = g_view == v;
@@ -2258,7 +2260,7 @@ void DrawHeader(int errors, int active)
     if (Locked()) status(std::string("READ-ONLY \xC2\xB7 HOST: ") + (g_session.host[0] ? g_session.host : "A FRIEND"), PENDING, PENDING_SOFT, 0);
     else if (g_session.role == HF_SESSION_HOST) status("HOSTING \xC2\xB7 FRIENDS PLAY WITH YOUR STATS", MOD, MOD_SOFT, 0);
     if (errors > 0 && status(std::to_string(errors) + (errors == 1 ? " ERROR" : " ERRORS"), ERROR_, ERROR_SOFT, ui::Id("errors"))) OpenErrors();
-    if (active > 0 && !Locked()) status(std::to_string(active) + " ACTIVE", GOLD, GOLD_WASH, 0);
+    if (active > 0) status(std::to_string(active) + (Locked() ? " ACTIVE (HOST)" : " ACTIVE"), GOLD, GOLD_WASH, 0);
     if (PendingCount() > 0 && !Locked()) status(std::to_string(PendingCount()) + " PENDING", PENDING, PENDING_SOFT, 0);
 }
 
@@ -2690,9 +2692,13 @@ void DrawChanges(float y0, float h)
     g_cv.Rect(0, y0, W, h, PANEL, 1);
     g_cv.Text("CHANGES", 20, y0 + 24, T(20, TEXT, ui::TITLE));
     int saved = (int)SavedRows().size();
-    g_cv.Text("Values the editors saved into Local Stats (also the launcher's STATS page), and pending ones.   " + std::to_string(saved) + " saved, " +
-        std::to_string(PendingCount()) + " pending, " + std::to_string(g_errors.size()) + " failed", 20, y0 + 47, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, W - 300));
-    if (Button("REVERT ALL", W - 216, y0 + 16, 196, 34, (saved > 0 || PendingCount() > 0) ? DANGER : DISABLED, ui::Id("revertall"))) StageResetAll();
+    if (Locked())
+        g_cv.Text(std::string("The changes ") + (g_session.host[0] ? g_session.host : "the host") + " saved, which everyone in the lobby plays with (read-only).   " +
+            std::to_string(saved) + " saved", 20, y0 + 47, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, W - 300));
+    else
+        g_cv.Text("Values the editors saved into Local Stats (also the launcher's STATS page), and pending ones.   " + std::to_string(saved) + " saved, " +
+            std::to_string(PendingCount()) + " pending, " + std::to_string(g_errors.size()) + " failed", 20, y0 + 47, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, W - 300));
+    if (Button("REVERT ALL", W - 216, y0 + 16, 196, 34, !Locked() && (saved > 0 || PendingCount() > 0) ? DANGER : DISABLED, ui::Id("revertall"))) StageResetAll();
     float hy = y0 + 66;
     g_cv.Rect(0, hy, W, 22, HEADER, 2);
     g_cv.Text("OBJECT", 20, hy + 11, T(SZ_TINY, FAINT, ui::TITLE));
@@ -2700,7 +2706,7 @@ void DrawChanges(float y0, float h)
     g_cv.Text("DEFAULT", W - 420, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::RIGHT));
     g_cv.Text("VALUE", W - 250, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::RIGHT));
     g_cv.Text("STATE", W - 112, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::RIGHT));
-    if (list.empty()) g_cv.Text("No editor changes. Edit a field in Browse, then Apply.", 20, hy + 44, T(SZ_SMALL, FAINT));
+    if (list.empty()) g_cv.Text(Locked() ? "The host plays without saved changes." : "No editor changes. Edit a field in Browse, then Apply.", 20, hy + 44, T(SZ_SMALL, FAINT));
     ListOpts o;
     o.x = 0; o.y = hy + 24; o.w = W; o.h = y0 + h - hy - 28; o.rowH = 32; o.count = (int)list.size(); o.selected = g_change; o.key = "changes"; o.focused = true;
     o.click = [&](int i) { if (g_change == i) { Reveal(list[i].row); Sound(sounds::OPEN); } else g_change = i; };
@@ -2721,6 +2727,7 @@ void DrawChanges(float y0, float h)
         else Chip(e.row->Live() ? "EDITED" : "NEXT BOOT", x + lw - 112, cy, GOLD, GOLD_WASH, true);
     };
     o.after = [&](int i, float x, float y, float lw, float rh) {
+        if (Locked()) return; /* the host's: nothing to reset here */
         if (Button(list[i].state == 1 ? "UNDO" : "RESET", x + lw - 96, y + 4, 80, rh - 8, list[i].state == 1 ? NORMAL : DANGER, ui::Id("changereset", (uint64_t)i)))
             Revert(list[i].row);
     };
@@ -3024,13 +3031,15 @@ void DrawErrors()
 }
 
 
-/* ---- co-op: the values of content mods added ----
- * They are this editor's own live edits (mod-stats.json), not Local Stats, so the session's backend, which plays the
- * host's Local Stats, does not reach them. Joined, the editor takes its own off and applies the host's, which the backend
- * writes beside them (host-mod-stats.json); back on its own, the host's go and its own come back. */
+/* ---- co-op: the host's saved changes ----
+ * The values of content mods added are this editor's own live edits (mod-stats.json), not Local Stats, so the session's
+ * backend, which plays the host's Local Stats, does not reach them. Joined, the editor takes its own off and applies the
+ * host's, which the backend writes beside them (host-mod-stats.json); back on its own, the host's go and its own come back.
+ * Joined, the editor also shows the host's saved changes as its own (marks, ACTIVE, the Changes list), read-only: the
+ * host's Local Stats file (host-stats.json, which the backend has applied) and mod content values. */
 std::map<const Row*, double> g_modLive; /* what the editor's live edits of mod content hold now */
 int g_modRole = -1;                     /* HF_SESSION_JOINER: they are the host's; else this machine's (-1: none yet) */
-std::string g_hostModText;              /* the host's file as last applied */
+std::string g_hostModText, g_hostStatsText; /* the host's files as last applied and shown */
 ULONGLONG g_modCheck;
 
 std::vector<localstats::Entry> ModEntriesOf(const hfjson::Value& document)
@@ -3058,7 +3067,7 @@ int ApplyModValues(const std::vector<localstats::Entry>& entries, const char* wh
     }
     std::set<const Row*> undo;
     for (auto& held : g_modLive) undo.insert(held.first);
-    for (const localstats::Entry& e : localstats::Entries())
+    for (const localstats::Entry& e : localstats::OwnEntries())
         if (const Row* row = localstats::IsMod(e.category) ? g_catalog.Entry(e.category, e.target, e.key) : nullptr; row != nullptr && row->Live()) undo.insert(row);
     int applied = 0, undone = 0;
     for (const Row* row : undo)
@@ -3080,7 +3089,7 @@ int ApplyModValues(const std::vector<localstats::Entry>& entries, const char* wh
     return applied;
 }
 
-/* Joined: the host's values, read again each second (the backend rewrites the file when the host changes them). */
+/* Joined: the host's values, read again each second (the backend rewrites the files when the host changes them). */
 void SyncModValues()
 {
     if (g_session.role != HF_SESSION_JOINER)
@@ -3089,21 +3098,29 @@ void SyncModValues()
         {
             g_modRole = (int)g_session.role;
             g_hostModText.clear();
-            ApplyModValues(localstats::Entries(), "this machine's", "HellForge refused its saved value");
+            g_hostStatsText.clear();
+            localstats::ShowOwn();
+            ApplyModValues(localstats::OwnEntries(), "this machine's", "HellForge refused its saved value");
         }
         return;
     }
     ULONGLONG now = GetTickCount64();
     if (g_modRole == HF_SESSION_JOINER && now < g_modCheck) return;
     g_modCheck = now + 1000;
-    std::string text;
-    if (!hfjson::ReadFile(hfjson::Wide(g_host.modFolder) + L"\\host-mod-stats.json", &text)) text.clear(); /* none (yet) */
-    if (g_modRole == HF_SESSION_JOINER && text == g_hostModText) return;
-    hfjson::Value document;
+    std::wstring folder = hfjson::Wide(g_host.modFolder);
+    std::string text, stats;
+    if (!hfjson::ReadFile(folder + L"\\host-mod-stats.json", &text)) text.clear(); /* none (yet) */
+    if (!hfjson::ReadFile(folder + L"\\host-stats.json", &stats)) stats.clear();
+    if (g_modRole == HF_SESSION_JOINER && text == g_hostModText && stats == g_hostStatsText) return;
+    hfjson::Value document, statsDocument;
     if (!text.empty() && !hfjson::Parse(text, &document, nullptr)) return; /* being written: the next second */
+    if (!stats.empty() && !hfjson::Parse(stats, &statsDocument, nullptr)) return;
+    bool modsChanged = g_modRole != HF_SESSION_JOINER || text != g_hostModText;
     g_hostModText = text;
+    g_hostStatsText = stats;
     g_modRole = HF_SESSION_JOINER;
-    ApplyModValues(ModEntriesOf(document), "the host's", "HellForge refused the host's value");
+    localstats::ShowHost(stats, text); /* from the moment of joining: empty until the host's files arrive */
+    if (modsChanged) ApplyModValues(ModEntriesOf(document), "the host's", "HellForge refused the host's value");
 }
 
 /* The layout for a screen: the interface size as large as still fits (full width, at least PANEL_MIN_H of height). */
@@ -3267,7 +3284,7 @@ void AddModContent()
         api->log(g_host.mod, "editor: %s gets a page (%s's, %d field(s) of its own)", name.c_str(), like->name.c_str(), (int)o->rows.size());
     }
     /* their saved values, to the game: the stats pass does not know them (joined to a friend, Tick swaps in the host's) */
-    int applied = ApplyModValues(localstats::Entries(), "this machine's", "HellForge refused its saved value");
+    int applied = ApplyModValues(localstats::OwnEntries(), "this machine's", "HellForge refused its saved value");
     g_modRole = HF_SESSION_SOLO;
     if (pages || applied) api->log(g_host.mod, "editor: %d mod stratagem page(s), %d saved value(s) of them applied", pages, applied);
 }
