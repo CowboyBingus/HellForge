@@ -111,15 +111,22 @@ int ChoiceIndex(const Row* row) { return row->choice == "second" ? 1 : 0; }
 /* The arm swaps (a vehicle's Mounted Weapons): the option chosen per slot ("<vehicle>|mount.slot_N"), kept in the
  * editor's settings ("mounts") and applied live (set_live, the slot's u64) from Init on. */
 std::map<std::string, double> g_mounts;
+/* Joined to a friend's lobby: the host's arm swaps (host-mounts.json, which the session's backend writes), applied and
+ * shown in place of this machine's; the armor perks are solo only (with other players the loader gives everyone the
+ * armor's own), so a joiner shows none. */
+std::map<std::string, double> g_hostMounts;
+bool g_hostMountsShown;
+bool Locked();
+const std::map<std::string, double>& Mounts() { return g_hostMountsShown ? g_hostMounts : g_mounts; }
 std::string MountKey(const Row* row) { return row->target + "|" + row->key; }
 bool IsMount(const Row* row) { return row->choice == "mount"; }
 double ChoiceGet(const Row* row)
 {
-    if (!IsMount(row)) return g_choice[ChoiceIndex(row)];
-    auto found = g_mounts.find(MountKey(row));
-    return found != g_mounts.end() ? found->second : row->options.empty() ? -1 : row->options[0].value;
+    if (!IsMount(row)) return Locked() ? -1 : g_choice[ChoiceIndex(row)];
+    auto found = Mounts().find(MountKey(row));
+    return found != Mounts().end() ? found->second : row->options.empty() ? -1 : row->options[0].value;
 }
-bool ChoiceSaved(const Row* row) { return IsMount(row) ? g_mounts.count(MountKey(row)) > 0 : g_choice[ChoiceIndex(row)] >= 0; }
+bool ChoiceSaved(const Row* row) { return IsMount(row) ? Mounts().count(MountKey(row)) > 0 : !Locked() && g_choice[ChoiceIndex(row)] >= 0; }
 std::map<const Row*, std::string> g_errors;
 /* Caches (thousands of changes made every frame slow): the frame, and versions of what views depend on. */
 unsigned g_frame = 1, g_errorsVersion = 1, g_layoutVersion = 1;
@@ -204,6 +211,14 @@ std::string Refusal(const char* fallback)
 
 bool HasGetLive() { return g_host.api->size >= offsetof(HfApi, get_live) + sizeof(void*) && g_host.api->get_live != nullptr; }
 bool HasGetStat() { return g_host.api->size >= offsetof(HfApi, get_stat) + sizeof(void*) && g_host.api->get_stat != nullptr; }
+bool HasSetStat() { return g_host.api->size >= offsetof(HfApi, set_stat) + sizeof(void*) && g_host.api->set_stat != nullptr; }
+/* An attachment's entity delta or a status multiplier: saved like the rest, and (SDK 9, set_stat) changed live too, where
+ * the stats pass writes it at boot; a weapon takes it when it is next built (from the next respawn, expected). */
+bool LiveStat(const Row* row)
+{
+    return !row->Live() && row->Stat() && (row->statKind == "EntityDelta" || row->statKind == "StatusMultiplier") && HasSetStat();
+}
+HfStat StatOf(const Row* row) { return HfStat{row->statKind.c_str(), row->statComponent.c_str(), row->statResource, row->statRecord, row->offset, row->type}; }
 
 /* Co-op (docs/multiplayer.md step 5): joined to a friend's lobby, this game plays with the host's stats, which the
  * session's backend applies; the editor shows them read-only. Hosting, friends play with this machine's. */
@@ -355,9 +370,8 @@ RowView ViewOfNow(const Row* row, bool withPending)
     RowView v;
     LiveState& live = Live(row);
     double saved;
-    /* joined: Saved answers with the host's saved changes, which the game holds; not a boot-only field's (attachments),
-     * which live editing does not reach, so this game keeps its own */
-    bool isSaved = Saved(row, &saved) && (!Locked() || row->Live() || !row->choice.empty());
+    /* joined: Saved answers with the host's saved changes, which the game holds (attachments' from the next respawn) */
+    bool isSaved = Saved(row, &saved);
     if (live.read)
     {
         v.has = true; v.hasBase = true; v.base = live.base; v.holder = live.mod;
@@ -523,6 +537,7 @@ bool LaterSlotFilled(const Row* row)
 
 std::string AppliesText(const Row* row)
 {
+    if (LiveStat(row)) return "applies on respawn (expected)";
     std::string when = row->applies == "now" ? "applies now" : row->applies == "respawn" ? "applies on respawn" :
         row->applies == "mission" ? "applies next mission" : "applies from the next boot";
     return row->Live() && !row->verified ? when + " (expected)" : when;
@@ -573,7 +588,8 @@ bool StageReset(const Row* row)
 void SendMount(const Row* row)
 {
     HfField field{"MountComponentData", g_layout, (uint16_t)row->offset, 8, HF_TYPE_U64, 0};
-    const Row::Option* o = g_mounts.count(MountKey(row)) ? row->OptionOf(g_mounts[MountKey(row)]) : nullptr;
+    auto chosen = Mounts().find(MountKey(row));
+    const Row::Option* o = chosen != Mounts().end() ? row->OptionOf(chosen->second) : nullptr;
     int applies;
     if (o == nullptr || o == &row->options[0]) applies = g_host.api->set_live(g_host.mod, row->ref, &field, nullptr, 0);
     else
@@ -615,6 +631,11 @@ void ResetRow(const Row* row)
             HfField field = FieldOf(s);
             g_host.api->set_live(g_host.mod, s->ref, &field, nullptr, HF_LIVE_BASE);
         }
+        else if (LiveStat(s))
+        {
+            HfStat stat = StatOf(s);
+            g_host.api->set_stat(g_host.mod, &stat, nullptr, HF_LIVE_BASE);
+        }
         ClearError(s);
         g_pending.erase(s);
         g_live[s].at = 0;
@@ -653,6 +674,13 @@ void ApplyRow(const Row* row, double value)
         HfValue v{row->type, value, 0};
         int applies = g_host.api->set_live(g_host.mod, row->ref, &field, &v, row->shared ? HF_LIVE_SHARED : 0);
         if (applies == 0) SetError(row, Refusal("HellForge refused it"));
+        else ClearError(row);
+    }
+    else if (LiveStat(row))
+    {
+        HfStat stat = StatOf(row);
+        HfValue v{row->type, value, 0};
+        if (g_host.api->set_stat(g_host.mod, &stat, &v, 0) == 0) SetError(row, Refusal("HellForge refused it (saved for the next boot)"));
         else ClearError(row);
     }
     for (const Row* s : g_catalog.Siblings(row)) g_live[s].at = 0;
@@ -695,8 +723,8 @@ const std::vector<const Row*>& SavedRows()
     if (stats == now && version == g_markVersion && !out.empty()) return out;
     stats = now; version = g_markVersion;
     out.clear();
-    for (auto& e : localstats::Entries()) /* joined: the host's, but its boot-only fields (ViewOfNow) */
-        if (const Row* row = g_catalog.Entry(e.category, e.target, e.key); row != nullptr && (!Locked() || row->Live())) out.push_back(row);
+    for (auto& e : localstats::Entries()) /* joined: the host's */
+        if (const Row* row = g_catalog.Entry(e.category, e.target, e.key)) out.push_back(row);
     for (const Row* row : g_choiceRows) if (ChoiceSaved(row)) out.push_back(row);
     return out;
 }
@@ -2724,7 +2752,7 @@ void DrawChanges(float y0, float h)
         g_cv.Text(e.reset && !live.read ? "\xE2\x80\x94" : Format(e.row, e.value), x + lw - 250, cy, T(SZ_LABEL, e.state == 1 ? PENDING : GOLD, ui::BODY, ui::RIGHT, 160));
         if (e.state == 1) Chip(e.reset ? "PENDING RESET" : "PENDING", x + lw - 112, cy, PENDING, PENDING_SOFT, true);
         else if (e.state == 2) Chip("ERROR", x + lw - 112, cy, ERROR_, ERROR_SOFT, true);
-        else Chip(e.row->Live() ? "EDITED" : "NEXT BOOT", x + lw - 112, cy, GOLD, GOLD_WASH, true);
+        else Chip(e.row->Live() || LiveStat(e.row) ? "EDITED" : "NEXT BOOT", x + lw - 112, cy, GOLD, GOLD_WASH, true);
     };
     o.after = [&](int i, float x, float y, float lw, float rh) {
         if (Locked()) return; /* the host's: nothing to reset here */
@@ -3039,7 +3067,14 @@ void DrawErrors()
  * host's Local Stats file (host-stats.json, which the backend has applied) and mod content values. */
 std::map<const Row*, double> g_modLive; /* what the editor's live edits of mod content hold now */
 int g_modRole = -1;                     /* HF_SESSION_JOINER: they are the host's; else this machine's (-1: none yet) */
-std::string g_hostModText, g_hostStatsText; /* the host's files as last applied and shown */
+std::string g_hostModText, g_hostStatsText, g_hostMountsText; /* the host's files as last applied and shown */
+
+/* Every mount slot to the arm swaps shown (the host's while joined, else this machine's), or back to its vanilla weapon. */
+void SendAllMounts()
+{
+    for (const Row* row : g_choiceRows) if (IsMount(row)) SendMount(row);
+    g_markVersion++;
+}
 ULONGLONG g_modCheck;
 
 std::vector<localstats::Entry> ModEntriesOf(const hfjson::Value& document)
@@ -3099,7 +3134,9 @@ void SyncModValues()
             g_modRole = (int)g_session.role;
             g_hostModText.clear();
             g_hostStatsText.clear();
+            g_hostMountsText.clear();
             localstats::ShowOwn();
+            if (g_hostMountsShown) { g_hostMountsShown = false; g_hostMounts.clear(); SendAllMounts(); }
             ApplyModValues(localstats::OwnEntries(), "this machine's", "HellForge refused its saved value");
         }
         return;
@@ -3108,19 +3145,32 @@ void SyncModValues()
     if (g_modRole == HF_SESSION_JOINER && now < g_modCheck) return;
     g_modCheck = now + 1000;
     std::wstring folder = hfjson::Wide(g_host.modFolder);
-    std::string text, stats;
+    std::string text, stats, mounts;
     if (!hfjson::ReadFile(folder + L"\\host-mod-stats.json", &text)) text.clear(); /* none (yet) */
     if (!hfjson::ReadFile(folder + L"\\host-stats.json", &stats)) stats.clear();
-    if (g_modRole == HF_SESSION_JOINER && text == g_hostModText && stats == g_hostStatsText) return;
-    hfjson::Value document, statsDocument;
+    if (!hfjson::ReadFile(folder + L"\\host-mounts.json", &mounts)) mounts.clear();
+    if (g_modRole == HF_SESSION_JOINER && text == g_hostModText && stats == g_hostStatsText && mounts == g_hostMountsText) return;
+    hfjson::Value document, statsDocument, mountsDocument;
     if (!text.empty() && !hfjson::Parse(text, &document, nullptr)) return; /* being written: the next second */
     if (!stats.empty() && !hfjson::Parse(stats, &statsDocument, nullptr)) return;
-    bool modsChanged = g_modRole != HF_SESSION_JOINER || text != g_hostModText;
+    if (!mounts.empty() && !hfjson::Parse(mounts, &mountsDocument, nullptr)) return;
+    bool joining = g_modRole != HF_SESSION_JOINER;
+    bool modsChanged = joining || text != g_hostModText, mountsChanged = joining || mounts != g_hostMountsText;
     g_hostModText = text;
     g_hostStatsText = stats;
+    g_hostMountsText = mounts;
     g_modRole = HF_SESSION_JOINER;
     localstats::ShowHost(stats, text); /* from the moment of joining: empty until the host's files arrive */
     if (modsChanged) ApplyModValues(ModEntriesOf(document), "the host's", "HellForge refused the host's value");
+    if (mountsChanged)
+    {
+        g_hostMounts.clear();
+        if (mountsDocument.kind == hfjson::Value::Object)
+            for (auto& m : mountsDocument.members) if (m.second.kind == hfjson::Value::Number) g_hostMounts[m.first] = m.second.AsNumber();
+        g_hostMountsShown = true;
+        SendAllMounts(); /* vehicles called in from now on carry the host's swaps */
+        g_host.api->log(g_host.mod, "editor: the host's arm swaps: %d", (int)g_hostMounts.size());
+    }
 }
 
 /* The layout for a screen: the interface size as large as still fits (full width, at least PANEL_MIN_H of height). */

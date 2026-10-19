@@ -922,6 +922,17 @@ deferred edits, with the same checks and conflict reports.
   offset, storage) with `set`, `reset` and `get`; each becomes a `set_live` edit of the Local Stats mod
   (`zz.local.stats`), so conflicts with other mods are reported as for any edit, and the editor's own saved file is not
   a conflict. The game's hello carries its build and stats schema; the launcher sends nothing to a game running another build or schema.
+  Entity deltas and status multipliers go over the pipe too (written where the stats pass writes them, below).
+- **Attachments and status multipliers live** (SDK 9, `set_stat(mod, &stat, value, flags)`): the fields `set_live`
+  cannot reach and `get_stat` reads (an attachment's or a default magazine's entity delta, a booster's status
+  multiplier), changed in the running game in the place a stats file writes them at boot. `value` NULL puts back the
+  value from before this session's first live change, or with `HF_LIVE_BASE` the field's base (another mod's value,
+  else the game's). It returns `HF_APPLIES_RESPAWN`: the game reads an attachment's delta when it builds the weapon, so
+  a change is expected from the next respawn or re-equip (not yet confirmed in game). The in-game editor applies its
+  attachment and magazine changes this way (and saves them, so they hold from every boot).
+- **Co-op** (docs/multiplayer.md step 5): a joiner plays with the host's Local Stats, including attachments, the
+  in-game editor's mod content values and its arm swaps (Mounted Weapons), and its editor shows the host's changes
+  read-only. Armor perks stay solo only.
 
 ### Game events (SDK 7)
 

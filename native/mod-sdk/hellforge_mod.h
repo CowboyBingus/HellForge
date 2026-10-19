@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 8
+#define HF_MOD_SDK_VERSION 9
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -846,6 +846,14 @@ typedef struct HfApi
     /* SDK 8: returns a selection-category handle, or 0 with a logged reason. Re-registering an identical fully
      * qualified definition returns the same handle; a conflicting title/order is refused. */
     uint32_t (*add_stratagem_category)(HfMod* mod, const HfStratagemCategory* category);
+
+    /* ---- SDK 9 ---------------------------------------------------------------------------------------------------- */
+    /* Changes a stats field set_live cannot reach (an entity delta: an attachment's or a default magazine's stats; a
+     * status multiplier), the fields get_stat reads, live, in the place a stats file writes it at boot. value NULL: back
+     * to its value from before this session's live change, or with HF_LIVE_BASE to its base (get_stat's). Returns
+     * HF_APPLIES_RESPAWN (a weapon takes an attachment's value when it is next built, expected) or 0 (the mod's log says
+     * why). Check hf->size before calling. */
+    int (*set_stat)(HfMod* mod, const HfStat* stat, const HfValue* value, uint32_t flags);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

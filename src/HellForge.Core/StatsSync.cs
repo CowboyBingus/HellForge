@@ -12,8 +12,9 @@ namespace HellForge.Core;
 //   set   <bits>  the field holds bits (a live edit of the Local Stats mod)
 //   base          the field holds its base: without the Local Stats mod's edits (another mod's value, else the game's)
 //   reset         the Local Stats mod's live edit is undone: the field holds its session-start value again
-// Fields live editing does not reach (attachments' entity deltas, status multipliers) apply from a session start: they
-// stay this machine's own and are counted (BootOnly).
+// Attachments' entity deltas and status multipliers, which the in-game editor saves for the next session, go over the
+// pipe too (the loader writes them where the stats pass does; a weapon takes an attachment's from its next respawn). A
+// stats mod's own records ("own") apply from a session start: they stay this machine's own and are counted (BootOnly).
 public sealed record StatsSyncRequest(string Verb, StatsField Field, uint Bits, string Address);
 
 public sealed class StatsSync
@@ -40,6 +41,9 @@ public sealed class StatsSync
         return values;
     }
 
+    // Fields the loader takes over the pipe though set_live does not reach them (live.c LiveExtraRequest).
+    public static bool PipeOnly(StatsField field) => field.Kind is "EntityDelta" or "StatusMultiplier";
+
     static void Read(JsonObject root, Dictionary<string, (StatsField Field, uint Bits)> values, ref int bootOnly)
     {
         foreach (var (category, targets) in root)
@@ -52,7 +56,7 @@ public sealed class StatsSync
                 foreach (var (key, value) in fields)
                 {
                     if (value == null || !target.Fields.TryGetValue(target.Aliases.GetValueOrDefault(key, key), out var field)) continue;
-                    if (LiveApplies.Of(field) == null) { bootOnly++; continue; }
+                    if (LiveApplies.Of(field) == null && !PipeOnly(field)) { bootOnly++; continue; }
                     if (StatsCatalog.TryParse(field, value.ToJsonString(), out _, out var bits, out _)) values[field.AddressKey] = (field, bits);
                 }
             }

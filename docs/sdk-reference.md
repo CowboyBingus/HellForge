@@ -84,6 +84,10 @@ end; a mod checks `hf->version`.
 - **`add_ability`** `uint32_t (HfMod* mod, const HfAbility* ability)`: Adds a new ability (see HfAbility). Call it from hellforge_mod_init. Returns its id (2868 and up), or 0 (the mod's log says why). An entity naming it never sets it off if HellForge could not install it (modloader.log).
 - **`add_stratagem_category`** `uint32_t (HfMod* mod, const HfStratagemCategory* category)`: SDK 8: returns a selection-category handle, or 0 with a logged reason. Re-registering an identical fully qualified definition returns the same handle; a conflicting title/order is refused.
 
+### SDK 9
+
+- **`set_stat`** `int (HfMod* mod, const HfStat* stat, const HfValue* value, uint32_t flags)`: Changes a stats field set_live cannot reach (an entity delta: an attachment's or a default magazine's stats; a status multiplier), the fields get_stat reads, live, in the place a stats file writes it at boot. value NULL: back to its value from before this session's live change, or with HF_LIVE_BASE to its base (get_stat's). Returns HF_APPLIES_RESPAWN (a weapon takes an attachment's value when it is next built, expected) or 0 (the mod's log says why). Check hf->size before calling.
+
 ## Components
 
 Entity component records: `HF_FIELD(Component, field)` names a field, `hf_record(mod, entity, HfComponent)` gives a typed
