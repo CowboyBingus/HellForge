@@ -27,6 +27,7 @@
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <stdio.h>
+#include <string>
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_dx12.h"
@@ -442,6 +443,46 @@ static void STDMETHODCALLTYPE ExecuteDetour(ID3D12CommandQueue* queue, UINT coun
 
 /* ---- set-up ----------------------------------------------------------------------------------------------------- */
 
+/* Where each method was found: its slot in the object's method table (the table every object of that kind shares,
+ * where it lies in a module's image), for the fallback below. */
+static void** g_slotPresent;
+static void** g_slotPresent1;
+static void** g_slotResize;
+static void** g_slotExecute;
+
+/* The module an address lies in ("" none: allocated memory, say an overlay's own code), for the log. */
+static std::string ModuleOf(const void* address)
+{
+    HMODULE module = NULL;
+    wchar_t path[MAX_PATH];
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)address, &module) ||
+        !GetModuleFileNameW(module, path, MAX_PATH)) return "";
+    const wchar_t* name = wcsrchr(path, L'\\');
+    char out[MAX_PATH];
+    WideCharToMultiByte(CP_UTF8, 0, name ? name + 1 : path, -1, out, sizeof out, NULL, NULL);
+    return out;
+}
+
+/* A method hooked where its code is (MinHook, through the loader), else, where the code cannot be hooked (another
+ * overlay already sends the call to code of its own, and MinHook finds no room near it), its slot in the shared method
+ * table pointed at the detour, the code that was there kept as the original: the editor then runs in front of that
+ * overlay, as overlays chain. A table in allocated memory (one object's own) is not patched: the game's objects would
+ * not use it. 0 when hooked. */
+static int HookMethod(HfMod* mod, const char* name, void* target, void** slot, void* detour, void** original)
+{
+    if (!g_api->hook(mod, (uintptr_t)target, detour, original)) return 0;
+    std::string code = ModuleOf(target), table = slot != NULL ? ModuleOf(slot) : "";
+    g_api->log(mod, "editor: %s at %p (%s) could not be hooked in place; its method table at %p (%s)", name, target,
+        code.empty() ? "allocated memory: another overlay's code?" : code.c_str(), (void*)slot, table.empty() ? "allocated memory" : table.c_str());
+    DWORD protect;
+    if (slot == NULL || table.empty() || *slot != target || !VirtualProtect(slot, sizeof *slot, PAGE_READWRITE, &protect)) return 1;
+    *original = target;
+    InterlockedExchangePointer(slot, detour);
+    VirtualProtect(slot, sizeof *slot, protect, &protect);
+    g_api->log(mod, "editor: %s: the method table now calls the editor first (then %p)", name, target);
+    return 0;
+}
+
 /* The addresses of the swap chain's and the queue's methods: a throwaway device, queue and swap chain on a hidden
  * window show them (every swap chain and queue of the process shares these implementations). */
 static bool FindMethods(void** present, void** present1, void** resize, void** execute)
@@ -472,6 +513,7 @@ static bool FindMethods(void** present, void** present1, void** resize, void** e
         *resize = chain[13];    /* IDXGISwapChain::ResizeBuffers */
         *present1 = chain[22];  /* IDXGISwapChain1::Present1 */
         *execute = commands[10]; /* ID3D12CommandQueue::ExecuteCommandLists */
+        g_slotPresent = &chain[8]; g_slotResize = &chain[13]; g_slotPresent1 = &chain[22]; g_slotExecute = &commands[10];
         found = true;
     }
     if (swapChain) swapChain->Release();
@@ -526,10 +568,10 @@ static void Start(HfMod* mod, HfEvent event, void* user)
     if (!FindMethods(&present, &present1, &resize, &execute)) { g_api->log(mod, "editor: no D3D12 device for the probe; the editor stays off"); return; }
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     bool hooked =
-        !g_api->hook(mod, (uintptr_t)execute, (void*)ExecuteDetour, (void**)&g_execute) &&
-        !g_api->hook(mod, (uintptr_t)resize, (void*)ResizeBuffersDetour, (void**)&g_resize) &&
-        !g_api->hook(mod, (uintptr_t)present, (void*)PresentDetour, (void**)&g_present) &&
-        !g_api->hook(mod, (uintptr_t)present1, (void*)Present1Detour, (void**)&g_present1);
+        !HookMethod(mod, "ExecuteCommandLists", execute, g_slotExecute, (void*)ExecuteDetour, (void**)&g_execute) &&
+        !HookMethod(mod, "ResizeBuffers", resize, g_slotResize, (void*)ResizeBuffersDetour, (void**)&g_resize) &&
+        !HookMethod(mod, "Present", present, g_slotPresent, (void*)PresentDetour, (void**)&g_present) &&
+        !HookMethod(mod, "Present1", present1, g_slotPresent1, (void*)Present1Detour, (void**)&g_present1);
     /* a Direct3D 11 swap chain's methods, hooked too where they are other code than the D3D12 one's */
     void *present11, *present1_11, *resize11;
     if (hooked && FindMethods11(&present11, &present1_11, &resize11))
