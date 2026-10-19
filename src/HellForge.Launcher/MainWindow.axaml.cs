@@ -76,6 +76,7 @@ public partial class MainWindow : Window
 
         InitializeMods();
         InitializeWeaponLevels();
+        InitializeSettingsImport();
         Nav.SelectionChanged += (_, _) => ShowPage(Nav.SelectedIndex);
         DiscordButton.Click += (_, _) => OpenLink(DiscordInvite);
         ToolTip.SetTip(DiscordButton, "Support, news and mods: the HellForge Discord (" + DiscordInvite + ")");
@@ -397,7 +398,9 @@ public partial class MainWindow : Window
         TemplateText.Text = profile.Template;
         TemplateBadge.IsVisible = profile.IsDev;
         TemplateCaption.Text = "Applied when the profile is first created";
+        ImportSettingsStatus.Text = "";
         ShowProfile();
+        UpdateSettingsImport();
     }
 
     void ShowTemplateDescription()
@@ -569,6 +572,7 @@ public partial class MainWindow : Window
         if (running && NewProfileForm.IsVisible) ShowNewProfileForm(false);
         SetModsLocked(running);
         SetWeaponLevelsLocked(running);
+        UpdateSettingsImport();
     }
 
     void BuildSteps()

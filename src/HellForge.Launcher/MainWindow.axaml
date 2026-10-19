@@ -204,6 +204,19 @@
               </StackPanel>
             </Border>
           </UniformGrid>
+          <Border Classes="card" Margin="0,0,0,16">
+            <StackPanel Spacing="10">
+              <TextBlock Text="GAME SETTINGS" Classes="h2" Margin="0" />
+              <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                         Text="Copies the options you set in the normal HELLDIVERS 2 (graphics, audio, display, gameplay) into this profile, and your key bindings from Steam if you like. A new profile gets them once, when it is first played; import again after changing them in the normal game. The profile's own settings are kept, so Undo import takes them back. Progress, saves and loadouts are not touched." />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <CheckBox x:Name="ImportControlsBox" Content="Key bindings too" IsChecked="True" VerticalAlignment="Center" />
+                <Button x:Name="ImportSettingsButton" Classes="primary" Content="Import from HELLDIVERS 2" />
+                <Button x:Name="UndoImportButton" Classes="ghost" Content="Undo import" />
+              </StackPanel>
+              <TextBlock x:Name="ImportSettingsStatus" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
           <Border x:Name="WeaponLevelsCard" Classes="card" IsVisible="False">
             <StackPanel Spacing="10">
               <TextBlock Text="WEAPON LEVELS" Classes="h2" Margin="0" />

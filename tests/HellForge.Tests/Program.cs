@@ -345,6 +345,40 @@ Test("Session settings point every game path into the installation, per profile"
     catch (ArgumentException) { }
 });
 
+Test("A profile imports the normal game's settings again (and key bindings), and the import is taken back", () =>
+{
+    var install = new InstallLayout(Path.Combine(root, "import install"));
+    install.Create(SupportedBuild.Current.BuildId);
+    var vanilla = Directory.CreateDirectory(Path.Combine(root, "import vanilla", "saves")).Parent!.FullName;
+    File.WriteAllText(Path.Combine(vanilla, "user_settings.config"), "game v2");
+    File.WriteAllText(Path.Combine(vanilla, "saves", "1100001_user_settings.config"), "account v2");
+    File.WriteAllText(Path.Combine(vanilla, "saves", "1100001_user_settings.config.old"), "the game's own backup");
+    var controls = Path.Combine(root, "import vanilla", "input_settings.config");
+    File.WriteAllText(controls, "keys v2");
+    var profile = install.GameProfile("pp-real");
+    Directory.CreateDirectory(Path.Combine(profile, "saves"));
+    File.WriteAllText(Path.Combine(profile, "user_settings.config"), "game v1");
+    File.WriteAllText(Path.Combine(profile, "progress-marker"), "untouched");
+    Check(!GameSettings.CanUndoImport(install, "pp-real"), "Nothing to undo before an import.");
+    var result = GameSettings.ImportFromGame(install, "pp-real", vanilla, controls, controls: true);
+    Check(result.Copied.Count == 3 && result.Missing.Count == 0 && File.ReadAllText(Path.Combine(profile, "user_settings.config")) == "game v2" &&
+        File.ReadAllText(Path.Combine(profile, "saves", "1100001_user_settings.config")) == "account v2" &&
+        !File.Exists(Path.Combine(profile, "saves", "1100001_user_settings.config.old")) &&
+        File.ReadAllText(Path.Combine(profile, "cloud", "input_settings.config")) == "keys v2", "Options, account options and key bindings copied (not the game's .old backups).");
+    Check(File.ReadAllText(Path.Combine(profile, "user_settings.config" + GameSettings.BackupSuffix)) == "game v1" && GameSettings.CanUndoImport(install, "pp-real"),
+        "The profile's own options are kept beside them.");
+    Check(GameSettings.UndoImport(install, "pp-real") == 3 && File.ReadAllText(Path.Combine(profile, "user_settings.config")) == "game v1" &&
+        !File.Exists(Path.Combine(profile, "saves", "1100001_user_settings.config")) && !File.Exists(Path.Combine(profile, "cloud", "input_settings.config")) &&
+        File.ReadAllText(Path.Combine(profile, "progress-marker")) == "untouched" && !GameSettings.CanUndoImport(install, "pp-real"),
+        "Undo: its own options back, the files the import made gone, nothing else touched.");
+    var without = GameSettings.ImportFromGame(install, "pp-real", vanilla, null, controls: false);
+    Check(without.Copied.Count == 2 && !File.Exists(Path.Combine(profile, "cloud", "input_settings.config")), "Without key bindings: those stay as they are.");
+    var nothing = GameSettings.ImportFromGame(install, "pp-real", Path.Combine(root, "no such game"), null, controls: true);
+    Check(nothing.Copied.Count == 0 && nothing.Missing.Count == 2, "No normal game on this PC: nothing copied, and said so.");
+    try { GameSettings.ImportFromGame(install, "Bad Name", vanilla, null, false); throw new Exception("Imported into an invalid profile name."); }
+    catch (ArgumentException) { }
+});
+
 Test("Session logs: only the newest ten earlier sessions stay; other folders are never touched", () =>
 {
     var sessions = Directory.CreateDirectory(Path.Combine(root, "prune-sessions")).FullName;
