@@ -4,7 +4,7 @@
 your PC, loads mods into it (new stratagems, weapons, stats, difficulties) and lets you play solo or with friends who
 run HellForge too. It comes with an in-game editor (F8) and a C mod SDK with docs and examples.
 
-**Status: beta (0.1.4-beta)**, for modders first. Expect rough edges; the version and game build it targets are in the
+**Status: beta (0.1.5-beta)**, for modders first. Expect rough edges; the version and game build it targets are in the
 launcher's bottom-left corner.
 
 ## How it works
@@ -13,8 +13,8 @@ launcher's bottom-left corner.
   against Steam's hashes. No game files are distributed, and your normal Steam game is never changed.
 - **Steam ownership.** A genuine Steam ownership check runs at setup and before every launch: Steam must be running and
   signed in to an account that owns the game or has it through Steam Family Sharing.
-- **Offline.** The copy talks to a local backend on your PC instead of Arrowhead's online services; Windows Firewall
-  rules block it from everything but this PC. It never connects to official servers, so it cannot be used to play online
+- **Offline.** The copy talks to a local backend on your PC instead of Arrowhead's online services; a network block
+  in the Windows Filtering Platform stops it reaching anything but this PC. It never connects to official servers, so it cannot be used to play online
   with a modified game. The one multiplayer feature is co-op with your Steam friends (below). The galactic war can follow
   the live war read-only from the community mirror [api.helldivers2.dev](https://api.helldivers2.dev) (Settings >
   Galactic war).
@@ -22,15 +22,14 @@ launcher's bottom-left corner.
 - **Co-op with Steam friends** is the only multiplayer: you host or join friends from your Steam friends list who also run
   HellForge, with the same gameplay mods (HellForge checks them before a join). There is no matchmaking, no public
   lobbies and no play with the normal game's players.
-- Everything HellForge writes stays inside its folder, apart from the firewall rules and optional shortcuts.
+- Everything HellForge writes stays inside its folder, apart from the network block and optional shortcuts.
 
 ## Install (players)
 
 **You need:** Windows 10 or 11 (64-bit); Steam running and signed in to an account that owns HELLDIVERS 2 (or has it through Steam Family Sharing); about 25 GB
 free on the drive you install to (about 50 GB in total if Steam has to download the supported build first); permission
-to approve one Windows administrator prompt; and **Windows Firewall switched on** for every network type, because
-HellForge keeps its copy of the game offline with Windows Firewall rules (security suites such as Norton or
-Bitdefender sometimes switch it off; setup checks first and says so). Windows SmartScreen may warn that the setup
+to approve one Windows administrator prompt. Windows Firewall does not need to be on: the block lives in the Windows
+Filtering Platform and holds even when a security suite has switched the firewall off. Windows SmartScreen may warn that the setup
 program is unrecognised: it is not code-signed (**More info > Run anyway**).
 
 Run `HellForge-Setup.exe` and pick a folder (default `Documents\HellForge`, or your user folder when Documents is in
@@ -46,15 +45,16 @@ wizard:
 2. confirms with Steam that the signed-in account owns the game, or has it through Steam Family Sharing;
 3. copies the game's 154 depot files (about 24 GB) from your own Steam library, each checked against Steam's hashes;
    mods and other files in the Steam folder are not copied, and an interrupted copy continues where it stopped;
-4. adds the firewall block for this folder's copy (the only Windows administrator prompt);
+4. places the network block for this folder's copy (the only Windows administrator prompt) and checks that it blocks;
+   setup does not finish until it is in place;
 5. optionally imports game settings from an earlier HellForge setup and creates shortcuts.
 
 Everything HellForge and the copied game write stays inside the folder: `app\` (program), `game\` (the copy),
 `userdata\` (game settings, saves, shader cache, crash reports; `settings.ini` is pointed here each session),
 `profiles\` (HellForge progress), `logs\` and `temp\`. The game's Steam Cloud files (loadout, title, player card,
 controls) stay in each profile's `userdata\profiles\<name>\cloud\` instead of the Steam account's cloud, which the
-normal game shares. Outside the folder there are only the firewall rules
-and the optional shortcuts. To uninstall: Settings > Installation > **Uninstall HellForge** removes the firewall rules and shortcuts, then deletes the folder (game copy, profiles, mods and all) once the launcher has closed. Start HellForge with `HellForge.exe` at the top of the folder. Running `HellForge-Setup.exe` on an existing
+normal game shares. Outside the folder there are only the network block
+and the optional shortcuts. To uninstall: Settings > Installation > **Uninstall HellForge** removes the network block and shortcuts, then deletes the folder (game copy, profiles, mods and all) once the launcher has closed. Start HellForge with `HellForge.exe` at the top of the folder. Running `HellForge-Setup.exe` on an existing
 installation updates the app and keeps the game, profiles and settings; Settings > Installation > Check and repair
 re-verifies the copy. Two mods are bundled, built: the in-game editor (F8) and the Hell Forge difficulty (level 11).
 Before each session they are put into `mods\hellforge-editor` and `mods\hell-forge` (switch either off on the Mods
