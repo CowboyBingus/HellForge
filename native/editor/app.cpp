@@ -986,6 +986,7 @@ struct ListOpts
     int count, selected = -1;
     std::string key;
     bool focused = false;
+    int layer = 3; /* the scrollbar's; a popup's list draws it above the popup's panel */
     std::function<void(int, float, float, float, float, bool hovered)> draw;
     std::function<void(int)> click, rightClick;
     std::function<void(int, float, float, float, float)> after;
@@ -1038,8 +1039,8 @@ void List(const ListOpts& o)
         float trackY = o.y + 2, trackH = o.h - 4;
         float thumb = std::max(24.0f, trackH * rows / o.count), t = (float)scroll / std::max(1, maxScroll);
         bool dragging = g_drag.key == o.key;
-        g_cv.Rect(o.x + o.w - 4, trackY, 3, trackH, LINE, 3);
-        g_cv.Rect(o.x + o.w - (dragging ? 6 : 4), trackY + (trackH - thumb) * t, dragging ? 5.0f : 3.0f, thumb, (o.focused || dragging) ? GOLD : LINE_STRONG, 4);
+        g_cv.Rect(o.x + o.w - 4, trackY, 3, trackH, LINE, o.layer);
+        g_cv.Rect(o.x + o.w - (dragging ? 6 : 4), trackY + (trackH - thumb) * t, dragging ? 5.0f : 3.0f, thumb, (o.focused || dragging) ? GOLD : LINE_STRONG, o.layer + 1);
         if (g_cv.Hit(o.x + o.w - 14, o.y, 14, o.h, ui::Id(o.key, 8888)))
         {
             g_drag.key = o.key; g_drag.trackY = trackY; g_drag.trackH = trackH; g_drag.thumb = thumb;
@@ -3062,7 +3063,7 @@ void DrawPicker()
     float ly = sy + sh + 8;
     o.x = x + 2; o.y = ly; o.w = w - 4; o.h = y + h - ly - 44; o.rowH = row->pick.empty() ? 48 : 40; o.count = (int)g_picker.entries.size();
     o.selected = g_picker.index;
-    o.key = "picker"; o.focused = true;
+    o.key = "picker"; o.focused = true; o.layer = 12;
     o.click = [&](int i) { PickerChoose(i); };
     o.draw = [&](int i, float rx, float ry, float rw, float rh, bool hovered) {
         const PickEntry& option = g_picker.entries[i];
@@ -3128,7 +3129,7 @@ void DrawErrors()
     float detail = 64;
     ListOpts o;
     o.x = x + 2; o.y = hy + 26; o.w = w - 4; o.h = y + h - hy - 26 - detail - 48; o.rowH = 50; o.count = n; o.selected = g_errorsPopup.index;
-    o.key = "errors"; o.focused = true;
+    o.key = "errors"; o.focused = true; o.layer = 12;
     o.click = [&](int i) { g_errorsPopup.index = i; g_errorsPopup.on = false; Reveal(list[i]); Sound(sounds::OPEN); };
     o.draw = [&](int i, float rx, float ry, float rw, float rh, bool hovered) {
         const Row* row = list[i];

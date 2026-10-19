@@ -158,6 +158,13 @@ public static class StatsCatalog
         ["jump"] = "Jump pack", ["hover"] = "Hover pack", ["shield"] = "Shield", ["vehicle"] = "Vehicle", ["deposit"] = "Supply",
         ["booster"] = "Booster"
     };
+    // The Fire mode group's order: the modes, the burst, then the rate-of-fire slots X, Y (the weapon's own fire rate), Z.
+    static readonly Dictionary<string, int> FireRank = new(StringComparer.Ordinal)
+    {
+        ["fire_mode.modes.1"] = 0, ["fire_mode.modes.2"] = 1, ["fire_mode.modes.3"] = 2, ["fire_mode.burst_rounds"] = 3,
+        ["fire_rate.modes.x"] = 4, ["weapon.fire_rate"] = 5, ["fire_rate.modes.z"] = 6,
+    };
+
     static readonly Dictionary<string, int> AmmoRank = new(StringComparer.Ordinal)
     {
         ["weapon.capacity"] = 1, ["weapon.feed_capacity_1"] = 1, ["weapon.feed_capacity_2"] = 1, ["magazine.capacity"] = 1,
@@ -292,6 +299,14 @@ public static class StatsCatalog
                          .Select(g => g.OrderBy(f => f.Value.Name.Contains("deprecated", StringComparison.OrdinalIgnoreCase)).ThenBy(f => f.Value.Order).First()))
             {
                 var (category, group, rank) = Place(part.Category, key, roles, field.Section);
+                var label = Label(key, field);
+                // A weapon with fire modes: burst rounds under them, its fire rate as the Y slot between X and Z.
+                if (category == "fire" && (key == "fire_mode.burst_rounds" && target.Fields.ContainsKey("fire_mode.modes.1") ||
+                                           key == "weapon.fire_rate" && target.Fields.ContainsKey("fire_rate.modes.x")))
+                {
+                    (group, rank) = ("Fire mode", 1.5);
+                    if (key == "weapon.fire_rate") label = "Rate of fire Y";
+                }
                 if (vehiclePage && part.Category == "weapons")
                 {
                     // the mount's own category; its sections in the order a weapon page has them
@@ -300,7 +315,7 @@ public static class StatsCatalog
                     category = "mount:" + part.Target;
                     titles[category] = (schema.Targets["weapons"][part.Target].Class == "Shield" ? "Shield · " : "Weapon · ") + part.Title;
                 }
-                placed.Add((category, group, rank, new StatsRow(part, key, field, Label(key, field))));
+                placed.Add((category, group, rank, new StatsRow(part, key, field, label)));
             }
         }
         // A group that several parts fill is split per part, named after it: "Backpack · Ammunition".
@@ -315,7 +330,7 @@ public static class StatsCatalog
                 .Select(g => new StatsGroup(groupParts[(category, g.Key.Group)].Count > 1 && groupParts[(category, g.Key.Group)][0] != g.Key.Part
                         ? g.Key.Part.Title + " · " + g.Key.Group : g.Key.Group,
                     g.OrderBy(p => AmmoRank.GetValueOrDefault(p.Row.Key, p.Row.Key.StartsWith("reload.", StringComparison.Ordinal) ? 5 : 3))
-                        .ThenBy(p => p.Row.Field.Order).ThenBy(p => p.Row.Key, StringComparer.Ordinal).Select(p => p.Row).ToList()))
+                        .ThenBy(p => FireRank.GetValueOrDefault(p.Row.Key, FireRank.Count)).ThenBy(p => p.Row.Field.Order).ThenBy(p => p.Row.Key, StringComparer.Ordinal).Select(p => p.Row).ToList()))
                 .ToList();
             var title = titles.GetValueOrDefault(category) ?? Titles.GetValueOrDefault(category) ?? rows[0].Group;
             // A projectile category with no round of its own holds explosions only.
