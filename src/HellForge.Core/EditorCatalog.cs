@@ -186,9 +186,12 @@ public static class EditorCatalog
             "mounted_weapon" => "Mounted weapons", _ => "Other",
         };
         string[] projectileGroups = ["Weapons", "Support weapons", "Stratagems", "Vehicles", "Mounted weapons", "Other"];
+        // A weapon's programmable round is another weapon's shot at times (the GR-8 Recoilless Rifle's is the TD-220 Bastion's
+        // shell): the note names it too.
+        var programmedBy = root["programmable"]!.AsObject().ToLookup(w => w.Value!["projectile"]!.GetValue<long>(), w => w.Key + " (programmable ammo)");
         var projectiles = root["projectiles"]!.AsArray().Select(p => p!).Select(p =>
         {
-            var owners = p["owners"]!.AsArray().Select(o => o!.GetValue<string>()).ToList();
+            var owners = p["owners"]!.AsArray().Select(o => o!.GetValue<string>()).Concat(programmedBy[p["type"]!.GetValue<long>()]).ToList();
             var others = owners.Count > 1 ? $", also {string.Join(", ", owners.Skip(1).Take(2))}{(owners.Count > 3 ? $" +{owners.Count - 3}" : "")}" : "";
             return Option(p["type"]!.GetValue<long>(), owners[0], Kind(p["owner"]!.GetValue<string>()), $"projectile {p["type"]}{others}");
         }).OrderBy(o => Array.IndexOf(projectileGroups, o["group"]!.GetValue<string>())).ThenBy(o => o["label"]!.GetValue<string>(), StringComparer.OrdinalIgnoreCase);
