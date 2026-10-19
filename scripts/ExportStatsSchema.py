@@ -135,6 +135,33 @@ def humanize(name):
     return text[:1].upper() + text[1:]
 
 
+# HD2R's third-person reticle flag is a view over WeaponDataComponentData +400 crosshair_type (CrosshairWeaponType;
+# HD2Runtime docs/weapon-reticles.md): 3 hides the reticle, any other style shows it. HellForge offers the styles
+# themselves, the ones some weapon uses (Default 0's effect is not mapped), each named with the weapons that use it.
+RETICLE_KEY = "weapon.third_person_reticle"
+RETICLES = []
+
+
+def reticle_options(runtime):
+    research = next(iter(sorted((runtime / "research").glob("weapon-reticles-*.json"))), None)
+    if research is None:
+        return []
+    data = json.loads(research.read_text(encoding="utf-8"))
+    names = data["enum"]["names"]
+    users = {}
+    for w in data["weapons"]:
+        if isinstance(w.get("crosshairType"), int) and w["crosshairType"] != 0:
+            users.setdefault(w["crosshairType"], []).append(w["weapon"])
+    def label(value, weapons):
+        name = names.get(str(value))
+        name = "No reticle" if value == data["encoding"]["hidden"] else \
+            re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name).capitalize() if name else "Style %d" % value
+        weapons = sorted(weapons, key=lambda w: name.lower() not in w.lower())  # the style's namesake first (the Railgun)
+        more = " +%d more" % (len(weapons) - 2) if len(weapons) > 2 else ""
+        return "%s (%d): %s%s" % (name, value, ", ".join(weapons[:2]), more)
+    return [[v, label(v, users[v])] for v in sorted(users)]
+
+
 def expand(f):
     """HD2R Editor's value kinds as plain fields, each one value HellForge's stats file and live edits hold: a flag
     (its u8 or u32), an enum or weapon function (a u32 with its named values: "options"), and the slot lists HD2Runtime
@@ -149,6 +176,8 @@ def expand(f):
                  type="number" if storage == "f32" else "integer", _options=options, **extra)
         g["_slot"] = key != f["semanticFieldId"]  # one slot of a list: gives way to a named field on the same bytes
         return g
+    if ty == "boolean" and f["semanticFieldId"] == RETICLE_KEY and b.get("storage") == "u32" and RETICLES:
+        return [slot(f["semanticFieldId"], f.get("displayName") or "Third-person reticle", b["offset"], "u32", RETICLES)]
     if ty == "boolean" and b.get("storage") in ("u8", "u32"):
         return [slot(f["semanticFieldId"], f.get("displayName") or humanize(f["semanticFieldId"].split(".")[-1]), b["offset"], b["storage"],
                      [[0, "No"], [1, "Yes"]], min=0, max=1)]
@@ -184,6 +213,7 @@ def export(runtime, profile):
     if schema["dll_sha"].upper() != profile["gameDllSha256"].upper():
         raise ValueError("HD2Runtime and HellForge game.dll fingerprints differ")
     targets = {}
+    RETICLES[:] = reticle_options(runtime)
     sources = [("player_weapon", "weapons", "weapons"), ("support_weapon", "weapons", "weapons"),
                ("throwable", "throwables", "throwables"), ("stratagem", "stratagems", "stratagems"),
                ("vehicle_weapon", "weapons", "weapons"), ("entity", "backpacks", "backpacks"),

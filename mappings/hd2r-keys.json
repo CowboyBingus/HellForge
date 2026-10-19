@@ -91441,7 +91441,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR-11 Arbitrator|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|280|400"
 ],
@@ -91548,7 +91548,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR-2 Coyote|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|276|400"
 ],
@@ -91655,7 +91655,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR-23 Liberator|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|270|400"
 ],
@@ -91762,7 +91762,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR-23A Liberator Carbine|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|278|400"
 ],
@@ -91869,7 +91869,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR-23C Liberator Concussive|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|272|400"
 ],
@@ -91976,7 +91976,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR-23P Liberator Penetrator|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|271|400"
 ],
@@ -92083,7 +92083,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR-32 Pacifier|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|275|400"
 ],
@@ -92190,7 +92190,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR-59 Suppressor|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|281|400"
 ],
@@ -92297,7 +92297,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR-61 Tenderizer|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|279|400"
 ],
@@ -92381,7 +92381,7 @@
 "field": "weapon.suppressed"
 },
 "pw|AR/GL-21 One-Two|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|273|400"
 ],
@@ -92454,7 +92454,7 @@
 "field": "weapon.suppressed"
 },
 "pw|ARC-12 Blitzer|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|269|400"
 ],
@@ -92561,7 +92561,7 @@
 "field": "weapon.suppressed"
 },
 "pw|BR-14 Adjudicator|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|285|400"
 ],
@@ -92657,7 +92657,7 @@
 "field": "weapon.suppressed"
 },
 "pw|CB-9 Exploding Crossbow|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|288|400"
 ],
@@ -92730,7 +92730,7 @@
 "field": "weapon.suppressed"
 },
 "pw|CQC-19 Stun Lance|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|164|400"
 ],
@@ -92803,7 +92803,7 @@
 "field": "weapon.suppressed"
 },
 "pw|CQC-2 Saber|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|262|400"
 ],
@@ -92876,7 +92876,7 @@
 "field": "weapon.suppressed"
 },
 "pw|CQC-30 Stun Baton|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|264|400"
 ],
@@ -92897,7 +92897,7 @@
 "field": "weapon.suppressed"
 },
 "pw|CQC-42 Machete|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|267|400"
 ],
@@ -92970,7 +92970,7 @@
 "field": "weapon.suppressed"
 },
 "pw|CQC-5 Combat Hatchet|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|266|400"
 ],
@@ -92991,7 +92991,7 @@
 "field": "weapon.suppressed"
 },
 "pw|CQC-73 Entrenchment Tool|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|166|400"
 ],
@@ -93064,7 +93064,7 @@
 "field": "weapon.suppressed"
 },
 "pw|DBS-2 Double Freedom|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|177|400"
 ],
@@ -93122,7 +93122,7 @@
 "field": "weapon.suppressed"
 },
 "pw|FLAM-66 Torcher|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|289|400"
 ],
@@ -93218,7 +93218,7 @@
 "field": "weapon.suppressed"
 },
 "pw|GL-15 Evictor|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|169|400"
 ],
@@ -93492,7 +93492,7 @@
 "field": "weapon.suppressed"
 },
 "pw|JAR-5 Dominator|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|290|400"
 ],
@@ -93595,7 +93595,7 @@
 "field": "weapon.suppressed"
 },
 "pw|LAS-12 Sai|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|297|400"
 ],
@@ -93675,7 +93675,7 @@
 "field": "weapon.suppressed"
 },
 "pw|LAS-13 Trident|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|296|400"
 ],
@@ -93778,7 +93778,7 @@
 "field": "weapon.suppressed"
 },
 "pw|LAS-16 Sickle|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|294|400"
 ],
@@ -93880,7 +93880,7 @@
 "field": "weapon.suppressed"
 },
 "pw|LAS-17 Double-Edge Sickle|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|295|400"
 ],
@@ -93953,7 +93953,7 @@
 "field": "weapon.suppressed"
 },
 "pw|LAS-22 Shear|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|293|400"
 ],
@@ -94033,7 +94033,7 @@
 "field": "weapon.suppressed"
 },
 "pw|LAS-5 Scythe|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|292|400"
 ],
@@ -94136,7 +94136,7 @@
 "field": "weapon.suppressed"
 },
 "pw|LAS-58 Talon|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|313|400"
 ],
@@ -94216,7 +94216,7 @@
 "field": "weapon.suppressed"
 },
 "pw|LAS-7 Dagger|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|317|400"
 ],
@@ -94312,7 +94312,7 @@
 "field": "weapon.suppressed"
 },
 "pw|M6C/SOCOM Pistol|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|321|400"
 ],
@@ -94419,7 +94419,7 @@
 "field": "weapon.suppressed"
 },
 "pw|M7S SMG|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|182|400"
 ],
@@ -94492,7 +94492,7 @@
 "field": "weapon.suppressed"
 },
 "pw|M90A Shotgun|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|178|400"
 ],
@@ -94699,7 +94699,7 @@
 "field": "weapon.suppressed"
 },
 "pw|MP-98 Knight|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|179|400"
 ],
@@ -94780,7 +94780,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-11 Stim Pistol|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|191|400"
 ],
@@ -94876,7 +94876,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-113 Verdict|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|318|400"
 ],
@@ -94983,7 +94983,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-19 Redeemer|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|311|400"
 ],
@@ -95079,7 +95079,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-2 Peacemaker|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|190|400"
 ],
@@ -95137,7 +95137,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-33 Missile Pistol|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|189|400"
 ],
@@ -95233,7 +95233,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-34 Breacher|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|316|400"
 ],
@@ -95329,7 +95329,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-35 Re-Educator|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|312|400"
 ],
@@ -95425,7 +95425,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-4 Senator|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|324|400"
 ],
@@ -95521,7 +95521,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-69 Veto|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|319|400"
 ],
@@ -95659,7 +95659,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P-92 Warrant|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|188|400"
 ],
@@ -95755,7 +95755,7 @@
 "field": "weapon.suppressed"
 },
 "pw|P/40-K Bolt Pistol|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|322|400"
 ],
@@ -95862,7 +95862,7 @@
 "field": "weapon.suppressed"
 },
 "pw|PLAS-1 Scorcher|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|308|400"
 ],
@@ -95935,7 +95935,7 @@
 "field": "weapon.suppressed"
 },
 "pw|PLAS-101 Purifier|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|309|400"
 ],
@@ -96008,7 +96008,7 @@
 "field": "weapon.suppressed"
 },
 "pw|PLAS-15 Loyalist|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|323|400"
 ],
@@ -96107,7 +96107,7 @@
 "field": "weapon.suppressed"
 },
 "pw|PLAS-39 Accelerator Rifle|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|185|400"
 ],
@@ -96203,7 +96203,7 @@
 "field": "weapon.suppressed"
 },
 "pw|R-2 Amendment|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|286|400"
 ],
@@ -96299,7 +96299,7 @@
 "field": "weapon.suppressed"
 },
 "pw|R-2124 Constitution|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|287|400"
 ],
@@ -96395,7 +96395,7 @@
 "field": "weapon.suppressed"
 },
 "pw|R-36 Eruptor|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|291|400"
 ],
@@ -96491,7 +96491,7 @@
 "field": "weapon.suppressed"
 },
 "pw|R-4 Hyena|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|300|400"
 ],
@@ -96564,7 +96564,7 @@
 "field": "weapon.suppressed"
 },
 "pw|R-6 Deadeye|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|298|400"
 ],
@@ -96660,7 +96660,7 @@
 "field": "weapon.suppressed"
 },
 "pw|R-63 Diligence|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|303|400"
 ],
@@ -96756,7 +96756,7 @@
 "field": "weapon.suppressed"
 },
 "pw|R-63CS Diligence Counter Sniper|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|304|400"
 ],
@@ -96852,7 +96852,7 @@
 "field": "weapon.suppressed"
 },
 "pw|R-72 Censor|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|301|400"
 ],
@@ -96948,7 +96948,7 @@
 "field": "weapon.suppressed"
 },
 "pw|R/40-K Hot-Shot Marksman Rifle|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|302|400"
 ],
@@ -97006,7 +97006,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SG-20 Halt|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|173|400"
 ],
@@ -97179,7 +97179,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SG-225 Breaker|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|282|400"
 ],
@@ -97275,7 +97275,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SG-225IE Breaker Incendiary|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|284|400"
 ],
@@ -97382,7 +97382,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SG-225SP Breaker Spray&Pray|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|283|400"
 ],
@@ -97478,7 +97478,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SG-451 Cookout|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|174|400"
 ],
@@ -97551,7 +97551,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SG-8 Punisher|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|170|400"
 ],
@@ -97647,7 +97647,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SG-8P Punisher Plasma|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|175|400"
 ],
@@ -97720,7 +97720,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SG-8S Slugger|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|172|400"
 ],
@@ -97793,7 +97793,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SG-97 Sweeper|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|176|400"
 ],
@@ -97900,7 +97900,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SMG-203 Gallant|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|184|400"
 ],
@@ -98007,7 +98007,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SMG-32 Reprimand|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|183|400"
 ],
@@ -98114,7 +98114,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SMG-37 Defender|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|305|400"
 ],
@@ -98221,7 +98221,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SMG-72 Pummeler|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|306|400"
 ],
@@ -98294,7 +98294,7 @@
 "field": "weapon.suppressed"
 },
 "pw|SMG/FLAM-34 Stoker|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|180|400"
 ],
@@ -98390,7 +98390,7 @@
 "field": "weapon.suppressed"
 },
 "pw|StA-11 SMG|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|181|400"
 ],
@@ -98497,7 +98497,7 @@
 "field": "weapon.suppressed"
 },
 "pw|StA-52 Assault Rifle|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|274|400"
 ],
@@ -98579,7 +98579,7 @@
 "field": "weapon.suppressed"
 },
 "pw|VG-70 Variable|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|186|400"
 ],
@@ -98965,7 +98965,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|APW-1 Anti-Materiel Rifle|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|354|400"
 ],
@@ -99034,7 +99034,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|ARC-3 Arc Thrower|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|327|400"
 ],
@@ -99229,7 +99229,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|CQC-1 One True Flag|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|265|400"
 ],
@@ -99254,7 +99254,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|CQC-20 Breaching Hammer|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|163|400"
 ],
@@ -99316,7 +99316,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|CQC-9 Defoliation Tool|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|263|400"
 ],
@@ -99591,7 +99591,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|FAF-14 Spear|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|335|400"
 ],
@@ -99800,7 +99800,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|GL-28 Belt-Fed Grenade Launcher|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|329|400"
 ],
@@ -100093,7 +100093,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|LAS-99 Quasar Cannon|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|345|400"
 ],
@@ -100164,7 +100164,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|M-1000 Maxigun|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|348|400"
 ],
@@ -100327,7 +100327,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|MG-206 Heavy Machine Gun|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|342|400"
 ],
@@ -100412,7 +100412,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|MG-43 Machine Gun|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|347|400"
 ],
@@ -100786,7 +100786,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|RS-422 Railgun|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|351|400"
 ],
@@ -100930,7 +100930,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|SG-88 Break-Action Shotgun|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|243|400"
 ],
@@ -101007,7 +101007,7 @@
 "field": "weapon.stationary_while_firing"
 },
 "sp|StA-X3 W.A.S.P. Launcher|sw|weapon.third_person_reticle": {
-"kind": "bool",
+"kind": "reticle",
 "addresses": [
 "component|WeaponDataComponentData|336|400"
 ],

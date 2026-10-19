@@ -491,7 +491,7 @@ def build_rows(D):
 
 def structured(row):
     """A value kind HellForge holds as one or more plain fields (ExportStatsSchema.py expand()): the key's kind as the
-    editor reads a preset value ("bool": true/false; "enum": a number or a name; "slots": a list, one entry per slot;
+    editor reads a preset value ("bool": true/false; "reticle": true/false over a reticle style; "enum": a number or a name; "slots": a list, one entry per slot;
     "ap": an armor penetration label, the trait slot that holds it), the slots' addresses and the names of values.
     None: not one."""
     f = row.field
@@ -499,6 +499,8 @@ def structured(row):
         return None
     head, off = row.addr[:-1], row.addr[-1]
     at = lambda i, size=4: key_address(head + (off + i * size,))
+    if row.kind == "boolean" and row.sid == "weapon.third_person_reticle":  # a style number, its flag a view (ExportStatsSchema.py)
+        return {"kind": "reticle", "addresses": [at(0)]}
     if row.kind == "boolean":
         return {"kind": "bool", "addresses": [at(0)]}
     if row.kind == "enum":

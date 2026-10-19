@@ -1244,6 +1244,9 @@ void PickerFill()
     }
 }
 
+/* Whether `i` is an entry of the list (a filter that matches nothing leaves it empty and the index -1). */
+bool PickerHas(int i) { return i >= 0 && i < (int)g_picker.entries.size(); }
+
 /* The next selectable entry from `from` going `step` (headers are skipped), or `from`. */
 int PickerStep(int from, int step)
 {
@@ -1272,7 +1275,7 @@ void OpenPicker(const Row* row)
 
 void PickerChoose(int i)
 {
-    if (i < 0 || i >= (int)g_picker.entries.size() || g_picker.entries[i].header) return;
+    if (!PickerHas(i) || g_picker.entries[i].header) return;
     const Row* row = g_picker.row;
     double value = g_picker.entries[i].value;
     if (row->pick == "status" && value == 0 && LaterSlotFilled(row))
@@ -1429,9 +1432,20 @@ void ScanPresets()
     g_preset = std::clamp(g_preset, 0, std::max(0, (int)g_presets.size() - 1));
 }
 
+/* Reticle styles (WeaponDataComponentData crosshair_type): none (the damage indicator only) and the assault rifle's. */
+constexpr double RETICLE_OFF = 3, RETICLE_ON = 4;
+
 /* A flag, a named value or a slot list's entry as the row's number, or false with *why. */
 bool PresetStructured(const Row* row, const Row::Hd2rAs& as, const hfjson::Value& v, double* out, std::string* why)
 {
+    /* HD2R's reticle flag over the style number: off is 3 (damage indicator only), on the weapon's own style, or the
+     * assault rifle's (4) where the game's own is off */
+    if (as.kind == "reticle" && v.kind == hfjson::Value::Bool)
+    {
+        RowView view = ViewOf(row, false);
+        double own = view.hasBase ? view.base : view.value;
+        return Valid(row, !v.boolean ? RETICLE_OFF : own != RETICLE_OFF && row->OptionOf(own) ? own : RETICLE_ON, out, why);
+    }
     auto named = [&](const hfjson::Value& x, double* n) {
         if (x.kind == hfjson::Value::Bool) { *n = x.boolean ? 1 : 0; return true; }
         if (x.kind == hfjson::Value::Number) { *n = x.AsNumber(); return true; }
@@ -1579,6 +1593,7 @@ hfjson::Value PresetEncodeStructured(const std::string& key, const Row::Hd2rAs& 
     hfjson::Value list;
     if (values.empty()) return list;
     if (as.kind == "bool") return hfjson::Value::MakeBool(values.begin()->second != 0);
+    if (as.kind == "reticle") return hfjson::Value::MakeBool(values.begin()->second != RETICLE_OFF);
     if (as.kind == "enum") return hfjson::Value::MakeNumber(values.begin()->second, true);
     if (as.kind != "slots") return list; /* "ap": the traits carry its bytes */
     list.kind = hfjson::Value::Array;
@@ -2029,7 +2044,7 @@ void HandleKeys()
         if (Pressed(ImGuiKey_Backspace) && !g_picker.filter.empty()) { DropLast(g_picker.filter); refilter = true; }
         if (refilter)
         {
-            double was = g_picker.index < (int)g_picker.entries.size() ? g_picker.entries[g_picker.index].value : 0;
+            double was = PickerHas(g_picker.index) ? g_picker.entries[g_picker.index].value : ViewOf(g_picker.row).value;
             PickerFill();
             PickerSelect(was);
             g_scroll["picker"] = 0;
@@ -2943,7 +2958,7 @@ void DrawPicker()
     if (Button("CANCEL", x + w - 24 - 150, y + h - 40, 150, 30, NORMAL, ui::Id("pickercancel"), 11)) g_picker.on = false;
     /* the highlighted option's warnings, spelled out (HD2R Editor's) */
     std::string warning;
-    if (g_picker.index < (int)g_picker.entries.size())
+    if (PickerHas(g_picker.index))
         for (auto& w : g_picker.entries[g_picker.index].warnings)
             if (auto text = g_catalog.warnings.find(w); text != g_catalog.warnings.end()) warning += (warning.empty() ? "" : "   ") + WarningChip(w) + ": " + text->second;
     if (!warning.empty()) g_cv.Text(warning, x + 24, y + h - 25, T(SZ_TINY, PENDING, ui::BODY, ui::LEFT, w - 24 - 190, 11));
