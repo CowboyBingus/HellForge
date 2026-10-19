@@ -112,7 +112,7 @@ public partial class MainWindow
         try
         {
             SetRow(step, null, "Looking in your Steam libraries...", running: true);
-            await CheckWindowsFirewall(install);
+            await CheckFilteringEngine(install);
             var build = SupportedBuild.Current;
             var steamRoot = SteamLocator.SteamRoot() ?? throw new SetupStopped("Steam is not installed on this PC. Install Steam and HELLDIVERS 2, then start setup again.");
             SteamGame? game;
@@ -161,12 +161,12 @@ public partial class MainWindow
             SetRow(step, true, copied);
 
             step = SetupStep.Firewall;
-            SetRow(step, null, "Checking the firewall rules...", running: true);
-            if (await FirewallBlockInPlace(install)) SetRow(step, true, "Already in place.");
+            SetRow(step, null, "Checking the network block...", running: true);
+            if (await NetworkBlockInPlace(install)) SetRow(step, true, "Already in place.");
             else
             {
-                SetRow(step, null, "Windows asks for permission once to add the firewall rules...", running: true);
-                await InstallFirewallBlock(install);
+                SetRow(step, null, "Windows asks for permission once to place the network block...", running: true);
+                await InstallNetworkBlock(install);
                 SetRow(step, true, "The copied game can only reach this PC (its local backend). Your normal game is not affected.");
             }
 
@@ -209,7 +209,7 @@ public partial class MainWindow
             or JsonException or InvalidOperationException)
         {
             SetRow(step, false, error is Win32Exception { NativeErrorCode: 1223 }
-                ? "Windows permission was declined. The firewall block is required; start setup again and allow it."
+                ? "Windows permission was declined. The network block is required; start setup again and allow it."
                 : error.Message);
             SetupStartButton.Content = "Try again";
             SetupBackButton.IsVisible = Nav.IsVisible;
@@ -318,25 +318,22 @@ public partial class MainWindow
         catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
     }
 
-    // HellForge's network block is a set of Windows Firewall rules, so Windows Firewall must be on for every network type.
-    // Security suites with a firewall of their own often switch it off. Checked first: before the long copy, and before
-    // Windows asks for permission. Exit 3 only when it is off; a check that cannot run leaves it to the firewall step.
-    async Task CheckWindowsFirewall(InstallLayout install)
+    // HellForge's network block is placed in the Windows Filtering Platform, carried by the Base Filtering Engine (BFE)
+    // service. Unlike the old firewall rules, it does not need Windows Firewall itself to be on (a security suite that
+    // switches the firewall off no longer stops setup). Checked first, before the long copy: exit 3 only when BFE is
+    // off, which is rare since it is a core Windows service.
+    async Task CheckFilteringEngine(InstallLayout install)
     {
-        var check = await RunPowerShell("-Command \"if(@(@('BFE','MpsSvc')|Where-Object {(Get-Service $_).Status -ne 'Running'}).Count -or " +
-            "@(Get-NetFirewallProfile -PolicyStore ActiveStore|Where-Object Enabled -ne True).Count){exit 3}; exit 0\"", install);
+        var check = await RunPowerShell("-Command \"if((Get-Service BFE).Status -ne 'Running'){exit 3}; exit 0\"", install);
         if (check.ExitCode == 3)
-            throw new SetupStopped("Windows Firewall is off. HellForge keeps its copy of the game offline with Windows Firewall rules, so it must be on " +
-                "for every network type (Domain, Private and Public). Another security program (Norton, Bitdefender, ESET, Kaspersky...) may " +
-                "have switched it off: turn it back on in Windows Security > Firewall & network protection, then start setup again.");
+            throw new SetupStopped("The Windows Base Filtering Engine (BFE) service is off. HellForge needs it to keep its copy of the game offline. " +
+                "Turn it back on (Services > Base Filtering Engine, or run 'net start BFE' as administrator), then start setup again.");
     }
 
-    async Task<bool> FirewallBlockInPlace(InstallLayout install)
-    {
-        var check = await RunPowerShell("-Command \"$HellForgeInstallRoot=" + Quote(install.Root) + "; . " + Quote(ScriptPath("NetworkBlock.Common.ps1")) +
-            "; if(@(Test-HellForgeNetworkBlock (Get-HellForgeBlockedPrograms " + Quote(install.Game) + ")).Count){exit 3}; exit 0\"", install);
-        return check.ExitCode == 0;
-    }
+    // The block leaves a marker when it was placed; reading WFP filters back needs administrator rights, so setup
+    // trusts the marker rather than re-reading them without a prompt.
+    Task<bool> NetworkBlockInPlace(InstallLayout install) =>
+        Task.FromResult(File.Exists(Path.Combine(install.Root, "network-block", "wfp-block.json")));
 
     // The mods HellForge ships (BundledMods: the in-game editor, Hell Forge) are in mods/ from the start, not only once a
     // session has run. In the background: the editor's catalogue takes a moment to write.
@@ -380,8 +377,8 @@ public partial class MainWindow
         try { UninstallSafety(install.Root); }
         catch (InvalidDataException refused) { UninstallText.Text = refused.Message; return; }
         UninstallButton.IsEnabled = false;
-        UninstallText.Text = "Removing the firewall rules: Windows asks for permission...";
-        try { await InstallFirewallBlock(install, uninstall: true); }
+        UninstallText.Text = "Removing the network block: Windows asks for permission...";
+        try { await InstallNetworkBlock(install, uninstall: true); }
         catch (Exception error) when (error is SetupStopped or IOException or Win32Exception or InvalidOperationException or JsonException)
         {
             UninstallText.Text = (error is Win32Exception ? "Windows did not give permission" : error.Message) + ": nothing was removed.";
@@ -442,11 +439,11 @@ public partial class MainWindow
         finally { process.Dispose(); }
     }
 
-    async Task InstallFirewallBlock(InstallLayout install, bool uninstall = false)
+    async Task InstallNetworkBlock(InstallLayout install, bool uninstall = false)
     {
         var report = Path.Combine(install.Logs, "setup-network-block.json");
         if (File.Exists(report)) File.Delete(report);
-        var start = new ProcessStartInfo(PowerShell, $"-NoProfile -ExecutionPolicy Bypass -File {Arg(ScriptPath("Install-NetworkBlock.ps1"))} " +
+        var start = new ProcessStartInfo(PowerShell, $"-NoProfile -ExecutionPolicy Bypass -File {Arg(ScriptPath("Install-WfpBlock.ps1"))} " +
             $"-InstallRoot {Arg(install.Root)} -ReportPath {Arg(report)}" + (uninstall ? " -Uninstall" : ""))
         { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = install.Root };
         await Task.Run(() =>
@@ -456,7 +453,7 @@ public partial class MainWindow
         });
         var state = File.Exists(report) ? JsonDocument.Parse(File.ReadAllText(report)).RootElement : default;
         if (state.ValueKind != JsonValueKind.Object || SessionFiles.Text(state, "status") != (uninstall ? "uninstalled" : "installed"))
-            throw new SetupStopped((uninstall ? "The firewall rules were not removed: " : "The firewall block was not installed: ") +
+            throw new SetupStopped((uninstall ? "The network block was not removed: " : "The network block was not installed: ") +
                 (state.ValueKind == JsonValueKind.Object ? SessionFiles.Text(state, "failure") : "no report was written."));
     }
 
