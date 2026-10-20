@@ -238,6 +238,8 @@ public static class StatsCatalog
             case "projectile": return ("projectile", Join("Flight", role), RoleRank(role) + 0.1);
             case "attack" or "ammunition": return ("projectile", Join("Swap", role), RoleRank(role) - 1);
             case "function_ammo": return ("projectile", "Swap · Programmable ammo", RoleRank(role) - 0.5);
+            // a fired entity that explodes by itself (the Breacher's charge, the Maelstrom's rockets): its fuse, before its detonation
+            case "fired": return ("projectile", section ?? "Fired entity", 40);
             case "terminal" when partCategory == "projectiles": return ("projectile", "Projectile", 0);
             case "terminal":
                 var slot = Humanize(string.Join("_", middle).Replace("primary_", "").Replace("primary", "").Trim('_'));

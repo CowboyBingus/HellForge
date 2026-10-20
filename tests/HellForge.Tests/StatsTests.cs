@@ -311,6 +311,47 @@ static class StatsTests
                 "241 explosion pages: their ExplosionSettings radii and their damage type's damage.");
             check(StatsCatalog.Items.Count(i => i.Nav == "explosions") == 241, "Each explosion is an item.");
         });
+        test("Weapons that fire an entity edit what they fire: the Breacher's charge, the Maelstrom's rockets, the missiles' flight", () =>
+        {
+            var weapons = StatsSchema.Current.Targets["weapons"];
+            var breacher = weapons["P-34 Breacher"];
+            check(!breacher.Fields.Keys.Any(k => k.Split('.')[0] is "projectile" or "damage" || k.StartsWith("explosion.primary.")) &&
+                  breacher.Retired.ContainsKey("projectile.velocity") && breacher.Retired.ContainsKey("explosion.primary.impact.inner_radius"),
+                "Projectile 270 and its explosion 167 never reach the game: " + string.Join(", ", breacher.Fields.Keys.Where(k => k.StartsWith("projectile."))));
+            check(breacher.Fields["fired.explosion"] is { Kind: "component", Component: "ExplosiveComponentData", Resource: "0x87A8A187B6FD68FD", Record: 48, Offset: 36, Shared: false } &&
+                  breacher.Fields["explosion.detonation.inner_radius"] is { Kind: "ExplosionSettings", Record: 127 } &&
+                  breacher.Fields["explosion.detonation.damage.standard_damage"] is { Kind: "DamageInfo", Record: 342 }, "Charge fuse and detonation 127 (damage 342).");
+            var groups = StatsCatalog.Sections(StatsCatalog.Items.Single(i => i.Name == "P-34 Breacher")).SelectMany(s => s.Groups).Select(g => g.Title).ToList();
+            check(groups.Contains("Breaching charge") && groups.Contains("Explosion · Detonation") && !groups.Any(g => g.StartsWith("Flight")),
+                "Breacher groups: " + string.Join(", ", groups));
+            var payload = EditorCatalog.Build()["objects"]!.AsArray().Single(o => o!["name"]!.GetValue<string>() == "P-34 Breacher")!["page"]!.AsArray()
+                .SelectMany(c => c!["subs"]!.AsArray()).SelectMany(p => p!["rows"]!.AsArray()).Single(r => r!["key"]!.GetValue<string>() == "fired.explosion")!;
+            check(payload["pick"]?.GetValue<string>() == "explosion", "The in-game editor offers the charge's payload as an explosion pick: " + payload.ToJsonString());
+            // the Maelstrom's rockets explode by their own impact explosion 11, not the Commando's rows (projectile 245, explosion 148)
+            foreach (var slot in new[] { "TD-110 Maelstrom / slot_3", "TD-110 Maelstrom / slot_4" })
+            {
+                var f = weapons[slot].Fields;
+                check(!f.Values.Any(x => x.Kind == "ProjectileSettings" || x.Record is 148 or 237 or 392 && x.Kind != "component") &&
+                      f["explosion.detonation.inner_radius"].Record == 11 && f["explosion.detonation.damage.standard_damage"].Record == 394 &&
+                      f["fired.arming_delay"] is { Record: 26, Resource: "0xD24156BD98FFF3FE" } && !f.ContainsKey("fired.explosion") &&
+                      f["missile.preferred_speed"] is { Component: "SeekingMissileComponentData", Record: 14, Offset: 76 } && f.ContainsKey("entity.health"),
+                    slot + ": " + string.Join(", ", f.Keys));
+            }
+            // a missile flies by its SeekingMissile record; the carried row's damage and impact explosion stay
+            foreach (var (name, row) in new[] { ("P-33 Missile Pistol", 152L), ("P-92 Warrant", 326L), ("EXO-45 Patriot Exosuit / left_gun", 128L) })
+            {
+                var f = weapons[name].Fields;
+                check(!f.Values.Any(x => x.Kind == "ProjectileSettings" && x.Record == row && x.Offset is 28 or 32 or 36 or 40 or 44 or 64) &&
+                      f.Values.Any(x => x.Kind == "DamageInfo") && f.Keys.Any(k => k.StartsWith("missile.")), name + ": " + string.Join(", ", f.Keys));
+            }
+            check(weapons["P-33 Missile Pistol"].Fields.ContainsKey("explosion.primary.impact.inner_radius") &&
+                  weapons["EXO-45 Patriot Exosuit / left_gun"].Fields["missile.starting_speed"] is { Record: 12, Resource: "0xA526DC7D89FF696D", Shared: false } &&
+                  weapons["FAF-14 Spear"].Fields["missile.starting_speed"].Record == 7, "The Patriot's missile fields on its own record; the Spear's unchanged.");
+            // a saved edit that never applied still loads and is skipped
+            var edits = StatsData.Parse("""{"format":1,"weapons":{"P-34 Breacher":{"projectile.velocity":500,"fired.explosion_delay":1}}}""", profile);
+            check(edits.Count == 1 && edits[0].Offset == 12 && StatsData.Parse("""{"format":1,"weapons":{"P-34 Breacher":{"projectile.velocity":500}}}""", profile).Count == 0,
+                "Retired edits are skipped, not refused.");
+        });
         test("Editor values format, parse and step as the stats file stores them", () =>
         {
             var weapon = StatsSchema.Current.Targets["weapons"]["AR-23 Liberator"];

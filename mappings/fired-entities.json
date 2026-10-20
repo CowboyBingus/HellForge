@@ -1,0 +1,43 @@
+{
+  "format": 1,
+  "build": "25480438",
+  "source": "HD2Runtime research/wasp-rocket (ProjectileWeapon +40 spawns; a missile is unit-driven), research/explosion-identities (ExplosiveComponent +36 / +40 owners), filediver datalibrary/explosive_component.go (+36 ExplosionType, +40 ImpactExplosionType); records from the pinned generated_entities.dl_bin (one owner each)",
+  "about": "Weapons whose shot spawns an entity (ProjectileWeapon +40) instead of firing a projectile row. unfired: the row (+0) is never used, the entity explodes by its own ExplosiveComponent (explosive: its record; payload: the explosion member offered as a reference, where the loader knows it; detonation: the explosion it sets off). carried: a missile carries the row as its hit row (damage, impact explosion) but flies by its SeekingMissile record (missile), so the row's flight fields do nothing.",
+  "weapons": {
+    "P-34 Breacher": {
+      "section": "Breaching charge",
+      "entity": "0x87A8A187B6FD68FD",
+      "unfired": 270,
+      "explosive": 48,
+      "payload": 36,
+      "detonation": 127
+    },
+    "TD-110 Maelstrom / slot_3": {
+      "section": "Rocket",
+      "entity": "0xD24156BD98FFF3FE",
+      "unfired": 245,
+      "explosive": 26,
+      "detonation": 11,
+      "missile": 14
+    },
+    "TD-110 Maelstrom / slot_4": {
+      "section": "Rocket",
+      "entity": "0xD24156BD98FFF3FE",
+      "unfired": 245,
+      "explosive": 26,
+      "detonation": 11,
+      "missile": 14
+    },
+    "P-33 Missile Pistol": {
+      "carried": 152
+    },
+    "P-92 Warrant": {
+      "carried": 326
+    },
+    "EXO-45 Patriot Exosuit / left_gun": {
+      "entity": "0xA526DC7D89FF696D",
+      "carried": 128,
+      "missile": 12
+    }
+  }
+}

@@ -41,6 +41,9 @@ public sealed record StatsTarget(Dictionary<string, StatsField> Fields, Dictiona
     public string? Host { get; init; }
     public string? Mount { get; init; }
     public string? Family { get; init; }
+    // Fields it no longer offers because they never reached the game (a fired entity's unused projectile row): a stats
+    // file naming one still loads, and that edit is skipped.
+    [System.Text.Json.Serialization.JsonIgnore] public Dictionary<string, string> Retired { get; } = new(StringComparer.Ordinal);
 }
 public sealed record StatsSchema(int Format, string Build, string GameDllSha256, Dictionary<string, Dictionary<string, StatsTarget>> Targets)
 {
@@ -63,6 +66,7 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
         Melee(schema);
         Parity(schema);
         References(schema);
+        FiredEntities(schema);
         return schema;
     });
 
@@ -163,6 +167,64 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
                     }
                 }
             }
+    }
+
+    // Weapons whose shot spawns an entity instead of firing a projectile row (mappings/fired-entities.json,
+    // research/wasp-rocket). Where the entity explodes by its own ExplosiveComponent (the P-34 Breacher's sticky charge,
+    // the TD-110 Maelstrom's rockets), the row (ProjectileWeapon +0), its damage and its explosions never reach the
+    // game: they are retired, and the entity's fuse and detonation (its explosion's and damage's rows) offered instead.
+    // Where a missile carries the row as its hit row, only the row's flight is retired: the missile is unit-driven and
+    // flies by its SeekingMissile record, offered as missile.* (the Spear's fields; on these missiles guidance is never
+    // switched on by time, as on the Spear) where the catalogue lacks them.
+    static readonly int[] FlightOffsets = [28, 32, 36, 40, 44, 64]; // pellets, velocity, mass, drag, gravity, penetration slowdown
+    static void FiredEntities(StatsSchema schema)
+    {
+        using var stream = typeof(StatsSchema).Assembly.GetManifestResourceStream("HellForge.Core.mappings.fired-entities.json")!;
+        using var json = JsonDocument.Parse(stream);
+        var weapons = schema.Targets["weapons"];
+        var spear = weapons["FAF-14 Spear"].Fields.Where(f => f.Key.StartsWith("missile.", StringComparison.Ordinal)).OrderBy(f => f.Value.Order).ToList();
+        static long? Number(JsonElement e, string name) => e.TryGetProperty(name, out var v) ? v.GetInt64() : null;
+        foreach (var w in json.RootElement.GetProperty("weapons").EnumerateObject())
+        {
+            var target = weapons.TryGetValue(w.Name, out var t) ? t : throw new InvalidDataException($"fired-entities: no weapon {w.Name}.");
+            var v = w.Value;
+            var entity = v.TryGetProperty("entity", out var e) ? e.GetString()! : null;
+            void Retire(Func<KeyValuePair<string, StatsField>, bool> which, string reason)
+            {
+                foreach (var key in target.Fields.Where(which).Select(f => f.Key).ToList()) { target.Fields.Remove(key); target.Retired[key] = reason; }
+            }
+            if (Number(v, "unfired") is { } unfired)
+            {
+                var section = v.GetProperty("section").GetString()!;
+                var reason = $"The shot spawns an entity that explodes by itself; projectile {unfired} is never fired. Edit its {section.ToLowerInvariant()} and detonation instead.";
+                static bool Round(string key) => key.Split('.')[0] is "projectile" or "damage" or "explosion" or "terminal";
+                Retire(f => Round(f.Key), reason);
+                foreach (var key in target.Blocked.Keys.Where(Round).ToList()) { target.Blocked.Remove(key); target.Retired[key] = reason; }
+                var explosive = v.GetProperty("explosive").GetInt64();
+                var order = 0;
+                foreach (var (key, name, offset, storage, min, max, unit) in new[]
+                         {
+                             ("fired.arming_delay", "Arming delay", 8, "f32", (double?)0, (double?)120, "seconds"),
+                             ("fired.explosion_delay", "Fuse (explosion delay)", 12, "f32", 0, 120, "seconds"),
+                             ("fired.explosion", "Explosion payload", (int)(Number(v, "payload") ?? -1), "u32", null, null, null),
+                         })
+                    if (offset >= 0)
+                        target.Fields[key] = new StatsField(name, "component", "ExplosiveComponentData", entity!, explosive, offset, storage, min, max, unit, false, true)
+                            { Order = order++, Section = section };
+                // the detonation's own rows, as its Explosions page has them
+                var detonation = v.GetProperty("detonation").GetInt64();
+                var page = schema.Targets["explosions"].Values.FirstOrDefault(p => p.Fields.Values.Any(f => f.Kind == "ExplosionSettings" && f.Record == detonation))
+                    ?? throw new InvalidDataException($"fired-entities: explosion {detonation} of {w.Name} is not in the reference catalogue.");
+                foreach (var (key, field) in page.Fields.OrderBy(f => f.Value.Order))
+                    target.Fields["explosion.detonation." + key["explosion.".Length..]] = field with { Order = order++ };
+            }
+            if (Number(v, "carried") is { } carried)
+                Retire(f => f.Value.Kind == "ProjectileSettings" && f.Value.Record == carried && FlightOffsets.Contains(f.Value.Offset),
+                    $"The shot is a missile: it flies by its own record (the missile fields), so projectile {carried}'s flight does nothing. Its damage and impact explosion still apply.");
+            if (Number(v, "missile") is { } missile && !target.Fields.Keys.Any(k => k.StartsWith("missile.", StringComparison.Ordinal)))
+                foreach (var (key, field) in spear)
+                    target.Fields[key] = field with { Resource = entity!, Record = missile, Shared = false, SharedConsumers = [] };
+        }
     }
 
     // The boosters (mappings/boosters.json, HD2R Editor's Boosters category): one target each, every field HD2Runtime
@@ -474,6 +536,7 @@ public static class StatsData
         if (!root.TryGetProperty("format", out var format) || format.ValueKind != JsonValueKind.Number || !format.TryGetInt32(out var version) || version != 1)
             throw new InvalidDataException("Stats format must be 1.");
         var edits = new List<StatsEdit>();
+        var retired = 0;
         foreach (var section in root.EnumerateObject())
         {
             if (section.Name == "format") continue;
@@ -505,7 +568,7 @@ public static class StatsData
                 if (!targets.TryGetValue(targetName, out var target)) throw new InvalidDataException($"Unknown {section.Name} target {entry.Name}.");
                 Object(entry.Value);
                 var own = Flag(entry.Value, "own");
-                var before = edits.Count;
+                var (before, retiredBefore) = (edits.Count, retired);
                 foreach (var property in entry.Value.EnumerateObject())
                 {
                     if (property.Name == "own") continue;
@@ -520,6 +583,8 @@ public static class StatsData
                     for (var index = 0; index < names.Length; index++)
                     {
                         var name = names[index];
+                        // it never reached the game: still loads, and does nothing, as before
+                        if (target.Retired.ContainsKey(name)) { retired++; continue; }
                         if (target.Blocked.TryGetValue(name, out var reason)) throw new InvalidDataException($"{entry.Name} {property.Name}: {reason}");
                         if (!target.Fields.TryGetValue(name, out var field)) throw new InvalidDataException($"{entry.Name}: unknown stat {property.Name}.");
                         if (own && field.Kind != "component") throw new InvalidDataException($"{entry.Name} {name}: own isolates entity component records; {field.Kind} is a shared definition. Put shared definition edits in a separate entry or mod without own.");
@@ -532,10 +597,10 @@ public static class StatsData
                             field.Offset, field.Storage, bits, null, own, field.Shared, field.Unverified));
                     }
                 }
-                if (before == edits.Count) throw new InvalidDataException($"{entry.Name}: no stats supplied.");
+                if (before == edits.Count && retiredBefore == retired) throw new InvalidDataException($"{entry.Name}: no stats supplied.");
             }
         }
-        if (edits.Count is 0 or > MaxEdits) throw new InvalidDataException($"Stats file needs 1..{MaxEdits} edits.");
+        if (edits.Count > MaxEdits || edits.Count == 0 && retired == 0) throw new InvalidDataException($"Stats file needs 1..{MaxEdits} edits.");
         if (edits.Select(ConflictKey).Distinct(StringComparer.Ordinal).Count() != edits.Count)
             throw new InvalidDataException("Stats file sets the same field more than once (possibly through an alias or shared record).");
         return edits;
