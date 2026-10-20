@@ -4,7 +4,7 @@
 your PC, loads mods into it (new stratagems, weapons, stats, difficulties) and lets you play solo or with friends who
 run HellForge too. It comes with an in-game editor (F8) and a C mod SDK with docs and examples.
 
-**Status: beta (0.1.6-beta)**, for modders first. Expect rough edges; the version and game build it targets are in the
+**Status: beta (0.1.7-beta)**, for modders first. Expect rough edges; the version and game build it targets are in the
 launcher's bottom-left corner.
 
 ## How it works
@@ -27,7 +27,8 @@ launcher's bottom-left corner.
 ## Install (players)
 
 **You need:** Windows 10 or 11 (64-bit); Steam running and signed in to an account that owns HELLDIVERS 2 (or has it through Steam Family Sharing); about 25 GB
-free on the drive you install to (about 50 GB in total if Steam has to download the supported build first); permission
+free on the drive you install to (plus about 2 GB while a patch pack is applied, or about 50 GB in total if Steam has to
+download the supported build); permission
 to approve one Windows administrator prompt. Windows Firewall does not need to be on: the block lives in the Windows
 Filtering Platform and holds even when a security suite has switched the firewall off. Windows SmartScreen may warn that the setup
 program is unrecognised: it is not code-signed (**More info > Run anyway**).
@@ -37,14 +38,17 @@ OneDrive; Setup refuses OneDrive and linked folders). It unpacks HellForge there
 wizard:
 
 1. finds HELLDIVERS 2 in your Steam libraries and checks it is the supported build (Steam build 25480438). When Steam
-   has another build (the game was patched since this HellForge version) or no HELLDIVERS 2, Steam itself downloads the
-   supported build: the wizard shows one `download_depot 553850 <depot> <manifest>` command per depot (the manifests
-   pinned in `supported-build.json`) to paste into the Steam console (`steam://open/console`), watches
-   `<Steam>/steamapps/content/app_553850/` and continues when every depot is complete, then copies from there and
-   can delete the download. The normal game is not touched;
-2. confirms with Steam that the signed-in account owns the game, or has it through Steam Family Sharing;
-3. copies the game's 154 depot files (about 24 GB) from your own Steam library, each checked against Steam's hashes;
-   mods and other files in the Steam folder are not copied, and an interrupted copy continues where it stopped;
+   has a newer build that HellForge has a patch pack for, setup downloads the pack (about 1.7 GB, checked against its
+   SHA-256) and makes the copy by patching your own Steam files. Otherwise (another build, or no HELLDIVERS 2) Steam
+   itself downloads the supported build: the wizard shows one `download_depot 553850 <depot> <manifest>` command per
+   depot (the manifests pinned in `supported-build.json`) to paste into the Steam console (`steam://open/console`),
+   watches `<Steam>/steamapps/content/app_553850/` and continues when every depot is complete, then copies from there
+   and can delete the download. The normal game is not touched either way;
+2. confirms with Steam that the signed-in account owns the game, or has it through Steam Family Sharing (when a patch
+   pack is used, after the copy, with the copy's Steam library);
+3. copies or patches the game's 135 depot files (about 24 GB) from your own Steam library, each checked against
+   Steam's hashes; mods and other files in the Steam folder are not copied, and an interrupted copy continues where it
+   stopped;
 4. places the network block for this folder's copy (the only Windows administrator prompt) and checks that it blocks;
    setup does not finish until it is in place;
 5. optionally imports game settings from an earlier HellForge setup and creates shortcuts.
@@ -61,8 +65,10 @@ Vanilla Plus (small fixes: beacons stick, hellpods steer over any ground, reinfo
 each session they are put into `mods\hellforge-editor`, `mods\hell-forge` and `mods\vanilla-plus` (switch any off on
 the Mods page), the editor's icons and fonts and the difficulty's icon made from the copy. An update brings their new
 versions; an older copy downloaded separately (another folder, or a zip) is moved to `mods-retired` and the editor's
-settings and presets come along. No game files are distributed: every player's setup copies from their own Steam installation
-or from Steam's own download of the supported build on their account. An installation keeps working when Steam later
+settings and presets come along. Every player's game copy is made from their own Steam installation: copied as it is when Steam
+has the supported build, patched from it with HellForge's patch pack (binary differences between the two builds, plus a
+few small files the newer build no longer has) when Steam has a newer one, or copied from Steam's own download of the
+supported build on their account. An installation keeps working when Steam later
 updates the normal game: sessions check the copy, not the Steam installation. Each HellForge release targets one HD2 build.
 
 Building the setup: `scripts/Package-HellForge.ps1` writes `artifacts/package/HellForge-Setup.exe`. `scripts/Publish-HellForge.ps1 -InstallRoot <folder>` updates an installation's app
