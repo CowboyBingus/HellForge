@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Net.Http;
 using System.Runtime.Versioning;
 using System.Text.Json;
 using Avalonia.Controls;
@@ -120,11 +121,19 @@ public partial class MainWindow
             try { game = await Task.Run(() => SteamLocator.FindGame(steamRoot)); }
             catch (Exception error) when (error is InvalidDataException or IOException) { game = null; unusable = error.Message; }
             var fromDepots = false;
+            DownpatchPack? downpatchPack = null;
+            string? downpatchSource = null;
             if (game is { SupportedBuild: true }) SetRow(step, true, $"Build {game.Report.Pin.BuildId} in {game.Report.Source}");
             else if (await Task.Run(() => SteamDepotDownload.IsComplete(steamRoot, build)))
             {
                 fromDepots = true;
                 SetRow(step, true, $"Build {build.BuildId}, downloaded by Steam into {SteamDepotDownload.ContentFolder(steamRoot, build)}");
+            }
+            else if (game != null && Downpatcher.FindPack(game.Report.Pin.BuildId) is { } downpatch)
+            {
+                downpatchPack = downpatch;
+                downpatchSource = game.Report.Source;
+                SetRow(step, true, $"Build {game.Report.Pin.BuildId} in {game.Report.Source} — a {downpatch.Size / 1e9:0.0} GB patch converts it to {build.BuildId}");
             }
             else
             {
@@ -133,9 +142,28 @@ public partial class MainWindow
                 throw new SetupWaiting($"Steam has {have}, but this version of HellForge needs build {build.BuildId}. Steam can download that exact " +
                     "build for your account: follow the steps below. Setup continues by itself when the download is complete.");
             }
-            var steamApi = fromDepots
-                ? SteamDepotDownload.Locate(steamRoot, build, build.Files.Single(f => f.Path == "bin/steam_api64.dll"))
-                : Path.Combine(game!.Report.Source, "bin", "steam_api64.dll");
+            // When downpatching, copy first so the supported build's steam_api64.dll is available for the ownership check
+            // (the newer build's DLL may not work with the probe).
+            if (downpatchPack != null)
+            {
+                var copyRow = SetupSteps.Children[2];
+                var ownershipRow = SetupSteps.Children[1];
+                SetupSteps.Children.RemoveAt(2);
+                SetupSteps.Children.RemoveAt(1);
+                SetupSteps.Children.Insert(1, copyRow);
+                SetupSteps.Children.Insert(2, ownershipRow);
+                (setupRows[1], setupRows[2]) = (setupRows[2], setupRows[1]);
+                step = SetupStep.Copy;
+                SetRow(step, null, "Downloading and applying the build patch...", running: true);
+                await DownpatchGame(downpatchSource!, install, downpatchPack);
+                SetRow(step, true, $"{build.Files.Count} files ({build.TotalBytes / 1e9:0.0} GB), patched from build {downpatchPack.SourceBuild}.");
+            }
+
+            var steamApi = downpatchPack != null
+                ? Path.Combine(install.Game, "bin", "steam_api64.dll")
+                : fromDepots
+                    ? SteamDepotDownload.Locate(steamRoot, build, build.Files.Single(f => f.Path == "bin/steam_api64.dll"))
+                    : Path.Combine(game!.Report.Source, "bin", "steam_api64.dll");
 
             step = SetupStep.Ownership;
             SetRow(step, null, "Asking Steam...", running: true);
@@ -147,18 +175,21 @@ public partial class MainWindow
                     " Make sure Steam is running and signed in, then start setup again.");
             SetRow(step, true, "Steam confirmed the game on this account.");
 
-            step = SetupStep.Copy;
-            SetRow(step, null, "Copying and verifying the game files...", running: true);
-            await CopyGame(fromDepots ? null : game!.Report.Source, steamRoot, install);
-            var copied = $"{build.Files.Count} files ({build.TotalBytes / 1e9:0.0} GB), each verified against Steam's hashes.";
-            if (fromDepots && DeleteDownloadBox.IsChecked == true)
+            if (downpatchPack == null)
             {
-                SetRow(step, null, copied + " Deleting Steam's download...", running: true);
-                await Task.Run(() => SteamDepotDownload.Delete(steamRoot, build));
-                copied += " Steam's download was deleted.";
+                step = SetupStep.Copy;
+                SetRow(step, null, "Copying and verifying the game files...", running: true);
+                await CopyGame(fromDepots ? null : game!.Report.Source, steamRoot, install);
+                var copied = $"{build.Files.Count} files ({build.TotalBytes / 1e9:0.0} GB), each verified against Steam's hashes.";
+                if (fromDepots && DeleteDownloadBox.IsChecked == true)
+                {
+                    SetRow(step, null, copied + " Deleting Steam's download...", running: true);
+                    await Task.Run(() => SteamDepotDownload.Delete(steamRoot, build));
+                    copied += " Steam's download was deleted.";
+                }
+                DownloadCard.IsVisible = false;
+                SetRow(step, true, copied);
             }
-            DownloadCard.IsVisible = false;
-            SetRow(step, true, copied);
 
             step = SetupStep.Firewall;
             SetRow(step, null, "Checking the network block...", running: true);
@@ -206,7 +237,7 @@ public partial class MainWindow
             SetupBackButton.IsVisible = Nav.IsVisible;
         }
         catch (Exception error) when (error is SetupStopped or IOException or InvalidDataException or UnauthorizedAccessException or Win32Exception
-            or JsonException or InvalidOperationException)
+            or JsonException or InvalidOperationException or HttpRequestException)
         {
             SetRow(step, false, error is Win32Exception { NativeErrorCode: 1223 }
                 ? "Windows permission was declined. The network block is required; start setup again and allow it."
@@ -252,6 +283,49 @@ public partial class MainWindow
             if (source != null) GameCopier.Copy(source, install.Game, SupportedBuild.Current, Progress, token);
             else GameCopier.CopyFromDepots(steamRoot, install.Game, SupportedBuild.Current, Progress, token);
         }, token);
+        CopyProgress.Value = 1000;
+        CopyText.Text = $"Done in {clock.Elapsed.TotalMinutes:0.0} min.";
+    }
+
+    async Task DownpatchGame(string source, InstallLayout install, DownpatchPack pack)
+    {
+        CopyCard.IsVisible = true;
+        SetupPauseButton.IsVisible = true;
+        setupCancel = new();
+        var token = setupCancel.Token;
+        var clock = Stopwatch.StartNew();
+        var lastUpdate = TimeSpan.Zero;
+        var downloadStart = TimeSpan.Zero;
+
+        void Update(string text, double fraction)
+        {
+            if (clock.Elapsed - lastUpdate < TimeSpan.FromMilliseconds(200) && fraction < 1) return;
+            lastUpdate = clock.Elapsed;
+            Dispatcher.UIThread.Post(() =>
+            {
+                CopyProgress.Value = fraction * 1000;
+                CopyText.Text = text;
+            });
+        }
+
+        using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        await Task.Run(async () =>
+        {
+            await Downpatcher.ApplyAsync(source, install.Game, install.Temp, pack, http,
+                downloadProgress: (done, total) =>
+                {
+                    if (downloadStart == TimeSpan.Zero) downloadStart = clock.Elapsed;
+                    var elapsed = clock.Elapsed - downloadStart;
+                    var rate = elapsed.TotalSeconds > 1 ? done / elapsed.TotalSeconds / 1e6 : 0;
+                    Update($"Downloading build patch: {done / 1e9:0.00} of {total / 1e9:0.0} GB  ·  {rate:0} MB/s",
+                        total > 0 ? (double)done / total * 0.5 : 0);
+                },
+                applyProgress: (done, total, file) =>
+                    Update($"Applying: {done / 1e9:0.0} of {total / 1e9:0.0} GB  ·  {file}",
+                        0.5 + (total > 0 ? (double)done / total * 0.5 : 0)),
+                cancellation: token);
+        }, token);
+
         CopyProgress.Value = 1000;
         CopyText.Text = $"Done in {clock.Elapsed.TotalMinutes:0.0} min.";
     }
