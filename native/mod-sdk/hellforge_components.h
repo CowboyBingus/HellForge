@@ -206,7 +206,10 @@ typedef struct HfWeaponData
     uint8_t stationary_while_firing;             /* +0x183 1: the wielder stands still while firing (unverified) [respawn] */
     uint8_t _unknown_184[12];
     uint32_t crosshair_type;                     /* +0x190 crosshair (unverified) [respawn] */
-    uint8_t _unknown_194[828];
+    uint8_t _unknown_194[536];
+    uint32_t fire_ability;                       /* +0x3AC an ability the weapon runs when it fires (0: none) (unverified) [respawn] */
+    uint32_t fire_ability_2;                     /* +0x3B0 a second fire-time ability (the VG-70 Variable: 50, a lead for its knock-down when fired standing; 0 on the AMR and Autocannon) (unverified) [respawn] */
+    uint8_t _unknown_3B4[284];
 } HfWeaponData;
 HF_ASSERT_SIZE(HfWeaponData, 1232);
 HF_ASSERT_OFFSET(HfWeaponData, recoil_drift_horizontal, 0);
@@ -245,6 +248,10 @@ HF_ASSERT_OFFSET(HfWeaponData, stationary_while_firing, 387);
 #define HF_TYPE_WeaponData_stationary_while_firing HF_TYPE_U8
 HF_ASSERT_OFFSET(HfWeaponData, crosshair_type, 400);
 #define HF_TYPE_WeaponData_crosshair_type HF_TYPE_U32
+HF_ASSERT_OFFSET(HfWeaponData, fire_ability, 940);
+#define HF_TYPE_WeaponData_fire_ability HF_TYPE_U32
+HF_ASSERT_OFFSET(HfWeaponData, fire_ability_2, 944);
+#define HF_TYPE_WeaponData_fire_ability_2 HF_TYPE_U32
 /* Group recoil: both recoil blocks, sideways and up */
 #define HF_GROUP_WeaponData_recoil(X, ...) X(WeaponData, recoil_drift_horizontal, __VA_ARGS__), X(WeaponData, recoil_drift_vertical, __VA_ARGS__), X(WeaponData, recoil_climb_horizontal, __VA_ARGS__), X(WeaponData, recoil_climb_vertical, __VA_ARGS__)
 /* Group spread: spread sideways and up and down */
@@ -384,7 +391,9 @@ typedef struct HfDeposit
     uint32_t capacity;                           /* +0x00 most it holds (backpack ammunition, or drone magazines) (unverified) [respawn?] */
     int32_t start_amount;                        /* +0x04 what it holds at call-in (unverified) [respawn?] */
     uint32_t refill_amount;                      /* +0x08 what a resupply adds (unverified) [respawn?] */
-    uint8_t _unknown_0C[140];
+    uint8_t _unknown_0C[124];
+    uint64_t assisted_reload_weapon;             /* +0x88 the weapon this backpack reloads and feeds (AssistedReloadWeaponPath; the Autocannon Backpack: the AC-8) (unverified) [respawn?] */
+    uint8_t _unknown_90[8];
 } HfDeposit;
 HF_ASSERT_SIZE(HfDeposit, 152);
 HF_ASSERT_OFFSET(HfDeposit, capacity, 0);
@@ -393,6 +402,8 @@ HF_ASSERT_OFFSET(HfDeposit, start_amount, 4);
 #define HF_TYPE_Deposit_start_amount HF_TYPE_I32
 HF_ASSERT_OFFSET(HfDeposit, refill_amount, 8);
 #define HF_TYPE_Deposit_refill_amount HF_TYPE_U32
+HF_ASSERT_OFFSET(HfDeposit, assisted_reload_weapon, 136);
+#define HF_TYPE_Deposit_assisted_reload_weapon HF_TYPE_U64
 
 /* DifficultySettings (816-byte table rows, found by id; api->difficulty_row returns one: (HfDifficultySettings*)api->difficulty_row(...)): a difficulty level's settings (levels 1 to 11) */
 #define HfDifficultySettings_INFO "DifficultySettings", 25480438u

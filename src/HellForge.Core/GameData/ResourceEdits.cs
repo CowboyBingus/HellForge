@@ -81,16 +81,17 @@ public static class ResourceEdits
         };
     }
 
-    // Sets RGB parameters of a material by their name (IdString32). The parameter records {type, -, name, buffer offset,
-    // -} follow the texture list (0x88 + 12 x textures, the count at 0x40; parameter count at 0x68); the constant buffer
-    // they point into follows them, 16-byte aligned. Every named parameter must be there and be RGB (type 2).
+    // Sets RGB parameters of a material by their name (IdString32). The parameter records {type, count, name, buffer
+    // offset, stride} follow the texture list (0x88 + 12 x textures, the count at 0x40; parameter count at 0x68); the
+    // values they point into follow them directly (every one of the game's materials fits so; 16-byte alignment, which an
+    // earlier HellForge assumed, overruns a third of them). Every named parameter must be there and be RGB (type 2).
     public static void SetMaterialColours(byte[] material, IReadOnlyDictionary<uint, double[]> colours)
     {
         if (material.Length < 0x88) throw new InvalidDataException("not a material (too short).");
         var textures = BinaryPrimitives.ReadInt32LittleEndian(material.AsSpan(0x40));
         var parameters = BinaryPrimitives.ReadInt32LittleEndian(material.AsSpan(0x68));
         var records = 0x88 + 12L * textures;
-        var buffer = (records + 20L * parameters + 15) / 16 * 16;
+        var buffer = records + 20L * parameters;
         if (textures < 0 || parameters < 0 || buffer > material.Length) throw new InvalidDataException("the material's parameter list is malformed.");
         var written = new HashSet<uint>();
         for (var i = 0; i < parameters; i++)
@@ -107,6 +108,67 @@ public static class ResourceEdits
         var missing = colours.Keys.Where(k => !written.Contains(k)).Select(k => $"0x{k:X8}").ToList();
         if (missing.Count > 0) throw new InvalidDataException("the material has no parameter " + string.Join(", ", missing) + ".");
     }
+
+    // A material of another game build in the layout of `parent`, the game copy's material it derives from (+0x18): the
+    // parent's texture slots and parameters, each taking the source's texture or value of the same name (the parent's own
+    // where the source has none), so the shader the game copy has reads every value where it expects it. Slots and
+    // parameters the parent's shader does not have are left out. Returns the source unchanged when the layouts match.
+    public static byte[] MaterialInLayout(byte[] source, byte[] parent)
+    {
+        var from = Material.Read(source);
+        var layout = Material.Read(parent);
+        if (from.Parent == 0) throw new InvalidDataException("the material is a shader of its own (no parent); HellForge cannot port shaders.");
+        if (from.Textures.Select(t => t.Name).SequenceEqual(layout.Textures.Select(t => t.Name))
+            && from.Parameters.Select(r => (r.Name, r.Type)).OrderBy(r => r.Name).SequenceEqual(layout.Parameters.Select(r => (r.Name, r.Type)).OrderBy(r => r.Name)))
+            return source;
+        var textures = from.Textures.ToDictionary(t => t.Name, t => t.Id);
+        var values = from.Parameters.ToDictionary(r => r.Name);
+        var output = new byte[(layout.Values + layout.ValuesSize + 15) / 16 * 16];
+        parent.AsSpan(0, layout.Values + layout.ValuesSize).CopyTo(output);
+        BinaryPrimitives.WriteInt32LittleEndian(output.AsSpan(0x0C), layout.Values + layout.ValuesSize - 0x18);
+        BinaryPrimitives.WriteUInt32LittleEndian(output.AsSpan(0x10), BinaryPrimitives.ReadUInt32LittleEndian(source.AsSpan(0x10)));
+        BinaryPrimitives.WriteUInt64LittleEndian(output.AsSpan(0x18), from.Parent);
+        for (var i = 0; i < layout.Textures.Count; i++)
+            if (textures.TryGetValue(layout.Textures[i].Name, out var id))
+                BinaryPrimitives.WriteUInt64LittleEndian(output.AsSpan(0x88 + 4 * layout.Textures.Count + 8 * i), id);
+        foreach (var target in layout.Parameters)
+        {
+            if (!values.TryGetValue(target.Name, out var value) || value.Type != target.Type || value.Size != target.Size) continue;
+            if (from.Values + value.Offset + value.Size > source.Length) throw new InvalidDataException($"parameter 0x{value.Name:X8} is outside the material.");
+            source.AsSpan(from.Values + value.Offset, value.Size).CopyTo(output.AsSpan(layout.Values + target.Offset));
+        }
+        return output;
+    }
+
+    // The parts of a material's main part that a layout conversion reads.
+    sealed record Material(ulong Parent, IReadOnlyList<(uint Name, ulong Id)> Textures, IReadOnlyList<MaterialParameter> Parameters, int Values, int ValuesSize)
+    {
+        public static Material Read(byte[] m)
+        {
+            if (m.Length < 0x88 || BinaryPrimitives.ReadUInt32LittleEndian(m) != 0x120) throw new InvalidDataException("not a material.");
+            var textures = BinaryPrimitives.ReadInt32LittleEndian(m.AsSpan(0x40));
+            var parameters = BinaryPrimitives.ReadInt32LittleEndian(m.AsSpan(0x68));
+            var size = BinaryPrimitives.ReadInt32LittleEndian(m.AsSpan(0x78));
+            if (textures is < 0 or > 256 || parameters is < 0 or > 1024) throw new InvalidDataException("the material's lists are malformed.");
+            var records = 0x88 + 12 * textures;
+            var values = records + 20 * parameters;
+            if (size < 0 || values + size > m.Length) throw new InvalidDataException("the material's values are outside it.");
+            var slots = Enumerable.Range(0, textures).Select(i => (BinaryPrimitives.ReadUInt32LittleEndian(m.AsSpan(0x88 + 4 * i)),
+                BinaryPrimitives.ReadUInt64LittleEndian(m.AsSpan(0x88 + 4 * textures + 8 * i)))).ToList();
+            var list = Enumerable.Range(0, parameters).Select(i =>
+            {
+                var r = m.AsSpan(records + 20 * i, 20);
+                uint type = BinaryPrimitives.ReadUInt32LittleEndian(r), count = BinaryPrimitives.ReadUInt32LittleEndian(r[4..]),
+                    stride = BinaryPrimitives.ReadUInt32LittleEndian(r[16..]);
+                var bytes = type <= 3 ? 4 * (int)(type + 1) : checked((int)(count * stride));
+                return new MaterialParameter(type, BinaryPrimitives.ReadUInt32LittleEndian(r[8..]), (int)BinaryPrimitives.ReadUInt32LittleEndian(r[12..]), bytes);
+            }).ToList();
+            if (list.Any(p => p.Offset < 0 || p.Offset + p.Size > size)) throw new InvalidDataException("a material parameter is outside its values.");
+            return new(BinaryPrimitives.ReadUInt64LittleEndian(m.AsSpan(0x18)), slots, list, values, size);
+        }
+    }
+
+    sealed record MaterialParameter(uint Type, uint Name, int Offset, int Size);
 
     public sealed record LutRecolour(int? ZonesFrom, IReadOnlyDictionary<int, double[]> Columns, IReadOnlyDictionary<int, IReadOnlyDictionary<int, double[]>> Rows);
 

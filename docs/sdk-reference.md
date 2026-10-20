@@ -174,6 +174,8 @@ Group `firing_sounds` (every firing sound, silenced or not (HfWeapon.sound_from 
 | `ergonomics` | +0x164 | f32 | respawn | ergonomics (unverified) |
 | `stationary_while_firing` | +0x183 | u8 | respawn | 1: the wielder stands still while firing (unverified) |
 | `crosshair_type` | +0x190 | u32 | respawn | crosshair (unverified) |
+| `fire_ability` | +0x3AC | u32 | respawn | an ability the weapon runs when it fires (0: none) (unverified) |
+| `fire_ability_2` | +0x3B0 | u32 | respawn | a second fire-time ability (the VG-70 Variable: 50, a lead for its knock-down when fired standing; 0 on the AMR and Autocannon) (unverified) |
 
 Group `recoil` (both recoil blocks, sideways and up): `recoil_drift_horizontal`, `recoil_drift_vertical`, `recoil_climb_horizontal`, `recoil_climb_vertical`.
 
@@ -251,6 +253,7 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | `capacity` | +0x00 | u32 | respawn? | most it holds (backpack ammunition, or drone magazines) (unverified) |
 | `start_amount` | +0x04 | i32 | respawn? | what it holds at call-in (unverified) |
 | `refill_amount` | +0x08 | u32 | respawn? | what a resupply adds (unverified) |
+| `assisted_reload_weapon` | +0x88 | u64 | respawn? | the weapon this backpack reloads and feeds (AssistedReloadWeaponPath; the Autocannon Backpack: the AC-8) (unverified) (a pickup reference) |
 
 ### HfHealth
 
