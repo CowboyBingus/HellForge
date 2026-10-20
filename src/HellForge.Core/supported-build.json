@@ -20,1082 +20,814 @@
   ],
   "files": [
     {
-      "path": "bin/GameGuard.des",
-      "size": 2541704,
-      "sha1": "0ED2664506F712CE05B36EF70C9BB663AFAE330B",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/GameGuard.des",
-      "size": 2541704,
-      "sha1": "0ED2664506F712CE05B36EF70C9BB663AFAE330B",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/GameGuard.ver",
-      "size": 25,
-      "sha1": "D5FF4C568D0A0D26F570E19831D43D7EE39B2D2F",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/GameMon.des",
-      "size": 13809968,
-      "sha1": "2332AED8BB20967FFF35639B1E2C64E65D16206E",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/GameMon64.des",
-      "size": 14365872,
-      "sha1": "E398419AFB9BA71FA6BC885F731B45D4CC201B08",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/SONYGame.ini",
-      "size": 1283,
-      "sha1": "81BF57342A8A6DC18D626178BC217AA0F694346A",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/Splash.jpg",
-      "size": 93350,
-      "sha1": "36CFF60B89A8B11A5147A7FA8A14E38FF49F6BC5",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/ggerror.des",
-      "size": 3805832,
-      "sha1": "73592197C03AA39A8ECD325671659B48C0C75DB0",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/ggscan.des",
-      "size": 1703480,
-      "sha1": "7EB4A9E3958CE48A7B09BCCDBD74CBE5BDDDE664",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/npggNT.des",
-      "size": 1691232,
-      "sha1": "B4E4E59EE1036F7743CCFA843373A3BA08570CF1",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/npggNT64.des",
-      "size": 3387328,
-      "sha1": "3CE7311C0BEE2396E79E2B747E759099063A5EEF",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/npgmup.des",
-      "size": 1190272,
-      "sha1": "CD9C872ADA4A9D89097E8DC4AE610BF1B04801CA",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/npgmup.des.now",
-      "size": 1190272,
-      "sha1": "CD9C872ADA4A9D89097E8DC4AE610BF1B04801CA",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/nplsb.des",
-      "size": 14544,
-      "sha1": "FB513F7565C0A19554F8CAB9000962A2A7424CC4",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/nplsm.des",
-      "size": 260,
-      "sha1": "F3BFF41A8383A4EB696E49C9027D9F28FD6B91D9",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/npsc.des",
-      "size": 1530632,
-      "sha1": "90A724E09A6DD1FF30BDC60939805FE274983856",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
-      "path": "bin/GameGuard/npsc64.des",
-      "size": 2348392,
-      "sha1": "E7F9DD3FB1B65F12934C7844C1D896D1A44C8D72",
-      "depot": 553851,
-      "volatile": true
-    },
-    {
       "path": "bin/PartyWin.dll",
       "size": 4031520,
       "sha1": "DC5A8F33953EC5F88A621BE49C672A39A8AEFBFE",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/PlayFabMultiplayerWin.dll",
       "size": 1878048,
       "sha1": "0E8A8D68E9003ACE0302A03A915F9321B02DD913",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/SONYGame.ini",
       "size": 1252,
       "sha1": "C1426998BF26970DF3158CCA28682A19BBACFAE5",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/WinPixEventRuntime.dll",
       "size": 52392,
       "sha1": "641C48181DD7B84910071F9D50CC5AC32E40AB3F",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/amd_fidelityfx_upscaler_dx12.dll",
       "size": 22348552,
       "sha1": "C150EABE61716AE42472088B719CEF34789BF03D",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/bink2w64.dll",
       "size": 421792,
       "sha1": "6A18D16D82454D29C741851E93085E4D9461863E",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/crs-client.dll",
       "size": 496216,
       "sha1": "43BA8EA6AAFD33B650A87426D3E9E684CC1D4357",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/crs-handler.exe",
       "size": 1250904,
       "sha1": "FC68421B789749BB9D409C07EB83D8AB915A59BC",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/dstorage.dll",
       "size": 206880,
       "sha1": "ACBDD4D10F1A9976C8C09C272704DFF3E054C545",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/dstoragecore.dll",
       "size": 1458208,
       "sha1": "5C427839CC1D613DCF2FD68E09B3BB61427C20AF",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/helldivers2.exe",
       "size": 14957160,
       "sha1": "A4AF54FDD46C53D663013922E00C507DC8FB5AA1",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/libcurl.dll",
       "size": 571992,
       "sha1": "17B48D580351BF973CBD548AB2D02D7E327F2D1E",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/libxess.dll",
       "size": 77795704,
       "sha1": "9798B95E083A69E00C93CB28FE80318B6F53263D",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/lua51.dll",
       "size": 469080,
       "sha1": "DC2993179F50B254F8177CC87A6D80A9847FED7C",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/nvngx_dlss.dll",
       "size": 54779504,
       "sha1": "AEAEAFE49FB28790E3D011D194E889F0C53608BB",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/plugins/level_generation_pluginw64_release.dll",
       "size": 541784,
       "sha1": "884654AB880BE060069359BF8D0BDB4B0E1D01E4",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/plugins/wwise_pluginw64_release.dll",
       "size": 6089816,
       "sha1": "275F16DDA6195757C47C2613D242536608394EBE",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "bin/steam_api64.dll",
       "size": 298384,
       "sha1": "39CAC2889D8CA497EE0D8434FC9F6966F18FA336",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     },
     {
       "path": "data/02582f3da1f8daf5",
       "size": 270463,
       "sha1": "19F8352A613B126280E4AF719852AB89EE9275F2",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/02582f3da1f8daf5.stream",
       "size": 25356858,
       "sha1": "F048AB101EA908C84777A10F28B4C36D8EA35F35",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/0cf14e223de06a26",
       "size": 98,
       "sha1": "34B80DDAE857DC1B18E9BF2523CE0D118BB9CE9C",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/1d7ad1a3140db0d1",
       "size": 98,
       "sha1": "34B80DDAE857DC1B18E9BF2523CE0D118BB9CE9C",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/2a1a474c9891e64f",
       "size": 98,
       "sha1": "34B80DDAE857DC1B18E9BF2523CE0D118BB9CE9C",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/5ab4204a4e0ccbe8",
       "size": 243185,
       "sha1": "96D68C93E5E814322A05911F746B654911CBA831",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/5ab4204a4e0ccbe8.stream",
       "size": 62463138,
       "sha1": "FF86073A6F6CD2BE6AD0FEDA5362BABDCC7A5293",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/76b0a0e66d61aa15",
       "size": 165464,
       "sha1": "3CC9DE15E5C0D8EDF8D3131B23925D1AA3EDAA9D",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/76b0a0e66d61aa15.stream",
       "size": 9532113,
       "sha1": "FB01F579B55A8FC114D2CB11EA2FDA20080AC6E9",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/7c221cf5b12213ac",
       "size": 149556,
       "sha1": "BE7ECE20E3EE5CE5F59814D03D5C910A0224A0E4",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/7c221cf5b12213ac.stream",
       "size": 24215420,
       "sha1": "D5FDF1668664FCB9DA824D3947FEC371029316D9",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/7cf43b5d4c63838b",
       "size": 662591,
       "sha1": "69ADD5D79DC138EFB79852E595E6BCA4678B7DA2",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/7cf43b5d4c63838b.stream",
       "size": 67279034,
       "sha1": "360D94CE97E58D6EF1C7079E6DCE215B2DBE469B",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/88509e81213dbf9c",
       "size": 98,
       "sha1": "34B80DDAE857DC1B18E9BF2523CE0D118BB9CE9C",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/8a01bc23602246e8",
       "size": 16133,
       "sha1": "C2BF705BCBA09F1CF808BD97B225C405E9B82BC1",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/8a01bc23602246e8.stream",
       "size": 71785664,
       "sha1": "0C0F8475B76D45F4DC7AC75B4E2BAC687C79C9B3",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/9b6d3eb4c698079b",
       "size": 270463,
       "sha1": "19F8352A613B126280E4AF719852AB89EE9275F2",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/9b6d3eb4c698079b.stream",
       "size": 25356858,
       "sha1": "F048AB101EA908C84777A10F28B4C36D8EA35F35",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/a0a29953a5d45065",
       "size": 17737,
       "sha1": "C994EBDCF9F499E8FE0A3AE70300DC87B17AACEE",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/a0a29953a5d45065.stream",
       "size": 4459818,
       "sha1": "4AC3DF69D3B99C1E43BC25B6CB689440B0BA52B0",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/b98c5b68db4cca84",
       "size": 165814,
       "sha1": "2D3FC7ABD3396782D4FD73A7853F4397BC027A73",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/b98c5b68db4cca84.stream",
       "size": 9459603,
       "sha1": "C7A71CF659CD578794AD7663389B539F754A0EA5",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/bundle_database.data",
       "size": 186515,
       "sha1": "DA87BC4EA8EA9BF746B2FDA48F658E701244AC32",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.00.nxa",
       "size": 676565368,
       "sha1": "57DF6327FCDC8451EE1FA90388599DF3494172B2",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.01.nxa",
       "size": 578113828,
       "sha1": "43ADB3928329BE3B5DABDB3431A1F6092E9B3F6A",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.02.nxa",
       "size": 495548257,
       "sha1": "6669BD5423498A656617DE8FAA12DE5F2559FA2C",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.03.nxa",
       "size": 783493434,
       "sha1": "B8C3AB696F2818FBB1316218D0D4868E3D24877A",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.04.nxa",
       "size": 747231610,
       "sha1": "F803DF3AF77F89D8AF8DB6DFEED6DD422FCB49FC",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.05.nxa",
       "size": 591688076,
       "sha1": "411FCB68074924047610893B268DA8DE5BAAC161",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.06.nxa",
       "size": 809379168,
       "sha1": "3C682371FF203EEF36FCCE2130FCB6E8231EF043",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.07.nxa",
       "size": 615539694,
       "sha1": "E7B61BC752B570316482F4C93BD2CDF1D0C671DE",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.08.nxa",
       "size": 1445126178,
       "sha1": "395AF4630DB27581986CCFAEAD4D655B65C63C1B",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.09.nxa",
       "size": 735297735,
       "sha1": "C5F51389AC87D4F0FBB1703E30D9FA79BE6C9B25",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.10.nxa",
       "size": 692331820,
       "sha1": "F3096F64B219FE007A84F90CD306D89C30EE0B49",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.11.nxa",
       "size": 665110530,
       "sha1": "6A82DAA139D9D68485A743E192738089565DBDCA",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.12.nxa",
       "size": 950373092,
       "sha1": "08DB7F7DD86F4A2106E1859F831F10672127C0D6",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.13.nxa",
       "size": 1438045849,
       "sha1": "CC86E53850383843681267C1B79F91F77913741B",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.14.nxa",
       "size": 693553963,
       "sha1": "81E5C1DFE6B106C38779678E96270CD845988B56",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.15.nxa",
       "size": 737689539,
       "sha1": "FB313A7C70C9E5D12980230ACDB4DC936B8BF5BD",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.16.nxa",
       "size": 819268073,
       "sha1": "8CDE22E68607F4C004E463E96AC6CAF5F5F88133",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.17.nxa",
       "size": 496316288,
       "sha1": "1B1B11281FF8E98364DC64740963E202BA8D24E1",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.18.nxa",
       "size": 560494490,
       "sha1": "4BF8CC4D8DA7AC19B15470CBACBA2EC8BE8BEE3E",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.19.nxa",
       "size": 607688530,
       "sha1": "67F4067D22CAA62F55D447B0D7E873B42A2277B5",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.20.nxa",
       "size": 1030105463,
       "sha1": "6D32AD8C1186237F0206BDB4FF3A56B919632890",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.21.nxa",
       "size": 670822283,
       "sha1": "5C91300FE0C07939C0BB892D0FA823600772D46D",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.22.nxa",
       "size": 774067033,
       "sha1": "5BEAD74484DDE0A147DB52C0637403F6B9FB650C",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.23.nxa",
       "size": 573012246,
       "sha1": "B1C65C97D1563BAA827998AC911728F53ED12141",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.24.nxa",
       "size": 448907349,
       "sha1": "4270048F9345EB84E472432BC6D8681336C840C1",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.25.nxa",
       "size": 635933882,
       "sha1": "16F05629D9D3472343C47F99F00C3777D4F31062",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.26.nxa",
       "size": 1954310104,
       "sha1": "DB02B32686C157D182016FA6F2E6B7543C6F643A",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.27.nxa",
       "size": 785903410,
       "sha1": "E33A6C0EE8518902D20B1DDDC66B60C5DBB12CCF",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.28.nxa",
       "size": 683804227,
       "sha1": "1E458FA41C17F1FF7CFCF35FA84E55AB599FF2B5",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.29.nxa",
       "size": 523617568,
       "sha1": "4599C31B401D7E150B462F7CA566729018212F2D",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.nxa",
       "size": 6532943,
       "sha1": "2D6EA1B672D9F53B5C392E842C1BCE554EC54E84",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/bundles.region_hints",
       "size": 4748180,
       "sha1": "6A015D5500DDD0E8269507E886B7A2473245E42B",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/ce6b3d08283efc3d",
       "size": 165967,
       "sha1": "DF1DD90E1E9FC31A85CF061BC9D6ED92EB5340F0",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/ce6b3d08283efc3d.stream",
       "size": 9626090,
       "sha1": "DEB368DC3EB751DD73A9E7F2E5731B6E247D1BA7",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/e8e43494a3d38e6c",
       "size": 165464,
       "sha1": "65614583A8EEF2D74137608FA5AD553C81774E03",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/e8e43494a3d38e6c.stream",
       "size": 10026348,
       "sha1": "3C2FC2AE0B94278F45A389126F5D9C2BA2E3F389",
-      "depot": 553854,
-      "volatile": false
+      "depot": 553854
     },
     {
       "path": "data/game/dl_library.dl_typelib",
       "size": 1062706,
       "sha1": "618150274777CF69DA739D5100E00A9B3BB0CB64",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/game.dll",
       "size": 15522408,
       "sha1": "549B6277F7710C39073F853E3D5EE1EE2A015A9E",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_add_resource_dependencies.dl_bin",
       "size": 228,
       "sha1": "B99B207FA2FD7903C24742BF34B7C30A2E4C2117",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_animation_event_trigger_settings.dl_bin",
       "size": 165340,
       "sha1": "46515EEDE0CAA4989E383BCA85B89DC983905700",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_arc_settings.dl_bin",
       "size": 1756,
       "sha1": "431C497D0CC0DA9C033327505249C1AC79067FE7",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_beam_settings.dl_bin",
       "size": 3452,
       "sha1": "83136D5E9EE14F875CFA072D2873284F8BC21DAC",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_body_settings.dl_bin",
       "size": 164,
       "sha1": "DAF87C82A2993B945B882842630E6536E1EB9659",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_candidate_descs.dl_bin",
       "size": 860,
       "sha1": "B332285CC1F628E823280C445AF2A686102106BE",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_collision_event_settings.dl_bin",
       "size": 14492,
       "sha1": "5935AD8FE78ACB386D921A48CD67A69E33779787",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_corporation_logos.dl_bin",
       "size": 412,
       "sha1": "44648C5FE0E63C0954989D7EC46C65828FBAB2BF",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_credits_settings.dl_bin",
       "size": 368276,
       "sha1": "AE7366BD482C0999ADBF63A9E47665A31945E46A",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_customization_armor_sets.dl_bin",
       "size": 384244,
       "sha1": "466967D06A660382463257E2DD77D529DD6A8CF1",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_customization_passive_bonuses.dl_bin",
       "size": 3904,
       "sha1": "680FEEBD15C0A21B3BD85F8278D0F49476E95DD6",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_damage_settings.dl_bin",
       "size": 49472,
       "sha1": "0C77B7ACE59F1646625F11B69CAB1487F102AC1F",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_destruction_settings.dl_bin",
       "size": 1639318,
       "sha1": "29FA757355AAD1642FCD8A8860EAC0CA3263B16F",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_distant_war_effect_settings.dl_bin",
       "size": 1516,
       "sha1": "3C3824678BAF3453B512CF3CBC4CC2D831FAE501",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_entities.dl_bin",
       "size": 46612636,
       "sha1": "D30C04886901D572BA2114A1A0998B5045684671",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_entity_deltas.dl_bin",
       "size": 349618,
       "sha1": "F1AF964AB60EFC9475AFA5D39A6FBECBC04C9309",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_environment_settings.dl_bin",
       "size": 11430,
       "sha1": "47A855AF2469E6A7357F408BEDBB0E4FAC7E9C05",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_explosion_settings.dl_bin",
       "size": 67876,
       "sha1": "762CDE726EF9EBD8B4730DA97B156979C605374D",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_font_lookup.dl_bin",
       "size": 652,
       "sha1": "E059F407C380DE1C8201401173349F1AD9E11C97",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_font_settings.dl_bin",
       "size": 6028,
       "sha1": "D3E3465A37FC839C3061CD41C8013A29E922314B",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_galactic_presence_settings.dl_bin",
       "size": 149515,
       "sha1": "9B2BA0E0F5F578D24A85F6C92F02E779C6A765E6",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_generation_settings.dl_bin",
       "size": 10436,
       "sha1": "C7BC09ADF04378C9955ED1DC911BE6392D75BC3F",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_hit_effect_settings.dl_bin",
       "size": 68636,
       "sha1": "F66391047B4A68C4AE118C32EDEA55D7EDEC12A9",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_language_settings.dl_bin",
       "size": 3996,
       "sha1": "0CAEA10DC921E147B9734EADE64591A188CCF660",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_layer_package_indirection_settings.dl_bin",
       "size": 156,
       "sha1": "FB654FBBCAF4B53E1C1B1BCFD095D9CD7E9BD3ED",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_location_groups.dl_bin",
       "size": 396757,
       "sha1": "E9295F3635E613F74AF3B86C0963999230811C09",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_modifier_settings.dl_bin",
       "size": 1812,
       "sha1": "8E78DEA7B8A32272569974936A719172727D2025",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_planet_data.dl_bin",
       "size": 492236,
       "sha1": "33D4884D882C07CE1373A06E4848E391F416648A",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_planet_override_settings.dl_bin",
       "size": 34634,
       "sha1": "27359D8F2DAE9CC36DE7A89B9D7279750CDF1700",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_planet_region_settings.dl_bin",
       "size": 61533,
       "sha1": "C82A8A9AFEB77F77A74C53DB7CF04CF447CC88A9",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_planet_territory_graphs.dl_bin",
       "size": 1574676,
       "sha1": "CF2C98100C0DB4A74AB6C94E117C6A0E79324B62",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_planet_types_settings.dl_bin",
       "size": 17012,
       "sha1": "48142E799688A1A7DADACAB1ACE4FE2CB8271B98",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_policy_settings.dl_bin",
       "size": 528,
       "sha1": "6D99FF622E0D951A0F59C99E7EE1BBDF753459A1",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_projectile_settings.dl_bin",
       "size": 95292,
       "sha1": "CE612B5BC22A251F04754ED037D58E13A678DCBB",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_region_settings.dl_bin",
       "size": 402771,
       "sha1": "77FD5DCA94395E5BDDA02BE47DBD8A3D4D8FD672",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_resource_swap.dl_bin",
       "size": 72,
       "sha1": "4F62B7CEDED96534C93988E4102361BE5128C6BC",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_route_settings.dl_bin",
       "size": 508,
       "sha1": "180744B4054B8D9C5A2DCFDBBA7C7E323571F2FD",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_satellite_groups.dl_bin",
       "size": 84537,
       "sha1": "0DBCD0DFDB6C2623C6D7C45BD87ED0B27362C818",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_scenario_settings.dl_bin",
       "size": 8884,
       "sha1": "26C36B48EAF8B50E7025B7F9CA7323DFC9A4CC30",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_sky_settings.dl_bin",
       "size": 12532,
       "sha1": "1C6EACE2F6F171FA5C8109C53272E2FE8ABF2B0C",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_solar_system_settings.dl_bin",
       "size": 91812,
       "sha1": "FDC4FE2625ECA08F7073C7B773C0F5FA072EB867",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_stamp_settings.dl_bin",
       "size": 679548,
       "sha1": "05B7D23F8C64B1F4466474B64333CDF94965162B",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_status_effect_settings.dl_bin",
       "size": 13164,
       "sha1": "30F23201CE71DAFE1E38D580749DE4690AEECACC",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_stratagem_settings.dl_bin",
       "size": 80328,
       "sha1": "7D3467A1F0B16053CAE281812EC823DD0ADDEB66",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_stratagem_upgrade_settings.dl_bin",
       "size": 181,
       "sha1": "6915F7105319A0AF6DC6D378F61DCFC86EAE3313",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_surface_effect_settings.dl_bin",
       "size": 304732,
       "sha1": "AC8199DD8F8D6B40B07ABA745938CCCCAC98B210",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_unit_customization_settings.dl_bin",
       "size": 27792,
       "sha1": "40B75EF57A2ED8F234E26E1D31F1AC484269EE31",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_unit_effect_settings.dl_bin",
       "size": 63164,
       "sha1": "F657C4B2C79C4ECDF9D7E4316C7402464215E97B",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_video_flow_settings.dl_bin",
       "size": 2108,
       "sha1": "E2B0E8979927C06E0C4AD6B10F83C2BB2D199926",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_video_ui_settings.dl_bin",
       "size": 1172,
       "sha1": "25309A97E02DE8535E86495EFC67AE863EF6B82E",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_weapon_customization_settings.dl_bin",
       "size": 29576,
       "sha1": "8856A17CB43951BAB26E0E5240377B0523F8925B",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_weather_color_set_settings.dl_bin",
       "size": 25108,
       "sha1": "7362B246E19453C49BAD0F97135876F8AFB4A009",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_weather_settings.dl_bin",
       "size": 215522,
       "sha1": "508A07394942D0F491BC8F8CE53E2F31AFF6080D",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/game/generated_zone_data.dl_bin",
       "size": 543072,
       "sha1": "1BB7F834CF1E2790E2AE00FB080EC6AC5FC265EB",
-      "depot": 553853,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "data/settings.ini",
       "size": 5351,
       "sha1": "A3A75539299EF3C512658AB735FBD4368CA3370A",
-      "depot": 553853,
-      "volatile": false
-    },
-    {
-      "path": "tools/GGSetup.exe",
-      "size": 13163048,
-      "sha1": "AC461DBDF12783D59EB18BAEBE435F1630998B94",
-      "depot": 553851,
-      "volatile": false
-    },
-    {
-      "path": "tools/gguninst.exe",
-      "size": 79928,
-      "sha1": "BF91B256AA32852836936A42DD8002EB93C870BC",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553853
     },
     {
       "path": "tools/installscript.vdf",
       "size": 642,
       "sha1": "3ECEA1DAEBFBA2A0D4AA244C2241DAD7BE34A566",
-      "depot": 553851,
-      "volatile": false
+      "depot": 553851
     }
   ],
   "totalBytes": 23875535795

@@ -3,11 +3,11 @@ using System.Security.Cryptography;
 namespace HellForge.Core;
 
 // Copies the supported build's files from an HD2 installation into a HellForge game folder. Each file is hashed while it is
-// copied and must match Steam's depot hash; the game's self-updating files are copied as they are. Files written
-// completely are renamed from .partial, and a file already present with the right content is kept, so an interrupted
-// copy resumes and running it again repairs a damaged one. Only the build's depot files are copied: mods, other tools
-// and logs in the Steam folder are left behind. The source is an installed HD2 (Copy) or the depots Steam downloaded at
-// the build's exact manifests (CopyFromDepots, SteamDepotDownload).
+// copied and must match Steam's depot hash. Files written completely are renamed from .partial, and a file already
+// present with the right content is kept, so an interrupted copy resumes and running it again repairs a damaged one. Only
+// the build's listed files are copied: mods, other tools, logs and depot files HellForge never uses are left behind. The
+// source is an installed HD2 (Copy) or the depots Steam downloaded at the build's exact manifests (CopyFromDepots,
+// SteamDepotDownload).
 public static class GameCopier
 {
     const int BufferSize = 4 << 20;
@@ -74,7 +74,7 @@ public static class GameCopier
             using (var output = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize))
             using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA1))
             {
-                if (!file.Volatile && input.Length != file.Size)
+                if (input.Length != file.Size)
                     throw new InvalidDataException($"{file.Path} in {where} is not build {build.BuildId}; {fix}.");
                 int read;
                 while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
@@ -86,28 +86,24 @@ public static class GameCopier
                     progress?.Invoke(Math.Min(done, total), total, file.Path);
                 }
                 output.Flush(true);
-                if (!file.Volatile && !Convert.ToHexString(hash.GetHashAndReset()).Equals(file.Sha1, StringComparison.OrdinalIgnoreCase))
+                if (!Convert.ToHexString(hash.GetHashAndReset()).Equals(file.Sha1, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException($"{file.Path} in {where} is not build {build.BuildId}; {fix}.");
-                // A volatile file's size can differ from the list; keep the byte count consistent with the total.
-                done += file.Size - input.Length;
             }
             File.Move(partial, to, overwrite: true);
         }
     }
 
-    // A file that is in place with the build's content (volatile files only need to exist).
+    // A file that is in place with the build's content.
     static bool Matches(string path, SupportedFile file)
     {
         var info = new FileInfo(path);
-        if (!info.Exists) return false;
-        if (file.Volatile) return true;
-        return info.Length == file.Size && SupportedBuild.Sha1(path).Equals(file.Sha1, StringComparison.OrdinalIgnoreCase);
+        return info.Exists && info.Length == file.Size && SupportedBuild.Sha1(path).Equals(file.Sha1, StringComparison.OrdinalIgnoreCase);
     }
 
     // The cheap test used to estimate free space: present with the right size.
     static bool Present(string path, SupportedFile file)
     {
         var info = new FileInfo(path);
-        return info.Exists && (file.Volatile || info.Length == file.Size);
+        return info.Exists && info.Length == file.Size;
     }
 }

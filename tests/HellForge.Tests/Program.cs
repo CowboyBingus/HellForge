@@ -187,7 +187,7 @@ static byte[] DepotManifestBytes(uint depot, ulong manifest, params (string Name
             "InstalledDepots" { "553851" { "manifest" "42" "size" "1" } } }
         """);
     Directory.CreateDirectory(Path.Combine(source, "bin", "GameGuard"));
-    File.WriteAllText(Path.Combine(source, "bin", "GameGuard", "npsc.des"), "self-updating module");
+    File.WriteAllText(Path.Combine(source, "bin", "GameGuard", "npsc.des"), "a module the copy never uses");
     File.WriteAllText(Path.Combine(source, "data", "asset.patch_0"), "a mod, not part of any depot");
     var depotCache = Path.Combine(home, "Steam", "depotcache");
     Directory.CreateDirectory(depotCache);
@@ -215,9 +215,8 @@ Test("A supported build lists depot files only, pins the build, and verifies a c
     var (manifest, source, depotCache) = DepotFixture("supported-build");
     var build = SupportedBuild.FromSteam(manifest, depotCache);
     Check(build.BuildId == "12345" && build.Depots.Single().ManifestId == "42", "Build or depot not recorded.");
-    Check(build.Files.Count == 4 && build.Files.All(f => f.Path != "data/asset.patch_0"), "Non-depot files listed.");
-    Check(build.Files.Single(f => f.Path == "bin/GameGuard/npsc.des").Volatile && !build.Files.Single(f => f.Path == "data/asset").Volatile,
-        "Self-updating files are not marked volatile.");
+    Check(build.Files.Count == 3 && build.Files.All(f => f.Path != "data/asset.patch_0"), "Non-depot files listed.");
+    Check(build.Files.All(f => !SupportedBuild.IsUnused(f.Path)), "A depot file the copy never uses is listed.");
     Check(build.ExeSha256 == LocalInstall.Hash(Path.Combine(source, LocalInstall.Exe)), "Executable not pinned.");
     var saved = Path.Combine(root, "supported-build.json");
     build.Save(saved);
@@ -237,8 +236,8 @@ Test("A supported build lists depot files only, pins the build, and verifies a c
     File.Delete(asset + GameSettings.OriginalSuffix);
     Check(!build.IsComplete(source), "A resized file passed the completeness check.");
     File.WriteAllBytes(asset, assetBytes);
-    File.WriteAllText(Path.Combine(source, "bin", "GameGuard", "npsc.des"), "the module updated itself");
-    Check(build.Verify(source).Count == 0, "A self-updated module failed verification.");
+    Directory.Delete(Path.Combine(source, "bin", "GameGuard"), recursive: true);
+    Check(build.Verify(source).Count == 0, "A copy without the unused depot files failed verification.");
     File.WriteAllText(Path.Combine(source, "data", "asset"), "synthetic assft");
     Check(build.Verify(source).SequenceEqual(["changed: data/asset"]), "A changed file passed verification.");
     File.WriteAllText(Path.Combine(source, LocalInstall.Exe), "other build");
@@ -254,6 +253,7 @@ Test("The game copy takes depot files only, resumes, repairs, and rejects other 
     GameCopier.Copy(source, destination, build, (done, total, _) => (lastDone, lastTotal) = (done, total));
     Check(build.Verify(destination).Count == 0 && lastDone == lastTotal && lastTotal == build.TotalBytes, "Copy incomplete.");
     Check(!File.Exists(Path.Combine(destination, "data", "asset.patch_0")), "A mod was copied.");
+    Check(!Directory.Exists(Path.Combine(destination, "bin", "GameGuard")), "An unused depot file was copied.");
     Check(!Directory.EnumerateFiles(destination, "*.partial", SearchOption.AllDirectories).Any(), "Partial files remain.");
     File.Delete(Path.Combine(destination, "data", "asset"));
     File.WriteAllText(Path.Combine(destination, LocalInstall.GameDll), "damaged");

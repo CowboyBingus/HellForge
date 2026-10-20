@@ -97,8 +97,7 @@ try
         case "supported-build":
             var build = SupportedBuild.FromSteam(Required("--manifest"), Required("--depotcache"));
             build.Save(Required("--out"));
-            result = new { build.BuildId, depots = build.Depots.Count, files = build.Files.Count, bytes = build.TotalBytes,
-                volatileFiles = build.Files.Count(f => f.Volatile) };
+            result = new { build.BuildId, depots = build.Depots.Count, files = build.Files.Count, bytes = build.TotalBytes };
             break;
         case "install-game":
             var target = SupportedBuild.Current;

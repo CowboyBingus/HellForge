@@ -34,7 +34,7 @@ public static class SteamDepotDownload
             {
                 total += file.Size;
                 var info = new FileInfo(Locate(steamRoot, build, file));
-                if (info.Exists && (file.Volatile || info.Length == file.Size)) done += file.Size;
+                if (info.Exists && info.Length == file.Size) done += file.Size;
             }
             return new DepotState(depot, done, total);
         })];

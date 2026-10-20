@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace HellForge.Core;
 
 public sealed record SupportedDepot(uint Id, string ManifestId);
-public sealed record SupportedFile(string Path, long Size, string Sha1, uint Depot, bool Volatile);
+public sealed record SupportedFile(string Path, long Size, string Sha1, uint Depot);
 
 // The HD2 build HellForge's runtime patches target, as Steam publishes it: the files of its depots with sizes and SHA-1
 // hashes from Steam's depot manifests. Setup copies exactly these files and sessions verify them. The list holds names
@@ -17,10 +17,12 @@ public sealed record SupportedBuild(int SchemaVersion, string AppId, string Buil
 
     public long TotalBytes => Files.Sum(f => f.Size);
 
-    // Some of the game's modules update themselves (Steam's validation on 2026-10-14 found one of these changed), and
-    // HellForge does not use them, so these files only have to exist.
-    public static bool IsVolatile(string path) =>
-        path == "bin/GameGuard.des" || path.StartsWith("bin/GameGuard/", StringComparison.Ordinal);
+    // Depot files HellForge's copy never uses: modules that never run there (they update themselves, so Steam's
+    // validation on 2026-10-14 found one changed) and their installers. The list leaves them out, so setup does not copy
+    // them and sessions do not look for them.
+    public static bool IsUnused(string path) =>
+        path is "bin/GameGuard.des" or "tools/GGSetup.exe" or "tools/gguninst.exe" ||
+        path.StartsWith("bin/GameGuard/", StringComparison.Ordinal);
 
     static readonly Lazy<SupportedBuild> current = new(LoadEmbedded);
     public static SupportedBuild Current => current.Value;
@@ -57,8 +59,8 @@ public sealed record SupportedBuild(int SchemaVersion, string AppId, string Buil
                 throw new InvalidDataException($"Depot manifest {path} names another depot or manifest.");
             if (manifest.FilenamesEncrypted) throw new InvalidDataException($"Depot {id} has encrypted file names.");
             depots.Add(new(manifest.DepotId, manifestId));
-            foreach (var file in manifest.Files.Where(f => !f.IsDirectory))
-                if (!files.TryAdd(file.Path, new(file.Path, (long)file.Size, file.Sha1, manifest.DepotId, IsVolatile(file.Path))))
+            foreach (var file in manifest.Files.Where(f => !f.IsDirectory && !IsUnused(f.Path)))
+                if (!files.TryAdd(file.Path, new(file.Path, (long)file.Size, file.Sha1, manifest.DepotId)))
                     throw new InvalidDataException($"Two depots provide {file.Path}.");
         }
         foreach (var required in new[] { LocalInstall.Exe, LocalInstall.GameDll })
@@ -77,7 +79,7 @@ public sealed record SupportedBuild(int SchemaVersion, string AppId, string Buil
         var path = Path.Combine(gameRoot, file.Path);
         if (File.Exists(path + GameSettings.OriginalSuffix)) path += GameSettings.OriginalSuffix;
         var info = new FileInfo(path);
-        return info.Exists && (file.Volatile || info.Length == file.Size);
+        return info.Exists && info.Length == file.Size;
     });
 
     public static string Sha1(string path)
@@ -103,7 +105,6 @@ public sealed record SupportedBuild(int SchemaVersion, string AppId, string Buil
             var path = Path.Combine(gameRoot, file.Path);
             var info = new FileInfo(path);
             if (!info.Exists) problems.Add("missing: " + file.Path);
-            else if (file.Volatile) { } // Size and content change as the module updates itself.
             else if (info.Length != file.Size) problems.Add("wrong size: " + file.Path);
             else
             {
