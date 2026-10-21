@@ -699,15 +699,26 @@ public partial class MainWindow : Window
             if (run == null) { Append("No session logs yet: play a session first.", Orange); return; }
             var target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
                 $"HellForge-logs-{DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.zip");
-            // A running session still has its logs open for writing, so each file is read with shared access.
+            // A running session still has its logs open for writing, so each file is read with shared access. The game's
+            // console logs are copied into the session (engine-logs) only when it ends: while it runs, or if that copy
+            // failed, the ones the game wrote since the session started come from the installation's userdata/logs.
+            var files = Directory.EnumerateFiles(run, "*", SearchOption.AllDirectories)
+                .Select(file => (file, name: Path.Combine(Path.GetFileName(run), Path.GetRelativePath(run, file)))).ToList();
+            var gameLogs = paths.InstallRoot != null ? Path.Combine(paths.InstallRoot, "userdata", "logs") : null;
+            if (!Directory.Exists(Path.Combine(run, "engine-logs")) && gameLogs != null && Directory.Exists(gameLogs))
+            {
+                var started = Directory.GetCreationTimeUtc(run);
+                files.AddRange(new DirectoryInfo(gameLogs).GetFiles("console_*.txt")
+                    .Where(f => f.LastWriteTimeUtc >= started && f.Length < 200L * 1024 * 1024)
+                    .Select(f => (f.FullName, Path.Combine(Path.GetFileName(run), "engine-logs", "logs-" + f.Name))));
+            }
             var skipped = 0;
             using (var zip = System.IO.Compression.ZipFile.Open(target, System.IO.Compression.ZipArchiveMode.Create))
-                foreach (var file in Directory.EnumerateFiles(run, "*", SearchOption.AllDirectories))
+                foreach (var (file, name) in files)
                     try
                     {
                         using var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                        var entry = zip.CreateEntry(Path.Combine(Path.GetFileName(run), Path.GetRelativePath(run, file)).Replace(Path.DirectorySeparatorChar, '/'),
-                            System.IO.Compression.CompressionLevel.Optimal);
+                        var entry = zip.CreateEntry(name.Replace(Path.DirectorySeparatorChar, '/'), System.IO.Compression.CompressionLevel.Optimal);
                         using var destination = entry.Open();
                         source.CopyTo(destination);
                     }
