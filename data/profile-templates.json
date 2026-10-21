@@ -1,5 +1,5 @@
 {
- "scope": "Inventory templates for new local profiles. unlock-all is a development profile that grants every non-consumable catalogue item, including content the account may not own, and the consumable boosters the account owns.",
+ "scope": "Inventory templates for new local profiles. unlock-all is a development profile that grants every non-consumable catalogue item, including content the account may not own, and every booster.",
  "templates": {
   "starter": {
    "description": "Fresh player after basic training: AR-23 Liberator, P-2 Peacemaker, G-12 High Explosive (the onboarding chain's unlock items are added by ProfileStore).",
@@ -39,7 +39,7 @@
    }
   },
   "unlock-all": {
-   "description": "Development: every non-consumable catalogue item, the account's boosters and package progress, at the top level (300; customization needs level 10).",
+   "description": "Development: every non-consumable catalogue item, every booster and package progress, at the top level (300; customization needs level 10).",
    "progression": {
     "experience": 11080000,
     "onboardingFlags": 16351099,
@@ -14666,6 +14666,11 @@
     },
     {
      "mixId": 876985512,
+     "amount": 1,
+     "isDiscovered": true
+    },
+    {
+     "mixId": 3545987157,
      "amount": 1,
      "isDiscovered": true
     }

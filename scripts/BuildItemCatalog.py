@@ -298,17 +298,22 @@ def main():
          "levelSpec": level_spec, "itemPackages": item_packages, "seasonPass": season_pass, "seasonPassDetails": details,
          "progressionPackages": progression_packages, "storeFront": store_front}, separators=(",", ":")), newline="\n")
     # The base (Helldivers Mobilize) boosters are consumable items the account holds once (amount 1); the
-    # later warbond boosters are not consumable. unlock-all grants the boosters the account owns.
+    # later warbond boosters are not consumable. unlock-all grants every booster: the account's, then any it does
+    # not own (amount 1). The account the catalogue was rebuilt from lacked Integrated Extinguishers (FireExtinguish,
+    # 3545987157), so no unlock-all profile had it (a 0.1.8 report).
     boosters = [{"mixId": o["mixId"], "amount": o["amount"], "isDiscovered": True} for o in owned
                 if o["mixId"] in by_mix and by_mix[o["mixId"]]["isConsumable"] and by_mix[o["mixId"]]["progressionCategory"] == BOOSTER_CATEGORY]
+    held = {b["mixId"] for b in boosters}
+    boosters += [{"mixId": item["mixId"], "amount": 1, "isDiscovered": True} for item in items
+                 if item["isConsumable"] and item["progressionCategory"] == BOOSTER_CATEGORY and item["mixId"] not in held]
     unlock_all = [{"mixId": item["mixId"], "amount": 1, "isDiscovered": True} for item in items if not item["isConsumable"]] + boosters
     (out / "profile-templates.json").write_text(json.dumps({
-        "scope": "Inventory templates for new local profiles. unlock-all is a development profile that grants every non-consumable catalogue item, including content the account may not own, and the consumable boosters the account owns.",
+        "scope": "Inventory templates for new local profiles. unlock-all is a development profile that grants every non-consumable catalogue item, including content the account may not own, and every booster.",
         "templates": {
             "starter": {"description": "Fresh player after basic training: AR-23 Liberator, P-2 Peacemaker, G-12 High Explosive.", "items": starter,
                         "progression": {"onboardingFlags": onboarding_flags, "packageProgress": tutorial,
                                         "activeSeasonPass": default_season_pass, "purchasedSeasonPassItems": []}},
-            "unlock-all": {"description": "Development: every non-consumable catalogue item, the account's boosters and package progress.",
+            "unlock-all": {"description": "Development: every non-consumable catalogue item, every booster and package progress.",
                            "progression": {"onboardingFlags": onboarding_flags, "packageProgress": package_progress,
                                            "activeSeasonPass": default_season_pass, "purchasedSeasonPassItems": warbond_items},
                            "items": unlock_all},
