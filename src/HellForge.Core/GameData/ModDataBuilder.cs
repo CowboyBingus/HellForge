@@ -11,17 +11,19 @@ namespace HellForge.Core.GameData;
 public static class ModDataBuilder
 {
     // Part of the cache key and the modlist digest: raise it whenever the same spec would build different bytes.
-    // 2: a unit copy takes its base's physics under its own name; 3: and the physics names that unit inside it too
-    public const int Version = 3;
+    // 2: a unit copy takes its base's physics under its own name; 3: and the physics names that unit inside it too;
+    // 4: material colours land where the values are (no 16-byte rounding), and resources can come from Steam's install
+    public const int Version = 4;
 
     // Where a physics resource names its unit (after the type hash at +0): the havok layer files physics by the name at
     // +0x08, not the archive's, and a unit finds its bodies by its own name there (exe 0x7EDE60, 0x788E90); +0x38 and
     // +0x40 repeat it. Every one of the game's 4821 physics resources is laid out so.
     static readonly int[] PhysicsNames = [0x08, 0x38, 0x40];
 
-    public static List<string> Build(DataSpec spec, string modFolder, GameDataReader game, string output)
+    public static List<string> Build(DataSpec spec, string modFolder, GameDataReader game, string output, GameDataReader? steam = null)
     {
-        var sources = spec.Patches.SelectMany(p => p.Resources).SelectMany(r => r switch
+        if (spec.UsesSteam && steam == null) throw new InvalidDataException("it takes resources from HELLDIVERS 2 as Steam has it installed, and Steam's copy was not found.");
+        HashSet<ResourceKey> Sources(bool fromSteam) => spec.Patches.SelectMany(p => p.Resources).Where(r => r.Steam == fromSteam).SelectMany(r => r switch
         {
             // a unit copy's physics too, if it has one: the engine finds a unit's physics by the unit's name (its header names
             // its bones and state machine), so a copy without it gets a default body (a sentry: a huge box, and no aim)
@@ -30,13 +32,46 @@ public static class ModDataBuilder
             IncludeResources include => include.Ids.Select(id => new ResourceKey(include.Type, id)),
             _ => []
         }).ToHashSet();
-        var found = game.Find(sources);
-        var missing = sources.Where(k => !found.ContainsKey(k) && k.Type != ResourceTypes.Physics).Select(k => k.ToString()).Order(StringComparer.Ordinal).ToList();
+        var gameSources = Sources(false);
+        var steamSources = Sources(true);
+        var found = game.Find(gameSources);
+        var foundSteam = steam?.Find(steamSources) ?? [];
+        var missing = gameSources.Where(k => !found.ContainsKey(k) && k.Type != ResourceTypes.Physics).Select(k => k.ToString())
+            .Concat(steamSources.Where(k => !foundSteam.ContainsKey(k) && k.Type != ResourceTypes.Physics).Select(k => $"{k} (Steam)"))
+            .Order(StringComparer.Ordinal).ToList();
         if (missing.Count > 0) throw new InvalidDataException("not in the game data: " + string.Join(", ", missing) + ".");
+        // An include from Steam stands under its own name, so it may not replace a resource the game copy has (that one's
+        // bytes can differ between the builds): such a resource is included from the game.
+        var steamIncludes = spec.Patches.SelectMany(p => p.Resources).OfType<IncludeResources>().Where(i => i.Steam)
+            .SelectMany(i => i.Ids.Select(id => new ResourceKey(i.Type, id)));
+        var shadowed = game.Find(steamIncludes).Keys.Select(k => k.ToString()).Order(StringComparer.Ordinal).ToList();
+        if (shadowed.Count > 0) throw new InvalidDataException("the game copy has these already; include them from the game, not Steam: " + string.Join(", ", shadowed) + ".");
         var archives = spec.Patches.SelectMany(p => p.Archives).Distinct().Where(a => !game.HasArchive(a)).ToList();
         if (archives.Count > 0) throw new InvalidDataException("the game has no archive " + string.Join(", ", archives) + ".");
-        var read = new Dictionary<ResourceKey, ResourceParts>();
-        ResourceParts Read(ResourceKey key) => read.TryGetValue(key, out var parts) ? parts : read[key] = game.Read(found[key]);
+        var read = new Dictionary<(ResourceKey, bool), ResourceParts>();
+        var parents = new Dictionary<ulong, byte[]?>();
+        ResourceParts Read(ResourceKey key, bool fromSteam)
+        {
+            if (read.TryGetValue((key, fromSteam), out var parts)) return parts;
+            parts = fromSteam ? steam!.Read(foundSteam[key]) : game.Read(found[key]);
+            if (fromSteam && key.Type == ResourceTypes.Material) parts = InGameLayout(key, parts);
+            return read[(key, fromSteam)] = parts;
+        }
+        // A material from Steam's newer build, in the layout of its shader as the game copy has it (the shader's parameters
+        // can change between builds); a material whose shader the game copy lacks stays as it is.
+        ResourceParts InGameLayout(ResourceKey key, ResourceParts parts)
+        {
+            if (parts.Main.Length < 0x20 || BitConverter.ToUInt64(parts.Main, 0x18) is not (not 0 and var parent)) return parts;
+            if (!parents.TryGetValue(parent, out var shader))
+            {
+                var at = game.Find([new(ResourceTypes.Material, parent)]);
+                parents[parent] = shader = at.Count == 1 ? game.Read(at.Values.First()).Main : null;
+            }
+            if (shader == null) return parts;
+            try { return parts with { Main = ResourceEdits.MaterialInLayout(parts.Main, shader) }; }
+            catch (InvalidDataException error) { throw new InvalidDataException($"{key} (Steam): {error.Message}"); }
+        }
+        bool Has(ResourceKey key, bool fromSteam) => fromSteam ? foundSteam.ContainsKey(key) : found.ContainsKey(key);
 
         var built = new List<(IReadOnlyList<string> Archives, byte[] Archive, byte[] Gpu, byte[] Stream)>();
         var added = new HashSet<ResourceKey>();
@@ -54,7 +89,7 @@ public static class ModDataBuilder
                 switch (resource)
                 {
                     case IncludeResources include:
-                        foreach (var id in include.Ids) Add(include.Where, new(include.Type, id), Read(new(include.Type, id)));
+                        foreach (var id in include.Ids) Add(include.Where, new(include.Type, id), Read(new(include.Type, id), include.Steam));
                         break;
                     case IconResource icon:
                         foreach (var (key, parts) in IconImage.Family(File.ReadAllBytes(Path.Combine(modFolder, icon.Png)), Hash(icon.Name), icon.Prepare))
@@ -65,17 +100,17 @@ public static class ModDataBuilder
                         break;
                     case CopyResource copy:
                         var copied = new ResourceKey(copy.Type, Hash(copy.Name));
-                        try { Add(copy.Where, copied, Edit(copy, Read(new(copy.Type, copy.From)), modFolder)); }
+                        try { Add(copy.Where, copied, Edit(copy, Read(new(copy.Type, copy.From), copy.Steam), modFolder)); }
                         catch (InvalidDataException error) when (!error.Message.StartsWith(copy.Where, StringComparison.Ordinal))
                         {
                             throw new InvalidDataException($"{copy.Where} ({ResourceTypes.Describe(copy.Type)} 0x{copy.From:X16}): {error.Message}");
                         }
                         added.Add(copied);
                         var physics = new ResourceKey(ResourceTypes.Physics, copy.From);
-                        if (copy.Type == ResourceTypes.Unit && found.ContainsKey(physics))
+                        if (copy.Type == ResourceTypes.Unit && Has(physics, copy.Steam))
                         {
                             var named = new ResourceKey(ResourceTypes.Physics, copied.Name);
-                            Add(copy.Where, named, RenamePhysics(Read(physics), copy.From, copied.Name));
+                            Add(copy.Where, named, RenamePhysics(Read(physics, copy.Steam), copy.From, copied.Name));
                             added.Add(named);
                         }
                         break;
@@ -185,7 +220,8 @@ public static class ModDataCache
     public static (string Folder, IReadOnlyList<string> Files, bool Built) Ensure(InstallLayout install, ModManifest mod, Func<GameDataReader> game, Action<string>? log = null)
     {
         var spec = DataSpecs.Load(mod.Folder) ?? throw new InvalidDataException($"{DataSpecs.FileName} is missing.");
-        var key = Key(spec, mod.Folder, Path.Combine(install.Game, "data"));
+        var steamData = spec.UsesSteam ? SteamData() : null;
+        var key = Key(spec, mod.Folder, Path.Combine(install.Game, "data"), steamData);
         var cache = Path.Combine(Folder(install), mod.Id);
         var target = Path.Combine(cache, key);
         if (File.Exists(Path.Combine(target, Record)))
@@ -194,7 +230,8 @@ public static class ModDataCache
         var staging = target + ".partial-" + Guid.NewGuid().ToString("N")[..8];
         try
         {
-            var files = ModDataBuilder.Build(spec, mod.Folder, game(), staging);
+            using var steam = steamData == null ? null : new GameDataReader(steamData);
+            var files = ModDataBuilder.Build(spec, mod.Folder, game(), staging, steam);
             File.WriteAllText(Path.Combine(staging, Record), JsonSerializer.Serialize(new { builder = ModDataBuilder.Version, key, mod = mod.Id, files },
                 new JsonSerializerOptions { WriteIndented = true }) + "\n");
             try { Directory.Move(staging, target); }
@@ -211,12 +248,20 @@ public static class ModDataCache
         }
     }
 
-    public static string Key(DataSpec spec, string modFolder, string gameData)
+    // Steam's data folder, for a spec with resources from Steam; the build cannot be made without it.
+    static string SteamData()
+    {
+        var steam = SteamLocator.FindGame() ?? throw new InvalidDataException("it takes resources from HELLDIVERS 2 in Steam, and Steam does not have the game installed.");
+        return Path.Combine(steam.Report.Source, "data");
+    }
+
+    public static string Key(DataSpec spec, string modFolder, string gameData, string? steamData = null)
     {
         var text = new StringBuilder();
         text.Append("builder ").Append(ModDataBuilder.Version).Append('\n');
         text.Append("build ").Append(SupportedBuild.Current.BuildId).Append('\n');
         text.Append("index ").Append(FileHash(Path.Combine(gameData, GameDataReader.IndexFile))).Append('\n');
+        if (steamData != null) text.Append("steam index ").Append(FileHash(Path.Combine(steamData, GameDataReader.IndexFile))).Append('\n');
         text.Append("spec ").Append(FileHash(Path.Combine(modFolder, DataSpecs.FileName))).Append('\n');
         foreach (var input in spec.Inputs) text.Append(input).Append(' ').Append(FileHash(Path.Combine(modFolder, input))).Append('\n');
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())))[..16];

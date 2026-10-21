@@ -500,6 +500,20 @@
           "meaning": "crosshair",
           "verified": false,
           "source": "stats-schema"
+        },
+        "fire_ability": {
+          "offset": 940,
+          "type": "u32",
+          "meaning": "an ability the weapon runs when it fires (0: none)",
+          "verified": false,
+          "source": "Filediver weapon_data FireAbility +940 (2026-10-20)"
+        },
+        "fire_ability_2": {
+          "offset": 944,
+          "type": "u32",
+          "meaning": "a second fire-time ability (the VG-70 Variable: 50, a lead for its knock-down when fired standing; 0 on the AMR and Autocannon)",
+          "verified": false,
+          "source": "Filediver weapon_data, the field after FireAbility; VG-70 vs APW-1/AC-8 records (2026-10-20)"
         }
       },
       "groups": {
@@ -815,6 +829,14 @@
           "meaning": "what a resupply adds",
           "verified": false,
           "source": "stats-schema deposit.refill_amount"
+        },
+        "assisted_reload_weapon": {
+          "offset": 136,
+          "type": "u64",
+          "meaning": "the weapon this backpack reloads and feeds (AssistedReloadWeaponPath; the Autocannon Backpack: the AC-8)",
+          "verified": false,
+          "source": "Filediver deposit_component.go AssistedReloadWeaponPath +0x88; the Autocannon Backpack's record holds the AC-8 entity (2026-10-20)",
+          "ref": "pickup"
         }
       },
       "applies": "respawn",

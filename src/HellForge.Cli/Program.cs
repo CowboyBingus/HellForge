@@ -20,7 +20,7 @@ try
             prepare-session --install <folder> --profile <name>
             migrate --install <folder> --from <artifacts/host-startup> [--appdata <folder>]
             mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>]
-            build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> --out <folder>]
+            build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> [--steam-data <Steam's game data folder>] --out <folder>]
             check-stats --mod <mod folder>
             sdk-headers --repo <HellForge source folder> [--engine <HellForge-Engine folder>] [--mode write | check]
             new-mod --id <owner.mod-name> --name <name> (--install <folder> | --out <folder>)
@@ -59,7 +59,7 @@ try
         "prepare-session" => ["--install", "--profile"],
         "migrate" => ["--install", "--from", "--appdata"],
         "mods-stage" => ["--install", "--plan", "--logs", "--progress"],
-        "build-data" => ["--mod", "--install", "--game-data", "--out"],
+        "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--out"],
         "check-stats" => ["--mod"],
         "sdk-headers" => ["--repo", "--engine", "--mode"],
         "editor-data" => ["--out", "--install", "--game"],
@@ -292,7 +292,8 @@ try
                 var output = Path.GetFullPath(Required("--out"));
                 if ((output + Path.DirectorySeparatorChar).StartsWith(game.Folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                     throw new ArgumentException("--out must not be inside the game data folder.");
-                result = new { output, files = ModDataBuilder.Build(spec, modFolder, game, output) };
+                using var steamGame = options.TryGetValue("--steam-data", out var steamData) ? new GameDataReader(steamData) : null;
+                result = new { output, files = ModDataBuilder.Build(spec, modFolder, game, output, steamGame) };
             }
             else result = new { checkedSpec = Path.Combine(modFolder, DataSpecs.FileName), patches = spec.Patches.Count, resources, inputs = spec.Inputs };
             break;

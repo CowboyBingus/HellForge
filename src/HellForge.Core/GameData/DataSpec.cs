@@ -12,11 +12,19 @@ namespace HellForge.Core.GameData;
 //            material colours, a colour lookup texture recoloured;
 //   include  game resources unchanged under their own names (what a copy needs loaded with it);
 //   icon     a stratagem icon from a PNG in the mod folder: its texture and GUI material.
+// A copy or include reads the player's game copy, or with "source": "steam" the game as Steam has it installed (a newer
+// build's resources, read from the player's own files like the rest; an include from Steam must be new to the copy).
 //   mesh     (on a unit copy) the mod's own geometry from an OBJ in the mod folder, in every render and shadow mesh.
 // docs/mods.md "Data specs" describes the format.
-public sealed record DataSpec(IReadOnlyList<DataPatch> Patches, IReadOnlyList<string> Inputs);
+public sealed record DataSpec(IReadOnlyList<DataPatch> Patches, IReadOnlyList<string> Inputs)
+{
+    public bool UsesSteam => Patches.Any(p => p.Resources.Any(r => r.Steam));
+}
 public sealed record DataPatch(IReadOnlyList<string> Archives, IReadOnlyList<DataResource> Resources);
-public abstract record DataResource(string Where);
+public abstract record DataResource(string Where)
+{
+    public bool Steam { get; init; }
+}
 public sealed record CopyResource(string Where, ulong Type, ulong From, string Name, IReadOnlyDictionary<int, ulong> Expect,
     IReadOnlyList<Replacement> Replace, CurveEdit? Curves, IReadOnlyDictionary<uint, double[]>? Colours, ResourceEdits.LutRecolour? Lut, MeshFile? Mesh = null) : DataResource(Where);
 // A unit copy's own geometry: an OBJ in the mod folder (UnitMesh), scaled, Y-up or the game's Z-up.
@@ -97,10 +105,10 @@ public static partial class DataSpecs
         {
             case "include":
             {
-                Fields(e, at, "type", "include");
+                Fields(e, at, "type", "include", "source");
                 var ids = Items(e, "include", at).Select(id => Id(id, $"{at}.include")).ToList();
                 if (ids.Count == 0) throw new InvalidDataException($"{at}: include lists no resources.");
-                return new IncludeResources(at, Type(e, at), ids);
+                return new IncludeResources(at, Type(e, at), ids) { Steam = FromSteam(e, at) };
             }
             case "icon":
             {
@@ -115,7 +123,7 @@ public static partial class DataSpecs
                 return new IconResource(at, Name(e, at), png, prepare);
             }
         }
-        Fields(e, at, "type", "copy", "name", "expect", "replace", "curves", "colours", "lut", "mesh");
+        Fields(e, at, "type", "copy", "name", "expect", "replace", "curves", "colours", "lut", "mesh", "source");
         var type = Type(e, at);
         var expect = new Dictionary<int, ulong>();
         if (e.TryGetProperty("expect", out var pins))
@@ -182,8 +190,16 @@ public static partial class DataSpecs
             inputs.Add(obj);
             mesh = new(obj, scale, yUp);
         }
-        return new CopyResource(at, type, Id(Property(e, "copy", at), at), Name(e, at), expect, replace, curves, colours, lut, mesh);
+        return new CopyResource(at, type, Id(Property(e, "copy", at), at), Name(e, at), expect, replace, curves, colours, lut, mesh) { Steam = FromSteam(e, at) };
     }
+
+    static bool FromSteam(JsonElement e, string at) =>
+        !e.TryGetProperty("source", out _) ? false : Text(e, "source", at) switch
+        {
+            "game" => false,
+            "steam" => true,
+            _ => throw new InvalidDataException($"{at}: source is \"game\" (the game copy, the default) or \"steam\" (the game as Steam has it installed).")
+        };
 
     static Dictionary<int, double[]> Cells(JsonElement e, string at) =>
         Object(e, at).ToDictionary(item => Index(item.Name, at), item => Colour(item.Value, at));

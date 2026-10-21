@@ -54,8 +54,8 @@ static class DataBuilderTests
         {
             var material = Material(0x2222);
             ResourceEdits.SetMaterialColours(material, new Dictionary<uint, double[]> { [0x5086EEA5] = [0.1, 0.55, 1.0] });
-            check(BinaryPrimitives.ReadSingleLittleEndian(material.AsSpan(0xC0 + 16)) == 0.1f && BinaryPrimitives.ReadSingleLittleEndian(material.AsSpan(0xC0 + 24)) == 1f,
-                "The colour is not in the constant buffer.");
+            check(BinaryPrimitives.ReadSingleLittleEndian(material.AsSpan(0xBC + 16)) == 0.1f && BinaryPrimitives.ReadSingleLittleEndian(material.AsSpan(0xBC + 24)) == 1f,
+                "The colour is not where the parameter's values are (right after the records).");
             reject(() => ResourceEdits.SetMaterialColours(Material(0x2222), new Dictionary<uint, double[]> { [0x12345678] = [1, 1, 1] }));
             check(ResourceEdits.Replace(material, 0x2222, 0xABCD) == 1 && BinaryPrimitives.ReadUInt64LittleEndian(material.AsSpan(0x8C)) == 0xABCD, "The reference was not replaced.");
             reject(() => ResourceEdits.Replace(material, 0x2222, 1));
@@ -204,7 +204,7 @@ static class DataBuilderTests
             check(BinaryPrimitives.ReadUInt64LittleEndian(unit.Main.AsSpan(0x40)) == H("test/mod/material") && unit.Gpu.SequenceEqual(Enumerable.Repeat((byte)7, 100)),
                 "The unit copy does not name the material copy or lost its GPU part.");
             var material = built[new(ResourceTypes.Material, H("test/mod/material"))].Main;
-            check(BinaryPrimitives.ReadUInt64LittleEndian(material.AsSpan(0x8C)) == H("test/mod/lut") && BinaryPrimitives.ReadSingleLittleEndian(material.AsSpan(0xC4)) == 0.35f,
+            check(BinaryPrimitives.ReadUInt64LittleEndian(material.AsSpan(0x8C)) == H("test/mod/lut") && BinaryPrimitives.ReadSingleLittleEndian(material.AsSpan(0xC0)) == 0.35f,
                 "The material copy is not edited.");
             check(built[new(ResourceTypes.Particles, H("test/mod/bolt"))].Main.AsSpan(4 * 11, 4).SequenceEqual(BitConverter.GetBytes(15f)), "The bolt is not blue.");
             check(built[new(ResourceTypes.Hash("wwise_bank"), 0x5555)].Stream.SequenceEqual(Enumerable.Repeat((byte)9, 40)) &&
@@ -243,6 +243,75 @@ static class DataBuilderTests
             var (none, taken) = ModDataCache.Prepare(install, ModCatalog.Load(mods).Mods);
             check(none.Count == 0 && taken.Single().Contains("the game's own resources"), "A copy took a game resource's name: " + string.Join(" | ", taken));
         });
+
+        test("A material of a newer build is rebuilt in its shader's layout as the game copy has it, values by name", () =>
+        {
+            // the game copy's shader: textures A, B; parameters P (scalar), Q (RGB), R (scalar)
+            var shader = LaidOut(0, [(0xA, 0x100), (0xB, 0x200)], [(0, 0x50, 0), (2, 0x51, 4), (0, 0x52, 16)], [1, 2, 3, 4, 5]);
+            // the newer build's child: a new texture slot first, a new parameter, Q after it, R missing
+            var child = LaidOut(0x9999, [(0xE, 0x300), (0xA, 0x101), (0xB, 0x201)], [(0, 0x50, 0), (0, 0x58, 4), (2, 0x51, 8)], [10, 99, 20, 21, 22]);
+            var ported = ResourceEdits.MaterialInLayout(child, shader);
+            check(ported.Length == shader.Length && BinaryPrimitives.ReadUInt64LittleEndian(ported.AsSpan(0x18)) == 0x9999 &&
+                BinaryPrimitives.ReadUInt32LittleEndian(ported.AsSpan(0x10)) == 0, "The port is not a child in the shader's layout.");
+            check(BinaryPrimitives.ReadInt32LittleEndian(ported.AsSpan(0x40)) == 2 && BinaryPrimitives.ReadUInt64LittleEndian(ported.AsSpan(0x88 + 8)) == 0x101 &&
+                BinaryPrimitives.ReadUInt64LittleEndian(ported.AsSpan(0x88 + 16)) == 0x201, "The textures are not the child's, by slot name.");
+            check(Value(ported, 0x50) == 10 && Value(ported, 0x51) == 20 && Value(ported, 0x52) == 5, "Values are not the child's by name (the shader's where it has none).");
+            check(BinaryPrimitives.ReadSingleLittleEndian(ported.AsSpan(0x88 + 24 + 60 + 12)) == 22, "An RGB value lost its channels.");
+            var same = LaidOut(0x9999, [(0xA, 0x7), (0xB, 0x8)], [(0, 0x52, 0), (2, 0x51, 4), (0, 0x50, 16)], [1, 2, 3, 4, 5]);
+            check(ReferenceEquals(ResourceEdits.MaterialInLayout(same, shader), same), "A material already in its shader's layout was rebuilt.");
+            reject(() => ResourceEdits.MaterialInLayout(shader, shader));
+            reject(() => ResourceEdits.MaterialInLayout(LaidOut(0x9999, [], [(0, 0x50, 64)], [1]), shader));
+        });
+
+        test("Resources come from Steam's install with \"source\": \"steam\", new ones only, materials in the copy's layout", () =>
+        {
+            var folder = Path.Combine(root, "steam-source");
+            var game = Path.Combine(folder, "game");
+            var steamData = Path.Combine(folder, "steam");
+            var shader = LaidOut(0, [(0xA, 0x100)], [(0, 0x50, 0)], [1]);
+            WriteBundles(game, new Dictionary<string, byte[]>
+            {
+                ["1111111111111111"] = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts>
+                {
+                    [new(ResourceTypes.Material, 0x9999)] = new(shader, [], []),
+                    [new(ResourceTypes.Texture, 0x100)] = new([1], [], []),
+                }).Archive
+            });
+            var steamArchive = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts>
+            {
+                [new(ResourceTypes.Unit, 0x3333)] = new(new byte[0x40], [5, 5], []),
+                [new(ResourceTypes.Physics, 0x3333)] = new(Physics(0x3333), [], []),
+                [new(ResourceTypes.Material, 0x7777)] = new(LaidOut(0x9999, [(0xE, 0x300), (0xA, 0x101)], [(0, 0x58, 0), (0, 0x50, 4)], [99, 42]), [], []),
+                [new(ResourceTypes.Texture, 0x100)] = new([2], [], []),
+            });
+            WriteBundles(steamData, new() { ["5555555555555555"] = steamArchive.Archive, ["5555555555555555.gpu_resources"] = steamArchive.Gpu });
+            var mod = Directory.CreateDirectory(Path.Combine(folder, "mod")).FullName;
+            DataSpec Spec(string resources)
+            {
+                File.WriteAllText(Path.Combine(mod, DataSpecs.FileName), $$"""{"format":1,"patches":[{"archives":["1111111111111111"],"resources":[{{resources}}]}]}""");
+                return DataSpecs.Load(mod)!;
+            }
+            const string port = """{"type":"unit","copy":"0x3333","name":"test/mod/port","source":"steam"},{"type":"material","include":["0x7777"],"source":"steam"}""";
+            check(Spec(port).UsesSteam && !Spec("""{"type":"texture","include":["0x100"],"source":"game"}""").UsesSteam, "source did not parse.");
+            reject(() => Spec("""{"type":"texture","include":["0x100"],"source":"live"}"""));
+            using var gameReader = new GameDataReader(game);
+            using var steamReader = new GameDataReader(steamData);
+            var output = Path.Combine(folder, "out");
+            reject(() => ModDataBuilder.Build(Spec(port), mod, gameReader, output));
+            ModDataBuilder.Build(Spec(port), mod, gameReader, output, steamReader);
+            var built = ResourceArchive.Read(File.ReadAllBytes(Path.Combine(output, "1111111111111111.patch_0")),
+                File.ReadAllBytes(Path.Combine(output, "1111111111111111.patch_0.gpu_resources")), []);
+            var name = EngineHash.Murmur64A("test/mod/port"u8);
+            check(built[new(ResourceTypes.Unit, name)].Gpu.SequenceEqual(new byte[] { 5, 5 }) && built.ContainsKey(new(ResourceTypes.Physics, name)),
+                "The unit from Steam was not copied with its physics.");
+            var material = built[new(ResourceTypes.Material, 0x7777)].Main;
+            check(BinaryPrimitives.ReadInt32LittleEndian(material.AsSpan(0x40)) == 1 && Value(material, 0x50) == 42 &&
+                BinaryPrimitives.ReadUInt64LittleEndian(material.AsSpan(0x88 + 4)) == 0x101, "The material from Steam is not in the game copy's shader layout.");
+            try { ModDataBuilder.Build(Spec("""{"type":"texture","include":["0x100"],"source":"steam"}"""), mod, gameReader, output + "2", steamReader); throw new Exception("Shadowed."); }
+            catch (InvalidDataException error) { check(error.Message.Contains("include them from the game"), "Refused for another reason: " + error.Message); }
+            try { ModDataBuilder.Build(Spec("""{"type":"texture","include":["0x4242"],"source":"steam"}"""), mod, gameReader, output + "3", steamReader); throw new Exception("Missing."); }
+            catch (InvalidDataException error) { check(error.Message.Contains("0x0000000000004242 (Steam)"), "A missing Steam resource is not named: " + error.Message); }
+        });
     }
 
     // The synthetic game data: archive 1111111111111111 with a unit naming a material, the material naming a colour
@@ -278,11 +347,20 @@ static class DataBuilderTests
             [new(ResourceTypes.Unit, EngineHash.Murmur64A("test/mod/taken"u8))] = new([1], [], []),
         });
         var second = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts> { [bank] = new("bank-second"u8.ToArray(), [], [1, 2, 3]) });
-        var items = new Dictionary<string, byte[]>
+        WriteBundles(folder, new Dictionary<string, byte[]>
         {
             ["2222222222222222"] = second.Archive, ["2222222222222222.stream"] = second.Stream,
             ["1111111111111111"] = first.Archive, ["1111111111111111.gpu_resources"] = first.Gpu, ["1111111111111111.stream"] = first.Stream,
-        };
+        });
+        // A loose patch file, as a session stages them: never read as game data.
+        File.WriteAllText(Path.Combine(folder, "1111111111111111.patch_0"), "staged by a session");
+    }
+
+    // Archives and their companions as the game ships them: one bundle of 48-byte chunks (every other LZ4-coded), each
+    // item in two index entries.
+    static void WriteBundles(string folder, Dictionary<string, byte[]> items)
+    {
+        Directory.CreateDirectory(folder);
         const int chunkSize = 48;
         var chunks = new List<(ulong Offset, byte[] Stored, uint Size, byte Compression)>();
         var entries = new Dictionary<string, List<(uint ArchiveOffset, uint BundleOffset)>>();
@@ -334,8 +412,6 @@ static class DataBuilderTests
         BinaryPrimitives.WriteInt32LittleEndian(index.AsSpan(24 + 24 * items.Count), nameAt["bundles.00.nxa"]);
         names.ToArray().CopyTo(index, headerSize);
         File.WriteAllBytes(Path.Combine(folder, GameDataReader.IndexFile), Dsar([(0, index, (uint)index.Length, 0)]));
-        // A loose patch file, as a session stages them: never read as game data.
-        File.WriteAllText(Path.Combine(folder, "1111111111111111.patch_0"), "staged by a session");
     }
 
     static byte[] Dsar(List<(ulong Offset, byte[] Stored, uint Size, byte Compression)> chunks)
@@ -373,7 +449,8 @@ static class DataBuilderTests
         return [.. block];
     }
 
-    // A material naming texture `lut`, with two RGB parameters (0xB4138578 at buffer +0, 0x5086EEA5 at +16).
+    // A material naming texture `lut`, with two RGB parameters (0xB4138578 at +0 of its values, 0x5086EEA5 at +16); the
+    // values start right after the records, at 0xBC.
     static byte[] Material(ulong lut)
     {
         var data = new byte[0x100];
@@ -389,6 +466,44 @@ static class DataBuilderTests
             BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(record + 12), offset);
         }
         return data;
+    }
+
+    // A material: parent at 0x18, texture slots {name, id}, parameters {type, name, offset} and their values right after
+    // the records (size at 0x78), padded to 16 bytes.
+    static byte[] LaidOut(ulong parent, (uint Name, ulong Id)[] textures, (uint Type, uint Name, int Offset)[] parameters, float[] values)
+    {
+        var at = 0x88 + 12 * textures.Length + 20 * parameters.Length;
+        var data = new byte[(at + 4 * values.Length + 15) / 16 * 16];
+        BinaryPrimitives.WriteUInt32LittleEndian(data, 0x120);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(0x10), parent == 0 ? 0x1234u : 0);
+        BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(0x18), parent);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(0x40), textures.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(0x68), parameters.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(0x78), 4 * values.Length);
+        for (var i = 0; i < textures.Length; i++)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(0x88 + 4 * i), textures[i].Name);
+            BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(0x88 + 4 * textures.Length + 8 * i), textures[i].Id);
+        }
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            var record = data.AsSpan(0x88 + 12 * textures.Length + 20 * i);
+            BinaryPrimitives.WriteUInt32LittleEndian(record, parameters[i].Type);
+            BinaryPrimitives.WriteUInt32LittleEndian(record[8..], parameters[i].Name);
+            BinaryPrimitives.WriteInt32LittleEndian(record[12..], parameters[i].Offset);
+        }
+        for (var i = 0; i < values.Length; i++) BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(at + 4 * i), values[i]);
+        return data;
+    }
+
+    static float Value(byte[] material, uint name)
+    {
+        int textures = BinaryPrimitives.ReadInt32LittleEndian(material.AsSpan(0x40)), parameters = BinaryPrimitives.ReadInt32LittleEndian(material.AsSpan(0x68));
+        var records = 0x88 + 12 * textures;
+        for (var i = 0; i < parameters; i++)
+            if (BinaryPrimitives.ReadUInt32LittleEndian(material.AsSpan(records + 20 * i + 8)) == name)
+                return BinaryPrimitives.ReadSingleLittleEndian(material.AsSpan(records + 20 * parameters + BinaryPrimitives.ReadInt32LittleEndian(material.AsSpan(records + 20 * i + 12))));
+        throw new Exception($"no parameter {name:X8}");
     }
 
     // A 23 x 8 RGBA16F lookup texture with 5 mips; the top mip's values k/512 (exact halves), the rest zero.
