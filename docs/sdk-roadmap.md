@@ -195,6 +195,10 @@ Declarative content makes conflicts visible instead of silent (unlike script mod
   replaces another), honours a requested priority (earlier or later, like Mixin priorities), and the launcher lists
   which mods hook what and flags functions hooked by more than one mod.
 
+**Lua bridge (2026-10-21).** HD2Runtime runs on HellForge through the Lua bridge ([lua-bridge.md](lua-bridge.md)):
+its mods' changes are live edits ranked between the editors' and code mods'. Its events and actions with no engine call
+yet are listed there ("What the engine still needs"); each one added serves code mods too.
+
 ## Phases
 
 1. **Named fields and deferred edits (C).** Mappings for the components the example mods touch (ProjectileWeapon,

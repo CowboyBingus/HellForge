@@ -85,6 +85,20 @@ public static class LocalInstall
         return files.OrderBy(x => x.RelativePath, StringComparer.Ordinal).ToList();
     }
 
+    // Steam's app state (EAppState bits): installed in full (4), and not busy with its files. An update Steam has queued
+    // (2) or paused (512) leaves the installed build's files as they are, so they count; one it is downloading, staging
+    // or committing does not, nor files it reports missing or corrupt, nor a running game (its files are locked).
+    public static string? Unusable(uint flags)
+    {
+        const uint installed = 4, running = 64, missing = 32, corrupt = 128;
+        const uint busy = 256 | 1024 | 2048 | 4096 | 65536 | 131072 | 262144 | 524288 | 1048576 | 2097152 | 4194304 | 8388608;
+        if ((flags & installed) == 0) return "Steam does not report HELLDIVERS 2 as fully installed.";
+        if ((flags & (missing | corrupt)) != 0) return "Steam reports missing or corrupt game files: verify the game in Steam, then start setup again.";
+        if ((flags & busy) != 0) return "Steam is updating, validating or moving HELLDIVERS 2: let it finish, then start setup again.";
+        if ((flags & running) != 0) return "HELLDIVERS 2 is running: close it, then start setup again.";
+        return null;
+    }
+
     public static InstallReport Inspect(string manifestPath)
     {
         manifestPath = FullPath(manifestPath);
@@ -95,7 +109,8 @@ public static class LocalInstall
         if (!document.Children.TryGetValue("AppState", out var app))
             throw new InvalidDataException("Missing AppState object.");
         if (app.Required("appid") != AppId) throw new InvalidDataException("Wrong Steam app ID.");
-        if (app.Required("StateFlags") != "4") throw new InvalidDataException("Steam does not report a fully installed, idle build.");
+        if (!uint.TryParse(app.Required("StateFlags"), out var flags)) throw new InvalidDataException("Invalid Steam state flags.");
+        if (Unusable(flags) is { } why) throw new InvalidDataException(why);
         var build = app.Required("buildid");
         if (!ulong.TryParse(build, out var number) || number == 0) throw new InvalidDataException("Invalid Steam build ID.");
         var name = app.Required("installdir");

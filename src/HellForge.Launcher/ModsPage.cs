@@ -266,6 +266,7 @@ public partial class MainWindow
         if (mod.Id == ModCatalog.LocalStatsId) tags.Add(("YOUR EDITS", "#FFC72C"));
         else if (BundledMods.ShippedFiles(mod.Folder) != null) tags.Add(("BUNDLED", "#9AA0A8"));
         if (mod.Pack != null) tags.Add(("PACK", "#4FA3FF"));
+        if (mod.Lua) tags.Add(("LUA", "#F2A541"));
         if (mod.HasCode) tags.Add(("CODE", "#E05591"));
         if (mod.HasNative) tags.Add(("NATIVE", "#9B85FF"));
         if (mod.Stats.Count > 0) tags.Add(("STATS", "#9B85FF"));

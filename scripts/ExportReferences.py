@@ -300,10 +300,12 @@ def main(runtime, out_json, out_header):
                 if b.get('storage') != 'bytes' or b.get('settings') != 'explosion' or not f.get('allowedValues'):
                     continue
                 types = [explosions[x]['type'] for x in f['allowedValues'] if x in explosions]
+                # the rows the same copy goes into with it (the Urchin's final discharge: HD2Runtime swaps both pulse rows)
+                also = [r['recordType'] for r in f.get('payloadRecipients') or [] if r.get('recordType') != b['recordType']]
                 row_copies.append({'category': 'throwables', 'target': tname, 'key': fid, 'label': f.get('displayName') or fid,
                                    'table': 'ExplosionSettings', 'row': b['recordType'], 'offset': b['offset'], 'size': b['width'],
                                    'default': explosions[f['currentDefault']]['type'] if f.get('currentDefault') in explosions else b['recordType'],
-                                   'allowed': types})
+                                   'allowed': types, 'also': also})
 
     # Packages mods load for sounds no catalogue entry carries (HfAbility.package): the Launch ICBM objective's, whose bank
     # obj_gen_icbm holds the ICBM launch sequence (HD2Runtime research/sound-events: the bank ships in this package).
@@ -406,12 +408,15 @@ def main(runtime, out_json, out_header):
         for sl in r['slots']:
             vanilla = int(pickups[sl['default']]['resource'], 16) if sl['default'] != 'empty' else 0
             h.append(f'    {{0x{int(r["resource"], 16):016X}ull, {sl["slot"] - 1}, 0x{vanilla:016X}ull}}, /* {r["rack"]} slot {sl["slot"]} */')
-    h += ['};', '/* Settings rows a copy of another row may replace: table, row, bytes, the rows allowed as donors (kRefRowDonors) */',
-          'typedef struct RefRowCopy { const char* table; uint32_t row, offset, size; uint16_t first, count; } RefRowCopy;',
+    h += ['};', '/* Settings rows a copy of another row may replace: table, row, bytes, the rows allowed as donors (kRefRowDonors), and',
+          ' * `with`: the row whose copy this one follows (0: a row mods name; else it takes the same donor whenever that row does) */',
+          'typedef struct RefRowCopy { const char* table; uint32_t row, offset, size; uint16_t first, count; uint32_t with; } RefRowCopy;',
           'static const RefRowCopy kRefRowCopies[] = {']
     donors = []
     for r in row_copies:
-        h.append(f'    {{"{r["table"]}", {r["row"]}u, {r["offset"]}u, {r["size"]}u, {len(donors)}, {len(r["allowed"])}}}, /* {r["target"]}: {r["label"]} */')
+        h.append(f'    {{"{r["table"]}", {r["row"]}u, {r["offset"]}u, {r["size"]}u, {len(donors)}, {len(r["allowed"])}, 0u}}, /* {r["target"]}: {r["label"]} */')
+        for row in r.get('also') or []:
+            h.append(f'    {{"{r["table"]}", {row}u, {r["offset"]}u, {r["size"]}u, {len(donors)}, {len(r["allowed"])}, {r["row"]}u}}, /* {r["target"]}: {r["label"]}, with it */')
         donors += r['allowed']
     h += ['    {0}};' if not row_copies else '};', 'static const uint32_t kRefRowDonors[] = {', '    ' + ', '.join(f'{d}u' for d in donors or [0]) + '};']
     h += ['/* Status effects a damage type can apply */', 'static const uint32_t kRefStatuses[] = {']

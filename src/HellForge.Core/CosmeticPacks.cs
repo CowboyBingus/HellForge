@@ -64,15 +64,14 @@ public static partial class CosmeticPacks
         id = guid != null && Guid.TryParse(guid, out var g) ? "pack." + g.ToString("D") : "pack." + Slug(name);
         var rootPatches = Directory.EnumerateFiles(folder).Any(f => ModCatalog.PatchFile().IsMatch(Path.GetFileName(f)));
         if (options.Count == 0 && !rootPatches) throw new InvalidDataException("the pack has no options and no patches at its root.");
-        // any patch in it, whichever options are on: a Lua mod is refused as a whole (ModCatalog.LuaRefused)
-        if (Directory.EnumerateFiles(folder, "*.patch_*", SearchOption.AllDirectories)
-            .Any(f => ModCatalog.PatchFile().Match(Path.GetFileName(f)) is { Success: true } m && m.Groups[2].Length == 0 && ModCatalog.HoldsLua(f)))
-            throw new InvalidDataException(ModCatalog.LuaRefused);
+        // any patch in it, whichever options are on: a Lua mod (ModManifest.Lua)
+        var lua = Directory.EnumerateFiles(folder, "*.patch_*", SearchOption.AllDirectories)
+            .Any(f => ModCatalog.PatchFile().Match(Path.GetFileName(f)) is { Success: true } m && m.Groups[2].Length == 0 && ModCatalog.HoldsLua(f));
         var pack = new Pack(icon, options, rootPatches);
         var folders = Folders(folder, pack, choice);
         foreach (var f in folders.Where(f => !Directory.Exists(f)))
             throw new InvalidDataException($"an option includes {Path.GetRelativePath(folder, f)}, which the pack does not have.");
-        return new ModManifest(id, name, "", description, false, folder, [], [], []) { Pack = pack, PackChoice = choice, PackFolders = folders, Icon = icon != null && File.Exists(icon) ? icon : null };
+        return new ModManifest(id, name, "", description, false, folder, [], [], []) { Pack = pack, PackChoice = choice, PackFolders = folders, Icon = icon != null && File.Exists(icon) ? icon : null, Lua = lua };
     }
 
     // The folders a choice stages, in the manifest's order: the root (if it has patches), then each option switched on with

@@ -332,9 +332,15 @@
             <Border Classes="card">
               <StackPanel Spacing="8">
                 <TextBlock Text="GALACTIC WAR" Classes="h2" />
-                <CheckBox x:Name="LiveWarBox" Content="Follow the live galactic war" />
-                <TextBlock Classes="muted" TextWrapping="Wrap"
-                           Text="Before the game starts and every 5 minutes while you play, the backend reads the current war (planets, campaigns, liberation) from the community API mirror api.helldivers2.dev, read-only. Neither HellForge nor the game ever contacts Arrowhead's servers. Without a connection the last fetched war is used; switched off, HellForge serves its built-in frozen war. Applies to the next session." />
+                <RadioButton x:Name="WarLiveRadio" GroupName="war" Content="Follow the live galactic war" />
+                <TextBlock Classes="muted" TextWrapping="Wrap" Margin="28,0,0,0"
+                           Text="Before the game starts and every 5 minutes while you play, the backend reads the current war (planets, campaigns, liberation) from the community API mirror api.helldivers2.dev, read-only. Neither HellForge nor the game ever contacts Arrowhead's servers. Without a connection the last fetched war is used." />
+                <RadioButton x:Name="WarFrozenRadio" GroupName="war" Content="HellForge's frozen war" />
+                <TextBlock Classes="muted" TextWrapping="Wrap" Margin="28,0,0,0"
+                           Text="A snapshot of the real war from 14 October 2026, built into HellForge: the same planets and campaigns every session, offline." />
+                <RadioButton x:Name="WarOpenRadio" GroupName="war" Content="All planets open" />
+                <TextBlock Classes="muted" TextWrapping="Wrap" Margin="28,0,0,0"
+                           Text="Every planet but Super Earth is a liberation campaign you can drop on. Planets Super Earth holds in the frozen war go to the enemy whose front lies that way from Super Earth, so each faction holds about a third of the galaxy. Built from the frozen war, so it is the same on every PC and offline. Applies to the next session." />
               </StackPanel>
             </Border>
 

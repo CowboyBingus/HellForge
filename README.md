@@ -16,8 +16,8 @@ launcher's bottom-left corner.
 - **Offline.** The copy talks to a local backend on your PC instead of Arrowhead's online services; a network block
   in the Windows Filtering Platform stops it reaching anything but this PC. It never connects to official servers, so it cannot be used to play online
   with a modified game. The one multiplayer feature is co-op with your Steam friends (below). The galactic war can follow
-  the live war read-only from the community mirror [api.helldivers2.dev](https://api.helldivers2.dev) (Settings >
-  Galactic war).
+  the live war read-only from the community mirror [api.helldivers2.dev](https://api.helldivers2.dev), stay HellForge's
+  frozen war, or open every planet to liberation (Settings > Galactic war).
 - **Profiles** are local. A new profile starts with every item unlocked; other templates can be picked.
 - **Co-op with Steam friends** is the only multiplayer: you host or join friends from your Steam friends list who also run
   HellForge, with the same gameplay mods (HellForge checks them before a join). There is no matchmaking, no public

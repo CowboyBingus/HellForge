@@ -4210,6 +4210,25 @@
         }
       }
     },
+    "HiveMind": {
+      "component": "HiveMindComponentData",
+      "index": 212,
+      "stride": 1084,
+      "layout": "25480438",
+      "meaning": "a mission's enemy director: the mission's authored launch timer (HD2Runtime's domains/missions.lua)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the mission's director entity is made, at launch",
+      "fields": {
+        "mission_duration": {
+          "offset": 116,
+          "type": "f32",
+          "meaning": "Mission timer in seconds (60 to 2500; the game cuts longer countdowns to 2500). Set it aboard the ship before launch",
+          "verified": false,
+          "source": "HD2Runtime domains/missions.lua sources (offset 116)"
+        }
+      }
+    },
     "OrbitalAbility": {
       "component": "OrbitalAbilityComponentData",
       "index": 308,

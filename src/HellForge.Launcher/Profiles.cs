@@ -129,8 +129,17 @@ static partial class ProfileStore
     // backend. On unless switched off.
     public static bool LoadSdkShims(LauncherPaths paths) => LoadFlag(paths, "sdkShims");
 
-    // Follow the live galactic war read-only through the community mirror (backend --live-war). On unless switched off.
-    public static bool LoadLiveWar(LauncherPaths paths) => LoadFlag(paths, "liveWar");
+    // The galactic war a session serves: the live war read-only through the community mirror (backend --live-war), the
+    // frozen war HellForge ships, or the all-planets war made from it (backend --war open). Live unless chosen otherwise;
+    // a settings file from before the choice keeps its live-war switch ("liveWar").
+    public const string WarLive = "live", WarFrozen = "frozen", WarOpen = "open";
+    public static string LoadWar(LauncherPaths paths)
+    {
+        var settings = SessionFiles.ReadJson(paths.SettingsFile);
+        var war = settings is { } s ? SessionFiles.Text(s, "war") : "";
+        if (war is WarLive or WarFrozen or WarOpen) return war;
+        return LoadFlag(paths, "liveWar") ? WarLive : WarFrozen;
+    }
 
     // The engine's own log (--log-to-file), copied into the session's logs. On unless switched off (multiplayer testing).
     public static bool LoadEngineLog(LauncherPaths paths) => LoadFlag(paths, "engineLog");
@@ -146,32 +155,32 @@ static partial class ProfileStore
         SessionFiles.ReadJson(paths.SettingsFile) is not { } settings || SessionFiles.Text(settings, name) != "false";
 
     public static void SaveSelected(LauncherPaths paths, string name) =>
-        Save(paths, name, LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
+        Save(paths, name, LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
 
     public static void SaveLocalPlayFab(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), enabled, LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
+        Save(paths, LoadSelected(paths), enabled, LoadSdkShims(paths), LoadWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
 
     public static void SaveSdkShims(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), enabled, LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), enabled, LoadWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
 
-    public static void SaveLiveWar(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), enabled, LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
+    public static void SaveWar(LauncherPaths paths, string war) =>
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), war, LoadEngineLog(paths), LoadCrashDump(paths), LoadLaunchOptions(paths));
 
     public static void SaveCrashDump(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), enabled, LoadLaunchOptions(paths));
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadWar(paths), LoadEngineLog(paths), enabled, LoadLaunchOptions(paths));
 
     public static void SaveEngineLog(LauncherPaths paths, bool enabled) =>
-        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), enabled, LoadCrashDump(paths), LoadLaunchOptions(paths));
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadWar(paths), enabled, LoadCrashDump(paths), LoadLaunchOptions(paths));
 
     public static void SaveLaunchOptions(LauncherPaths paths, string text) =>
-        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadLiveWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), text);
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), text);
 
-    static void Save(LauncherPaths paths, string name, bool localPlayFab, bool sdkShims, bool liveWar, bool engineLog, bool crashDump, string launchOptions)
+    static void Save(LauncherPaths paths, string name, bool localPlayFab, bool sdkShims, string war, bool engineLog, bool crashDump, string launchOptions)
     {
         try
         {
             Directory.CreateDirectory(paths.HostRoot);
-            File.WriteAllText(paths.SettingsFile, JsonSerializer.Serialize(new { selectedProfile = name, localPlayFab, sdkShims, liveWar, engineLog, crashDump, launchOptions }, WriteOptions) + "\n");
+            File.WriteAllText(paths.SettingsFile, JsonSerializer.Serialize(new { selectedProfile = name, localPlayFab, sdkShims, war, liveWar = war == WarLive, engineLog, crashDump, launchOptions }, WriteOptions) + "\n");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }  // Only a convenience.
     }

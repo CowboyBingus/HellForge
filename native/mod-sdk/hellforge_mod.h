@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 9
+#define HF_MOD_SDK_VERSION 11
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -481,6 +481,13 @@ typedef struct HfSession
 #define HF_ON_STRATAGEM 7      /* HfStratagemEvent: a stratagem's beacon activates (on the thrower's machine) */
 #define HF_ON_KILL 8           /* HfKillEvent: something was killed (on the victim's owner; the kill also reaches the others) */
 #define HF_ON_SPAWN 9          /* HfSpawnEvent: an entity was spawned in this machine's world (remote spawns too) */
+/* SDK 11 */
+#define HF_ON_HEAL 10          /* HfHealEvent: a Helldiver's health went up (any player's; a stim, a Supply Pack's, a booster's) */
+#define HF_ON_STAT 11          /* HfStatEvent: the local player's mission stats grew (shots fired, hits, kills, damage dealt) */
+#define HF_ON_WEAPON 12        /* HfWeaponEvent: what the local player's Helldiver holds changed */
+#define HF_ON_EXPLOSION 13     /* HfExplosionEvent: an explosion was requested in this machine's world (its own simulation) */
+#define HF_ON_BUGHOLE 14       /* HfBugholeEvent: a bug hole (any bug spawner) was closed, on every machine */
+#define HF_ON_DAMAGE_PRE 15    /* HfDamagePreEvent: damage about to apply, as HF_ON_DAMAGE's; a listener may change it */
 
 /* The game's states (HfStateEvent, game_state). */
 #define HF_STATE_NONE 0u
@@ -594,6 +601,164 @@ typedef struct HfSpawnEvent
     uint64_t resource;    /* what it is: its entity resource (HF_ENTITY_..., add_entity's or register_entity's) */
     uint32_t authority;   /* 1: this machine simulates it */
 } HfSpawnEvent;
+
+/* SDK 11 events. A heal: the avatar's health record grew between two game updates (alive or downed; a heal and a hit in
+ * the same update show as their sum). Every player's Helldiver, as this machine's game holds it. */
+typedef struct HfHealEvent
+{
+    HfEventInfo info;
+    uint32_t entity;      /* the Helldiver (avatar) entity */
+    int32_t amount;       /* health gained */
+    int32_t health;       /* health now */
+    int32_t max_health;   /* its maximum, or -1 when not known */
+    uint64_t peer;        /* the player it belongs to (0: none found) */
+    uint32_t local;       /* 1: this machine's player */
+} HfHealEvent;
+/* The local player's mission stats, as the game keeps them: a total and a part per source (the weapon, throwable or
+ * stratagem payload it recorded the stat under, by entity resource). Checked 10 times a second; one event per stat that
+ * grew. A shotgun counts each pellet; a hit is a projectile that hit (a knife's is damage only). */
+#define HF_STAT_SHOTS 0x565790DAu  /* projectiles fired */
+#define HF_STAT_HITS 0x897A5551u   /* projectiles that hit */
+#define HF_STAT_KILLS 0xD494C5CCu  /* kills credited */
+#define HF_STAT_DAMAGE 0x5C7A2930u /* damage dealt (after armour; team damage not counted) */
+#define HF_STAT_SOURCES 5
+typedef struct HfStatSource { uint64_t resource; int32_t added; uint32_t reserved; } HfStatSource;
+typedef struct HfStatEvent
+{
+    HfEventInfo info;
+    uint32_t stat;        /* HF_STAT_... */
+    int32_t added;        /* growth since the last check */
+    int32_t total;        /* the stat now */
+    int32_t unattributed; /* growth of the part with no source */
+    uint32_t player;      /* the local player's player entity (not its Helldiver) */
+    uint32_t count;       /* sources[] used: the largest growths first, at most HF_STAT_SOURCES */
+    HfStatSource sources[HF_STAT_SOURCES];
+} HfStatEvent;
+/* What the local Helldiver holds (its hand: a weapon, a support weapon, a held item), checked 10 times a second. 0 for
+ * nothing: before the first item after a respawn, and when the Helldiver is gone. The first check sets the start. */
+typedef struct HfWeaponEvent
+{
+    HfEventInfo info;
+    uint32_t avatar, previous_avatar;     /* the Helldiver now and at the last check (0: none) */
+    uint32_t entity, previous;            /* the held entity now and before (0: nothing) */
+    uint64_t resource, previous_resource; /* their entity resources */
+    uint32_t selection;                   /* the inventory selection: 1 primary, 2 secondary, 3 support, 4/5 held item, 0 none */
+    uint32_t previous_selection;
+} HfWeaponEvent;
+/* An explosion request (every one: projectile impacts, explosives, stratagems, chained blasts, mods'). */
+typedef struct HfExplosionEvent
+{
+    HfEventInfo info;
+    uint32_t type;        /* its ExplosionSettings row (HF_EXPLOSION_... or a mod's) */
+    uint32_t source;      /* the entity it comes from (an explosive, a projectile's weapon; 0: none) */
+    uint32_t owner;       /* that entity's owner (0: none) */
+    uint32_t reserved;
+    uint64_t creditor;    /* the peer credited with it (0: none) */
+    float position[3];
+} HfExplosionEvent;
+/* A bug hole closed: its destruction stage left 0. Holes already closed when HellForge first sees them are not told. */
+typedef struct HfBugholeEvent
+{
+    HfEventInfo info;
+    uint32_t entity;      /* the hole's entity (it stays after closing) */
+    uint32_t unit;
+    uint64_t resource;    /* its bug_spawner_* entity resource */
+    uint32_t stage;       /* the stage it reached (1 to 3) */
+    uint32_t owned;       /* 1: this machine owns it (the host) */
+    float position[3];
+    uint32_t has_position;
+} HfBugholeEvent;
+/* Damage before it applies, on the machine applying it (HF_ON_DAMAGE's moment, the same fields). The one event a listener
+ * may write to: set damage.amount (before armour and multipliers; -1 kills), or cancel (1: none of its amount applies;
+ * the hit's other effects, a status or a push, may still). Listeners see the value earlier ones left. */
+typedef struct HfDamagePreEvent
+{
+    HfDamageEvent damage; /* damage.info.kind is HF_ON_DAMAGE_PRE */
+    uint32_t cancel;
+} HfDamagePreEvent;
+
+/* SDK 11 actions: what a mod makes the game do, through the game's own functions (HD2Runtime 0.40.1's research), on the
+ * game thread (an event listener's or on_game_thread's call; from another thread an action waits for the next game
+ * update and answers HF_ACT_QUEUED). Each answers HF_ACT_..., or 0 refused (last_log says why). The local Helldiver:
+ * this machine's player's, alive (not downed). Host: the session's host in a mission. */
+#define HF_ACT_DONE 1u      /* done */
+#define HF_ACT_REQUESTED 2u /* the game does it within this update or the next (damage, statuses, explosions) */
+#define HF_ACT_WAITING 3u   /* its packages are loading (the call took them): call again */
+#define HF_ACT_QUEUED 4u    /* not on the game thread: done at the next game update (its log says how it went) */
+/* The Helldiver's limbs (heal_limb, injure, limb_state) */
+#define HF_LIMB_HEAD 0u
+#define HF_LIMB_CHEST 1u
+#define HF_LIMB_LEFT_ARM 2u
+#define HF_LIMB_RIGHT_ARM 3u
+#define HF_LIMB_LEFT_LEG 4u
+#define HF_LIMB_RIGHT_LEG 5u
+typedef struct HfLimbState { int32_t health, max_health; uint32_t injured; } HfLimbState;
+/* Statuses apply_status takes (StatusEffectSettings rows) */
+#define HF_STATUS_FIRE 5u
+#define HF_STATUS_FIRE_PANIC 6u
+#define HF_STATUS_BURNING_HEAVY 32u
+#define HF_STATUS_STUN_SMALL 37u
+#define HF_STATUS_STUN_MEDIUM 38u
+#define HF_STATUS_STUN_LARGE 39u
+#define HF_STATUS_GAS 42u
+#define HF_STATUS_GAS_2 43u
+#define HF_STATUS_GAS_CONFUSION 44u
+#define HF_STATUS_GAS_CONFUSION_2 45u
+#define HF_STATUS_FLAMER_SLOWED 67u
+/* Shot rules (modify_shots, homing): what they take is this machine's player's own shots of one projectile type, fired
+ * by the listed weapons (entity resources, ending in 0; NULL or none: any of the player's). Each shot is changed once, as
+ * it leaves; other weapons firing the same projectile stay as they are. Without HF_SHOT_MULTIPLAYER only in a solo game
+ * (another machine's copy of the shot flies as the game made it). */
+#define HF_SHOT_MULTIPLAYER 0x1u
+#define HF_HOMING_NO_RETARGET 0x2u /* homing: keep the first target */
+#define HF_HOMING_FRIENDLY 0x4u    /* homing: home on the other players' Helldivers, not on enemies */
+typedef struct HfShotRule
+{
+    uint32_t size;          /* sizeof(HfShotRule) */
+    uint32_t projectile;    /* its ProjectileSettings type */
+    const uint64_t* sources;
+    float damage;           /* multipliers, 1 for unchanged: damage 0.01 .. 100, armor_penetration 0.1 .. 10, */
+    float armor_penetration; /* speed 0.1 .. 10, gravity 0 .. 20, drag 0 .. 20 */
+    float speed, gravity, drag;
+    uint32_t flags;
+} HfShotRule;
+typedef struct HfHoming
+{
+    uint32_t size;          /* sizeof(HfHoming) */
+    uint32_t projectile;
+    const uint64_t* sources;
+    float turn_rate;        /* degrees a second, 1 .. 1440 */
+    float cone;             /* the half-angle it looks for targets in, 1 .. 180 degrees */
+    float range;            /* metres, 1 .. 500 */
+    float arm_distance;     /* metres flown before it steers, 0 .. 100 */
+    float aim_height;       /* metres above the target's root, -5 .. 10 */
+    uint32_t flags;         /* HF_SHOT_MULTIPLAYER, HF_HOMING_... */
+} HfHoming;
+/* A transport Pelican called in (spawn_pelican): it flies in from the approach point, hovers over the position and
+ * leaves after hover_seconds once released (0: at once). Host; solo for the hover. */
+typedef struct HfPelicanCall
+{
+    uint32_t size;          /* sizeof(HfPelicanCall) */
+    float position[3];      /* where it hovers */
+    float hover_seconds;    /* 0 .. 120 */
+    float approach_distance, approach_height; /* where it starts: this far back and this high (0: 250 m, 80 m) */
+    float facing[2];        /* its heading (x, y); 0, 0: from the local Helldiver towards the position */
+} HfPelicanCall;
+
+/* A mod of the session (SDK 10, mods): what get_live names as a holder is its id. Set size before the call. */
+#define HF_MOD_CODE 1u   /* a code mod (a DLL) */
+#define HF_MOD_STATS 2u  /* a stats mod (stats files, no DLL) */
+#define HF_MOD_LUA 3u    /* a Lua mod, through the Lua bridge (an HD2Runtime mod) */
+#define HF_MOD_EDITOR 4u /* the editors: the F8 editor and Local Stats, where the editors save */
+typedef struct HfModInfo
+{
+    uint32_t size;
+    uint32_t kind;      /* HF_MOD_... */
+    const char* id;     /* "skyeshade.vanilla-plus", "lua.mods-azura-railgun_repenetrated" */
+    const char* folder; /* a code or stats mod's folder (UTF-8), "" for a Lua mod */
+    const char* name;   /* a Lua mod's name as its runtime gave it ("mods/azura/railgun_repenetrated"), else "" */
+    uint32_t loaded;    /* 1: it loaded (a mod whose hellforge_mod_init declined, or whose DLL failed, is 0) */
+} HfModInfo;
 
 typedef struct HfEntityDef HfEntityDef;
 
@@ -861,6 +1026,46 @@ typedef struct HfApi
      * there, once the donor's packages are resident (it waits for them). from 0 puts the row's own bytes back. Returns
      * HF_APPLIES_NOW or 0 (the mod's log says why). Check hf->size before calling. */
     int (*copy_row)(HfMod* mod, const char* table, uint64_t row, uint64_t from, uint32_t offset, uint32_t size);
+
+    /* ---- SDK 10 --------------------------------------------------------------------------------------------------- */
+    /* The index-th mod of the session (HfModInfo): the code and stats mods in load order, then the Lua mods as they
+     * register through the Lua bridge (docs/lua-bridge.md). 1 with *out filled, 0 past the last. Check hf->size. */
+    int (*mods)(HfMod* mod, uint32_t index, HfModInfo* out);
+
+    /* ---- SDK 11: actions (HF_ACT_...; check hf->size before calling) ----------------------------------------------- */
+    /* Heals the local Helldiver by `amount` health (each limb by the same share), up to its maximum. */
+    int (*heal)(HfMod* mod, float amount);
+    /* Heals one of the local Helldiver's limbs (HF_LIMB_...) in full, and mends it. */
+    int (*heal_limb)(HfMod* mod, uint32_t limb);
+    /* Damages one of the local Helldiver's limbs (1 .. its maximum: head 85, chest 60, arms 35, legs 45); it may down
+     * or kill the Helldiver, as the game's own hit would. */
+    int (*injure)(HfMod* mod, uint32_t limb, int32_t damage);
+    /* A Helldiver's limb now: its health, maximum and whether it is injured (any Helldiver this machine has). */
+    int (*limb_state)(HfMod* mod, uint32_t entity, uint32_t limb, HfLimbState* out);
+    /* Applies a status (HF_STATUS_...) to an entity: `buildup` 0 .. 1000 (100: as a full hit); host. */
+    int (*apply_status)(HfMod* mod, uint32_t entity, uint32_t status, float buildup);
+    /* Adds to the local Helldiver's velocity (m/s, world space, Z up; each part at most 25, the result at most 50).
+     * Walking resets sideways speed every update: an upward push is the dependable one. */
+    int (*add_velocity)(HfMod* mod, const float delta[3]);
+    /* The local Helldiver uses its B-1 Supply Pack on itself, as the game's own input does (one supply). */
+    int (*resupply_from_pack)(HfMod* mod);
+    /* An explosion (its ExplosionSettings row) at a position, credited to this machine's player; host. Loads the
+     * explosion's packages first (HF_ACT_WAITING until they are in). */
+    int (*spawn_explosion)(HfMod* mod, uint32_t type, const float position[3]);
+    /* A projectile (its ProjectileSettings type) fired from a position along a direction, as the local Helldiver's;
+     * host. Loads its packages first. */
+    int (*spawn_projectile)(HfMod* mod, uint32_t type, const float position[3], const float direction[3]);
+    /* The kills of an entity (a turret, a vehicle a mod spawned) credited to its owner, this machine's player; solo host. */
+    int (*credit_to_player)(HfMod* mod, uint32_t entity);
+    /* Pauses (1) or resumes (0) the mission timer; host. A new mission starts it again. */
+    int (*freeze_mission_timer)(HfMod* mod, int frozen);
+    /* Calls in a transport Pelican (HfPelicanCall); *entity its entity. Host. */
+    int (*spawn_pelican)(HfMod* mod, const HfPelicanCall* call, uint32_t* entity);
+    /* Shot rules: an id (1 and up), or 0 refused. stop_shots ends one (later shots fly as the game makes them). One
+     * rule of each kind per projectile type. */
+    uint32_t (*modify_shots)(HfMod* mod, const HfShotRule* rule);
+    uint32_t (*homing)(HfMod* mod, const HfHoming* rule);
+    int (*stop_shots)(HfMod* mod, uint32_t id);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

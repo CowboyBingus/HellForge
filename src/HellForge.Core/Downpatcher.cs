@@ -6,7 +6,10 @@ using System.Text.Json;
 
 namespace HellForge.Core;
 
-public sealed record DownpatchPack(string SourceBuild, string TargetBuild, string Url, string Sha256, long Size);
+// A patch from one Steam build to the supported one. SourceExeSha256 and SourceGameDllSha256 name the source build by its
+// files too, so a copy Steam labels with another build id (a stale manifest) still finds its patch.
+public sealed record DownpatchPack(string SourceBuild, string TargetBuild, string Url, string Sha256, long Size,
+    string SourceExeSha256 = "", string SourceGameDllSha256 = "");
 
 public static class Downpatcher
 {
@@ -15,13 +18,21 @@ public static class Downpatcher
         new("25988413", "25480438",
             "https://files.hf-mod.com/downpatch/downpatch-25988413-to-25480438.zip",
             "4CE81BFB2CB9D47848A5C3518F511D4BB14B6BDF18748007F93B46B1E0BD03AC",
-            1_680_909_152)
+            1_680_909_152,
+            "2CE8B3D74C5573088E4211B060CED0963F1FC1E74526E2645399780B8FB13FF7",
+            "A457433F0EB766FBE15A6DE5A16F0FBBB1FD3C840C5607A5F0B2EBF53B112949")
     ];
 
     const string HpatchzUrl = "https://github.com/sisong/HDiffPatch/releases/download/v5.1.3/hdiffpatch_v5.1.3_bin_windows64.zip";
 
     public static DownpatchPack? FindPack(string sourceBuild) =>
         Packs.FirstOrDefault(p => p.SourceBuild == sourceBuild && p.TargetBuild == SupportedBuild.Current.BuildId);
+
+    // The patch for an installed game: by its build id, else by its executable's and game.dll's hashes.
+    public static DownpatchPack? FindPack(BuildPin pin) =>
+        FindPack(pin.BuildId) ?? Packs.FirstOrDefault(p => p.TargetBuild == SupportedBuild.Current.BuildId && p.SourceExeSha256.Length > 0 &&
+            p.SourceExeSha256.Equals(pin.ExeSha256, StringComparison.OrdinalIgnoreCase) &&
+            p.SourceGameDllSha256.Equals(pin.GameDllSha256, StringComparison.OrdinalIgnoreCase));
 
     public static async Task ApplyAsync(
         string steamGame, string gameDestination, string tempFolder,

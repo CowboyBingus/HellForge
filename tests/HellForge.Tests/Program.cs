@@ -49,6 +49,36 @@ Test("Steam ownership requires the correct app, live subscription, the owner or 
         Check(!SteamOwnershipPolicy.ConfirmsCurrentClientOwner(rejected), "Incomplete ownership observation accepted.");
 });
 
+Test("Setup finds the downpatchable game: Steam's flags as bits, every library, the patch by build id or by file hashes", () =>
+{
+    // a queued or paused update leaves the files usable; updating, validating, missing files or a running game do not
+    foreach (var usable in new uint[] { 4, 6, 516 }) Check(LocalInstall.Unusable(usable) == null, $"Flags {usable} refused.");
+    foreach (var busy in new uint[] { 0, 1026, 1028, 36, 132, 68, 1048580, 131076 }) Check(LocalInstall.Unusable(busy) != null, $"Flags {busy} accepted.");
+    // a stale copy in Steam's own library (another build) and the patch's source build in a second library
+    var (staleManifest, _, home) = Fixture("setup-libraries-a");
+    var (patchable, _, _) = Fixture("setup-libraries-b");
+    File.WriteAllText(patchable, File.ReadAllText(patchable).Replace("\"buildid\" \"12345\"", $"\"buildid\" \"{Downpatcher.Packs[0].SourceBuild}\""));
+    var steamRoot = Path.Combine(home, "Steam");
+    var second = Path.GetDirectoryName(Path.GetDirectoryName(patchable)!)!;
+    File.WriteAllText(Path.Combine(steamRoot, "steamapps", "libraryfolders.vdf"),
+        "\"libraryfolders\" { \"0\" { \"path\" \"" + steamRoot.Replace("\\", "\\\\") + "\" } \"1\" { \"path\" \"" + second.Replace("\\", "\\\\") + "\" } }");
+    var game = SteamLocator.FindGame(steamRoot);
+    Check(game != null && game.ManifestPath == LocalInstall.FullPath(patchable) && Downpatcher.FindPack(game.Report.Pin) != null,
+        "The patchable copy was not chosen: " + game?.ManifestPath);
+    // with only the stale copy: it, and no patch for it
+    File.Delete(patchable);
+    game = SteamLocator.FindGame(steamRoot);
+    Check(game != null && game.ManifestPath == LocalInstall.FullPath(staleManifest) && Downpatcher.FindPack(game.Report.Pin) == null, "The stale copy was not the fallback.");
+    // a copy whose manifest names another build but whose files are the patch's source build
+    var pack = Downpatcher.Packs[0];
+    Check(Downpatcher.FindPack(new BuildPin("1", pack.SourceExeSha256.ToLowerInvariant(), pack.SourceGameDllSha256)) == pack, "The patch was not found by its hashes.");
+    Check(Downpatcher.FindPack(new BuildPin("1", pack.SourceExeSha256, "00")) == null, "A half match found the patch.");
+    // a busy game (Steam updating it) is reported, not skipped as absent
+    File.WriteAllText(staleManifest, File.ReadAllText(staleManifest).Replace("\"StateFlags\" \"4\"", "\"StateFlags\" \"1028\""));
+    try { SteamLocator.FindGame(steamRoot); Check(false, "A game Steam is updating was used."); }
+    catch (InvalidDataException error) { Check(error.Message.Contains("updating"), error.Message); }
+});
+
 Test("Valve metadata supports comments, escapes, and quoted braces", () =>
 {
     var data = ValveData.Parse("""
@@ -88,7 +118,7 @@ Test("Wrong app, incomplete install, and traversal are rejected", () =>
 {
     var fixture = Fixture("metadata");
     var original = File.ReadAllText(fixture.Manifest);
-    foreach (var changed in new[] { original.Replace("553850", "999"), original.Replace("\"4\"", "\"6\""),
+    foreach (var changed in new[] { original.Replace("553850", "999"), original.Replace("\"4\"", "\"2\""),
         original.Replace("Helldivers 2", "../escape") })
     {
         File.WriteAllText(fixture.Manifest, changed);

@@ -129,15 +129,18 @@ public partial class MainWindow
                 fromDepots = true;
                 SetRow(step, true, $"Build {build.BuildId}, downloaded by Steam into {SteamDepotDownload.ContentFolder(steamRoot, build)}");
             }
-            else if (game != null && Downpatcher.FindPack(game.Report.Pin.BuildId) is { } downpatch)
+            else if (game != null && Downpatcher.FindPack(game.Report.Pin) is { } downpatch)
             {
                 downpatchPack = downpatch;
                 downpatchSource = game.Report.Source;
                 SetRow(step, true, $"Build {game.Report.Pin.BuildId} in {game.Report.Source} — a {downpatch.Size / 1e9:0.0} GB patch converts it to {build.BuildId}");
             }
+            // the game is there but busy (Steam updating it, the game running): that passes, so no download is offered
+            else if (game == null && unusable != null)
+                throw new SetupStopped($"HELLDIVERS 2 is in Steam, but setup cannot use it right now: {unusable}");
             else
             {
-                var have = game != null ? $"HELLDIVERS 2 build {game.Report.Pin.BuildId}" : unusable != null ? "a copy of HELLDIVERS 2 it cannot use right now" : "no HELLDIVERS 2";
+                var have = game != null ? $"HELLDIVERS 2 build {game.Report.Pin.BuildId}" : "no HELLDIVERS 2";
                 ShowDownload(steamRoot, have);
                 throw new SetupWaiting($"Steam has {have}, but this version of HellForge needs build {build.BuildId}. Steam can download that exact " +
                     "build for your account: follow the steps below. Setup continues by itself when the download is complete.");

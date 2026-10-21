@@ -51,6 +51,8 @@ public sealed record ModManifest(string Id, string Name, string Version, string 
     public bool Cosmetic => !Gameplay;
     // The picture the Mods page shows for it (a manifest's "icon", a pack's IconPath): a file in its folder, or null.
     public string? Icon { get; init; }
+    // A patch of it holds Lua scripts (ModCatalog.HoldsLua): an HD2Runtime or Bingus Shared Loader mod, or one made for them.
+    public bool Lua { get; init; }
 }
 
 public static partial class ModCatalog
@@ -64,7 +66,7 @@ public static partial class ModCatalog
         File.Exists(Path.Combine(folder, ManifestName)) ? Path.Combine(folder, ManifestName)
         : File.Exists(Path.Combine(folder, LegacyManifestName)) ? Path.Combine(folder, LegacyManifestName) : null;
     // The mod SDK version this HellForge provides (native/mod-sdk/hellforge_mod.h).
-    public const int SdkVersion = 9;
+    public const int SdkVersion = 11;
 
     [GeneratedRegex("^[A-Za-z0-9_.-]{1,64}\\.dll$")]
     private static partial Regex DllName();
@@ -78,11 +80,9 @@ public static partial class ModCatalog
     [GeneratedRegex("^[a-z0-9_]{1,64}$")]
     private static partial Regex FieldTypeName();
 
-    // HellForge loads no Lua mods (HD2Runtime scripts, Bingus Shared Loader and the mods made for them): they ship as game
-    // patches holding a lua resource, which runs inside the game against memory that HellForge's own mods change. A mod
-    // or pack with such a patch is refused with this.
-    public const string LuaRefused = "it is a Lua script mod (its game patches hold Lua scripts). HellForge does not load Lua mods, " +
-        "such as HD2Runtime or Bingus Shared Loader ones: they read and write the game's memory, which HellForge's mods change.";
+    // Lua mods (HD2Runtime, Bingus Shared Loader and the mods made for them) ship as game patches holding a lua resource.
+    // HellForge stages them like any patch; HD2Runtime runs on HellForge's Lua bridge there (docs/lua-bridge.md), so its
+    // mods' changes are HellForge live edits. They are the player's own: client-only, never in the modlist code.
 
     // A patch file (<archive>.patch_<n>) whose resource table lists the lua type. Only the table at its start is read.
     public static bool HoldsLua(string patchFile)
@@ -159,6 +159,7 @@ public static partial class ModCatalog
                     problems.Add($"{mod.Id}: stats conflict on {edit.Label} with {previous}; {mod.Id} applies later.");
                 claimed[key] = mod.Id;
             }
+        problems.AddRange(LuaRuntimes.Problems(ordered.Where(m => m.Enabled)));
         return (ordered, problems);
     }
 
@@ -253,19 +254,22 @@ public static partial class ModCatalog
         }
 
         var data = new List<string>();
+        var lua = false;
         var dataFolder = Path.Combine(folder, "data");
         if (Directory.Exists(dataFolder))
             foreach (var file in Directory.GetFiles(dataFolder).Order(StringComparer.Ordinal))
             {
                 var fileName = Path.GetFileName(file);
                 if (!PatchFile().IsMatch(fileName)) throw new InvalidDataException($"data/{fileName} is not a game patch file.");
-                if (PatchFile().Match(fileName).Groups[2].Length == 0 && HoldsLua(file)) throw new InvalidDataException(LuaRefused);
+                if (PatchFile().Match(fileName).Groups[2].Length == 0 && HoldsLua(file)) lua = true;
                 data.Add(fileName);
             }
         // A data spec is checked here; what it names in the game data when it is built (ModDataCache).
         var spec = DataSpecs.Load(folder) != null;
         var stats = StatsData.Load(folder, profile);
         if (stats.Count > 0 || writes.Count > 0) gameplay = true;
+        // A mod of Lua patches alone is the player's own: client-only, outside the modlist code.
+        else if (lua && code == null && types.Count == 0 && !spec) gameplay = false;
         if (types.Count == 0 && writes.Count == 0 && data.Count == 0 && code == null && !spec && stats.Count == 0) throw new InvalidDataException("The mod changes nothing.");
         // "icon": a PNG or JPEG in the mod folder, for the Mods page; one that is missing or outside the folder is left out
         string? icon = null;
@@ -275,7 +279,7 @@ public static partial class ModCatalog
             if (LocalInstall.Within(full, folder) && File.Exists(full)) icon = full;
         }
         return new ModManifest(id, name, version, description, gameplay, Path.GetFullPath(folder), types, writes, data)
-            { CodeDll = code, HasSource = source, HasDataSpec = spec, Stats = stats, Icon = icon };
+            { CodeDll = code, HasSource = source, HasDataSpec = spec, Stats = stats, Icon = icon, Lua = lua };
     }
 
     // What friends compare before playing together: every gameplay mod's id, version and exact files. "none" without any.

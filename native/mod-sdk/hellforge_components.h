@@ -2141,6 +2141,18 @@ HF_ASSERT_OFFSET(HfPassiveStat, add, 4);
 HF_ASSERT_OFFSET(HfPassiveStat, mul, 8);
 #define HF_TYPE_PassiveStat_mul HF_TYPE_F32
 
+/* HiveMindComponentData (component 212, 1084-byte records): a mission's enemy director: the mission's authored launch timer (HD2Runtime's domains/missions.lua) */
+#define HfHiveMind_INFO "HiveMindComponentData", 25480438u
+typedef struct HfHiveMind
+{
+    uint8_t _unknown_00[116];
+    float mission_duration;                      /* +0x74 Mission timer in seconds (60 to 2500; the game cuts longer countdowns to 2500). Set it aboard the ship before launch (unverified) [respawn?] */
+    uint8_t _unknown_78[964];
+} HfHiveMind;
+HF_ASSERT_SIZE(HfHiveMind, 1084);
+HF_ASSERT_OFFSET(HfHiveMind, mission_duration, 116);
+#define HF_TYPE_HiveMind_mission_duration HF_TYPE_F32
+
 /* OrbitalAbilityComponentData (component 308, 552-byte records): OrbitalAbilityComponentData (fields from the stats schema) */
 #define HfOrbitalAbility_INFO "OrbitalAbilityComponentData", 25480438u
 typedef struct HfOrbitalAbility

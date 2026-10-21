@@ -89,6 +89,28 @@ end; a mod checks `hf->version`.
 - **`set_stat`** `int (HfMod* mod, const HfStat* stat, const HfValue* value, uint32_t flags)`: Changes a stats field set_live cannot reach (an entity delta: an attachment's or a default magazine's stats; a status multiplier), the fields get_stat reads, live, in the place a stats file writes it at boot. value NULL: back to its value from before this session's live change, or with HF_LIVE_BASE to its base (get_stat's). Returns HF_APPLIES_RESPAWN (a weapon takes an attachment's value when it is next built, expected) or 0 (the mod's log says why). Check hf->size before calling.
 - **`copy_row`** `int (HfMod* mod, const char* table, uint64_t row, uint64_t from, uint32_t offset, uint32_t size)`: A settings row's bytes (offset, size) replaced live by another row's of the same table, for the rows HellForge's catalogue names (mappings/references.json "rowCopies": the G-109 Urchin's pulse explosion), from the donors listed there, once the donor's packages are resident (it waits for them). from 0 puts the row's own bytes back. Returns HF_APPLIES_NOW or 0 (the mod's log says why). Check hf->size before calling.
 
+### SDK 10
+
+- **`mods`** `int (HfMod* mod, uint32_t index, HfModInfo* out)`: The index-th mod of the session (HfModInfo): the code and stats mods in load order, then the Lua mods as they register through the Lua bridge (docs/lua-bridge.md). 1 with *out filled, 0 past the last. Check hf->size.
+
+### SDK 11: actions (HF_ACT_...; check hf->size before calling)
+
+- **`heal`** `int (HfMod* mod, float amount)`: Heals the local Helldiver by `amount` health (each limb by the same share), up to its maximum.
+- **`heal_limb`** `int (HfMod* mod, uint32_t limb)`: Heals one of the local Helldiver's limbs (HF_LIMB_...) in full, and mends it.
+- **`injure`** `int (HfMod* mod, uint32_t limb, int32_t damage)`: Damages one of the local Helldiver's limbs (1 .. its maximum: head 85, chest 60, arms 35, legs 45); it may down or kill the Helldiver, as the game's own hit would.
+- **`limb_state`** `int (HfMod* mod, uint32_t entity, uint32_t limb, HfLimbState* out)`: A Helldiver's limb now: its health, maximum and whether it is injured (any Helldiver this machine has).
+- **`apply_status`** `int (HfMod* mod, uint32_t entity, uint32_t status, float buildup)`: Applies a status (HF_STATUS_...) to an entity: `buildup` 0 .. 1000 (100: as a full hit); host.
+- **`add_velocity`** `int (HfMod* mod, const float delta[3])`: Adds to the local Helldiver's velocity (m/s, world space, Z up; each part at most 25, the result at most 50). Walking resets sideways speed every update: an upward push is the dependable one.
+- **`resupply_from_pack`** `int (HfMod* mod)`: The local Helldiver uses its B-1 Supply Pack on itself, as the game's own input does (one supply).
+- **`spawn_explosion`** `int (HfMod* mod, uint32_t type, const float position[3])`: An explosion (its ExplosionSettings row) at a position, credited to this machine's player; host. Loads the explosion's packages first (HF_ACT_WAITING until they are in).
+- **`spawn_projectile`** `int (HfMod* mod, uint32_t type, const float position[3], const float direction[3])`: A projectile (its ProjectileSettings type) fired from a position along a direction, as the local Helldiver's; host. Loads its packages first.
+- **`credit_to_player`** `int (HfMod* mod, uint32_t entity)`: The kills of an entity (a turret, a vehicle a mod spawned) credited to its owner, this machine's player; solo host.
+- **`freeze_mission_timer`** `int (HfMod* mod, int frozen)`: Pauses (1) or resumes (0) the mission timer; host. A new mission starts it again.
+- **`spawn_pelican`** `int (HfMod* mod, const HfPelicanCall* call, uint32_t* entity)`: Calls in a transport Pelican (HfPelicanCall); *entity its entity. Host.
+- **`modify_shots`** `uint32_t (HfMod* mod, const HfShotRule* rule)`: Shot rules: an id (1 and up), or 0 refused. stop_shots ends one (later shots fly as the game makes them). One rule of each kind per projectile type.
+- **`homing`** `uint32_t (HfMod* mod, const HfHoming* rule)`
+- **`stop_shots`** `int (HfMod* mod, uint32_t id)`
+
 ## Components
 
 Entity component records: `HF_FIELD(Component, field)` names a field, `hf_record(mod, entity, HfComponent)` gives a typed
@@ -721,6 +743,14 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
 | `fire_rate` | +0x04 | f32 | respawn? | Fire rate (rpm) (unverified) |
+
+### HfHiveMind
+
+`HiveMindComponentData`: component 212, 1084-byte records. a mission's enemy director: the mission's authored launch timer (HD2Runtime's domains/missions.lua).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `mission_duration` | +0x74 | f32 | respawn? | Mission timer in seconds (60 to 2500; the game cuts longer countdowns to 2500). Set it aboard the ship before launch (unverified) |
 
 ### HfOrbitalAbility
 

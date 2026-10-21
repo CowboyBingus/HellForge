@@ -604,10 +604,10 @@ includes, root patches first, then the options in the manifest's order, like any
 `mods/` whole (their previews are often in a dot folder) and are never zipped by HellForge: share a pack as its author
 made it.
 
-**Lua mods are refused.** HD2Runtime, Bingus Shared Loader and the mods made for them ship as packs too, but their
-patches hold a `lua` resource: a script that runs inside the game and reads and writes its memory, which HellForge's
-own mods change. A pack, zip or HellForge mod (`data/`) with any patch holding Lua is not loaded or added; the Mods
-page names it with the reason. Only each patch's resource table is read to tell.
+**Lua mods** (HD2Runtime, Bingus Shared Loader and the mods made for them) ship as packs too; their patches hold a
+`lua` resource. They load like any pack, with a **LUA** tag, and are client-only: never in the modlist code. HD2Runtime
+runs on HellForge's Lua bridge, so its mods' changes are HellForge live edits the F8 editor names (`lua.<mod>`); see
+[lua-bridge.md](lua-bridge.md). Only each patch's resource table is read to tell a Lua mod.
 
 ### Data specs
 
@@ -976,9 +976,17 @@ hf->subscribe(mod, HF_ON_SPAWN, Spawned, NULL, 0);
 | `HF_ON_KILL` | `HfKillEvent` | something is killed: victim, dealer, creditor peer, kind, element |
 | `HF_ON_STRATAGEM` | `HfStratagemEvent` | a stratagem's beacon activates: its type, the thrower, the beacon's position |
 | `HF_ON_SPAWN` | `HfSpawnEvent` | an entity is spawned: its entity id, network id, resource (what it is) and whether this machine simulates it |
+| `HF_ON_HEAL` (SDK 11) | `HfHealEvent` | a Helldiver's health went up (any player's): the amount, health now, its maximum, the player's peer |
+| `HF_ON_STAT` (SDK 11) | `HfStatEvent` | the local player's mission stats grew (`HF_STAT_SHOTS`, `_HITS`, `_KILLS`, `_DAMAGE`): the growth, the total and up to five sources (the weapon, throwable or payload) |
+| `HF_ON_WEAPON` (SDK 11) | `HfWeaponEvent` | what the local Helldiver holds changed: the held entity and its resource, before and now, and the inventory selection |
+| `HF_ON_EXPLOSION` (SDK 11) | `HfExplosionEvent` | an explosion was requested in this machine's world: its type, where, what it came from, the creditor |
+| `HF_ON_BUGHOLE` (SDK 11) | `HfBugholeEvent` | a bug hole was closed: its entity, resource, the stage it reached and where |
+| `HF_ON_DAMAGE_PRE` (SDK 11) | `HfDamagePreEvent` | damage about to apply (as `HF_ON_DAMAGE`): a listener may set `damage.amount` or `cancel` |
 
-- **Observing, not changing.** Events report; changing their data changes nothing, and nothing is cancelled. Content
-  stays game data (definition blocks, registered entities and behaviours); events are for logic around it.
+- **Observing, not changing** (but `HF_ON_DAMAGE_PRE`). Events report; changing their data changes nothing, and
+  nothing is cancelled. A pre-damage listener's `amount` and `cancel` are the exception: the game applies what the
+  listeners left. Content stays game data (definition blocks, registered entities and behaviours); events are for
+  logic around it.
 - **Sources** (`native/mod-loader/event_sources.c`, from HD2Runtime 0.40.1's event research and game.dll's code): the
   state and the players are read every game update; damage, kills, stratagems and spawns come from hooks on the game
   functions that do them (the damage consumer, the kill dispatch, the beacon activation dispatcher, the entity spawner).
@@ -991,6 +999,41 @@ hf->subscribe(mod, HF_ON_SPAWN, Spawned, NULL, 0);
   spawn event pairs the two.
 - The compendium's HMG sentry (src/hmg_sentry.c) logs its beacon, each of its sentries landing and the deployments per
   mission.
+- **SDK 11 sources** (`native/mod-loader/event_polls.c`): heal, stats, weapon and bug hole events are read from the
+  game's own records (health, mission stats, wielders, destructibles) every update or a few times a second; the
+  explosion event hooks the game's explosion request, so every one is told.
+
+### Actions (SDK 11)
+
+What a mod makes the game do, through the game's own functions (HD2Runtime 0.40.1's research). Call them on the game
+thread: from an event listener, or `on_game_thread`'s callback. Called from another thread an action waits for the next
+game update and answers `HF_ACT_QUEUED`. Each answers `HF_ACT_DONE`, `HF_ACT_REQUESTED` (the game does it in this
+update or the next), `HF_ACT_WAITING` (its packages are loading: call again), or 0 refused with the reason in
+`last_log`.
+
+| Call | Does |
+|---|---|
+| `heal(mod, amount)` | heals the local Helldiver (each limb by the same share), up to its maximum |
+| `heal_limb(mod, limb)`, `injure(mod, limb, damage)`, `limb_state(mod, entity, limb, &out)` | a limb (`HF_LIMB_HEAD` .. `_RIGHT_LEG`): healed in full, damaged as a hit would, or read |
+| `apply_status(mod, entity, status, buildup)` | a status (`HF_STATUS_FIRE`, `_STUN_LARGE`, `_GAS`, ...) on an entity; host |
+| `add_velocity(mod, delta)` | pushes the local Helldiver (an upward push holds; walking resets sideways speed) |
+| `resupply_from_pack(mod)` | the local Helldiver uses its B-1 Supply Pack on itself |
+| `spawn_explosion(mod, type, position)`, `spawn_projectile(mod, type, position, direction)` | an explosion or a projectile, credited to this machine's player; host; their packages loaded first |
+| `credit_to_player(mod, entity)` | a turret's or vehicle's kills credited to its owner; solo host |
+| `freeze_mission_timer(mod, frozen)` | pauses or resumes the mission timer; host |
+| `spawn_pelican(mod, &call, &entity)` | calls in a transport Pelican to hover over a point (`HfPelicanCall`); host |
+| `modify_shots(mod, &rule)`, `homing(mod, &rule)`, `stop_shots(mod, id)` | rules for the local player's own shots of a projectile type: damage, penetration, speed, gravity and drag multipliers, or steering towards enemies (or friends); solo unless `HF_SHOT_MULTIPLAYER` |
+
+```c
+static void Healed(HfMod* mod, const HfEventInfo* event, void* user)
+{
+    const HfHealEvent* heal = (const HfHealEvent*)event;
+    if (heal->local && heal->amount >= 50) HF_API(mod)->heal_limb(mod, HF_LIMB_LEFT_LEG); /* a big heal mends a leg too */
+}
+```
+
+Actions are logic around the game, like events: they make the game do what it does (a hit, a status, an explosion),
+never new content. New weapons, projectiles and stratagems stay game data (definition blocks and registries).
 
 ## Native mods
 

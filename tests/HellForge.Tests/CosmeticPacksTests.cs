@@ -103,7 +103,7 @@ static class CosmeticPacksTests
             check(ModCatalog.Digest(listed) == ModCatalog.Digest(listed.Where(m => m.Gameplay)), "Cosmetic packs are not in it, wherever they sit.");
         });
 
-        test("Lua script mods are refused: a pack, a zip of one, or a HellForge mod's data with a lua resource", () =>
+        test("Lua script mods load, marked Lua and outside the modlist code: a pack, a zip of one, or a HellForge mod's data with a lua resource", () =>
         {
             static void Archive(string path, ulong type)
             {
@@ -128,16 +128,55 @@ static class CosmeticPacksTests
             Archive(Path.Combine(coded, "data", "9ba626afa44a3aa3.patch_0"), ResourceTypes.Lua);
 
             var (loaded, problems) = ModCatalog.Load(mods);
-            check(loaded.Select(m => m.Id).SequenceEqual(["pack.skin"]), "Only the skin loads: " + string.Join(", ", loaded.Select(m => m.Id)));
-            check(problems.Count == 2 && problems.All(p => p.Contains("Lua script mod")) && problems.Any(p => p.StartsWith("frv-swap")) && problems.Any(p => p.StartsWith("wrapped")),
-                "Both Lua mods are named as refused: " + string.Join(" | ", problems));
+            check(problems.Count == 1 && problems[0].Contains("need Bingus Shared Loader") && loaded.Count == 3,
+                "All three load (their Lua needs Bingus Shared Loader, not here): " + string.Join(", ", loaded.Select(m => m.Id)) + " | " + string.Join(" | ", problems));
+            var frv = loaded.Single(m => m.Id == "pack.7a41fd46-5db0-4f09-9a96-22a832e5bb62");
+            var wrapped = loaded.Single(m => m.Id == "a.wrapped");
+            check(frv.Lua && wrapped.Lua && !loaded.Single(m => m.Id == "pack.skin").Lua, "The Lua ones are marked Lua, the skin is not.");
+            check(ModCatalog.Digest(loaded) == ModCatalog.Digest(loaded.Where(m => !m.Lua)), "Lua mods are not in the modlist code.");
 
             var zip = Path.Combine(root, "lua-source", "frv.zip");
             Directory.CreateDirectory(Path.GetDirectoryName(zip)!);
             ZipFile.CreateFromDirectory(lua, zip);
             Directory.Delete(lua, recursive: true);
             var (candidates, refused) = ModInstaller.Inspect(install, [zip]);
-            check(candidates.Count == 0 && refused.Single().Contains("Lua script mod"), "Add mods refuses its zip: " + string.Join(" | ", refused));
+            check(candidates.Count == 1 && refused.Count == 0, "Add mods takes its zip: " + string.Join(" | ", refused));
+        });
+
+        test("Lua runtimes: a Lua mod without Bingus Shared Loader, an HD2Runtime mod without HD2Runtime, an HD2Runtime without the bridge", () =>
+        {
+            var mods = Directory.CreateDirectory(Path.Combine(root, "lua-runtimes")).FullName;
+            string LuaMod(string name, string guid, string? runtimeSpec = null, bool bingus = false)
+            {
+                var folder = Directory.CreateDirectory(Path.Combine(mods, name)).FullName;
+                File.WriteAllText(Path.Combine(folder, CosmeticPacks.ManifestName), $$"""{"Version":1,"Guid":"{{guid}}","Name":"{{name}}","Options":[]}""");
+                var (archive, gpu, _) = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts> { [new(ResourceTypes.Lua, 0x1234)] = new([1, 2, 3, 4], [], []) });
+                File.WriteAllBytes(Path.Combine(folder, "9ba626afa44a3aa3.patch_0"), archive);
+                File.WriteAllBytes(Path.Combine(folder, "9ba626afa44a3aa3.patch_0.gpu_resources"), gpu);
+                if (runtimeSpec != null) File.WriteAllText(Path.Combine(folder, "hd2runtime.json"), runtimeSpec);
+                if (bingus) File.WriteAllText(Path.Combine(folder, "BingusSharedLoader-manifest.json"), """{"name":"Bingus Shared Loader","provides":{"shared_loader_api":1}}""");
+                return folder;
+            }
+            List<string> Problems() => ModCatalog.Load(mods).Problems;
+            LuaMod("Railgun", "11111111-0000-0000-0000-000000000001",
+                """{"format":1,"resource":"mods/azura/railgun","requires":{"bingus":{"api":1},"hd2runtime":{"module":"mods/skyeshade/hd2runtime"}}}""");
+            var problems = Problems();
+            check(problems.Count == 2 && problems.Any(p => p.StartsWith("Railgun needs Bingus Shared Loader")) && problems.Any(p => p.StartsWith("Railgun needs HD2Runtime")),
+                "Both runtimes missing: " + string.Join(" | ", problems));
+            LuaMod("Bingus", "11111111-0000-0000-0000-000000000002", bingus: true);
+            var runtime = LuaMod("HD2Runtime", "11111111-0000-0000-0000-000000000003",
+                """{"format":1,"name":"HD2Runtime","resource":"mods/skyeshade/hd2runtime","requires":{"bingus":{"api":1}}}""");
+            problems = Problems();
+            check(problems.Count == 1 && problems[0].Contains("has no HellForge bridge"), "An HD2Runtime from before the bridge: " + string.Join(" | ", problems));
+            File.WriteAllText(Path.Combine(runtime, "hd2runtime.json"),
+                """{"format":1,"name":"HD2Runtime","resource":"mods/skyeshade/hd2runtime","requires":{"bingus":{"api":1}},"hellforge":{"bridge":1}}""");
+            check(Problems().Single().Contains("was made for HellForge's bridge 1"), "An older bridge.");
+            File.WriteAllText(Path.Combine(runtime, "hd2runtime.json"),
+                """{"format":1,"name":"HD2Runtime","resource":"mods/skyeshade/hd2runtime","requires":{"bingus":{"api":1}},"hellforge":{"bridge":""" + LuaRuntimes.Bridge + "}}");
+            check(Problems().Count == 0, "With both, and this bridge: " + string.Join(" | ", Problems()));
+            // a disabled runtime counts as absent
+            ModSettings.SetEnabled(mods, "pack.11111111-0000-0000-0000-000000000002", false);
+            check(Problems().Single().StartsWith("Railgun, HD2Runtime need Bingus Shared Loader"), "Bingus turned off: " + string.Join(" | ", Problems()));
         });
 
         test("A cosmetic pack zipped loads like a folder, and Add mods takes it", () =>

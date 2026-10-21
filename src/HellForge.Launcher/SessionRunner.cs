@@ -19,7 +19,7 @@ sealed class SessionRunner
     public bool IsRunning => controller is { HasExited: false };
 
     // The template only matters when the backend creates the profile on first use.
-    public void Start(LauncherPaths paths, LocalProfile profile, bool localPlayFab, bool sdkShims, bool liveWar, bool engineLog, bool crashDump = false, IReadOnlyList<string>? gameOptions = null)
+    public void Start(LauncherPaths paths, LocalProfile profile, bool localPlayFab, bool sdkShims, string war, bool engineLog, bool crashDump = false, IReadOnlyList<string>? gameOptions = null)
     {
         if (!IsSupported) throw new PlatformNotSupportedException(UnsupportedMessage);
         if (IsRunning) return;
@@ -35,7 +35,9 @@ sealed class SessionRunner
             start.ArgumentList.Add(argument);
         if (localPlayFab) start.ArgumentList.Add("--local-playfab");
         if (sdkShims) start.ArgumentList.Add("--multiplayer");
-        if (liveWar) { start.ArgumentList.Add("--live-war"); start.ArgumentList.Add(Path.Combine(paths.HostRoot, "live-war.json")); }
+        // the galactic war (ProfileStore.LoadWar): the live war through the mirror, or the all-planets war; the frozen war needs nothing
+        if (war == ProfileStore.WarLive) { start.ArgumentList.Add("--live-war"); start.ArgumentList.Add(Path.Combine(paths.HostRoot, "live-war.json")); }
+        else if (war == ProfileStore.WarOpen) start.ArgumentList.Add("--open-war");
         if (engineLog) start.ArgumentList.Add("--engine-log");
         // the player's launch options, for the session runner to add to the game's command line (GameLaunchOptions)
         if (gameOptions is { Count: > 0 }) { start.ArgumentList.Add("--game-options"); start.ArgumentList.Add(GameLaunchOptions.CommandLine(gameOptions)); }

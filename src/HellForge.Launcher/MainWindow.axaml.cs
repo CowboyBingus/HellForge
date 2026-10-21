@@ -106,8 +106,12 @@ public partial class MainWindow : Window
         LocalPlayFabBox.IsCheckedChanged += (_, _) => ProfileStore.SaveLocalPlayFab(paths, LocalPlayFabBox.IsChecked == true);
         SdkShimsBox.IsChecked = ProfileStore.LoadSdkShims(paths);
         SdkShimsBox.IsCheckedChanged += (_, _) => ProfileStore.SaveSdkShims(paths, SdkShimsBox.IsChecked == true);
-        LiveWarBox.IsChecked = ProfileStore.LoadLiveWar(paths);
-        LiveWarBox.IsCheckedChanged += (_, _) => ProfileStore.SaveLiveWar(paths, LiveWarBox.IsChecked == true);
+        var war = ProfileStore.LoadWar(paths);
+        WarLiveRadio.IsChecked = war == ProfileStore.WarLive;
+        WarFrozenRadio.IsChecked = war == ProfileStore.WarFrozen;
+        WarOpenRadio.IsChecked = war == ProfileStore.WarOpen;
+        foreach (var (radio, mode) in new[] { (WarLiveRadio, ProfileStore.WarLive), (WarFrozenRadio, ProfileStore.WarFrozen), (WarOpenRadio, ProfileStore.WarOpen) })
+            radio.IsCheckedChanged += (_, _) => { if (radio.IsChecked == true) ProfileStore.SaveWar(paths, mode); };
         EngineLogBox.IsChecked = ProfileStore.LoadEngineLog(paths);
         EngineLogBox.IsCheckedChanged += (_, _) => ProfileStore.SaveEngineLog(paths, EngineLogBox.IsChecked == true);
         CrashDumpBox.IsChecked = ProfileStore.LoadCrashDump(paths);
@@ -216,7 +220,7 @@ public partial class MainWindow : Window
         if (gameOptions.Count > 0) Append("Launch options: " + HellForge.Core.GameLaunchOptions.CommandLine(gameOptions), LauncherLine);
         try
         {
-            runner.Start(paths, profile, LocalPlayFabBox.IsChecked == true, SdkShimsBox.IsChecked == true, LiveWarBox.IsChecked == true, EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true, gameOptions);
+            runner.Start(paths, profile, LocalPlayFabBox.IsChecked == true, SdkShimsBox.IsChecked == true, ProfileStore.LoadWar(paths), EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true, gameOptions);
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {

@@ -65,14 +65,33 @@ static int SetLive(HfMod*, HfRef target, const HfField* field, const HfValue* va
     else if (flags & HF_LIVE_BASE) g_resets++;
     return HF_APPLIES_RESPAWN;
 }
-/* every field holds 640, its base 600; whole-number fields (references among them) hold their base */
+/* every field holds 640, its base 600; whole-number fields (references among them) hold their base. With
+ * HELLFORGE_EDITOR_TEST_VIEW=mods (the MODS view's screenshot), mods hold some: a Lua mod a damage row's armour
+ * penetration (+12, 9 where an editor change holds 10), a code mod the projectile settings' velocity (+32). */
+static bool g_modsView;
 static int GetLive(HfMod*, HfRef, const HfField* field, HfLiveValue* out)
 {
     out->now.type = out->base.type = field->type;
     out->now.number = field->type == HF_TYPE_U32 ? 600 : 640;
     out->base.number = 600;
     out->mod = NULL;
+    if (g_modsView && !strcmp(field->component, "DamageInfo") && field->offset == 12)
+    { out->mod = "lua.mods-azura-railgun_repenetrated"; out->base.number = 9; out->now.number = 9; }
+    if (g_modsView && !strcmp(field->component, "ProjectileSettings") && field->offset == 32)
+    { out->mod = "skyeshade.vanilla-plus"; out->base.number = 1200; out->now.number = 1200; }
     return HF_APPLIES_RESPAWN;
+}
+/* SDK 10, mods: two HellForge mods and a Lua mod */
+static int Mods(HfMod*, uint32_t index, HfModInfo* out)
+{
+    static const HfModInfo list[] = {
+        {sizeof(HfModInfo), HF_MOD_CODE, "skyeshade.vanilla-plus", "", "", 1},
+        {sizeof(HfModInfo), HF_MOD_STATS, "skyeshade.hell-forge", "", "", 1},
+        {sizeof(HfModInfo), HF_MOD_EDITOR, "hellforge.editor", "", "", 1},
+        {sizeof(HfModInfo), HF_MOD_LUA, "lua.mods-azura-railgun_repenetrated", "", "mods/azura/railgun_repenetrated", 1}};
+    if (index >= sizeof list / sizeof list[0]) return 0;
+    *out = list[index];
+    return 1;
 }
 /* fields applied at boot (entity deltas, say): every one holds 1.5 (whole ones 7), its base 1 */
 static int g_stats;
@@ -150,6 +169,8 @@ int main(int argc, char** argv)
     g_api.get_live = GetLive;
     g_api.last_log = LastLog; g_api.logs_folder = LogsFolder; g_api.get_stat = GetStat; g_api.session = Session;
     g_api.content = Content;
+    g_api.mods = Mods;
+    g_modsView = getenv("HELLFORGE_EDITOR_TEST_VIEW") != NULL && !strcmp(getenv("HELLFORGE_EDITOR_TEST_VIEW"), "mods");
     /* the editor's folder in a mods folder of the test's own: its catalogue and icons, and Local Stats next to it */
     char mods[MAX_PATH], stats[MAX_PATH];
     GetTempPathA(MAX_PATH, mods);
@@ -273,6 +294,7 @@ int main(int argc, char** argv)
         if (frame == 342) Type(window, "1200");
         if (frame == 350) Key(window, VK_RETURN);
         if (frame == 356) Key(window, VK_F9);
+        if (g_modsView && (frame == 362 || frame == 366 || frame == 370)) Key(window, VK_F6); /* BROWSE, SEARCH, CHANGES, MODS */
         if (frame == 150 || frame == 200) /* the game resizes its swap chain */
         {
             if (!d3d11) { fence->SetEventOnCompletion(value, event); queue->Signal(fence, ++value); WaitForSingleObject(event, 2000); }
@@ -407,7 +429,7 @@ int main(int argc, char** argv)
         { puts("FAIL the projectile swap did not reach set_live with a donor"); failures++; }
         Key(window, VK_DELETE); frames(10);
         Key(window, VK_F9); frames(20);
-        /* a preset (HD2R Editor's format) imported from the PRESETS view (F6 x3): a number, unlimited uses, no impact
+        /* a preset (HD2R Editor's format) imported from the PRESETS view (F6 x4): a number, unlimited uses, no impact
          * explosion and a status staged; an enemy (no HellForge row) skipped, a status no damage applies refused */
         {
             char presets[MAX_PATH], preset[MAX_PATH];
@@ -423,7 +445,7 @@ int main(int argc, char** argv)
                 "{\"key\":\"pw|R-36 Eruptor|damage.status_2_type\",\"value\":\"pure_damage\"},"
                 "{\"key\":\"en|Bile Titan|entity::entity.health\",\"value\":7000}]}", file);
             fclose(file);
-            for (int i = 0; i < 3; i++) { Key(window, VK_F6); frames(4); }
+            for (int i = 0; i < 4; i++) { Key(window, VK_F6); frames(4); }
             Key(window, VK_RETURN); frames(10);
             if (argc > 2 && dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-presets.bmp"); Screenshot(shot, width, height); }
             int lives = g_lives;
@@ -504,7 +526,7 @@ int main(int argc, char** argv)
                     printf("  big preset: %.1f ms a frame in %s\n", ms, where);
                     if (ms > 50) { printf("FAIL the editor is slow with a big preset in %s\n", where); failures++; }
                 };
-                for (int i = 0; i < 3; i++) { Key(window, VK_F6); frames(4); }   /* PRESETS (big.hd2rpreset.json first) */
+                for (int i = 0; i < 4; i++) { Key(window, VK_F6); frames(4); }   /* PRESETS (big.hd2rpreset.json first) */
                 Key(window, VK_HOME); frames(2);
                 Key(window, VK_RETURN); frames(4);
                 timed("PRESETS");
@@ -513,7 +535,7 @@ int main(int argc, char** argv)
                 /* fields applied at boot among them (attachments, boosters): read through get_stat, not left blank */
                 printf("  get_stat: %d read(s)\n", g_stats);
                 if (g_stats == 0) { puts("FAIL no field applied at boot was read through get_stat"); failures++; }
-                for (int i = 0; i < 4; i++) { Key(window, VK_F6); frames(2); }   /* PRESETS, LOGS, SETTINGS, BROWSE */
+                for (int i = 0; i < 5; i++) { Key(window, VK_F6); frames(2); }   /* MODS, PRESETS, LOGS, SETTINGS, BROWSE */
                 timed("BROWSE");
                 /* applied, with refusals: the ERRORS chip opens the errors list; then the LOGS view */
                 snprintf(g_logsFolder, sizeof g_logsFolder, "%s", mods);
@@ -533,7 +555,7 @@ int main(int argc, char** argv)
                 SendMessageW(window, WM_LBUTTONUP, 0, at); frames(10);
                 if (dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-errors.bmp"); Screenshot(shot, width, height); }
                 Key(window, VK_ESCAPE); frames(4);
-                for (int i = 0; i < 4; i++) { Key(window, VK_F6); frames(3); } /* SEARCH, CHANGES, PRESETS, LOGS */
+                for (int i = 0; i < 5; i++) { Key(window, VK_F6); frames(3); } /* SEARCH, CHANGES, MODS, PRESETS, LOGS */
                 frames(10);
                 if (dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-logs.bmp"); Screenshot(shot, width, height); }
                 /* joined to a friend's lobby: the editor is greyed and read-only (a preset import or APPLY changes nothing), and
@@ -549,7 +571,7 @@ int main(int argc, char** argv)
                 for (int i = 0; i < 2; i++) { Key(window, VK_F6); frames(3); } /* SETTINGS, BROWSE */
                 frames(10);
                 if (dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-readonly.bmp"); Screenshot(shot, width, height); }
-                for (int i = 0; i < 3; i++) { Key(window, VK_F6); frames(3); } /* SEARCH, CHANGES, PRESETS */
+                for (int i = 0; i < 4; i++) { Key(window, VK_F6); frames(3); } /* SEARCH, CHANGES, MODS, PRESETS */
                 int imports = g_presetImports, writes = g_lives;
                 Key(window, VK_HOME); frames(2); Key(window, VK_RETURN); frames(6); Key(window, VK_F9); frames(6);
                 printf("  read-only: %d import(s), %d write(s) while joined\n", g_presetImports - imports, g_lives - writes);

@@ -47,7 +47,7 @@ const ImU32 PANEL = C(24, 27, 32, 242), PANEL_ALT = C(29, 32, 38, 244), HEADER =
     FAINT = C(126, 132, 140, 255), INVERSE = C(14, 16, 20, 255), GOLD = C(255, 199, 44, 255), GOLD_DIM = C(150, 113, 10, 255),
     GOLD_WASH = C(255, 199, 44, 26), GOLD_SOFT = C(255, 199, 44, 48), SELECT = C(255, 199, 44, 34), HOVER = C(255, 255, 255, 14),
     SELECT_HEADER = C(255, 199, 44, 16), WASH_HEADER = C(255, 199, 44, 11), HOVER_HEADER = C(255, 199, 44, 7),
-    MOD = C(110, 190, 245, 255), MOD_SOFT = C(110, 190, 245, 44), PENDING = C(246, 160, 72, 255), PENDING_SOFT = C(246, 160, 72, 48),
+    MOD = C(110, 190, 245, 255), MOD_SOFT = C(110, 190, 245, 44), LUA = C(186, 140, 255, 255), LUA_SOFT = C(186, 140, 255, 44), PENDING = C(246, 160, 72, 255), PENDING_SOFT = C(246, 160, 72, 48),
     ERROR_ = C(255, 96, 84, 255), ERROR_SOFT = C(255, 96, 84, 48), OK = C(128, 210, 148, 255), BOX = C(14, 16, 19, 255),
     BOX_EDGE = C(255, 255, 255, 54), BOX_FOCUS = C(255, 199, 44, 255), SHADOW = C(0, 0, 0, 80),
     ICON = C(226, 226, 214, 255), PERK = C(255, 221, 31, 255), PRIMARY_HOVER = C(255, 214, 92, 255), BRAND = C(229, 57, 43, 255);
@@ -86,8 +86,8 @@ uint32_t g_layout;
 Canvas g_cv;
 float g_time, g_panelH = PANEL_H, g_scaleNow = 1;
 
-enum View { BROWSE, SEARCH, CHANGES, PRESETS, LOGS, SETTINGS, VIEW_COUNT };
-const char* const VIEW_LABELS[] = {"BROWSE", "SEARCH", "CHANGES", "PRESETS", "LOGS", "SETTINGS"};
+enum View { BROWSE, SEARCH, CHANGES, MODS, PRESETS, LOGS, SETTINGS, VIEW_COUNT };
+const char* const VIEW_LABELS[] = {"BROWSE", "SEARCH", "CHANGES", "MODS", "PRESETS", "LOGS", "SETTINGS"};
 View g_view = BROWSE;
 enum Focus { CATEGORIES, OBJECTS, FIELDS };
 Focus g_focus = CATEGORIES;
@@ -283,6 +283,7 @@ LiveState& Live(const Row* row, bool fresh = false)
             const LiveState& ts = Live(t, fresh);
             if (ts.read && ts.now != 0 && row->OptionOf(ts.now)) s.now = ts.now;
             if (ts.read && ts.base != 0 && row->OptionOf(ts.base)) s.base = ts.base;
+            if (ts.read && !ts.mod.empty()) s.mod = ts.mod;
         }
         return s;
     }
@@ -810,8 +811,50 @@ void StageResetAll()
     Toast(n ? std::to_string(n) + (n == 1 ? " reset" : " resets") + " pending: APPLY writes them, DISCARD takes them back" : "Nothing to reset", TEXT);
 }
 
+/* ---- holders: the mod whose value each catalogue row holds (get_live / get_stat name it), read a few rows a frame so
+ * the objects' and categories' marks and the MODS view know them without stalling the game: every frame from the
+ * session's start, open or not (Tick: 0.5 ms of reads; 1.5 ms more while the editor draws), a pass over the catalogue
+ * every 10 s. What a pass finds shows in the marks within half a second. ---- */
+std::map<const Row*, std::string> g_holders;
+size_t g_holderNext;
+ULONGLONG g_holderPass, g_holderMarked;
+bool g_holderChanged, g_holdersRead;
+
+bool IsLuaHolder(const std::string& id) { return id.rfind("lua.", 0) == 0; }
+
+void HolderTick(LONGLONG microseconds)
+{
+    if (!g_catalogOk) return;
+    ULONGLONG tick = GetTickCount64();
+    if (g_holderChanged && (g_holderNext >= g_catalog.rows.size() || tick - g_holderMarked >= 500))
+    { g_markVersion++; g_holderChanged = false; g_holderMarked = tick; }
+    if (g_holderNext >= g_catalog.rows.size())
+    {
+        g_holdersRead = true;
+        if (g_holderPass != 0 && tick - g_holderPass < 10000) return;
+        g_holderNext = 0;
+        g_holderPass = tick;
+    }
+    LARGE_INTEGER frequency, start, now;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
+    const LONGLONG budget = frequency.QuadPart * microseconds / 1000000;
+    while (g_holderNext < g_catalog.rows.size())
+    {
+        const Row* row = &g_catalog.rows[g_holderNext++];
+        if (!row->choice.empty() || IsApLabel(row) || (!row->Live() && !row->Stat())) continue;
+        const LiveState& live = Live(row);
+        std::string holder = live.read ? live.mod : "";
+        auto found = g_holders.find(row);
+        if (holder.empty() && found != g_holders.end()) { g_holders.erase(found); g_holderChanged = true; }
+        else if (!holder.empty() && (found == g_holders.end() || found->second != holder)) { g_holders[row] = holder; g_holderChanged = true; }
+        QueryPerformanceCounter(&now);
+        if (now.QuadPart - start.QuadPart > budget) break;
+    }
+}
+
 /* ---- markers (what an object, a category or a header holds) ---- */
-struct Marks { bool error = false, pending = false, editor = false, mod = false; };
+struct Marks { bool error = false, pending = false, editor = false, mod = false, lua = false; };
 struct MarkCache { unsigned version = 0, stats = 0, errors = 0; std::map<const Object*, Marks> objects; std::map<std::string, Marks> navs; } g_marks;
 
 const MarkCache& Markers()
@@ -833,6 +876,16 @@ const MarkCache& Markers()
     /* content a mod added (a custom stratagem): the mod's mark on it and its category, as on its fields */
     for (auto& o : g_catalog.objects)
         if (o->id.rfind("mod/", 0) == 0) { g_marks.objects[o.get()].mod = true; g_marks.navs[o->category].mod = true; }
+    /* values a mod holds: its mark (a Lua mod's purple) on every object and category showing them */
+    for (auto& [row, holder] : g_holders)
+        for (const Row* s : g_catalog.Siblings(row))
+        {
+            bool lua = IsLuaHolder(holder);
+            Marks& o = g_marks.objects[s->object];
+            Marks& n = g_marks.navs[s->object->category];
+            (lua ? o.lua : o.mod) = true;
+            (lua ? n.lua : n.mod) = true;
+        }
     for (auto& e : g_errors) { g_marks.objects[e.first->object].error = true; g_marks.navs[e.first->object->category].error = true; }
     for (auto& p : g_pending) mark(p.first, 1);
     for (const Row* row : SavedRows()) mark(row, 2);
@@ -852,7 +905,9 @@ Marks RowsMarks(const std::vector<const Row*>& rows)
         if (PendingOf(row)) m.pending = true;
         if (Saved(row, &v)) m.editor = true;
         auto live = g_live.find(row);
-        if (live != g_live.end() && !live->second.mod.empty()) m.mod = true;
+        std::string holder = live != g_live.end() ? live->second.mod : "";
+        if (holder.empty()) { auto h = g_holders.find(row); if (h != g_holders.end()) holder = h->second; }
+        if (!holder.empty()) (IsLuaHolder(holder) ? m.lua : m.mod) = true;
     }
     return m;
 }
@@ -928,6 +983,7 @@ float DrawMarks(const Marks& m, float x, float cy, float size)
     if (m.pending) one(UI_MARK_PENDING, PENDING);
     if (m.editor) one(UI_MARK_EDITED, GOLD);
     if (m.mod) one(UI_MARK_MOD, MOD);
+    if (m.lua) one(UI_MARK_MOD, LUA);
     return first ? x : x - floorf(size * 0.2f);
 }
 
@@ -2113,6 +2169,219 @@ const std::vector<Change>& Changes()
     return out;
 }
 
+/* ---- MODS: the session's mods, HellForge's (code and stats mods) and Lua's (HD2Runtime mods, through the Lua bridge),
+ * and the values each one holds: the fields whose holder get_live or get_stat names (the blue MOD mark). A field two mods
+ * change is listed under the one whose value it holds. ---- */
+struct ModInfo { std::string id, name, detail, folder; uint32_t kind = 0; bool loaded = true; std::vector<const Row*> rows; };
+struct ModEntry { std::string heading; int mod = -1; };
+std::vector<ModInfo> g_modList;
+ULONGLONG g_modsAt;
+int g_modEntry = -1, g_modRow;
+bool HasMods() { return g_host.api->size >= offsetof(HfApi, mods) + sizeof(void*) && g_host.api->mods != nullptr; }
+
+/* The left list: a heading per group, then its mods (HellForge's in load order, then Lua's as they registered). */
+std::vector<ModEntry> ModEntries()
+{
+    std::vector<ModEntry> out;
+    for (int group = 0; group < 2; group++)
+    {
+        bool lua = group == 1;
+        out.push_back({lua ? "LUA MODS" : "HELLFORGE MODS", -1});
+        for (int i = 0; i < (int)g_modList.size(); i++) if ((g_modList[i].kind == HF_MOD_LUA) == lua) out.push_back({"", i});
+    }
+    return out;
+}
+
+const ModInfo* SelectedMod()
+{
+    auto entries = ModEntries();
+    if (g_modEntry < 0 || g_modEntry >= (int)entries.size() || entries[g_modEntry].mod < 0) return nullptr;
+    return &g_modList[entries[g_modEntry].mod];
+}
+
+std::vector<const Row*> ModRows()
+{
+    const ModInfo* m = SelectedMod();
+    return m != nullptr ? m->rows : std::vector<const Row*>{};
+}
+
+/* A Lua mod's name as people read it: the last part of its runtime name, words for underscores ("railgun_repenetrated"
+ * becomes "Railgun Repenetrated"). */
+std::string LuaModTitle(const std::string& name)
+{
+    size_t slash = name.find_last_of('/');
+    std::string last = name.substr(slash == std::string::npos ? 0 : slash + 1);
+    bool start = true;
+    for (char& c : last)
+    {
+        if (c == '_' || c == '-') { c = ' '; start = true; continue; }
+        if (start && c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+        start = false;
+    }
+    return last.empty() ? name : last;
+}
+
+/* A code or stats mod's name and version, from the manifest in its folder (read once). */
+std::pair<std::string, std::string> ManifestName(const std::string& folder)
+{
+    static std::map<std::string, std::pair<std::string, std::string>> known;
+    auto found = known.find(folder);
+    if (found != known.end()) return found->second;
+    std::pair<std::string, std::string> out;
+    std::string text, why;
+    hfjson::Value manifest;
+    if (!folder.empty() && hfjson::ReadFile(hfjson::Wide(folder) + L"\\hellforge-mod.json", &text) && hfjson::Parse(text, &manifest, &why))
+        out = {manifest.GetString("name"), manifest.GetString("version")};
+    known.emplace(folder, out);
+    return out;
+}
+
+/* The list again (every 2 s while MODS is open, or now): the mods from the loader, their names, and the values each holds
+ * (the holder index HolderTick keeps). The selected mod stays selected. */
+void ScanMods(bool now)
+{
+    ULONGLONG tick = GetTickCount64();
+    if (!now && g_modsAt != 0 && tick - g_modsAt < 2000) return;
+    g_modsAt = tick;
+    const ModInfo* was = SelectedMod();
+    std::string keep = was != nullptr ? was->id : "";
+    std::vector<ModInfo> list;
+    if (HasMods())
+        for (uint32_t i = 0; i < 1024; i++)
+        {
+            HfModInfo info{};
+            info.size = sizeof info;
+            if (!g_host.api->mods(g_host.mod, i, &info)) break;
+            if (info.kind == HF_MOD_EDITOR || info.id == nullptr) continue;
+            ModInfo m;
+            m.id = info.id;
+            m.kind = info.kind;
+            m.loaded = info.loaded != 0;
+            m.folder = info.folder != nullptr ? info.folder : "";
+            if (info.kind == HF_MOD_LUA)
+            {
+                std::string name = info.name != nullptr ? info.name : "";
+                m.name = LuaModTitle(name);
+                m.detail = name;
+            }
+            else
+            {
+                auto [name, version] = ManifestName(m.folder);
+                m.name = name.empty() ? m.id : name;
+                m.detail = m.id + (version.empty() ? "" : SEP + version);
+            }
+            list.push_back(m);
+        }
+    std::map<std::string, size_t> byId;
+    for (size_t i = 0; i < list.size(); i++) byId[list[i].id] = i;
+    for (auto& [row, holder] : g_holders) /* read a few a frame (HolderTick) */
+    {
+        auto at = byId.find(holder);
+        if (at == byId.end()) continue;
+        std::vector<const Row*>& rows = list[at->second].rows;
+        bool seen = false; /* the same field on another page's copy: once per object */
+        for (const Row* r : rows) seen = seen || (r->object == row->object && r->label == row->label);
+        if (!seen) rows.push_back(row);
+    }
+    for (ModInfo& m : list)
+        std::stable_sort(m.rows.begin(), m.rows.end(), [](const Row* a, const Row* b) { return a->object->name < b->object->name; });
+    g_modList = std::move(list);
+    auto entries = ModEntries();
+    g_modEntry = -1;
+    for (int i = 0; i < (int)entries.size(); i++)
+    {
+        if (entries[i].mod < 0) continue;
+        if (g_modEntry < 0) g_modEntry = i;
+        if (g_modList[entries[i].mod].id == keep) { g_modEntry = i; break; }
+    }
+}
+
+void DrawMods(float y0, float h)
+{
+    ScanMods(false);
+    float W = PANEL_W, LW = 380;
+    g_cv.Rect(0, y0, LW, h, PANEL_ALT, 1);
+    g_cv.Rect(LW - 1, y0, 1, h, LINE, 2);
+    g_cv.Rect(LW, y0, W - LW, h, PANEL, 1);
+    if (!HasMods())
+    {
+        g_cv.Text("This HellForge cannot list its mods (its mod loader is older than SDK 10).", 20, y0 + 30, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, W - 40));
+        return;
+    }
+    auto entries = ModEntries();
+    ListOpts o;
+    o.x = 0; o.y = y0 + 6; o.w = LW; o.h = h - 12; o.rowH = 46; o.count = (int)entries.size(); o.selected = g_modEntry; o.key = "mods"; o.focused = true;
+    o.click = [&](int i) { if (entries[i].mod >= 0) { g_modEntry = i; g_modRow = 0; g_scroll["modrows"] = 0; Sound(sounds::CLICK); } };
+    o.draw = [&](int i, float x, float y, float lw, float rh, bool hovered) {
+        const ModEntry& e = entries[i];
+        if (e.mod < 0)
+        {
+            bool lua = e.heading == "LUA MODS";
+            int count = 0;
+            for (const ModInfo& m : g_modList) count += (m.kind == HF_MOD_LUA) == lua;
+            g_cv.Text(e.heading, x + 20, y + rh - 16, T(SZ_HEADING, GOLD, ui::TITLE));
+            g_cv.Text(count == 0 ? (lua ? "none (an HD2Runtime mod shows once it changes a value)" : "none") : std::to_string(count),
+                x + lw - 20, y + rh - 16, T(SZ_TINY, FAINT, ui::BODY, ui::RIGHT, lw - 170));
+            g_cv.Rect(x + 16, y + rh - 5, lw - 32, 1, LINE_STRONG, 2);
+            return;
+        }
+        const ModInfo& m = g_modList[e.mod];
+        bool selected = i == g_modEntry;
+        if (selected) { g_cv.Rect(x + 8, y + 2, lw - 16, rh - 4, SELECT, 2); g_cv.Rect(x + 8, y + 2, 3, rh - 4, GOLD, 3); }
+        else if (hovered) g_cv.Rect(x + 8, y + 2, lw - 16, rh - 4, HOVER, 2);
+        g_cv.Text(m.name, x + 24, y + 15, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, lw - 120));
+        g_cv.Text(m.detail, x + 24, y + 32, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, lw - 120));
+        if (!m.loaded) Chip("NOT LOADED", x + lw - 18, y + rh / 2, ERROR_, ERROR_SOFT, true);
+        else if (!m.rows.empty()) Chip(std::to_string(m.rows.size()), x + lw - 18, y + rh / 2, m.kind == HF_MOD_LUA ? LUA : MOD, m.kind == HF_MOD_LUA ? LUA_SOFT : MOD_SOFT, true);
+        else if (!g_holdersRead) Chip("READING", x + lw - 18, y + rh / 2, FAINT, LINE, true);
+    };
+    List(o);
+
+    float x0 = LW, rw = W - LW;
+    const ModInfo* m = SelectedMod();
+    if (m == nullptr)
+    {
+        g_cv.Text("No mods in this session.", x0 + 24, y0 + 34, T(SZ_SMALL, FAINT));
+        return;
+    }
+    const char* kind = m->kind == HF_MOD_LUA ? "LUA MOD" : m->kind == HF_MOD_STATS ? "STATS MOD" : "CODE MOD";
+    g_cv.Text(m->name, x0 + 24, y0 + 26, T(20, TEXT, ui::TITLE, ui::LEFT, rw - 200));
+    ImU32 tone = m->kind == HF_MOD_LUA ? LUA : MOD;
+    Chip(kind, x0 + rw - 20, y0 + 26, tone, m->kind == HF_MOD_LUA ? LUA_SOFT : MOD_SOFT, true);
+    std::string about = m->id + SEP + (m->rows.empty() ? std::string("holds no value the editor shows") :
+        std::to_string(m->rows.size()) + (m->rows.size() == 1 ? " value it holds" : " values it holds") + "; reset in BROWSE goes back to the mod's value");
+    g_cv.Text(about, x0 + 24, y0 + 50, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, rw - 48));
+    float hy = y0 + 70;
+    g_cv.Rect(x0, hy, rw, 22, HEADER, 2);
+    g_cv.Text("OBJECT", x0 + 20, hy + 11, T(SZ_TINY, FAINT, ui::TITLE));
+    g_cv.Text("FIELD", x0 + 280, hy + 11, T(SZ_TINY, FAINT, ui::TITLE));
+    g_cv.Text("MOD'S VALUE", x0 + rw - 170, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::RIGHT));
+    g_cv.Text("NOW", x0 + rw - 24, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::RIGHT));
+    const std::vector<const Row*> rows = m->rows;
+    if (rows.empty())
+        g_cv.Text(m->kind == HF_MOD_LUA ? "None of its changes is a value the editor lists." :
+            "It adds content or hooks the game; it changes none of the values the editor lists.", x0 + 24, hy + 44, T(SZ_SMALL, FAINT));
+    g_modRow = std::clamp(g_modRow, 0, std::max(0, (int)rows.size() - 1));
+    ListOpts r;
+    r.x = x0; r.y = hy + 24; r.w = rw; r.h = y0 + h - hy - 28; r.rowH = 32; r.count = (int)rows.size(); r.selected = g_modRow; r.key = "modrows";
+    r.click = [&](int i) { if (g_modRow == i) { Reveal(rows[i]); Sound(sounds::OPEN); } else g_modRow = i; };
+    r.draw = [&](int i, float x, float y, float lw, float rh, bool hovered) {
+        const Row* row = rows[i];
+        bool selected = i == g_modRow;
+        if (selected) { g_cv.Rect(x + 8, y + 2, lw - 16, rh - 4, SELECT, 2); g_cv.Rect(x + 8, y + 2, 3, rh - 4, tone, 3); }
+        else if (hovered) g_cv.Rect(x + 8, y + 2, lw - 16, rh - 4, HOVER, 2);
+        float cy = y + rh / 2;
+        DrawIcon(row->object, x + 18, y + 4, rh - 8);
+        g_cv.Text(row->object->name, x + 18 + rh, cy, T(SZ_SMALL, DIM, ui::BODY, ui::LEFT, 260 - rh));
+        g_cv.Text(row->label, x + 280, cy, T(SZ_SMALL, TEXT, ui::BODY, ui::LEFT, lw - 280 - 330));
+        const LiveState& live = Live(row);
+        g_cv.Text(live.read ? Format(row, live.base) : "\xE2\x80\x94", x + lw - 170, cy, T(SZ_LABEL, tone, ui::BODY, ui::RIGHT, 150));
+        bool yours = live.read && !Same(row, live.now, live.base); /* an editor change over the mod's */
+        g_cv.Text(live.read ? Format(row, live.now) : "\xE2\x80\x94", x + lw - 24, cy, T(SZ_LABEL, yours ? GOLD : DIM, ui::BODY, ui::RIGHT, 130));
+    };
+    List(r);
+}
+
 /* ---- keys ---- */
 bool Pressed(ImGuiKey key) { return ImGui::IsKeyPressed(key, true); }
 
@@ -2122,6 +2391,7 @@ void NextView(int delta)
     g_edit.on = false;
     if (g_view == PRESETS) ScanPresets();
     if (g_view == LOGS) LogRead(true);
+    if (g_view == MODS) ScanMods(true);
 }
 
 std::vector<std::string> Chars()
@@ -2256,6 +2526,22 @@ void HandleKeys()
         }
         return;
     }
+    if (g_view == MODS)
+    {
+        auto entries = ModEntries();
+        auto rows = ModRows();
+        if (Pressed(ImGuiKey_UpArrow) || Pressed(ImGuiKey_DownArrow))
+        {
+            int dir = Pressed(ImGuiKey_UpArrow) ? -1 : 1;
+            for (int i = g_modEntry + dir; i >= 0 && i < (int)entries.size(); i += dir)
+                if (entries[i].mod >= 0) { g_modEntry = i; g_modRow = 0; g_scroll["modrows"] = 0; break; }
+        }
+        if (Pressed(ImGuiKey_PageUp)) g_modRow = std::max(0, g_modRow - 1);
+        if (Pressed(ImGuiKey_PageDown)) g_modRow = std::min(std::max(0, (int)rows.size() - 1), g_modRow + 1);
+        if ((Pressed(ImGuiKey_Enter) || Pressed(ImGuiKey_KeypadEnter)) && g_modRow < (int)rows.size()) { Reveal(rows[g_modRow]); Sound(sounds::OPEN); }
+        if (Pressed(ImGuiKey_F5)) ScanMods(true);
+        return;
+    }
     if (g_view == LOGS)
     {
         int n = std::max(1, (int)g_logs.shown.size());
@@ -2363,7 +2649,7 @@ void DrawHeader(int errors, int active)
         if (selected) { g_cv.Rect(tx, h - 3, w, 3, GOLD, 4); g_cv.Rect(tx, 8, w, h - 11, GOLD_WASH, 2); }
         else if (g_cv.Hovered() == id) g_cv.Rect(tx, 8, w, h - 11, HOVER, 2);
         g_cv.Text(label, tx + 11, h / 2 + 1, T(SZ_TAB, selected ? GOLD : DIM, ui::TITLE));
-        if (g_cv.Hit(tx, 6, w, h - 6, id)) { g_view = (View)v; g_edit.on = false; if (v == PRESETS) ScanPresets(); if (v == LOGS) LogRead(true); }
+        if (g_cv.Hit(tx, 6, w, h - 6, id)) { g_view = (View)v; g_edit.on = false; if (v == PRESETS) ScanPresets(); if (v == LOGS) LogRead(true); if (v == MODS) ScanMods(true); }
         tx += w + 2;
     }
     float tabsEnd = tx + 8;
@@ -2639,7 +2925,7 @@ void DrawFields(float y0, float h)
         else if (error && v.source != STAGED) edge = ERROR_;
         else if (v.source == STAGED) { edge = PENDING; colour = PENDING; }
         else if (v.source == EDITED) { edge = GOLD_DIM; colour = GOLD; }
-        else if (v.source == MODDED) colour = MOD;
+        else if (v.source == MODDED) colour = IsLuaHolder(v.holder) ? LUA : MOD;
         if ((locked || blocked) && v.source != STAGED) colour = FAINT;
         g_cv.Rect(bx, y + 4, bw2, rowH - 8, BOX, 3);
         g_cv.Frame(bx, y + 4, bw2, rowH - 8, edge, 4);
@@ -2657,6 +2943,7 @@ void DrawFields(float y0, float h)
         else if (blocked && v.source != STAGED) Chip("IN ORDER", bxr, cy, FAINT, LINE, true);
         else if (v.source == STAGED) Chip(v.reset ? "PENDING RESET" : "PENDING", bxr, cy, PENDING, PENDING_SOFT, true);
         else if (v.source == EDITED) Chip(row->Live() ? "EDITED" : "NEXT BOOT", bxr, cy, GOLD, GOLD_WASH, true);
+        else if (v.source == MODDED && IsLuaHolder(v.holder)) Chip("LUA", bxr, cy, LUA, LUA_SOFT, true);
         else if (v.source == MODDED) Chip("MOD", bxr, cy, MOD, MOD_SOFT, true);
     };
     List(o);
@@ -2732,7 +3019,8 @@ void DrawStatus(float y, float h)
         if (row->unverified) x += Chip("UNVERIFIED EFFECT", x, cy, FAINT, LINE, false) + 6;
         RowView v = ViewOf(row);
         if (!v.holder.empty())
-            g_cv.Text("Mod: " + v.holder + " = " + Format(row, v.base), x + 10, cy, T(SZ_SMALL, MOD, ui::BODY, ui::LEFT, std::max(40.0f, maxw - x - 10)));
+            g_cv.Text(std::string(IsLuaHolder(v.holder) ? "Lua mod: " : "Mod: ") + v.holder + " = " + Format(row, v.base), x + 10, cy,
+                T(SZ_SMALL, IsLuaHolder(v.holder) ? LUA : MOD, ui::BODY, ui::LEFT, std::max(40.0f, maxw - x - 10)));
         else if (!row->also.empty())
         {
             std::string names;
@@ -2746,6 +3034,7 @@ void DrawStatus(float y, float h)
     }
     const char* text = g_view == SEARCH ? "Every word must match, in any order. Enter or a click opens the object in BROWSE." :
         g_view == CHANGES ? "Enter jumps to the field. RESET or Backspace stages a reset, UNDO drops a pending change; APPLY writes them." :
+        g_view == MODS ? "\xE2\x86\x91\xE2\x86\x93 mod   PgUp PgDn value   Enter or a click opens the field; its reset goes back to the mod's value   F5 read again" :
         g_view == PRESETS ? "Enter or IMPORT stages the selected preset; EXPORT writes your saved changes as a preset HD2R Editor reads." :
         g_view == LOGS ? "\xE2\x86\x90\xE2\x86\x92 filter   Enter switch HellForge's log / the editor's   End follow the end" :
         "Settings are saved with the editor and apply at once.";
@@ -3016,6 +3305,7 @@ void DrawErrors();
 
 void Draw()
 {
+    HolderTick(1500);
     g_cv.Rect(-4, -4, PANEL_W + 8, g_panelH + 8, SHADOW, 0);
     g_cv.Rect(0, 0, PANEL_W, g_panelH, PANEL, 0);
     int errors = (int)g_errors.size(), active = (int)SavedRows().size();
@@ -3025,6 +3315,7 @@ void Draw()
     else if (g_view == BROWSE) { DrawCategories(bodyY, bodyH); DrawObjects(bodyY, bodyH); DrawFields(bodyY, bodyH); }
     else if (g_view == SEARCH) DrawSearch(bodyY, bodyH);
     else if (g_view == CHANGES) DrawChanges(bodyY, bodyH);
+    else if (g_view == MODS) DrawMods(bodyY, bodyH);
     else if (g_view == PRESETS) DrawPresets(bodyY, bodyH);
     else if (g_view == LOGS) DrawLogs(bodyY, bodyH);
     else DrawSettings(bodyY, bodyH);
@@ -3444,6 +3735,7 @@ void Tick()
     ULONGLONG now = GetTickCount64();
     if (now >= next) { next = now + 250; ReadSession(); }
     SyncModValues();
+    HolderTick(500); /* the marks are ready when the editor opens */
 }
 
 float PixelScale(float width, float height)
