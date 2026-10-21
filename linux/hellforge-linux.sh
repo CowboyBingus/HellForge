@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Starts HellForge on Linux (Proton), with no way out to the internet: docs/linux.md.
-#   1. Steam running and signed in, then ./hf-bridge-host.sh in another terminal (leave it open).
-#   2. ./hellforge-linux.sh
-# What it does: fetches the live galactic war while this PC still has its network (the session that follows has none
-# and serves this copy), then starts the launcher inside a network namespace with loopback only
-# (hellforge-offline.sh), where hf-inner.sh forwards Steam's local ports and runs HellForge.exe through Proton.
+# Starts HellForge on Linux (Proton), with no way out to the internet: docs/linux.md. One command, with Steam running and
+# signed in: ./hellforge-linux.sh
+# What it does: bridges Steam's local ports (hf-bridge-host.sh, unless one is running already), fetches the live galactic
+# war while this PC still has its network (the session that follows has none and serves this copy), then starts the
+# launcher inside a network namespace with loopback only (hellforge-offline.sh), where hf-inner.sh forwards Steam's
+# ports and runs HellForge.exe through Proton. The bridge it started stops when HellForge closes.
 #
 # Settings (environment variables; the defaults suit the Steam client in ~/.local/share/Steam):
-#   PROTON                            the proton script to run HellForge with (required unless one is found)
+#   PROTON                            the proton script to run HellForge with (default: the newest the Steam client has)
 #   INSTALL                           the HellForge installation (default: the one this script is in, app/linux)
 #   STEAM_COMPAT_CLIENT_INSTALL_PATH  the Steam client (default ~/.local/share/Steam)
-#   STEAM_COMPAT_DATA_PATH            the Wine prefix (default: HELLDIVERS 2's, steamapps/compatdata/553850)
+#   STEAM_COMPAT_DATA_PATH            the Wine prefix (default: HELLDIVERS 2's, steamapps/compatdata/553850; a prefix of
+#                                     HellForge's own is better: docs/linux.md)
 #
 # Linux support is the work of DreamyBranch and joshua-software-dev (SkyeShade/HellForge issue 1).
 set -euo pipefail
@@ -23,15 +24,24 @@ if [ -z "${INSTALL:-}" ] && [ -f "$here/../../hellforge-install.json" ]; then IN
 [ -f "$INSTALL/hellforge-install.json" ] || { echo "$INSTALL is not a HellForge installation (no hellforge-install.json)" >&2; exit 1; }
 export INSTALL
 if [ -z "${PROTON:-}" ]; then
-  # the newest Proton the Steam client has, if any
   PROTON="$(ls -d "$STEAM_COMPAT_CLIENT_INSTALL_PATH"/steamapps/common/Proton*/proton "$STEAM_COMPAT_CLIENT_INSTALL_PATH"/compatibilitytools.d/*/proton 2>/dev/null | sort -V | tail -n 1 || true)"
 fi
 : "${PROTON:?PROTON is not set and no Proton was found: set it to a proton script, e.g. .../compatibilitytools.d/<name>/proton}"
 export PROTON
 echo "HellForge: $INSTALL with $PROTON (prefix $STEAM_COMPAT_DATA_PATH)"
 
+# Steam's bridge: the one running, else one of our own for as long as HellForge runs.
 dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-compgen -G "$dir/hf-steam-*.sock" >/dev/null || { echo "Steam's bridge is not running: start ./hf-bridge-host.sh first (with Steam signed in)" >&2; exit 1; }
+bridge=""
+cleanup() { if [ -n "$bridge" ]; then kill "$bridge" 2>/dev/null || true; wait "$bridge" 2>/dev/null || true; fi; }
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+if ! pgrep -u "$(id -u)" -f "hf-bridge-host.sh" >/dev/null; then
+  "$here/hf-bridge-host.sh" &
+  bridge=$!
+  for _ in $(seq 1 20); do compgen -G "$dir/hf-steam-*.sock" >/dev/null && break; kill -0 "$bridge" 2>/dev/null || break; sleep 0.5; done
+fi
+compgen -G "$dir/hf-steam-*.sock" >/dev/null || { echo "Steam's local ports could not be bridged: is Steam running and signed in?" >&2; exit 1; }
 
 # The live war, now, while there is a network (Wine sees / as Z:). A failure is not fatal: the session then serves the
 # last war fetched, or HellForge's built-in one.
@@ -42,4 +52,4 @@ else echo "Could not fetch the live galactic war; the session serves the last on
 # (proton can return before a Windows program ends: the fetch finishes before the namespace is entered)
 for _ in $(seq 1 30); do pgrep -f "LocalBackend.exe fetch-live-war" >/dev/null || break; sleep 1; done
 
-exec "$here/hellforge-offline.sh" "$here/hf-inner.sh"
+"$here/hellforge-offline.sh" "$here/hf-inner.sh"
