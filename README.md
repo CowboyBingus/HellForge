@@ -33,6 +33,9 @@ to approve one Windows administrator prompt. Windows Firewall does not need to b
 Filtering Platform and holds even when a security suite has switched the firewall off. Windows SmartScreen may warn that the setup
 program is unrecognised: it is not code-signed (**More info > Run anyway**).
 
+**Linux (experimental):** HellForge runs under Proton with its game in a network namespace instead of the Windows block;
+setup still runs on Windows. See [docs/linux.md](docs/linux.md).
+
 Run `HellForge-Setup.exe` and pick a folder (default `Documents\HellForge`, or your user folder when Documents is in
 OneDrive; Setup refuses OneDrive and linked folders). It unpacks HellForge there and opens the launcher, whose setup
 wizard:
@@ -118,6 +121,7 @@ against the SDK headers here and do not need the engine's sources.
   (BSD-2-Clause) hooks for the mod loader and the editor; [Zig](https://ziglang.org) compiles native code and mods. All are downloaded at
   build time, pinned, and their licences ship with what uses them.
 - The live war comes from the community [Helldivers 2 API](https://github.com/helldivers-2/api).
+- Linux support was worked out by **DreamyBranch** and **joshua-software-dev** ([issue 1](https://github.com/SkyeShade/HellForge/issues/1)).
 
 HellForge is an independent fan project, not affiliated with or endorsed by Arrowhead Game Studios or Sony Interactive
 Entertainment. HELLDIVERS is a trademark of Sony Interactive Entertainment.
