@@ -169,7 +169,8 @@ try
                 codeMods = code.Count,
                 loaderRequired = true, // read-only stats snapshots are also collected without mods
                 disabled = mods.Where(m => !m.Enabled).Select(m => m.Id),
-                problems = modProblems, staged, native = active.Any(m => m.HasNative), digest, modlist = ModlistDiff.Encode(compared)
+                problems = modProblems, staged, stagedCopied = ModStaging.LastCounts.Copied, stagedKept = ModStaging.LastCounts.Kept,
+                native = active.Any(m => m.HasNative), digest, modlist = ModlistDiff.Encode(compared)
             };
             break;
         }

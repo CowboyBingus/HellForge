@@ -10,7 +10,9 @@ with the same files give the same modlist code. A zipped mod counts by what its 
 unpacked folder as it runs (key bindings, a cache) are each player's own and never split friends. A mod kept as a
 loose folder counts by every file in it, so share mods as zips. Each session stages
 the data mods into the copied game, loads the code mods into it and applies the declarative native edits while the game
-runs; nothing is changed in the normal game. The session's `result.json` lists what loaded (`mods`) and network edit
+runs; nothing is changed in the normal game. Staging copies only what changed since the last session: a patch already
+staged from the same file (same size and time) stays, so an unchanged modlist starts without copying anything. The zips'
+hashes and the files they ship are kept in `mods/.unpacked` (`.zip-hashes.json`, `.zip-files.json`) for the same reason. The session's `result.json` lists what loaded (`mods`) and network edit
 status (`nativeMods`). `native-mods.log` records network edits; `mod-<id>.log` records stats and legacy component edits.
 
 The launcher's **Mods** page lists every mod as a row with a switch, in two groups: **gameplay** mods, then

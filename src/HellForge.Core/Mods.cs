@@ -359,7 +359,9 @@ public static class ModArchives
         var results = new List<(string, string?, string?)>();
         var cache = Path.Combine(modsFolder, UnpackedFolder);
         var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var archive in Directory.GetFiles(modsFolder, "*.zip").Order(StringComparer.OrdinalIgnoreCase))
+        var archives = Directory.GetFiles(modsFolder, "*.zip").Order(StringComparer.OrdinalIgnoreCase).ToList();
+        LoadHashes(cache);
+        foreach (var archive in archives)
         {
             try
             {
@@ -374,6 +376,7 @@ public static class ModArchives
                 results.Add((archive, null, error.Message));
             }
         }
+        if (archives.Count > 0) SaveHashes(cache, archives);
         if (Directory.Exists(cache))
             foreach (var stale in Directory.GetDirectories(cache).Where(d => !keep.Contains(Path.GetFileName(d))))
                 try { Directory.Delete(stale, recursive: true); }
@@ -382,8 +385,11 @@ public static class ModArchives
     }
 
     // A zip's content hash, kept while its size and time are unchanged: the Mods page loads the mods on every change, and
-    // hashing a pack of hundreds of MB each time made it lag.
+    // hashing a pack of hundreds of MB each time made it lag. Kept across runs too (mods/.unpacked/.zip-hashes.json): the
+    // launcher and each session's mod staging are new processes, and read every zip again (678 MB on a tester's PC).
     static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (long Length, DateTime Written, string Hash)> hashes = new(StringComparer.OrdinalIgnoreCase);
+    const string HashesName = ".zip-hashes.json";
+    static readonly HashSet<string> hashesLoaded = new(StringComparer.OrdinalIgnoreCase);
 
     static string ContentHash(string archive)
     {
@@ -393,6 +399,38 @@ public static class ModArchives
         using (var stream = File.OpenRead(archive)) hash = Convert.ToHexStringLower(SHA256.HashData(stream))[..12];
         hashes[info.FullName] = (info.Length, info.LastWriteTimeUtc, hash);
         return hash;
+    }
+
+    // The saved hashes of the zips in a mods folder, read once per process (a broken or missing file: none).
+    static void LoadHashes(string cache)
+    {
+        lock (hashesLoaded) if (!hashesLoaded.Add(cache)) return;
+        try
+        {
+            if (System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(cache, HashesName))) is not System.Text.Json.Nodes.JsonObject saved) return;
+            foreach (var (path, entry) in saved)
+                if (entry is System.Text.Json.Nodes.JsonObject e && (long?)e["length"] is long length && (long?)e["written"] is long written && (string?)e["hash"] is { Length: 12 } hash)
+                    hashes.TryAdd(path, (length, new DateTime(written, DateTimeKind.Utc), hash));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or FormatException) { }
+    }
+
+    // The hashes of the zips there now, written whole (another process writing at the same time: the last one stays).
+    static void SaveHashes(string cache, IEnumerable<string> archives)
+    {
+        var saved = new System.Text.Json.Nodes.JsonObject();
+        foreach (var archive in archives)
+            if (hashes.TryGetValue(Path.GetFullPath(archive), out var known))
+                saved[Path.GetFullPath(archive)] = new System.Text.Json.Nodes.JsonObject { ["length"] = known.Length, ["written"] = known.Written.Ticks, ["hash"] = known.Hash };
+        try
+        {
+            Directory.CreateDirectory(cache);
+            var path = Path.Combine(cache, HashesName);
+            var partial = path + "." + Guid.NewGuid().ToString("N")[..8] + ".partial";
+            File.WriteAllText(partial, saved.ToJsonString());
+            File.Move(partial, path, overwrite: true);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
     }
 
     // The files a zipped mod ships, by their path in its folder (the one holding its manifest), with their SHA-256: what
@@ -409,8 +447,10 @@ public static class ModArchives
         var root = InCache(full) ? full : InCache(Path.GetDirectoryName(full)) ? Path.GetDirectoryName(full)! : null;
         if (root == null) return null;
         var prefix = root == full ? "" : Path.GetFileName(full) + "/";
-        var info = new FileInfo(Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(root)!)!, archive));
+        var cache = Path.GetDirectoryName(root)!;
+        var info = new FileInfo(Path.Combine(Path.GetDirectoryName(cache)!, archive));
         var key = info.FullName + "|" + full;
+        LoadShipped(cache);
         if (shipped.TryGetValue(key, out var known) && known.Length == info.Length && known.Written == info.LastWriteTimeUtc) return known.Files;
         try
         {
@@ -424,9 +464,53 @@ public static class ModArchives
                     files[name[prefix.Length..]] = Convert.ToHexString(SHA256.HashData(stream));
                 }
             shipped[key] = (info.Length, info.LastWriteTimeUtc, files);
+            SaveShipped(cache);
             return files;
         }
         catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    // The files zipped mods ship, kept across runs (mods/.unpacked/.zip-files.json) as the zips' hashes are: each session
+    // start computed the modlist code by decompressing every gameplay zip again (127 MB for one of a tester's mods).
+    const string ShippedName = ".zip-files.json";
+    static readonly HashSet<string> shippedLoaded = new(StringComparer.OrdinalIgnoreCase);
+
+    static void LoadShipped(string cache)
+    {
+        lock (shippedLoaded) if (!shippedLoaded.Add(cache)) return;
+        try
+        {
+            if (System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(cache, ShippedName))) is not System.Text.Json.Nodes.JsonObject saved) return;
+            foreach (var (key, entry) in saved)
+                if (entry is System.Text.Json.Nodes.JsonObject e && (long?)e["length"] is long length && (long?)e["written"] is long written &&
+                    e["files"] is System.Text.Json.Nodes.JsonObject list)
+                    shipped.TryAdd(key, (length, new DateTime(written, DateTimeKind.Utc),
+                        list.Where(f => f.Value is not null).ToDictionary(f => f.Key, f => (string)f.Value!, StringComparer.Ordinal)));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or FormatException) { }
+    }
+
+    // The zips of this mods folder that still are there, written whole.
+    static void SaveShipped(string cache)
+    {
+        var mods = Path.GetDirectoryName(cache)! + Path.DirectorySeparatorChar;
+        var saved = new System.Text.Json.Nodes.JsonObject();
+        foreach (var (key, entry) in shipped)
+        {
+            var zip = key[..key.IndexOf('|')];
+            if (!zip.StartsWith(mods, StringComparison.OrdinalIgnoreCase) || !File.Exists(zip)) continue;
+            var files = new System.Text.Json.Nodes.JsonObject();
+            foreach (var (name, hash) in entry.Files) files[name] = hash;
+            saved[key] = new System.Text.Json.Nodes.JsonObject { ["length"] = entry.Length, ["written"] = entry.Written.Ticks, ["files"] = files };
+        }
+        try
+        {
+            var path = Path.Combine(cache, ShippedName);
+            var partial = path + "." + Guid.NewGuid().ToString("N")[..8] + ".partial";
+            File.WriteAllText(partial, saved.ToJsonString());
+            File.Move(partial, path, overwrite: true);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
     }
 
     internal static void Unpack(string archive, string target)
@@ -585,52 +669,98 @@ public static class ModStaging
 {
     const string RecordName = "staged-mods.json";
 
+    // What the last Stage did: files copied, and files kept from the session before (the same source, unchanged).
+    public static (int Copied, int Kept) LastCounts { get; private set; }
+
+    // The previous session's staged files stay where they are what this one stages (same name, and the same size and
+    // time as the file they come from: a copy keeps its source's time): a session start copied and deleted every patch
+    // again, ~3 GB for a tester's packs, and kept the drive busy for minutes. Only new or changed patches are copied;
+    // those no longer staged are removed.
     public static IReadOnlyList<string> Stage(InstallLayout install, IReadOnlyList<ModManifest> mods)
     {
-        Unstage(install);
         var data = Path.Combine(install.Game, "data");
+        var previous = Previous(install);
         var next = new Dictionary<string, int>(StringComparer.Ordinal);
         int NextIndex(string bundle)
         {
             if (!next.TryGetValue(bundle, out var index))
             {
                 index = 0;
-                while (File.Exists(Path.Combine(data, $"{bundle}.patch_{index}"))) index++;
+                /* after the bundle's own patches (the game's or the player's); the last session's staged ones do not count */
+                while (!previous.Contains($"{bundle}.patch_{index}") && File.Exists(Path.Combine(data, $"{bundle}.patch_{index}"))) index++;
             }
             next[bundle] = index + 1;
             return index;
         }
+        var plan = new List<(string Source, string Target)>();
+        foreach (var mod in mods)
+        {
+            if (mod.HasDataSpec && mod.GeneratedData == null) throw new InvalidDataException($"{mod.Id}: its data has not been generated.");
+            var sources = new List<(string Folder, IEnumerable<string> Files)> { (Path.Combine(mod.Folder, "data"), mod.DataFiles) };
+            foreach (var folder in mod.PackFolders) sources.Add((folder, CosmeticPacks.PatchFiles(folder)));
+            if (mod.GeneratedData != null)
+                sources.Add((mod.GeneratedData, Directory.GetFiles(mod.GeneratedData).Select(f => Path.GetFileName(f)).Where(f => ModCatalog.PatchFile().IsMatch(f))));
+            foreach (var (folder, files) in sources)
+                foreach (var group in files.GroupBy(f => (Bundle: f[..16], Index: int.Parse(ModCatalog.PatchFile().Match(f).Groups[1].Value, CultureInfo.InvariantCulture)))
+                    .OrderBy(g => g.Key.Bundle, StringComparer.Ordinal).ThenBy(g => g.Key.Index))
+                {
+                    var index = NextIndex(group.Key.Bundle);
+                    foreach (var file in group.Order(StringComparer.Ordinal))
+                        plan.Add((Path.Combine(folder, file), $"{group.Key.Bundle}.patch_{index}{ModCatalog.PatchFile().Match(file).Groups[2].Value}"));
+                }
+        }
+        var wanted = plan.Select(p => p.Target).ToHashSet(StringComparer.Ordinal);
+        var left = new HashSet<string>(previous, StringComparer.Ordinal); /* staged here before and still in game/data */
         var staged = new List<string>();
+        int copied = 0, kept = 0;
         try
         {
-            foreach (var mod in mods)
+            foreach (var name in previous.Where(n => !wanted.Contains(n)))
             {
-                if (mod.HasDataSpec && mod.GeneratedData == null) throw new InvalidDataException($"{mod.Id}: its data has not been generated.");
-                var sources = new List<(string Folder, IEnumerable<string> Files)> { (Path.Combine(mod.Folder, "data"), mod.DataFiles) };
-                foreach (var folder in mod.PackFolders) sources.Add((folder, CosmeticPacks.PatchFiles(folder)));
-                if (mod.GeneratedData != null)
-                    sources.Add((mod.GeneratedData, Directory.GetFiles(mod.GeneratedData).Select(f => Path.GetFileName(f)).Where(f => ModCatalog.PatchFile().IsMatch(f))));
-                foreach (var (folder, files) in sources)
-                    foreach (var group in files.GroupBy(f => (Bundle: f[..16], Index: int.Parse(ModCatalog.PatchFile().Match(f).Groups[1].Value, CultureInfo.InvariantCulture)))
-                        .OrderBy(g => g.Key.Bundle, StringComparer.Ordinal).ThenBy(g => g.Key.Index))
-                    {
-                        var index = NextIndex(group.Key.Bundle);
-                        foreach (var file in group.Order(StringComparer.Ordinal))
-                        {
-                            var suffix = ModCatalog.PatchFile().Match(file).Groups[2].Value;
-                            var target = $"{group.Key.Bundle}.patch_{index}{suffix}";
-                            File.Copy(Path.Combine(folder, file), Path.Combine(data, target), overwrite: false);
-                            staged.Add(target);
-                        }
-                    }
+                var path = Path.Combine(data, name);
+                if (File.Exists(path)) File.Delete(path);
+                left.Remove(name);
+            }
+            foreach (var (source, target) in plan)
+            {
+                var path = Path.Combine(data, target);
+                if (left.Contains(target) && Same(source, path)) { staged.Add(target); left.Remove(target); kept++; continue; }
+                if (left.Remove(target) && File.Exists(path)) File.Delete(path);
+                File.Copy(source, path, overwrite: false);
+                staged.Add(target);
+                copied++;
             }
         }
         finally
         {
             Directory.CreateDirectory(install.Temp);
+            /* a stage cut short: what it placed, and the last session's files it did not get to, for the next one to remove */
+            staged.AddRange(left.Where(n => File.Exists(Path.Combine(data, n))));
             File.WriteAllText(Path.Combine(install.Temp, RecordName), JsonSerializer.Serialize(staged));
+            LastCounts = (copied, kept);
         }
         return staged;
+    }
+
+    // The last session's staged files (patch file names only).
+    static HashSet<string> Previous(InstallLayout install)
+    {
+        var record = Path.Combine(install.Temp, RecordName);
+        try
+        {
+            return File.Exists(record)
+                ? (JsonSerializer.Deserialize<List<string>>(File.ReadAllText(record)) ?? []).Where(n => ModCatalog.PatchFile().IsMatch(n)).ToHashSet(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal);
+        }
+        catch (JsonException) { return new HashSet<string>(StringComparer.Ordinal); }
+    }
+
+    // A staged file still is its source: the same size and last write time (a copy keeps its source's time).
+    static bool Same(string source, string staged)
+    {
+        var from = new FileInfo(source);
+        var to = new FileInfo(staged);
+        return to.Exists && from.Exists && to.Length == from.Length && to.LastWriteTimeUtc == from.LastWriteTimeUtc;
     }
 
     public static void Unstage(InstallLayout install)

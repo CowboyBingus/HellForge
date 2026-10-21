@@ -93,6 +93,9 @@ static class ModTests
             var (loaded, problems) = ModCatalog.Load(mods);
             check(loaded.Select(m => m.Id).SequenceEqual(["test.nested", "test.zipped"]), "Zipped mods: " + string.Join(", ", loaded.Select(m => m.Id)) + " problems: " + string.Join(" | ", problems));
             check(loaded.All(m => m.Archive != null && m.Folder.Contains(ModArchives.UnpackedFolder)), "A zipped mod does not name its zip or loads from outside the cache.");
+            // the zips' hashes are kept for the next process (a session start does not read every zip again)
+            var hashes = Path.Combine(mods, ModArchives.UnpackedFolder, ".zip-hashes.json");
+            check(File.Exists(hashes) && File.ReadAllText(hashes).Contains("root.zip", StringComparison.Ordinal), "The zips' hashes were not kept.");
             check(problems.Count == 2 && problems.Any(p => p.StartsWith("escape.zip", StringComparison.Ordinal) && p.Contains("unsafe path")) &&
                 problems.Any(p => p.StartsWith("empty.zip", StringComparison.Ordinal)), "Zip refusals: " + string.Join(" | ", problems));
             check(!File.Exists(Path.Combine(root, "outside.txt")) && !File.Exists(Path.Combine(mods, "outside.txt")), "An unsafe zip wrote outside its folder.");
@@ -186,6 +189,20 @@ static class ModTests
                 "Mods are staged in id order.");
             ModStaging.Stage(install, ModCatalog.Load(mods).Mods);
             check(!File.Exists(Path.Combine(data, "9ba626afa44a3aa3.patch_3")), "Staging again duplicated files.");
+            // A session after one with the same mods copies nothing again (a tester's packs: ~3 GB each session start).
+            check(ModStaging.LastCounts == (0, 4), $"Unchanged mods were copied again: {ModStaging.LastCounts}.");
+            // A changed patch is copied again, the others stay; one the player changed in game/data is put back.
+            File.WriteAllText(Path.Combine(mods, "a", "data", "9ba626afa44a3aa3.patch_0"), "test.a, version 2");
+            File.WriteAllText(Path.Combine(data, "9ba626afa44a3aa3.patch_2.gpu_resources"), "tampered");
+            staged = ModStaging.Stage(install, ModCatalog.Load(mods).Mods);
+            check(ModStaging.LastCounts == (2, 2) && File.ReadAllText(Path.Combine(data, "9ba626afa44a3aa3.patch_1")) == "test.a, version 2" &&
+                File.ReadAllText(Path.Combine(data, "9ba626afa44a3aa3.patch_2.gpu_resources")) == "test.b gpu", $"A change was not staged: {ModStaging.LastCounts}.");
+            // A mod no longer loaded takes its staged files with it; the rest renumber as they must.
+            staged = ModStaging.Stage(install, ModCatalog.Load(mods).Mods.Where(m => m.Id == "test.b").ToList());
+            check(staged.SequenceEqual(["9ba626afa44a3aa3.patch_1", "9ba626afa44a3aa3.patch_1.gpu_resources"]) &&
+                File.ReadAllText(Path.Combine(data, "9ba626afa44a3aa3.patch_1")) == "test.b" && !File.Exists(Path.Combine(data, "9ba626afa44a3aa3.patch_2")),
+                "A removed mod's files stayed, or the others were not renumbered: " + string.Join(", ", staged));
+            ModStaging.Stage(install, ModCatalog.Load(mods).Mods);
             ModStaging.Unstage(install);
             check(Directory.GetFiles(data).Select(Path.GetFileName).SequenceEqual(["9ba626afa44a3aa3.patch_0"]) &&
                 File.ReadAllText(Path.Combine(data, "9ba626afa44a3aa3.patch_0")) == "installed by hand", "Unstaging touched other files.");
