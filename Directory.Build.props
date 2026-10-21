@@ -6,6 +6,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- HellForge's version, one line per release: every assembly's, shown in the launcher's and HellForge-Setup's
          corner (AppVersion) with the commit the SDK appends. -->
-    <Version>0.1.12-linux-preview</Version>
+    <Version>0.1.12-diagnostics-beta.2</Version>
   </PropertyGroup>
 </Project>
