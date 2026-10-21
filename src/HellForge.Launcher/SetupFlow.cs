@@ -113,7 +113,7 @@ public partial class MainWindow
         try
         {
             SetRow(step, null, "Looking in your Steam libraries...", running: true);
-            await CheckFilteringEngine(install);
+            if (!LinuxNetworkBlock.Requested) await CheckFilteringEngine(install);
             var build = SupportedBuild.Current;
             var steamRoot = SteamLocator.SteamRoot() ?? throw new SetupStopped("Steam is not installed on this PC. Install Steam and HELLDIVERS 2, then start setup again.");
             SteamGame? game;
@@ -199,8 +199,16 @@ public partial class MainWindow
             if (await NetworkBlockInPlace(install)) SetRow(step, true, "Already in place.");
             else
             {
-                SetRow(step, null, "Windows asks for permission once to place the network block...", running: true);
-                await InstallNetworkBlock(install);
+                if (LinuxNetworkBlock.Requested)
+                {
+                    SetRow(step, null, "Checking that this session has no route to the internet...", running: true);
+                    await LinuxNetworkBlock.Install(install);
+                }
+                else
+                {
+                    SetRow(step, null, "Windows asks for permission once to place the network block...", running: true);
+                    await InstallNetworkBlock(install);
+                }
                 SetRow(step, true, "The copied game can only reach this PC (its local backend). Your normal game is not affected.");
             }
 
@@ -410,7 +418,8 @@ public partial class MainWindow
     // The block leaves a marker when it was placed; reading WFP filters back needs administrator rights, so setup
     // trusts the marker rather than re-reading them without a prompt.
     Task<bool> NetworkBlockInPlace(InstallLayout install) =>
-        Task.FromResult(File.Exists(Path.Combine(install.Root, "network-block", "wfp-block.json")));
+        Task.FromResult(File.Exists(Path.Combine(install.Root, "network-block", "wfp-block.json"))
+            && (LinuxNetworkBlock.Requested || !LinuxNetworkBlock.MarkerIsEmulated(install.Root)));
 
     // The mods HellForge ships (BundledMods: the in-game editor, Hell Forge) are in mods/ from the start, not only once a
     // session has run. In the background: the editor's catalogue takes a moment to write.

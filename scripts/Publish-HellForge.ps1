@@ -125,6 +125,10 @@ foreach($name in @('hell-forge','vanilla-plus')){
 }
 Copy-Item -LiteralPath (Join-Path $project 'data/profile-templates.json') -Destination $staging
 Copy-Item -LiteralPath (Join-Path $project 'data/progression-data.json') -Destination $staging
+# app/linux: the Linux (Proton) scripts and their guide (docs/linux.md), for an installation copied to Linux.
+$linuxTarget=New-Item -ItemType Directory (Join-Path $staging 'linux')
+Copy-Item -Path (Join-Path $project 'linux/*.sh') -Destination $linuxTarget
+Copy-Item -LiteralPath (Join-Path $project 'docs/linux.md') -Destination $linuxTarget
 # "HellForge.exe" at the top of the installation starts app\launcher\HellForge.Launcher.exe (native/launcher-stub).
 $zig=(& (Join-Path $PSScriptRoot 'Get-BuildTools.ps1')).Zig
 $stub=Join-Path $staging 'HellForge.exe'

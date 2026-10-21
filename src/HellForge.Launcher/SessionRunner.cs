@@ -24,6 +24,7 @@ sealed class SessionRunner
         if (!IsSupported) throw new PlatformNotSupportedException(UnsupportedMessage);
         if (IsRunning) return;
         if (paths.InstallRoot == null) throw new InvalidOperationException("Sessions run in installations made with HellForge-Setup.");
+        LinuxNetworkBlock.GuardSession(paths.InstallRoot);
         var start = new ProcessStartInfo(paths.Session)
         {
             WorkingDirectory = paths.Root,
