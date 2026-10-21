@@ -322,7 +322,9 @@ static void Render(IDXGISwapChain3* swapChain)
     }
     if (g_ready && g_saveFailed) { InterlockedExchange(&g_saveFailed, 0); editorapp::SaveStatus(false, g_saveStatus); }
     if (g_ready) editorapp::Tick();
-    if (g_ready && g_open)
+    /* the window, or while it is closed HellForge's message over the game (no input, the game's own cursor kept) */
+    bool overlay = g_ready && !g_open && editorapp::NoticeShown();
+    if (g_ready && (g_open || overlay))
     {
         DXGI_SWAP_CHAIN_DESC desc;
         if (FAILED(swapChain->GetDesc(&desc))) { LeaveCriticalSection(&g_lock); return; }
@@ -345,11 +347,16 @@ static void Render(IDXGISwapChain3* swapChain)
                 ImGui_ImplDX12_InvalidateDeviceObjects();
             }
         }
+        ImGuiIO& io = ImGui::GetIO();
+        io.MouseDrawCursor = !overlay;
+        if (overlay) io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+        else io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
         if (g_device11 != NULL) ImGui_ImplDX11_NewFrame();
         else ImGui_ImplDX12_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-        editorapp::Frame(ImGui::GetBackgroundDrawList(), width, height, ImGui::GetIO().DeltaTime);
+        if (overlay) editorapp::Overlay(ImGui::GetBackgroundDrawList(), width, height);
+        else editorapp::Frame(ImGui::GetBackgroundDrawList(), width, height, io.DeltaTime);
         ImGui::Render();
 
         UINT index = swapChain->GetCurrentBackBufferIndex() % MAX_BUFFERS;

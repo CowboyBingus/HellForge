@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 11
+#define HF_MOD_SDK_VERSION 12
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -458,6 +458,19 @@ typedef struct HfSession
     uint32_t version;
     char host[64];    /* the host's name (UTF-8), when joined */
 } HfSession;
+
+/* SDK 12: HellForge's latest message for the player (notice), as the session's backend posts it: why a friend's lobby
+ * refused this game's join, or why a friend could not join this one. A title and up to 8 lines (UTF-8, '\n' between
+ * them); version changes with every new one, 0 before the first. The in-game editor shows each over the game. */
+#define HF_NOTICE_INFO 0u
+#define HF_NOTICE_ERROR 1u
+typedef struct HfNotice
+{
+    uint32_t version;
+    uint32_t kind;    /* HF_NOTICE_... */
+    char title[128];
+    char text[1792];
+} HfNotice;
 
 /* ---- game events (SDK 7, subscribe) ------------------------------------------------------------------------------
  * What happens in the game, delivered on the game thread (engine calls are safe in a listener) to every listener of the
@@ -1066,6 +1079,10 @@ typedef struct HfApi
     uint32_t (*modify_shots)(HfMod* mod, const HfShotRule* rule);
     uint32_t (*homing)(HfMod* mod, const HfHoming* rule);
     int (*stop_shots)(HfMod* mod, uint32_t id);
+
+    /* ---- SDK 12 --------------------------------------------------------------------------------------------------- */
+    /* HellForge's latest message for the player (HfNotice), as the session's backend posts it. Check hf->size. */
+    void (*notice)(HfMod* mod, HfNotice* out);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

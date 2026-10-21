@@ -117,6 +117,10 @@ public sealed class LiveEditServer : IAsyncDisposable
     // stats) or "joiner" (this machine plays with the host's; the editor is read-only), and the host's name.
     public Task<LiveResult> SessionAsync(string role, string host) =>
         SendAsync("session", role + "\t" + string.Concat(host.Where(c => !char.IsControl(c)).Take(60)));
+    // A message for the player, which the in-game editor shows over the game (HfApi notice): why a friend's lobby refused
+    // this game's join, say. kind "error" or "info"; a title and up to 8 lines. A loader from before notices refuses it.
+    public Task<LiveResult> NoticeAsync(string kind, string title, IEnumerable<string> lines) =>
+        SendAsync("notice", string.Join('\t', new[] { kind, title }.Concat(lines.Take(8)).Select(t => string.Concat(t.Where(c => !char.IsControl(c)).Take(200)))));
     // The field's value in the running game now.
     public Task<LiveResult> GetAsync(StatsField field) => SendAsync("get", Identity(field));
 

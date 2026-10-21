@@ -22,10 +22,15 @@ void Init(const Host& host);
 void AddModContent();
 /* Pixels per 1080p unit for a screen: the editor's scale (the fonts are baked for it). */
 float PixelScale(float width, float height);
-/* Every frame, open or not (the window's lock held): the co-op role, and the mod content values it calls for. */
+/* Every frame, open or not (the window's lock held): HellForge's messages, the co-op role, and the mod content values
+ * it calls for. */
 void Tick();
 /* One frame: input, then drawing into the list. */
 void Frame(ImDrawList* list, float width, float height, float dt);
+/* HellForge's message for the player (SDK 12 notice) is showing: the window draws it over the game while closed too. */
+bool NoticeShown();
+/* A frame of the closed window: only the message, no input. */
+void Overlay(ImDrawList* list, float width, float height);
 void Opened();
 void Closed();
 /* The status of the last Local Stats save, shown in the window. */

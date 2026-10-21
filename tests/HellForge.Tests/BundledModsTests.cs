@@ -93,6 +93,7 @@ static class BundledModsTests
                 "A modder's copy of the same version stays, and the bundled one is not added beside it: " + string.Join(" | ", lines));
 
             // Friends compare a bundled gameplay mod by what HellForge ships, not what each player saved beside it.
+            var fingerprints = new Dictionary<string, List<ModFingerprint>>();
             string Digest(string name, string settings, string dll)
             {
                 var player = new InstallLayout(Path.Combine(root, name));
@@ -105,11 +106,28 @@ static class BundledModsTests
                 File.WriteAllText(Path.Combine(player.Mods, BundledMods.EditorFolder, "editor-settings.json"), settings);
                 var (mods, problems) = ModCatalog.Load(player.Mods);
                 check(problems.Count == 0 && mods.Single().Gameplay, "The bundled editor loads as a gameplay mod: " + string.Join(" | ", problems));
-                return ModCatalog.Digest(mods);
+                var (digest, compared) = ModCatalog.Modlist(mods);
+                check(digest == ModCatalog.Digest(mods), "The modlist's digest is the modlist code.");
+                fingerprints[name] = compared;
+                return digest;
             }
             var first = Digest("digest-a", "{\"a\": 1}", "build 1");
             check(first != "none" && first == Digest("digest-b", "{\"b\": 2}", "build 1"), "Same editor, different saved settings: friends match.");
             check(first != Digest("digest-c", "{\"a\": 1}", "build 2"), "A different editor build does not match.");
+
+            // A refused join says which mods differ (ModlistDiff), from each player's side, through its wire form.
+            var host = ModlistDiff.Decode(ModlistDiff.Encode(fingerprints["digest-a"]));
+            check(host.Count == 1 && host[0] == fingerprints["digest-a"][0] && host[0].Name == "Editor", "A modlist survives its wire form.");
+            check(ModlistDiff.Describe(fingerprints["digest-b"], host, asHost: false).Count == 0, "Same editor: no difference.");
+            var joiner = fingerprints["digest-c"];
+            check(ModlistDiff.Describe(joiner, host, asHost: false).SequenceEqual(["Editor 1.0.0: your files differ from the host's"]) &&
+                ModlistDiff.Describe(host, joiner, asHost: true).SequenceEqual(["Editor 1.0.0: their files differ from yours"]), "Other files of the same version.");
+            List<ModFingerprint> extra = [new("z.mod", "Zeta\tTabbed", "2.0", "ffff"), new("a.mod", "Alpha", "1.0", "aaaa")];
+            var wire = ModlistDiff.Decode(ModlistDiff.Encode(extra) + "\nmalformed line");
+            check(wire.Count == 2 && wire[0].Name == "ZetaTabbed", "Names lose their tabs, malformed lines are skipped.");
+            check(ModlistDiff.Describe(host, wire, asHost: false).SequenceEqual(["Missing: Alpha 1.0 (the host has it)", "Not on the host: Editor 1.0.0", "Missing: ZetaTabbed 2.0 (the host has it)"]) &&
+                ModlistDiff.Describe(host, [new("hellforge.editor", "Editor", "1.1.0", "x")], asHost: true).SequenceEqual(["Editor: they have 1.1.0, you have 1.0.0"]),
+                "Mods only one side has, and other versions, by name.");
 
             var empty = new InstallLayout(Path.Combine(root, "bundled-none"));
             empty.Create(SupportedBuild.Current.BuildId);

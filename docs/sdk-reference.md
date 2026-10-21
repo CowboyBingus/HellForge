@@ -111,6 +111,10 @@ end; a mod checks `hf->version`.
 - **`homing`** `uint32_t (HfMod* mod, const HfHoming* rule)`
 - **`stop_shots`** `int (HfMod* mod, uint32_t id)`
 
+### SDK 12
+
+- **`notice`** `void (HfMod* mod, HfNotice* out)`: HellForge's latest message for the player (HfNotice), as the session's backend posts it. Check hf->size.
+
 ## Components
 
 Entity component records: `HF_FIELD(Component, field)` names a field, `hf_record(mod, entity, HfComponent)` gives a typed

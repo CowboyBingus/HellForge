@@ -15,7 +15,7 @@ Copy the folder `app/sdk/template-mod` of the installation into its `mods` folde
 
 ```
 mods/liberator-tweaks/
-  hellforge-mod.json   id, name, version, "code": {"dll": "my_mod.dll", "sdk": 11}
+  hellforge-mod.json   id, name, version, "code": {"dll": "my_mod.dll", "sdk": 12}
   src/my_mod.c         the mod (rename it and "dll" if you like: any name works)
   CMakeLists.txt       for IDEs (Rider, CLion, VS Code)
   CMakePresets.json

@@ -6,7 +6,9 @@ into `mods/.unpacked/<name>-<content hash>` when mods are loaded (the launcher's
 loaded from there; deleting or replacing a zip removes its unpacked copy at the next load, so a mod is managed by its
 zip alone. Zips with absolute or `..` paths (files that would land outside the mod's folder) are refused; there is no size or file
 count limit. A zip and a folder
-with the same files give the same modlist code. Each session stages
+with the same files give the same modlist code. A zipped mod counts by what its zip holds: files it writes into its
+unpacked folder as it runs (key bindings, a cache) are each player's own and never split friends. A mod kept as a
+loose folder counts by every file in it, so share mods as zips. Each session stages
 the data mods into the copied game, loads the code mods into it and applies the declarative native edits while the game
 runs; nothing is changed in the normal game. The session's `result.json` lists what loaded (`mods`) and network edit
 status (`nativeMods`). `native-mods.log` records network edits; `mod-<id>.log` records stats and legacy component edits.
@@ -28,6 +30,13 @@ gameplay mods, not their order, and not the cosmetic group. Friends who order th
 together, but that is theirs to sort out: a conflict goes to a different mod on each machine. What mods add
 (stratagems, weapons, entities, projectiles, damage types, abilities, behaviours) is numbered alike whatever the order:
 code mods are set up in the order of their ids, and added entities are numbered by their resource ids.
+
+**A refused join.** When a friend's modlist code is not the host's, the host's backend refuses the join and both games
+say why, over the game (the in-game editor draws it, open or not, for 20 seconds; the SDK 12 `notice` call): the
+joiner sees "Couldn't join <host>" with each mod that differs (one the host has and they do not, one only they have,
+another version, or the same version with other files), the host sees "<friend> couldn't join" with the same list from
+their side. Another HellForge version, a full or a locked lobby are said the same way. Both sessions'
+`multiplayer.log` keep the full list. The game's own "couldn't join" message shows as well.
 
 Switches, the order and packs' options are saved in `mods/hellforge-mods.json`
 (`{"format":1,"disabled":[ids],"order":[ids, top first],"packs":{id:{"off":[options],"sub":{option:variant}}}}`;

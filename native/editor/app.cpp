@@ -252,6 +252,85 @@ void ReadSession()
     }
 }
 bool Locked() { return g_session.role == HF_SESSION_JOINER; }
+
+/* HellForge's messages for the player (SDK 12, HfApi notice; docs/mods.md "A refused join"): why a friend's lobby
+ * refused this game's join, or why a friend could not join this one. Each new one shows over the game for a while, the
+ * editor open or not (Overlay draws it while the window is closed). */
+struct { uint32_t version = 0; bool error = false; std::string title; std::vector<std::string> lines; ULONGLONG at = 0; } g_notice;
+const ULONGLONG NOTICE_ERROR_MS = 20000, NOTICE_INFO_MS = 12000, NOTICE_FADE_MS = 800;
+bool HasNotice() { return g_host.api->size >= offsetof(HfApi, notice) + sizeof(void*) && g_host.api->notice != nullptr; }
+void ReadNotice()
+{
+    if (!HasNotice()) return;
+    HfNotice now{};
+    g_host.api->notice(g_host.mod, &now);
+    if (now.version == g_notice.version) return;
+    now.title[sizeof now.title - 1] = 0;
+    now.text[sizeof now.text - 1] = 0;
+    g_notice.version = now.version;
+    g_notice.error = now.kind == HF_NOTICE_ERROR;
+    g_notice.title = now.title;
+    for (char& c : g_notice.title) if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A'); /* a heading, as the editor's (UTF-8 kept) */
+    g_notice.lines.clear();
+    for (const char *p = now.text, *end; *p; p = *end ? end + 1 : end)
+    {
+        end = strchr(p, '\n');
+        if (end == nullptr) end = p + strlen(p);
+        if (end > p) g_notice.lines.emplace_back(p, end);
+    }
+    g_notice.at = GetTickCount64();
+    if (g_notice.error) Sound(sounds::ERROR_);
+}
+ULONGLONG NoticeMs() { return g_notice.error ? NOTICE_ERROR_MS : NOTICE_INFO_MS; }
+ImU32 Faded(ImU32 colour, float alpha) { return (colour & 0x00FFFFFF) | ((ImU32)((float)(colour >> 24) * alpha + 0.5f) << 24); }
+/* A line broken into lines at most max units wide, at word ends (a word wider than that is cut with "..."). */
+std::vector<std::string> Wrapped(const std::string& text, float max, float size)
+{
+    std::vector<std::string> out;
+    std::string line;
+    size_t i = 0;
+    while (i < text.size())
+    {
+        size_t space = text.find(' ', i);
+        std::string word = text.substr(i, space == std::string::npos ? std::string::npos : space - i);
+        i = space == std::string::npos ? text.size() : space + 1;
+        if (word.empty()) continue;
+        std::string longer = line.empty() ? word : line + " " + word;
+        if (!line.empty() && g_cv.Measure(longer, size) > max) { out.push_back(line); line = word; }
+        else line = longer;
+    }
+    if (!line.empty()) out.push_back(line);
+    return out;
+}
+/* The message at the top of the screen, over the game and the editor alike. */
+void DrawNotice()
+{
+    if (g_notice.version == 0) return;
+    ULONGLONG age = GetTickCount64() - g_notice.at, total = NoticeMs();
+    if (age >= total) return;
+    float alpha = age + NOTICE_FADE_MS > total ? (float)(total - age) / (float)NOTICE_FADE_MS : 1.0f;
+    ImU32 accent = g_notice.error ? ERROR_ : GOLD;
+    float w = std::min(860.0f, g_cv.width - 40), x = floorf(g_cv.width / 2 - g_cv.ox - w / 2), y = 36 - g_cv.oy;
+    std::vector<std::string> lines;
+    size_t lead = 0; /* the first line's rows, brighter: what happened; the rest say why */
+    for (const std::string& line : g_notice.lines)
+    {
+        for (std::string& part : Wrapped(line, w - 56, SZ_LABEL)) lines.push_back(std::move(part));
+        if (lead == 0) lead = lines.size();
+    }
+    if (lines.size() > 14) { lines.resize(14); lines.back() = "..."; }
+    float h = 62 + 24.0f * (float)lines.size() + (lines.empty() ? 0 : 12);
+    g_cv.Rect(x - 4, y - 4, w + 8, h + 8, Faded(SHADOW, alpha), 13);
+    g_cv.Rect(x, y, w, h, Faded(PANEL_ALT, alpha), 13);
+    g_cv.Frame(x, y, w, h, Faded(LINE_STRONG, alpha), 14);
+    g_cv.Rect(x, y, w, 3, Faded(accent, alpha), 14);
+    float bw = g_cv.Text("HELLFORGE", x + w - 24, y + 30, T(SZ_TINY, Faded(FAINT, alpha), ui::TITLE, ui::RIGHT, 0, 15));
+    g_cv.Text(g_notice.title, x + 24, y + 30, T(18, Faded(accent, alpha), ui::TITLE, ui::LEFT, w - 72 - bw, 15));
+    if (lines.empty()) return;
+    g_cv.Rect(x + 12, y + 52, w - 24, 1, Faded(LINE, alpha), 14);
+    for (size_t i = 0; i < lines.size(); i++)
+        g_cv.Text(lines[i], x + 24, y + 74 + 24.0f * (float)i, T(SZ_LABEL, Faded(i < lead ? TEXT : DIM, alpha), ui::BODY, ui::LEFT, w - 48, 15));
+}
 /* A change asked for while joined: refused, and said why. */
 bool RefuseLocked()
 {
@@ -3730,9 +3809,10 @@ void AddModContent()
 
 void Tick()
 {
-    if (!g_catalogOk || g_modRole == -1) return;
-    static ULONGLONG next;
+    static ULONGLONG next, nextNotice;
     ULONGLONG now = GetTickCount64();
+    if (now >= nextNotice) { nextNotice = now + 250; ReadNotice(); }
+    if (!g_catalogOk || g_modRole == -1) return;
     if (now >= next) { next = now + 250; ReadSession(); }
     SyncModValues();
     HolderTick(500); /* the marks are ready when the editor opens */
@@ -3760,7 +3840,19 @@ void Frame(ImDrawList* list, float width, float height, float dt)
     if (g_catalogOk) HandleKeys();
     else if (ImGui::IsKeyPressed(ImGuiKey_Escape)) g_host.close();
     Draw();
+    DrawNotice();
     if (g_cv.Clicked()) Sound(sounds::CLICK);
+    g_cv.End();
+}
+
+bool NoticeShown() { return g_notice.version != 0 && GetTickCount64() - g_notice.at < NoticeMs(); }
+
+void Overlay(ImDrawList* list, float width, float height)
+{
+    float ox, oy, s;
+    Layout(width, height, &ox, &oy, &s);
+    g_cv.Begin(list, ox, oy, s, width, height);
+    DrawNotice();
     g_cv.End();
 }
 

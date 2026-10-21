@@ -104,6 +104,22 @@ static class ModTests
             File.WriteAllText(Path.Combine(folder, patch), "patch bytes");
             check(ModCatalog.Digest(ModCatalog.Load(Path.GetDirectoryName(folder)!).Mods) == ModCatalog.Digest(loaded.Where(m => m.Id == "test.zipped")),
                 "A zip and a folder with the same files have different modlist codes.");
+            // What a zipped mod writes into its unpacked folder as it runs (key bindings, a cache, even a shipped file
+            // rewritten) is each player's own: friends still match. Its zip changing is not.
+            var zippedCode = ModCatalog.Digest(loaded);
+            foreach (var mod in loaded)
+            {
+                File.WriteAllText(Path.Combine(mod.Folder, "mod-bindings.ini"), "jump=space");
+                File.WriteAllBytes(Path.Combine(Directory.CreateDirectory(Path.Combine(mod.Folder, "cache")).FullName, "preview-profile.bin"), [1, 2, 3]);
+                File.WriteAllText(Path.Combine(mod.Folder, patch), "rewritten by the mod");
+            }
+            var (played, _) = ModCatalog.Load(mods);
+            check(ModCatalog.Digest(played) == zippedCode, "Files a zipped mod wrote into its folder changed the modlist code.");
+            check(ModCatalog.Digest(ModCatalog.Load(Path.GetDirectoryName(folder)!).Mods) == ModCatalog.Digest(played.Where(m => m.Id == "test.zipped")),
+                "A zip and a folder with the same files differ once the zipped mod wrote files.");
+            File.Delete(Path.Combine(mods, "nested.zip"));
+            Zip("nested.zip", ("Nested Mod/" + ModCatalog.ManifestName, manifest.Replace("test.zipped", "test.nested")), ("Nested Mod/" + patch, "another patch"));
+            check(ModCatalog.Digest(ModCatalog.Load(mods).Mods) != zippedCode, "A zip with other files kept the modlist code.");
             File.Delete(Path.Combine(mods, "root.zip"));
             var (after, _) = ModCatalog.Load(mods);
             check(after.Select(m => m.Id).SequenceEqual(["test.nested"]) &&

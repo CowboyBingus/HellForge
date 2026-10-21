@@ -25,6 +25,8 @@ static int g_modPage, g_modApplied; /* a mod's stratagem: its page made, its sav
 static char g_modDir[MAX_PATH] = "";
 static HfSession g_sessionNow; /* the co-op role the stand-in loader reports */
 static void Session(HfMod*, HfSession* out) { *out = g_sessionNow; }
+static HfNotice g_noticeNow; /* HellForge's message for the player, as the stand-in loader reports it */
+static void Notice(HfMod*, HfNotice* out) { *out = g_noticeNow; }
 static double g_lastLive;
 static char g_folder[MAX_PATH] = "";
 static char g_logsFolder[MAX_PATH] = "";
@@ -128,8 +130,9 @@ static int Content(HfMod*, uint32_t index, HfContent* out)
 
 static void Key(HWND window, WPARAM key) { SendMessageW(window, WM_KEYDOWN, key, 0); SendMessageW(window, WM_KEYUP, key, 0xC0000000); }
 static void Type(HWND window, const char* text) { for (; *text; text++) SendMessageW(window, WM_CHAR, (WPARAM)*text, 0); }
-/* The screen as it is into a 24-bit BMP. */
-static void Screenshot(const char* path, UINT width, UINT height)
+/* The screen as it is into a 24-bit BMP (path NULL: none); returns how many pixels in `area` (if given) are not the
+ * clear colour. */
+static int Screenshot(const char* path, UINT width, UINT height, const RECT* area = NULL)
 {
     HDC screen = GetDC(NULL), memory = CreateCompatibleDC(screen);
     HBITMAP bitmap = CreateCompatibleBitmap(screen, (int)width, (int)height);
@@ -140,9 +143,17 @@ static void Screenshot(const char* path, UINT width, UINT height)
     BYTE* pixels = (BYTE*)malloc(size);
     GetDIBits(memory, bitmap, 0, height, pixels, (BITMAPINFO*)&header, DIB_RGB_COLORS);
     BITMAPFILEHEADER file = {0x4D42, (DWORD)(sizeof file + sizeof header + size), 0, 0, (DWORD)(sizeof file + sizeof header)};
-    FILE* out = fopen(path, "wb");
+    FILE* out = path != NULL ? fopen(path, "wb") : NULL;
     if (out) { fwrite(&file, sizeof file, 1, out); fwrite(&header, sizeof header, 1, out); fwrite(pixels, size, 1, out); fclose(out); }
+    int drawn = 0;
+    if (area != NULL)
+        for (LONG y = area->top; y < area->bottom && y < (LONG)height; y++) for (LONG x = area->left; x < area->right && x < (LONG)width; x++)
+        {
+            BYTE* p = pixels + y * row + x * 3;
+            if (!(p[1] > 50 && p[1] < 80 && p[0] < 30 && p[2] < 30)) drawn++;
+        }
     free(pixels); DeleteObject(bitmap); DeleteDC(memory); ReleaseDC(NULL, screen);
+    return drawn;
 }
 
 static bool CopyInto(const char* from, const char* folder, const char* name)
@@ -170,6 +181,7 @@ int main(int argc, char** argv)
     g_api.last_log = LastLog; g_api.logs_folder = LogsFolder; g_api.get_stat = GetStat; g_api.session = Session;
     g_api.content = Content;
     g_api.mods = Mods;
+    g_api.notice = Notice;
     g_modsView = getenv("HELLFORGE_EDITOR_TEST_VIEW") != NULL && !strcmp(getenv("HELLFORGE_EDITOR_TEST_VIEW"), "mods");
     /* the editor's folder in a mods folder of the test's own: its catalogue and icons, and Local Stats next to it */
     char mods[MAX_PATH], stats[MAX_PATH];
@@ -282,6 +294,25 @@ int main(int argc, char** argv)
         MSG message;
         while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
         if (frame == 30 || frame == 260 || frame == 300) SendMessageW(window, WM_KEYDOWN, VK_F8, 0);     /* open, close, open */
+        /* closed: a friend's lobby refuses this game's join, and the editor shows why over the "game" (its top centre) */
+        if (frame == 264)
+        {
+            g_noticeNow.version = 1;
+            g_noticeNow.kind = HF_NOTICE_ERROR;
+            snprintf(g_noticeNow.title, sizeof g_noticeNow.title, "COULDN'T JOIN FRIEND HOST");
+            snprintf(g_noticeNow.text, sizeof g_noticeNow.text, "Your gameplay mods don't match the host's.\nMissing: Stratagem Compendium 1.2.0 "
+                "(the host has it)\nSmarter Guard Dogs & Sentries: you have 5.2.0, the host has 5.1.0\nTurn on the same gameplay mods on the "
+                "launcher's MODS page, then start a new session.");
+        }
+        if (frame == 290)
+        {
+            char shot[MAX_PATH] = "";
+            if (argc > 2) { snprintf(shot, sizeof shot, "%s", argv[2]); if (char* dot = strrchr(shot, '.')) snprintf(dot, (size_t)(shot + sizeof shot - dot), "-notice.bmp"); }
+            RECT top = {(LONG)width / 2 - 200, 30, (LONG)width / 2 + 200, 110};
+            int drawn = Screenshot(argc > 2 ? shot : NULL, width, height, &top);
+            printf("  notice: %d of %d pixels at the top centre are not the clear colour (the editor closed)\n", drawn, 400 * 80);
+            if (drawn < 2000) { puts("FAIL the refused join's message is not on screen while the editor is closed"); failures++; }
+        }
         /* to the objects, the next one back, to its fields, three rows down (past the category header, the projectile swap
          * and the part header), 1200, F9 */
         if (frame == 320 || frame == 330) Key(window, VK_TAB);

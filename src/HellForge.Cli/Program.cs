@@ -161,13 +161,15 @@ try
             var code = active.Where(m => m.NeedsLoader).ToList();
             if (options.TryGetValue("--plan", out var planPath))
                 File.WriteAllText(planPath, ModLoaderPlan.Text(code, Path.GetFullPath(Required("--logs")), EntityProfile.Current, SupportedBuild.Current.BuildId));
+            // modlist: the digest's mods one by one (ModlistDiff's wire form), so a refused co-op join can say which differ
+            var (digest, compared) = ModCatalog.Modlist(active);
             result = new
             {
                 mods = active.Select(m => new { m.Id, m.Name, m.Version, m.Gameplay, native = m.HasNative, code = m.CodeDll, source = m.HasSource, dataFiles = m.DataFiles.Count, dataSpec = m.HasDataSpec }),
                 codeMods = code.Count,
                 loaderRequired = true, // read-only stats snapshots are also collected without mods
                 disabled = mods.Where(m => !m.Enabled).Select(m => m.Id),
-                problems = modProblems, staged, native = active.Any(m => m.HasNative), digest = ModCatalog.Digest(active)
+                problems = modProblems, staged, native = active.Any(m => m.HasNative), digest, modlist = ModlistDiff.Encode(compared)
             };
             break;
         }
