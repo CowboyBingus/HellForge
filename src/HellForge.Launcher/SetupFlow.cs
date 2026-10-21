@@ -419,7 +419,7 @@ public partial class MainWindow
     // trusts the marker rather than re-reading them without a prompt.
     Task<bool> NetworkBlockInPlace(InstallLayout install) =>
         Task.FromResult(File.Exists(Path.Combine(install.Root, "network-block", "wfp-block.json"))
-            && (LinuxNetworkBlock.Requested || !LinuxNetworkBlock.MarkerIsEmulated(install.Root)));
+            && (LinuxNetworkBlock.Requested ? LinuxNetworkBlock.MarkerIsEmulated(install.Root) : !LinuxNetworkBlock.MarkerIsEmulated(install.Root)));
 
     // The mods HellForge ships (BundledMods: the in-game editor, Hell Forge) are in mods/ from the start, not only once a
     // session has run. In the background: the editor's catalogue takes a moment to write.

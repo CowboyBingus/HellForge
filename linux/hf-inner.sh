@@ -25,5 +25,5 @@ sleep 1
 # "proton run" returns as soon as the launcher has started, but the launcher keeps running.
 # Keep the forwarders alive until HellForge's own processes (launcher, session, backend, game) are gone.
 pat='HellForge\.(Launcher|Session)|LocalBackend|helldivers2'
-for _ in $(seq 1 30); do pgrep -f "$pat" >/dev/null && break; sleep 1; done
-while pgrep -f "$pat" >/dev/null; do sleep 2; done
+for _ in $(seq 1 30); do pgrep -u "$(id -u)" -f "$pat" >/dev/null && break; sleep 1; done
+while pgrep -u "$(id -u)" -f "$pat" >/dev/null; do sleep 2; done

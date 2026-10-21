@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using HellForge.Core;
 
@@ -15,6 +16,16 @@ static class LinuxNetworkBlock
 {
     public const string EnvVar = "HELLFORGE_LINUX_NETNS";
     public static bool Requested => Environment.GetEnvironmentVariable(EnvVar) == "1";
+
+    // Running under Wine (Proton): its ntdll exports wine_get_version, Windows' does not. An installation copied from
+    // Windows keeps the Windows block's marker, so this, not the marker, says the block must be the namespace.
+    public static bool UnderWine { get; } = DetectWine();
+
+    static bool DetectWine()
+    {
+        try { return NativeLibrary.TryLoad("ntdll.dll", out var ntdll) && NativeLibrary.TryGetExport(ntdll, "wine_get_version", out _); }
+        catch (Exception error) when (error is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException) { return false; }
+    }
 
     public static string MarkerPath(string installRoot) => Path.Combine(installRoot, "network-block", "wfp-block.json");
 
@@ -72,12 +83,16 @@ static class LinuxNetworkBlock
         }));
     }
 
-    // Before every session when the block is the emulated one: the namespace must be there, right now.
+    // Before every session on Linux (in the namespace, under Wine, or an installation whose block is the namespace): the
+    // namespace must be there, right now. Windows: nothing.
     public static void GuardSession(string installRoot)
     {
-        if (!MarkerIsEmulated(installRoot)) return;
         if (!Requested)
-            throw new InvalidOperationException("This installation's network block is a Linux network namespace. Start HellForge with linux/hellforge-linux.sh (docs/linux.md) so the game cannot reach the internet.");
+        {
+            if (UnderWine || MarkerIsEmulated(installRoot))
+                throw new InvalidOperationException("On Linux, HellForge's game runs only in its network namespace. Start HellForge with linux/hellforge-linux.sh (docs/linux.md) so the game cannot reach the internet.");
+            return;
+        }
         var (ok, detail) = Task.Run(Probe).GetAwaiter().GetResult();
         if (!ok) throw new InvalidOperationException("Not starting the session: " + detail);
     }

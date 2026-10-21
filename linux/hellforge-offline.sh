@@ -31,10 +31,12 @@ fi
 # wineserver's: a wineserver of this prefix still running outside the namespace would give the programs started inside
 # the internet (a VM test of 2026-10-21 reached 1.1.1.1 that way). One ends a few seconds after its last program: wait
 # for that, else refuse. (Wine 10 keeps the server's socket in $XDG_RUNTIME_DIR/wine, older Wine and Proton in /tmp.)
-prefix="${WINEPREFIX:-${STEAM_COMPAT_DATA_PATH:+$STEAM_COMPAT_DATA_PATH/pfx}}"
+# Proton always uses $STEAM_COMPAT_DATA_PATH/pfx, whatever WINEPREFIX says.
+if [ -n "${PROTON:-}" ] && [ -n "${STEAM_COMPAT_DATA_PATH:-}" ]; then prefix="$STEAM_COMPAT_DATA_PATH/pfx"
+else prefix="${WINEPREFIX:-${STEAM_COMPAT_DATA_PATH:+$STEAM_COMPAT_DATA_PATH/pfx}}"; fi
 prefix="${prefix:-$HOME/.wine}"
 if [ -d "$prefix" ]; then
-  server="server-$(stat -c %D "$prefix")-$(printf %x "$(stat -c %i "$prefix")")"
+  server="server-$(stat -L -c %D "$prefix")-$(printf %x "$(stat -L -c %i "$prefix")")"
   wineserver_running() {
     for s in "${XDG_RUNTIME_DIR:-/run/user/$uid}/wine/$server/socket" "/tmp/.wine-$uid/$server/socket"; do
       [ -S "$s" ] && socat -u OPEN:/dev/null UNIX-CONNECT:"$s" 2>/dev/null && return 0

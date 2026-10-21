@@ -7,7 +7,7 @@
 # ports and runs HellForge.exe through Proton. The bridge it started stops when HellForge closes.
 #
 # Settings (environment variables; the defaults suit the Steam client in ~/.local/share/Steam):
-#   PROTON                            the proton script to run HellForge with (default: the newest the Steam client has)
+#   PROTON                            the proton script to run HellForge with (default: one the Steam client has; set it)
 #   INSTALL                           the HellForge installation (default: the one this script is in, app/linux)
 #   STEAM_COMPAT_CLIENT_INSTALL_PATH  the Steam client (default ~/.local/share/Steam)
 #   STEAM_COMPAT_DATA_PATH            the Wine prefix (default: HELLDIVERS 2's, steamapps/compatdata/553850; a prefix of
@@ -36,12 +36,14 @@ bridge=""
 cleanup() { if [ -n "$bridge" ]; then kill "$bridge" 2>/dev/null || true; wait "$bridge" 2>/dev/null || true; fi; }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
-if ! pgrep -u "$(id -u)" -f "hf-bridge-host.sh" >/dev/null; then
+# a bridge answers on its sockets (ones left by a bridge that was killed do not)
+bridged() { for s in "$dir"/hf-steam-*.sock; do [ -S "$s" ] && socat -u OPEN:/dev/null UNIX-CONNECT:"$s" 2>/dev/null && return 0; done; return 1; }
+if ! bridged; then
   "$here/hf-bridge-host.sh" &
   bridge=$!
-  for _ in $(seq 1 20); do compgen -G "$dir/hf-steam-*.sock" >/dev/null && break; kill -0 "$bridge" 2>/dev/null || break; sleep 0.5; done
+  for _ in $(seq 1 20); do bridged && break; kill -0 "$bridge" 2>/dev/null || break; sleep 0.5; done
 fi
-compgen -G "$dir/hf-steam-*.sock" >/dev/null || { echo "Steam's local ports could not be bridged: is Steam running and signed in?" >&2; exit 1; }
+bridged || { echo "Steam's local ports could not be bridged: is Steam running and signed in?" >&2; exit 1; }
 
 # The live war, now, while there is a network (Wine sees / as Z:). A failure is not fatal: the session then serves the
 # last war fetched, or HellForge's built-in one.
