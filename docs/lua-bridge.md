@@ -12,7 +12,9 @@ so a mod made for HD2Runtime runs unchanged.
 ## For players
 
 1. Add Bingus Shared Loader and HD2Runtime (a release with the HellForge bridge) on the Mods page, like
-   any other mod. HD2Runtime needs Bingus Shared Loader. HellForge does not ship either.
+   any other mod. HD2Runtime needs Bingus Shared Loader. HellForge does not ship either. HD2Runtime's file is
+   `HD2Runtime-<version>-runtime.zip`; `HD2Runtime-ModTemplate-<version>.zip` is a starter for writing HD2Runtime mods,
+   not a mod, and the Mods page says so if it is added.
 2. Add the Lua mods you want.
 
 Lua mods are listed with a **LUA** tag, in the cosmetic group. They are staged like any game patch. The F8 editor shows

@@ -130,6 +130,28 @@ static class ModTests
                 "A removed zip left its mod behind.");
         });
 
+        test("HD2Runtime's mod template and an HD2Runtime mod's sources are refused with a message that says what they are", () =>
+        {
+            var mods = Path.Combine(root, "mods-not-mods");
+            Directory.CreateDirectory(mods);
+            void Zip(string name, params (string Entry, string Text)[] files)
+            {
+                using var zip = System.IO.Compression.ZipFile.Open(Path.Combine(mods, name), System.IO.Compression.ZipArchiveMode.Create);
+                foreach (var (entry, text) in files)
+                    using (var writer = new StreamWriter(zip.CreateEntry(entry).Open())) writer.Write(text);
+            }
+            Zip("HD2Runtime-ModTemplate-0.50.0.zip", ("hd2runtime.json", """{"format":1,"name":"My HD2 Mod","resource":"mods/your_name/my_hd2_mod","guid":"auto"}"""),
+                ("build.cmd", "@echo off"), ("src/addon.lua", "return {}"));
+            Zip("Cool Mod Source.zip", ("cool/hd2runtime.json", """{"format":1,"name":"Cool Mod","guid":"0b6c0e4e-0000-4000-8000-000000000001"}"""),
+                ("cool/src/addon.lua", "return {}"));
+            var (loaded, problems) = ModCatalog.Load(mods);
+            check(loaded.Count == 0 && problems.Count == 2, "Problems: " + string.Join(" | ", problems));
+            check(problems.Any(p => p.StartsWith("HD2Runtime-ModTemplate-0.50.0.zip", StringComparison.Ordinal) && p.Contains("mod template") && p.Contains("runtime zip")),
+                "The template is not named as such: " + string.Join(" | ", problems));
+            check(problems.Any(p => p.StartsWith("Cool Mod Source.zip", StringComparison.Ordinal) && p.Contains("source of an HD2Runtime mod (Cool Mod)")),
+                "Unbuilt sources are not named as such: " + string.Join(" | ", problems));
+        });
+
         test("Disabled mods are listed but not loaded, checked or counted", () =>
         {
             var mods = Path.Combine(root, "mods-switches");

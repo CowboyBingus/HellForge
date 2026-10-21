@@ -550,7 +550,31 @@ public static class ModArchives
         if (Root(unpacked)) return unpacked;
         var folders = Directory.GetDirectories(unpacked);
         if (folders.Length == 1 && Directory.GetFiles(unpacked).Length == 0 && Root(folders[0])) return folders[0];
-        throw new InvalidDataException($"no {ModCatalog.ManifestName} (or a cosmetic pack's {CosmeticPacks.ManifestName}) at the archive's root or in its one top-level folder.");
+        var single = folders.Length == 1 && Directory.GetFiles(unpacked).Length == 0 ? folders[0] : unpacked;
+        throw new InvalidDataException(NotAModReason(single) ??
+            $"no {ModCatalog.ManifestName} (or a cosmetic pack's {CosmeticPacks.ManifestName}) at the archive's root or in its one top-level folder.");
+    }
+
+    // Why an archive that holds no mod was added, when it is a known kind of not-a-mod: HD2Runtime's mod template (a
+    // starter for writing HD2Runtime mods, which players took for HD2Runtime itself: 0.1.8 reports), or an HD2Runtime
+    // mod's unbuilt sources. Null when it is neither.
+    internal static string? NotAModReason(string folder)
+    {
+        var descriptor = Path.Combine(folder, "hd2runtime.json");
+        if (!File.Exists(descriptor) || CosmeticPacks.IsPack(folder)) return null;
+        string name = "", guid = "";
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(descriptor));
+            if (document.RootElement.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String) name = n.GetString()!;
+            if (document.RootElement.TryGetProperty("guid", out var g) && g.ValueKind == JsonValueKind.String) guid = g.GetString()!;
+        }
+        catch (Exception error) when (error is JsonException or IOException) { }
+        if (guid == "auto" || name == "My HD2 Mod")
+            return "this is HD2Runtime's mod template, a starter for writing HD2Runtime mods, not a mod to play. To run HD2Runtime, add " +
+                "its runtime zip (HD2Runtime-<version>-runtime.zip) and Bingus Shared Loader instead.";
+        return $"this is the source of an HD2Runtime mod{(name.Length > 0 ? $" ({name})" : "")}, not a built one: add the mod's released zip (with " +
+            $"{CosmeticPacks.ManifestName}), or build it with its build.cmd first.";
     }
 }
 
