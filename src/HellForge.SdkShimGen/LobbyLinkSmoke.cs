@@ -15,17 +15,17 @@ public static unsafe class LobbyLinkSmoke
 {
     const string HostId = "110000100000001", FriendId = "110000100000002";
 
-    [StructLayout(LayoutKind.Sequential)] struct EntityKey { public byte* Id; public byte* Type; }
-    [StructLayout(LayoutKind.Sequential)] struct CreateConfiguration
+    [StructLayout(LayoutKind.Sequential)] internal struct EntityKey { public byte* Id; public byte* Type; }
+    [StructLayout(LayoutKind.Sequential)] internal struct CreateConfiguration
     {
         public uint MaxMemberCount, OwnerMigrationPolicy, AccessPolicy, SearchPropertyCount;
         public byte** SearchKeys, SearchValues;
         public uint LobbyPropertyCount;
         public byte** LobbyKeys, LobbyValues;
     }
-    [StructLayout(LayoutKind.Sequential)] struct JoinConfiguration { public uint Count; public byte** Keys, Values; }
+    [StructLayout(LayoutKind.Sequential)] internal struct JoinConfiguration { public uint Count; public byte** Keys, Values; }
 
-    sealed class Player
+    internal sealed class Player
     {
         public string Name = "";
         public nint Handle;
@@ -374,7 +374,7 @@ public static unsafe class LobbyLinkSmoke
         createEndpoint(*network, user, 0, 0, 0, 0x303, endpoint);
     }
 
-    static (nint Library, Player Player) Load(string original, string copy, string pipe, string name)
+    internal static (nint Library, Player Player) Load(string original, string copy, string pipe, string name)
     {
         File.Copy(original, copy, overwrite: true);
         Environment.SetEnvironmentVariable("HELLFORGE_PIPE", pipe);
@@ -392,10 +392,10 @@ public static unsafe class LobbyLinkSmoke
         return (library, player);
     }
 
-    static Process StartBackend(string backend, string evidence, string pipe, string link)
+    internal static Process StartBackend(string backend, string evidence, string pipe, string link, params string[] more)
     {
         var start = new ProcessStartInfo("dotnet") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var argument in new[] { backend, "--port", "0", "--evidence", evidence, "--lifetime-seconds", "120", "--pipe", pipe, "--link", link, "--mod-digest", "smoke" })
+        foreach (var argument in new[] { backend, "--port", "0", "--evidence", evidence, "--lifetime-seconds", "120", "--pipe", pipe, "--link", link, "--mod-digest", "smoke" }.Concat(more))
             start.ArgumentList.Add(argument);
         var process = Process.Start(start) ?? throw new IOException("Could not start the backend.");
         process.OutputDataReceived += (_, _) => { };
@@ -405,7 +405,7 @@ public static unsafe class LobbyLinkSmoke
         return process;
     }
 
-    static int FreePort()
+    internal static int FreePort()
     {
         using var probe = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
         return ((IPEndPoint)probe.Client.LocalEndPoint!).Port;

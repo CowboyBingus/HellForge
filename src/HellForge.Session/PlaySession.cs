@@ -55,6 +55,11 @@ sealed class PlaySession(PlayOptions options)
     {
         install = new InstallLayout(Path.GetFullPath(options.Install));
         if (!install.Exists) throw new SessionFailure("Not a HellForge installation: " + install.Root);
+        // Without Local PlayFab the session clears the platform matchmaking selector, which points the game's own lobby
+        // search at Steam's lobbies, where vanilla games list theirs under the same build string (knowledge base,
+        // hellforge-steam-lobby-directory). Multiplayer goes through the stand-ins and the backend's directory only.
+        if (options.Multiplayer && !options.LocalPlayFab)
+            throw new SessionFailure("Multiplayer needs Local PlayFab: turn on Experiments > Local PlayFab in the launcher and start again.");
         app = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, ".."));
         copy = install.Game;
         exe = Path.GetFullPath(Path.Combine(copy, "bin", "helldivers2.exe"));

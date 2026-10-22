@@ -245,22 +245,25 @@ public static class LocalBackend
                 }
                 else if (request.Path.StartsWithSegments("/lobby", out var lobbyPath))
                 {
-                    // The game's own lobby for friends' social tabs, and friends' lobbies for its own (FriendPresence).
+                    // The game's own lobby for friends' social tabs and the lobby directory, and friends' and the directory's
+                    // lobbies for its own social tab and Galactic Map (FriendPresence, Multiplayer.DirectoryService).
                     var rest = lobbyPath.Value ?? "";
                     var segments = rest.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                    (string Method, string Shape)? expected = segments switch
+                    (string[] Methods, string Shape)? expected = segments switch
                     {
-                        [] => ("PUT", "lobby"),
-                        ["accounts"] => ("POST", "accounts"),
-                        ["clear"] => ("DELETE", "clear"),
-                        [_, "member"] => ("POST", "member"),
+                        [] => (["PUT"], "lobby"),
+                        ["accounts"] => (["POST"], "accounts"),
+                        ["clear"] => (["DELETE"], "clear"),
+                        [_, "member"] => (["POST"], "member"),
+                        [_, "live"] => (["GET", "PUT"], "live"),
+                        [_] => (["GET"], "get"),
                         _ => null
                     };
                     if (expected is not { } route) { }
-                    else if (request.Method != route.Method)
+                    else if (!route.Methods.Contains(request.Method))
                     {
                         status = StatusCodes.Status405MethodNotAllowed;
-                        context.Response.Headers.Allow = route.Method;
+                        context.Response.Headers.Allow = string.Join(", ", route.Methods);
                         outcome = "method_rejected";
                         response = Error("HELLFORGE_METHOD_NOT_ALLOWED");
                     }
@@ -286,6 +289,22 @@ public static class LocalBackend
                                 presence.ClearLocal();
                                 outcome = "lobby_cleared";
                                 break;
+                            case "live" when request.Method == "PUT":
+                            {
+                                using var body = await JsonDocument.ParseAsync(request.Body, new JsonDocumentOptions { AllowTrailingCommas = true }, context.RequestAborted);
+                                presence.SetLocalLive(segments[0], body.RootElement);
+                                outcome = "lobby_live_published";
+                                break;
+                            }
+                            // Never seen called by the game so far (knowledge base: hellforge-steam-lobby-directory); a lobby
+                            // unknown here is a 404, logged with its outcome.
+                            case "live" or "get":
+                            {
+                                var found = route.Shape == "live" ? presence.LiveRecord(segments[0]) : presence.LobbyRecord(segments[0]);
+                                if (found != null) { response = found; outcome = route.Shape == "live" ? "lobby_live" : "lobby_record"; }
+                                else { status = StatusCodes.Status404NotFound; response = Error("HELLFORGE_LOBBY_NOT_FOUND"); outcome = "lobby_unknown"; }
+                                break;
+                            }
                             default:
                             {
                                 using var body = await JsonDocument.ParseAsync(request.Body, new JsonDocumentOptions { AllowTrailingCommas = true }, context.RequestAborted);

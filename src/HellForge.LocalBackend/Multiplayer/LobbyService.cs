@@ -73,6 +73,14 @@ public sealed class LobbyService
     readonly Dictionary<string, (ulong Owner, DateTime At)> joins = new(StringComparer.Ordinal);
     static readonly TimeSpan JoinMemory = TimeSpan.FromMinutes(1);
 
+    // The lobby directory (DirectoryService). A lobby hosted here changed (created, joined, updated, left, closed): its
+    // listing is looked at again. The game's lobby search from this machine's DLL: lobby.find [op, entity id, entity type,
+    // filter, sort, result count], answered with lobby.found. Both are called under this service's lock.
+    public event Action? HostedChanged;
+    public Action<Frame>? Find { get; set; }
+    public sealed record Hosted(string Id, string ConnectionString, uint MaxMembers, int Members, int Access, bool Locked, bool LocalOwner,
+        IReadOnlyDictionary<string, string> SearchProperties);
+
     public LobbyService(IPeerTransport? transport, Action<Frame> toLocal, Action<string> log, string modDigest, WarClock? warClock = null,
         string? modList = null)
     {
@@ -100,6 +108,7 @@ public sealed class LobbyService
     {
         lock (gate)
         {
+            if (frame.Type == "lobby.find" && Find != null) { Find(frame); return; }
             if (!Requests.Contains(frame.Type)) { log("Ignored a lobby frame from the DLL: " + frame.Type); return; }
             try { Route(frame); }
             catch (InvalidDataException error) { log($"Bad {frame.Type} from the DLL: {error.Message}"); }
@@ -144,6 +153,20 @@ public sealed class LobbyService
             forwarded.Clear();
             joining.Clear();
         }
+    }
+
+    // The lobbies hosted here as the directory lists them.
+    public IReadOnlyList<Hosted> HostedLobbies()
+    {
+        lock (gate)
+            return [.. hosted.Values.Select(l => new Hosted(l.Id, l.ConnectionString, l.MaxMembers, l.Members.Count, l.Access, l.Lock == 1,
+                l.Members.Any(m => m.Node == LocalNode && SameEntity(m.Id, l.OwnerId)), new Dictionary<string, string>(l.SearchProperties, StringComparer.Ordinal)))];
+    }
+
+    // Whether this machine asked the peer for a join in the last minute (its answers may come from a stranger).
+    public bool Joining(ulong peer)
+    {
+        lock (gate) return joins.Values.Any(j => j.Owner == peer && DateTime.UtcNow - j.At <= JoinMemory);
     }
 
     // Machines this backend shares a lobby with, for the peer heartbeat.
@@ -294,6 +317,7 @@ public sealed class LobbyService
                 lobby.OwnerId = creator.Id;
                 hosted[lobby.Id] = lobby;
                 log($"Lobby {lobby.Id} created, at most {lobby.MaxMembers} members.");
+                HostedChanged?.Invoke();
                 Send(LocalNode, Snapshot(new Frame("lobby.result").Add(op).Add("create").Add(0), lobby));
                 return;
             }
@@ -350,6 +374,7 @@ public sealed class LobbyService
                 if (node != LocalNode && warClock != null) Send(node, new Frame("war.clock").Add(warClock.Seconds));
                 var added = new Frame("lobby.memberAdded").Add(lobby.Id).Add(member.Id).Add(member.Type).Add(member.Properties);
                 foreach (var other in lobby.Nodes().Where(n => n != node)) Send(other, added);
+                HostedChanged?.Invoke();
                 return;
             }
             case "lobby.update":
@@ -388,6 +413,7 @@ public sealed class LobbyService
                 }
                 else updated.Add(0);
                 foreach (var target in lobby.Nodes()) Send(target, updated);
+                HostedChanged?.Invoke();
                 return;
             }
             case "lobby.leave":
@@ -406,6 +432,7 @@ public sealed class LobbyService
     void Leave(HostedLobby lobby, List<LobbyMember> leaving)
     {
         foreach (var member in leaving) lobby.Members.Remove(member);
+        HostedChanged?.Invoke();
         var leavingNodes = leaving.Select(m => m.Node).ToHashSet();
         if (leaving.Any(m => SameEntity(m.Id, lobby.OwnerId)) || lobby.Members.Count == 0)
         {

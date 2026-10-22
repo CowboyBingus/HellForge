@@ -443,7 +443,7 @@ Built 2026-10-22 and tested on one PC only. Players see it in [Playing with othe
     line...]`, its lines shown by both games. When the host shares, the joiner's last line says the MOD SYNC window
     offers the download. A backend from before ignores the offer.
   - A joiner takes an offer only for a join it asked for in the last minute.
-  - The joiner's machine may then download for 10 minutes:
+  - The joiner's machine (a stranger too: step 7's gate lets a download through) may then download for 10 minutes:
     - `mods.files [req, id, hash]` → `mods.filelist [req, ok, count, (path, size, sha256)...]`;
     - `mods.get [req, id, hash, path, offset, length ≤ 128 KiB]` → `mods.chunk [req, ok, offset, bytes]`;
     - or `[req, refused, reason]`.
@@ -467,8 +467,6 @@ Built 2026-10-22 and tested on one PC only. Players see it in [Playing with othe
     the host's modlist digest, it plays the player's own mods and reports why.
 - **Still to do:**
   - rejoining by itself after the restart (the player joins again from the social tab or the map);
-  - strangers' downloads, which come with the lobby directory's stranger support (the transport still accepts
-    friends only);
   - a launcher prompt for sessions without the in-game editor.
 
 **To test on two PCs:**
@@ -483,6 +481,80 @@ Built 2026-10-22 and tested on one PC only. Players see it in [Playing with othe
 5. BLOCK a mod from the dialog: the next join to that lobby shows it blocked; unblock it on the Mods page.
 6. Collect both sessions' `multiplayer.log` ("Mod sync:" lines), `backend/mod-sync.json` and `modloader.log`
    ("mod sync" lines).
+
+### Step 7: public lobbies on the Galactic Map (2026-10-22)
+
+Built 2026-10-22 and tested on one PC only.
+
+- **The directory** (`Multiplayer/LobbyDirectory.cs`):
+  - Every backend lists the public lobby its game hosts on Steam matchmaking (app 553850), as an Invisible Steam lobby
+    the backend holds beside the game's own (`SteamLobbyDirectory`, on the peer link's Steam thread).
+  - Listed means: privacy `number_key6` 0, not locked, not full. A listing appears and goes at once; changes are
+    written at most every 5 s (`DirectoryService`).
+  - A listing's data:
+    - `hellforge` (the protocol);
+    - `hf.connection`, `hf.lobbyId`, `hf.host` (SteamID64 in decimal);
+    - `hf.members`, `hf.maxMembers`, `hf.slots`, `hf.lock`;
+    - every PlayFab search property under its own name (`string_keyN`, `number_keyN`);
+    - `hf.lobby` (the game's `PUT /lobby` record, gzip and base64; long values split into parts) and `hf.live`;
+    - `hf.mods` (the mod set), `hf.digest`, `hf.share`;
+    - `hf.stats` (the host plays with edited stats).
+  - **Published record (decided 2026-10-22):** player names are kept, and every account id except the host's becomes
+    0.
+- **The search:**
+  - The lobby stand-in sends `PFMultiplayerFindLobbies` to the backend: `lobby.find [op, entity, filter, sort, count]`.
+    It logs the game's filter string when it changes.
+  - The backend asks the directory with coarse filters: the protocol, the filter's `eq` clauses, a slot free,
+    worldwide, at most 50. It then evaluates the game's whole filter (`LobbyFilter`: `and` of `eq ne gt lt ge le`).
+    Two clauses are left out on purpose: `number_key7`'s random window and the continent exclusions
+    (`string_key6 ne`).
+  - It then drops lobbies the player could not join (`ModSync.Joinable`): a blocked mod, mods to install by hand, or a
+    host with edited stats unless `"showEditedStats"`. It also drops its own lobby.
+  - It answers `lobby.found [op, hresult, count, (lobby id, connection string, owner, max, members, locked, search
+    properties)...]`, which the stand-in turns into `FindLobbiesCompleted` with `PFLobbySearchResult`s. The last four
+    searches' results stay valid after their batch.
+  - The game's two searches per scan (about 30 ms apart) share one directory search; nothing older than 500 ms is
+    reused.
+- **The map's records:** `POST /lobby/accounts` answers, after friends, for the hosts the last searches found (for 2
+    minutes), with the listing's record, its lobby id and connection string. `GET /lobby/<id>` and
+    `GET /lobby/<id>/live` answer from the local, a friend's or a found lobby. `PUT /lobby/<id>/live` is stored and
+    listed. The game has not been seen calling the GET routes; an unknown lobby is a 404 (`lobby_unknown`).
+- **Strangers** (`StrangerGate`):
+  - The Steam link accepts a session from someone who is not a Steam friend only while this machine lists a lobby, or
+    when it deals with them: a member of a lobby hosted here, the host of a lobby joined or being joined from here, or
+    a mod download.
+  - From a stranger, a backend takes `lobby.join` (at most 6 a minute from one machine, 60 in all, and only with a
+    lobby listed), pings, and then what follows once it deals with them. Presence (the social tab) stays between
+    friends. A stranger host's name comes from the record its listing carried.
+- **Multiplayer needs Local PlayFab.** The session runner and the launcher refuse `--multiplayer` without it: the
+  platform matchmaking selector that sessions clear without Local PlayFab sends the game's own search to Steam's
+  lobbies, where vanilla games list theirs under the same build string.
+- **Tests on one PC:**
+  - `HellForge.LocalBackend.Tests` (directory: filter, values, publishing, search, records, edited stats, blocked and
+    unjoinable mods, strangers);
+  - `HellForge.SdkShimGen smoke-lobby-search <stand-ins> <HellForge.LocalBackend.dll>`: two backends over loopback UDP
+    sharing a folder directory (`--directory`), and two lobby stand-ins through the PlayFab C API. The friend's
+    search finds the host's lobby about 0.35 s after it is listed, joins with the connection string it found, and
+    stops finding it about 0.35 s after the host leaves.
+- **Not yet known:**
+  - whether the Galactic Map shows a marker and hover card from these records (which string keys the map lists);
+  - whether the hover card works with the other members' account ids at 0;
+  - Steam's search rate limits;
+  - the map's exact filter string (now logged).
+
+**To test on two PCs that are not Steam friends:**
+1. Both turn on multiplayer and Local PlayFab. The host opens a Public lobby on a planet.
+2. The other player opens the Galactic Map on that planet. Check:
+   - a marker and a hover card with the host's name;
+   - `multiplayer.log` "Directory: search ... shown";
+   - the stand-in log's `PFMultiplayerFindLobbies: filter "..."`.
+3. JOIN from the map. Check:
+   - the join is admitted (the host's log has no "Dropped ... not a Steam friend");
+   - the mission plays.
+   Then with different mods: the MOD SYNC dialog opens.
+4. The host turns Invite Only, or the lobby fills: within a scan or two the marker goes.
+5. The host edits a stat (F8, APPLY): the lobby disappears from the other player's map until "Show public lobbies
+   whose host plays with edited stats" is on.
 
 ### Co-op diagnostics (engine 0.1.19, the 0.1.11 diagnostics beta)
 

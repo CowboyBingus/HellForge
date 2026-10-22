@@ -15,6 +15,7 @@ const string Usage = """
     HellForge.SdkShimGen verify-forward <original.dll> <real module> <handwritten.c> <stand-in.dll>
     HellForge.SdkShimGen smoke-cloud <steam_api64 stand-in> <original steam_api64.dll>
     HellForge.SdkShimGen smoke-lobby-link <directory with the stand-ins> <HellForge.LocalBackend.dll>
+    HellForge.SdkShimGen smoke-lobby-search <directory with PlayFabMultiplayerWin.dll> <HellForge.LocalBackend.dll>
     HellForge.SdkShimGen smoke-modloader <directory with the stand-ins and loader> <directory with the test DLLs> <Machine Gun 10k code mod>
     """;
 try
@@ -29,6 +30,7 @@ try
         ["verify-forward", var original, var module, var handwritten, var standIn] => VerifyForward(original, module, handwritten, standIn),
         ["smoke-cloud", var standIn, var original] => CloudSmoke.Run(standIn, original),
         ["smoke-lobby-link", var directory, var backend] => LobbyLinkSmoke.Run(directory, backend),
+        ["smoke-lobby-search", var searchDirectory, var searchBackend] => LobbySearchSmoke.Run(searchDirectory, searchBackend),
         ["smoke-modloader", var directory, var tests, var machineGun] => ModLoaderSmoke.Run(directory, tests, machineGun),
         ["smoke-modloader", var directory, var tests, var machineGun, var compendium] => ModLoaderSmoke.Run(directory, tests, machineGun, compendium),
         _ => Fail(Usage)

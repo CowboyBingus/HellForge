@@ -6,8 +6,9 @@ namespace HellForge.LocalBackend.Multiplayer;
 // Backend-to-backend messages through Steam networking (ISteamNetworkingMessages over Valve's relays, peers named by
 // SteamID). Runs in the backend process, which the network block does not list; the copied game itself only talks to
 // loopback. The backend starts the Steam API as the game's app beside the running game (verified with a
-// probe program, docs/multiplayer.md). Sessions are accepted only from the signed-in account's Steam
-// friends. Every Steam call happens on one thread.
+// probe program, docs/multiplayer.md). Sessions are accepted from the signed-in account's Steam
+// friends, and from someone else only when AcceptStranger says so (the lobby directory: a public lobby is listed, or this
+// machine deals with them). Every Steam call happens on one thread, the lobby directory's too (SteamLobbyDirectory).
 // Friends who run HellForge are found for the social tab by a rich presence key ("hellforge" = the multiplayer protocol) that the
 // backend sets for the game's app beside the game's own keys: only friends who are playing HD2 are looked at, and nothing
 // is sent to anyone to find them.
@@ -19,6 +20,7 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
     // queued while a route is being set up: NoDelay dropped a joining player's first game messages (first two-PC test).
     const int SendReliable = 8 | 32, SendUnreliable = 0 | 32;
     const int SessionRequest = 1251, SessionFailed = 1252; // SteamNetworkingMessagesSessionRequest_t, ..SessionFailed_t
+    const int CallCompleted = 703; // SteamAPICallCompleted_t
     const int IdentitySize = 136, IdentitySteamId = 16; // SteamNetworkingIdentity, k_ESteamNetworkingIdentityType_SteamID
     const int FriendRelationshipFriend = 3;
     const int FriendFlagImmediate = 4;
@@ -36,11 +38,19 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
     public event Action<ulong, byte[]>? Received;
     volatile IReadOnlyList<FriendPresence.Friend> hellforgeFriends = [];
     public IReadOnlyList<FriendPresence.Friend> HellForgeFriends => hellforgeFriends;
+    // Every Steam friend's SteamID, refreshed with the friend scan.
+    volatile HashSet<ulong> friendIds = [];
+    public bool IsFriend(ulong peer) => friendIds.Contains(peer);
+    // Whether a session from someone who is not a Steam friend is accepted (asked on the Steam thread; must be quick).
+    public Func<ulong, bool>? AcceptStranger { get; set; }
+    public SteamLobbyDirectory Directory { get; }
+    DateTime strangerLogged = DateTime.MinValue;
 
     public SteamPeerTransport(string steamApiLibrary, Action<string> log)
     {
         library = Path.GetFullPath(steamApiLibrary);
         this.log = log;
+        Directory = new SteamLobbyDirectory(log);
     }
 
     public void Start()
@@ -90,6 +100,7 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
             var requestPresence = (delegate* unmanaged[Cdecl]<nint, ulong, void>)E("SteamAPI_ISteamFriends_RequestFriendRichPresence");
             var friendPresence = (delegate* unmanaged[Cdecl]<nint, ulong, byte*, byte*>)E("SteamAPI_ISteamFriends_GetFriendRichPresence");
             var personaName = (delegate* unmanaged[Cdecl]<nint, ulong, byte*>)E("SteamAPI_ISteamFriends_GetFriendPersonaName");
+            Directory.Bind(E, pipe);
             log("Steam peer link started.");
             started.Set();
 
@@ -104,10 +115,12 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
             {
                 fixed (byte* k = key, v = tag) setPresence(friends, k, v);
                 var found = new List<FriendPresence.Friend>();
+                var all = new HashSet<ulong>();
                 var count = friendCount(friends, FriendFlagImmediate);
                 for (var i = 0; i < count; i++)
                 {
                     var friend = friendByIndex(friends, i, FriendFlagImmediate);
+                    all.Add(friend);
                     new Span<byte>(gameInfo, 32).Clear();
                     if (gamePlayed(friends, friend, gameInfo) == 0 || (*(ulong*)gameInfo & 0xFFFFFF) != AppId) continue;
                     if (!requested.TryGetValue(friend, out var asked) || DateTime.UtcNow - asked > TimeSpan.FromMinutes(1))
@@ -121,6 +134,7 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
                     found.Add(new FriendPresence.Friend(friend, Marshal.PtrToStringUTF8((nint)personaName(friends, friend)) ?? "Steam friend"));
                 }
                 hellforgeFriends = found;
+                friendIds = all;
             }
 
             var callback = stackalloc byte[24]; // CallbackMsg_t
@@ -137,9 +151,14 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
                     {
                         var remote = *(ulong*)(parameter + 8);
                         if (id == SessionFailed) log("A Steam peer session failed.");
-                        else if (relationship(friends, remote) == FriendRelationshipFriend) accept(messages, parameter);
-                        else log("Refused a Steam peer session from someone who is not a Steam friend.");
+                        else if (relationship(friends, remote) == FriendRelationshipFriend || AcceptStranger?.Invoke(remote) == true) accept(messages, parameter);
+                        else if (DateTime.UtcNow - strangerLogged > TimeSpan.FromMinutes(1))
+                        {
+                            strangerLogged = DateTime.UtcNow;
+                            log("Refused a Steam peer session from someone who is not a Steam friend (no public lobby listed here).");
+                        }
                     }
+                    else if (id == CallCompleted) Directory.CallCompleted(parameter);
                     freeCallback(pipe);
                 }
                 while (outbox.TryDequeue(out var outgoing))
@@ -164,6 +183,7 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
                         }
                         release(message);
                     }
+                Directory.Pump();
                 if (DateTime.UtcNow - lastScan > FriendScanInterval)
                 {
                     lastScan = DateTime.UtcNow;
@@ -171,6 +191,7 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
                 }
                 Thread.Sleep(2);
             }
+            Directory.Shutdown();
             // The tag goes when the backend does (an empty value deletes the key, leaving the game's own keys alone).
             fixed (byte* k = key, v = "\0"u8) setPresence(friends, k, v);
         }

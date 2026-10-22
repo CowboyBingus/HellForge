@@ -107,6 +107,40 @@ public sealed class ModSync : IAsyncDisposable
 
     bool Shares() => ModSettings.Read(modsFolder).Share;
 
+    // ---- The lobby directory (DirectoryService) --------------------------------------------------------------------
+
+    // This session's mod set as a lobby listing carries it (the wire form), its digest, and whether this player shares it.
+    public string? OwnSetWire => ownWire;
+    public string OwnDigest => own?.Digest ?? "none";
+    public bool Sharing => Shares();
+
+    ModLocator? locator;
+    ModLocator Locator { get { lock (gate) return locator ??= new ModLocator(modsFolder); } }
+
+    // Whether a listed lobby could be joined: the same mods, or a plan that is not blocked or unjoinable (mods to install
+    // by hand, another HellForge), and edited stats only when the player shows such lobbies. A listing without a mod set
+    // is shown: the join's refusal then brings it.
+    public bool Joinable(DirectoryListing listing, out string why)
+    {
+        why = "";
+        var settings = ModSettings.Read(modsFolder);
+        if (listing.Data.GetValueOrDefault(DirectoryKeys.Stats) == "1" && !settings.ShowEditedStats) { why = "its host plays with edited stats"; return false; }
+        if (listing.Data.GetValueOrDefault(DirectoryKeys.Digest) == OwnDigest) return true;
+        if (DirectoryData.Unpack(DirectoryData.Get(listing.Data, DirectoryKeys.Mods)) is not { } wire) return true;
+        ModSet set;
+        try { set = ModSet.Parse(wire, local: false); }
+        catch (InvalidDataException) { why = "its mod list is malformed"; return false; }
+        var plan = ModSyncPlan.Make(set, listing.Data.GetValueOrDefault(DirectoryKeys.Share) == "1", own ?? new ModSet("none", []), Locator.Find, settings.Blocked, verified);
+        why = plan.Verdict switch { SyncVerdict.Blocked => "it runs a blocked mod", SyncVerdict.Unjoinable => "it runs mods that cannot be downloaded", _ => "" };
+        return plan.Verdict is SyncVerdict.Ready or SyncVerdict.Download;
+    }
+
+    // A machine this one downloads from or lets download (a stranger is let through for that: MultiplayerHost's gate).
+    public bool Related(ulong peer)
+    {
+        lock (gate) return grants.TryGetValue(peer, out var until) && until > DateTime.UtcNow || offer?.Host == peer;
+    }
+
     void Queue(ulong peer, Frame frame)
     {
         lock (gate)
