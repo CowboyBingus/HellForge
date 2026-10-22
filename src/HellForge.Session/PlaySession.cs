@@ -176,6 +176,7 @@ sealed class PlaySession(PlayOptions options)
         modDigest = (string?)plan["digest"] ?? "none";
         modList = (string?)plan["modlist"];
         modNative = (bool?)plan["native"] == true;
+        nativeFolders = (plan["nativeFolders"] as JsonArray)?.Select(f => (string?)f).OfType<string>().ToList();
         result["mods"] = new JsonObject
         {
             ["loaded"] = new JsonArray((plan["mods"] as JsonArray ?? []).Select(m => (JsonNode?)JsonValue.Create($"{(string?)m!["id"]} {(string?)m["version"]}")).ToArray()),
@@ -229,6 +230,7 @@ sealed class PlaySession(PlayOptions options)
         catch (IOException) { return ""; }
     }
     bool modNative;
+    List<string>? nativeFolders; // mods-stage's mods with network type edits (null: a mods-stage from before it)
 
     // Network block (the readable scripts in app/scripts): $HellForgeInstallRoot names the installation's rule group.
     string BlockScript(string body) =>
@@ -499,7 +501,7 @@ sealed class PlaySession(PlayOptions options)
             var pid = job.Process.Id;
             applier = new Thread(() =>
             {
-                try { NativeModApplier.Run(install, pid, exe, Path.Combine(run, "native-mods.log"), Path.Combine(run, "native-mods.json")); }
+                try { NativeModApplier.Run(install, nativeFolders, pid, exe, Path.Combine(run, "native-mods.log"), Path.Combine(run, "native-mods.json")); }
                 catch (Exception error) when (error is IOException or System.ComponentModel.Win32Exception or InvalidOperationException) { }
             }) { IsBackground = true, Name = "native mods" };
             applier.Start();

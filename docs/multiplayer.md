@@ -454,7 +454,8 @@ Built 2026-10-22 and tested on one PC only. Players see it in [Playing with othe
 - **Joiner:**
   - The offer becomes the game's (`ModSyncPlan` in HellForge.Core). The loader's live pipe gets
     `syncmod` lines and then `syncstate` (`native/mod-loader/live.c`, SDK 13 `sync_state`/`sync_mod`), and the in-game
-    editor opens its MOD SYNC dialog. The answer comes back as `syncanswer <version> <answer> [<mod id>]`.
+    editor shows its MOD SYNC prompt over the game, the editor window closed. The answer comes back as
+  `syncanswer <version> <answer> [<mod id>]`.
   - The offer is also written to `<run>/backend/mod-sync.json`.
   - On accept it downloads, four requests in flight. The manifest comes first: a declared code mod that is not on
     the verified list stops there.
@@ -471,8 +472,8 @@ Built 2026-10-22 and tested on one PC only. Players see it in [Playing with othe
 
 **To test on two PCs:**
 1. The host enables a content mod (a data patch or stats mod) and a code mod; the friend has neither.
-2. The friend joins. Check that the MOD SYNC dialog opens, lists the content mod as downloading and the code mod as
-   "install it yourself", and refuses to start.
+2. The friend joins. Check that the MOD SYNC prompt shows (no editor window behind it), lists the content mod as
+   downloading and the code mod as "install it yourself", and refuses to start.
 3. The host turns the code mod off and starts a new session. The friend joins again, then DOWNLOAD AND RESTART:
    - check the progress bar and that the files land in `mods/.synced`;
    - check that the session restarts with "Playing with <host>'s mods" in the launcher;
@@ -563,7 +564,7 @@ Built 2026-10-22 and tested on one PC only.
 3. JOIN from the map. Check:
    - the join is admitted (the host's log has no "Dropped ... not a Steam friend");
    - the mission plays.
-   Then with different mods: the MOD SYNC dialog opens.
+   Then with different mods: the MOD SYNC prompt shows.
 4. The host turns Invite Only, or the lobby fills: within a scan or two the marker goes.
 5. The host edits a stat (F8, APPLY): the lobby disappears from the other player's map until "Show public lobbies
    whose host plays with edited stats" is on.

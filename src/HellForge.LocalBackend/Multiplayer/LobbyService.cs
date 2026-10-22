@@ -348,7 +348,7 @@ public sealed class LobbyService
                     var offered = node != LocalNode && ModsRefused?.Invoke(node, lobby.Id) == true;
                     Refuse(node, op, lobby.Id, "different gameplay mods; enable the same gameplay mods (see the launcher's MODS page) and start a new session.",
                         ["Your gameplay mods don't match the host's.", .. Differences(theirs, mine, asHost: false),
-                            offered ? "HellForge's MOD SYNC window offers to download the host's mods and restart with them."
+                            offered ? "HellForge's MOD SYNC prompt shows which of the host's mods it can download for you."
                                 : "Turn on the same gameplay mods on the launcher's MODS page, then start a new session."],
                         ["Their gameplay mods don't match yours.", .. Differences(mine, theirs, asHost: true)]);
                     return;
