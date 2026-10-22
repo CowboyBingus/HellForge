@@ -495,7 +495,15 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
     the verified list stops there.
   - Each file is checked against its listed size and SHA-256, and the whole mod by `SyncedStore.Install`, before it
     goes to `mods/.synced/`.
-  - On restart it writes `<install>/temp/mod-sync/session.json` (`ModSyncSession`) and `mod-sync` into
+  - When every difference with the host's set can change while the game runs (stats mods only, for now: see
+    [Changing mods while you play](mods.md#changing-mods-while-you-play)), the offer carries `HF_SYNC_LIVE`, and the
+    prompt's button reads APPLY AND JOIN.
+    - On restart, `LiveMods` sends the host's set to the loader as one change (`modbegin` ... `modcommit`,
+      `native/mod-loader/live_mods.c`).
+    - The session's digest, `modset.json`, its lobby and its listing then follow the host's mods, and a notice tells
+      the player to join again.
+    - A refused change falls back to the restart below.
+  - Otherwise, on restart it writes `<install>/temp/mod-sync/session.json` (`ModSyncSession`) and `mod-sync` into
     `stop-observation.signal`. The session runner reports `restart: mod-sync`, and the launcher starts the next
     session with `--mod-sync <file>` (`mods-stage --sync`).
   - That session plays the host's mods, each found by id and content hash, in the host's order. If they do not make

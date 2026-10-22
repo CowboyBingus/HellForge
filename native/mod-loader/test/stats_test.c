@@ -1607,7 +1607,7 @@ static void LuaBridgeFixture(void)
     }
 
     strcpy(editor->id, editorId);
-    for (int i = mods; i < g_modCount; i++) memset(&g_mods[i], 0, sizeof g_mods[i]);
+    for (int i = mods; i < g_modCount; i++) { memset(&g_mods[i], 0, sizeof g_mods[i]); g_mods[i].order = i; }
     g_modCount = mods;
     for (int i = 0; i < g_fakeRecordCount; i++) free(g_fakeRecords[i].bytes);
     g_fakeRecordCount = g_componentCount = g_editCount = 0;
@@ -3047,15 +3047,19 @@ static void HookChainFixture(void)
     assert(((volatile ChainFn)ChainTarget2)(5) == 2 * 5 + 7 + 110 && !strcmp(g_trail, "ba"));
 }
 
+#include "live_mods_test.c" /* after the helpers it shares (Edit, FixtureLoad) */
+
 int main(int argc, char** argv)
 {
     strcpy(g_build, "25480438");
+    for (int i = 0; i < MAX_MODS; i++) g_mods[i].order = i; /* load order as the plan creates them */
     for (int i = 0; i < 2; i++) { g_mods[i].loaded = 1; g_mods[i].log = INVALID_HANDLE_VALUE; }
     strcpy(g_mods[0].id, "a"); strcpy(g_mods[1].id, "b");
     g_modCount = 2;
     FieldsFixture();
     LiveFixture();
     LiveSyncFixture();
+    LiveModsFixture();
     LuaBridgeFixture();
     ActionsFixture();
     PassivesFixture();

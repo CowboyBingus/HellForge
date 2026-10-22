@@ -50,7 +50,7 @@ static void LiveSyncPipeFixture(void)
     char line[512];
     assert(SyncServerLine(server, line, sizeof line) && !strncmp(line, "hello\t", 6));
     SyncServerSend(server, "syncmod\t1\t21\t0\tdownload\tcontent\t5000\tfriend.tanks\tTanks\t2.0\n"
-        "syncstate\t2\t21\toffer\tFriend Two\t5000\t0\t1\tthe host runs other mods\n");
+        "syncstate\t2\t21\toffer\tFriend Two\t5000\t0\t1\t0\tthe host runs other mods\n");
     assert(SyncServerLine(server, line, sizeof line) && !strcmp(line, "1\tok\tnow"));
     assert(SyncServerLine(server, line, sizeof line) && !strcmp(line, "2\tok\tnow"));
     HfSyncState state = {sizeof state};
@@ -59,7 +59,7 @@ static void LiveSyncPipeFixture(void)
     assert(ApiSyncAnswer(NULL, 21, HF_SYNC_ACCEPT, NULL));
     assert(SyncServerLine(server, line, sizeof line) && !strcmp(line, "syncanswer\t21\taccept\t-"));
     /* and requests are still answered after it */
-    SyncServerSend(server, "syncstate\t3\t21\tdownloading\tFriend Two\t5000\t2500\t1\t\n");
+    SyncServerSend(server, "syncstate\t3\t21\tdownloading\tFriend Two\t5000\t2500\t1\t0\t\n");
     assert(SyncServerLine(server, line, sizeof line) && !strcmp(line, "3\tok\tnow"));
     assert(ApiSyncState(NULL, &state) && state.state == HF_SYNC_DOWNLOADING && state.done == 2500);
     /* the backend goes: the offer with it, and answers are no longer queued */
@@ -88,7 +88,7 @@ static void LiveSyncFixture(void)
     SyncLine("syncmod\t2\t5\t1\tmanual\tcode\t200\tfriend.guns\tGuns\t1.1", reply, sizeof reply);
     assert(!strcmp(reply, "2\tok\tnow"));
     assert(!ApiSyncState(NULL, &state) && !ApiSyncMod(NULL, 0, &mod));
-    SyncLine("syncstate\t3\t5\toffer\tFriend One\t1048576\t0\t2\t", reply, sizeof reply); /* an empty message */
+    SyncLine("syncstate\t3\t5\toffer\tFriend One\t1048576\t0\t2\t0\t", reply, sizeof reply); /* an empty message */
     assert(!strcmp(reply, "3\tok\tnow"));
     assert(ApiSyncState(NULL, &state) && state.state == HF_SYNC_OFFER && state.version == 5 && state.mods == 2 && state.bytes == 1048576 &&
         state.done == 0 && !strcmp(state.host, "Friend One") && state.message[0] == 0 && state.size == sizeof state);
@@ -98,24 +98,30 @@ static void LiveSyncFixture(void)
     assert(!ApiSyncMod(NULL, 2, &mod));
 
     /* progress: the same version, its mods kept */
-    SyncLine("syncstate\t4\t5\tdownloading\tFriend One\t1048576\t524288\t2\tdownloading Tanks", reply, sizeof reply);
+    SyncLine("syncstate\t4\t5\tdownloading\tFriend One\t1048576\t524288\t2\t0\tdownloading Tanks", reply, sizeof reply);
     assert(!strcmp(reply, "4\tok\tnow"));
     assert(ApiSyncState(NULL, &state) && state.state == HF_SYNC_DOWNLOADING && state.done == 524288 && !strcmp(state.message, "downloading Tanks"));
     assert(ApiSyncMod(NULL, 1, &mod) && !strcmp(mod.id, "friend.guns"));
-    SyncLine("syncstate\t5\t5\tdownloading\tFriend One\t1048576\t600000\t3\t", reply, sizeof reply);
+    SyncLine("syncstate\t5\t5\tdownloading\tFriend One\t1048576\t600000\t3\t0\t", reply, sizeof reply);
     assert(!strncmp(reply, "5\trefused\t", 10)); /* a mod count changed without its mods */
 
     /* a new version: its syncstate without all of its syncmod lines is refused, the old offer stays */
     SyncLine("syncmod\t6\t6\t1\toff\tcontent\t0\tmine.extra\tExtra\t1.0", reply, sizeof reply);
-    SyncLine("syncstate\t7\t6\tready\tFriend One\t0\t0\t2\t", reply, sizeof reply);
+    SyncLine("syncstate\t7\t6\tready\tFriend One\t0\t0\t2\t0\t", reply, sizeof reply);
     assert(!strncmp(reply, "7\trefused\t", 10) && strstr(reply, "missing"));
     assert(ApiSyncState(NULL, &state) && state.version == 5);
     SyncLine("syncmod\t8\t6\t0\thave\tbundled\t300\thellforge.editor\tHellForge Editor\t0.4.1", reply, sizeof reply);
-    SyncLine("syncstate\t9\t6\tready\tFriend One\t0\t0\t2\t", reply, sizeof reply);
+    SyncLine("syncstate\t9\t6\tready\tFriend One\t0\t0\t2\t0\t", reply, sizeof reply);
     assert(!strcmp(reply, "9\tok\tnow"));
     assert(ApiSyncState(NULL, &state) && state.state == HF_SYNC_READY && state.version == 6 && state.mods == 2);
     assert(ApiSyncMod(NULL, 0, &mod) && mod.action == HF_SYNC_MOD_HAVE && mod.kind == HF_SYNC_CLASS_BUNDLED);
     assert(ApiSyncMod(NULL, 1, &mod) && mod.action == HF_SYNC_MOD_OFF && !strcmp(mod.id, "mine.extra"));
+    /* the running game can take the host's mods (HF_SYNC_LIVE); an unknown flag is refused */
+    assert(state.flags == 0);
+    SyncLine("syncstate\t9\t6\tready\tFriend One\t0\t0\t2\t1\t", reply, sizeof reply);
+    assert(!strcmp(reply, "9\tok\tnow") && ApiSyncState(NULL, &state) && state.flags == HF_SYNC_LIVE && state.mods == 2);
+    SyncLine("syncstate\t9\t6\tready\tFriend One\t0\t0\t2\t2\t", reply, sizeof reply);
+    assert(!strncmp(reply, "9\trefused\t", 10) && ApiSyncState(NULL, &state) && state.flags == HF_SYNC_LIVE);
 
     /* malformed lines: refused, nothing changes */
     const char* bad[] = {
@@ -125,9 +131,9 @@ static void LiveSyncFixture(void)
         "syncmod\t13\t7\t0\tdownload\tcontent\t-1\tx\tX\t1",       /* not a number */
         "syncmod\t14\t7\t0\tdownload\tcontent\t1\t\tX\t1",         /* no id */
         "syncmod\t15\t7\t0\tdownload\tcontent\t1\tx\tX",           /* a field short */
-        "syncstate\t16\t7\twaiting\tA\t0\t0\t0\t",                 /* an unknown state */
-        "syncstate\t17\t7\toffer\tA\t0\t0\t65\t",                  /* too many mods */
-        "syncstate\t18\t99999999999\toffer\tA\t0\t0\t0\t",         /* a version past 32 bits */
+        "syncstate\t16\t7\twaiting\tA\t0\t0\t0\t0\t",                 /* an unknown state */
+        "syncstate\t17\t7\toffer\tA\t0\t0\t65\t0\t",                  /* too many mods */
+        "syncstate\t18\t99999999999\toffer\tA\t0\t0\t0\t0\t",         /* a version past 32 bits */
         "syncstate\t19\t7\toffer\tA\t0\t0",                        /* fields short */
     };
     for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++)
@@ -144,7 +150,7 @@ static void LiveSyncFixture(void)
     SyncLine(line, reply, sizeof reply);
     char host[100];
     memset(host, 'h', 90); host[90] = 0;
-    snprintf(line, sizeof line, "syncstate\t21\t8\tblocked\t%s\t9\t0\t1\tyou blocked\tfriend.tanks", host);
+    snprintf(line, sizeof line, "syncstate\t21\t8\tblocked\t%s\t9\t0\t1\t0\tyou blocked\tfriend.tanks", host);
     SyncLine(line, reply, sizeof reply);
     assert(!strcmp(reply, "21\tok\tnow"));
     assert(ApiSyncState(NULL, &state) && state.state == HF_SYNC_BLOCKED && strlen(state.host) == sizeof state.host - 1 &&
@@ -174,7 +180,7 @@ static void LiveSyncFixture(void)
     assert(!ApiSyncAnswer(NULL, 8, HF_SYNC_RESTART, NULL)); /* no backend */
 
     /* withdrawn: state none of a new version, then the pipe going clears it */
-    SyncLine("syncstate\t22\t9\tnone\t\t0\t0\t0\t", reply, sizeof reply);
+    SyncLine("syncstate\t22\t9\tnone\t\t0\t0\t0\t0\t", reply, sizeof reply);
     assert(!strcmp(reply, "22\tok\tnow") && !ApiSyncState(NULL, &state) && state.state == HF_SYNC_NONE && state.version == 9);
     SyncClear();
     assert(!ApiSyncState(NULL, &state) && state.version == 0);

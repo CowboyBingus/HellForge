@@ -41,6 +41,7 @@ struct HfMod
     char last[512]; /* its last log line (last_log: why a call was refused) */
     int lua;        /* a Lua mod (lua.<name>), registered through the Lua bridge while the game runs (lua_bridge.c) */
     char name[128]; /* a Lua mod's name as its runtime gave it (SDK 10, mods) */
+    int order;      /* its place in load order (0 loads first): its index, until a live change reorders (live_mods.c) */
 };
 
 typedef struct Component
@@ -80,7 +81,7 @@ static int g_modCount;
  * player's load order (2026-10-18: friends with the same mods in another order). g_mods stays in load order: the
  * deferred edits queued while they set up apply in it (fields.c), so the top mod still wins a conflict. */
 static int g_modsSettingUp;
-static int ModLoadIndex(const HfMod* mod) { return mod >= g_mods && mod < g_mods + g_modCount ? (int)(mod - g_mods) : MAX_MODS; }
+static int ModLoadIndex(const HfMod* mod) { return mod >= g_mods && mod < g_mods + g_modCount ? mod->order : MAX_MODS; }
 /* The code mods' set-up order: indices into g_mods by mod id. */
 static void SetupOrder(int order[MAX_MODS])
 {
@@ -976,7 +977,8 @@ static int ReadPlan(const wchar_t* path)
         }
         else if (n == 4 && strcmp(f[0], "mod") == 0 && g_modCount < MAX_MODS)
         {
-            HfMod* mod = &g_mods[g_modCount++];
+            HfMod* mod = &g_mods[g_modCount];
+            mod->order = g_modCount++;
             snprintf(mod->id, sizeof mod->id, "%s", f[1]);
             snprintf(mod->folder, sizeof mod->folder, "%s", f[2]);
             Utf8ToWide(f[3], mod->dll, MAX_PATH);
@@ -997,6 +999,7 @@ static int ReadPlan(const wchar_t* path)
 
 #include "live.c"
 #include "lua_bridge.c"
+#include "live_mods.c" /* after lua_bridge.c: it adds mods under the bridge's lock */
 #include "netapply.c" /* after live.c: the co-op role */
 #include "netreap.c"
 #include "coop_diag.c" /* after live.c: the co-op role */

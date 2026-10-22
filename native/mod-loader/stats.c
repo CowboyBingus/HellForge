@@ -197,43 +197,53 @@ static void StatsFinishComponents(uint8_t* state)
     StatsApplyComponents(state);
 }
 
-/* phase: projectile, damage, stratagem. Moved tables always take precedence over the original. */
+/* phase: projectile, damage, stratagem. The edit's field in its row (the moved table's, which takes precedence over the
+ * original), or 0 with *why. Also live_mods.c's lookup. */
+static uintptr_t StatsTableField(int phase, uintptr_t game, const StatEdit* e, const char** why)
+{
+    uintptr_t table = phase == 0 ? ProjectileTable(game) : phase == 1 ? (g_damageTable ? (uintptr_t)g_damageTable : game + DMG_TABLE) :
+        (g_stratagemTable ? (uintptr_t)g_stratagemTable : game + STR_TABLE);
+    uint32_t count = phase == 0 ? PRJ_VANILLA : phase == 1 ? DMG_VANILLA : STR_VANILLA;
+    uint32_t stride = phase == 0 ? PRJ_ROW : phase == 1 ? DMG_ROW : STR_ROW;
+    if (strcmp(g_build, "25480438") || e->own || e->offset < 4 || e->offset > stride - 4 || e->offset % 4)
+    { *why = "unsupported build or table layout"; return 0; }
+    uintptr_t found = 0;
+    int matches = 0;
+    for (uint32_t slot = 1; slot < count; slot++)
+    {
+        uintptr_t row = 0; uint32_t id = 0, type = 0;
+        if (SafeRead(table + slot * 8u, &row, 8) || !row || SafeRead(row, &type, 4) || type != slot) continue;
+        if (phase == 2) { if (SafeRead(row + 4, &id, 4)) continue; } else id = type;
+        if (e->record == id) { found = row; matches++; }
+    }
+    uint8_t layout[STR_ROW];
+    if (matches != 1 || SafeRead(found, layout, stride)) { *why = "table row identity/layout is not unique or readable"; return 0; }
+    return found + e->offset;
+}
+
 static void StatsApplyTable(int phase, uintptr_t game)
 {
     if (g_statsTablesDone[phase]) return;
     g_statsTablesDone[phase] = 1;
     const char* kind = phase == 0 ? "ProjectileSettings" : phase == 1 ? "DamageInfo" : "StratagemDefinition";
-    uintptr_t table = phase == 0 ? ProjectileTable(game) : phase == 1 ? (g_damageTable ? (uintptr_t)g_damageTable : game + DMG_TABLE) :
-        (g_stratagemTable ? (uintptr_t)g_stratagemTable : game + STR_TABLE);
-    uint32_t count = phase == 0 ? PRJ_VANILLA : phase == 1 ? DMG_VANILLA : STR_VANILLA;
-    uint32_t stride = phase == 0 ? PRJ_ROW : phase == 1 ? DMG_ROW : STR_ROW;
     for (int i = 0; i < g_statCount; i++)
     {
         StatEdit* e = &g_stats[i];
         if (strcmp(e->kind, kind) || !e->mod->loaded) continue;
-        if (strcmp(g_build, "25480438") || e->own || e->offset < 4 || e->offset > stride - 4 || e->offset % 4)
-        { StatsRefuse(e, "unsupported build or table layout"); continue; }
-        uintptr_t found = 0;
-        int matches = 0;
-        for (uint32_t slot = 1; slot < count; slot++)
-        {
-            uintptr_t row = 0; uint32_t id = 0, type = 0;
-            if (SafeRead(table + slot * 8u, &row, 8) || !row || SafeRead(row, &type, 4) || type != slot) continue;
-            if (phase == 2) { if (SafeRead(row + 4, &id, 4)) continue; } else id = type;
-            if (e->record == id) { found = row; matches++; }
-        }
-        uint8_t layout[STR_ROW];
-        if (matches != 1 || SafeRead(found, layout, stride)) { StatsRefuse(e, "table row identity/layout is not unique or readable"); continue; }
-        StatsWrite(e, found + e->offset);
+        const char* why = NULL;
+        uintptr_t at = StatsTableField(phase, game, e, &why);
+        if (!at) StatsRefuse(e, why);
+        else StatsWrite(e, at);
     }
 }
 
-static int StatsParse(char** f, int n)
+/* A plan's stat line (f[0] "stat", f[1] the mod id) into *out, its mod left NULL; 1 when malformed. Also live_mods.c's
+ * modstat lines. */
+static int StatsParseInto(char** f, int n, StatEdit* out)
 {
-    if (n != 14 || g_statCount >= MAX_STATS) return 1;
+    if (n != 14) return 1;
     StatEdit e = {0};
-    for (int i = 0; i < g_modCount; i++) if (!strcmp(g_mods[i].id, f[1])) e.mod = &g_mods[i];
-    if (!e.mod || strlen(f[2]) >= sizeof e.kind || strlen(f[3]) >= sizeof e.component || strlen(f[13]) >= sizeof e.label) return 1;
+    if (strlen(f[2]) >= sizeof e.kind || strlen(f[3]) >= sizeof e.component || strlen(f[13]) >= sizeof e.label) return 1;
     if (strcmp(f[2], "component") && !StatsTableKind(f[2]) && StatsExtraKind(f[2]) < 0) return 1;
     if (strcmp(f[7], "f32") && strcmp(f[7], "u32") && strcmp(f[7], "i32") && strcmp(f[7], "u8")) return 1;
     if (!strcmp(f[7], "u8") && strcmp(f[2], "component")) return 1; /* one-byte flags are components' only */
@@ -251,6 +261,18 @@ static int StatsParse(char** f, int n)
     for (int i = 10; i <= 12; i++) if (strcmp(f[i], "0") && strcmp(f[i], "1")) return 1;
     e.own = f[10][0] == '1'; e.shared = f[11][0] == '1'; e.unverified = f[12][0] == '1'; e.floating = !strcmp(f[7], "f32");
     if (e.floating) { float value; memcpy(&value, &e.value, 4); if (!isfinite(value)) return 1; }
+    *out = e;
+    return 0;
+}
+
+static int StatsParse(char** f, int n)
+{
+    if (n != 14 || g_statCount >= MAX_STATS) return 1;
+    HfMod* mod = NULL;
+    for (int i = 0; i < g_modCount; i++) if (!strcmp(g_mods[i].id, f[1])) mod = &g_mods[i];
+    StatEdit e;
+    if (!mod || StatsParseInto(f, n, &e)) return 1;
+    e.mod = mod;
     g_stats[g_statCount++] = e;
     return 0;
 }

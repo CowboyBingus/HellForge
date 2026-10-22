@@ -158,10 +158,11 @@ sealed class PlaySession(PlayOptions options)
         // Mods: stage data mods (and remove the last session's) before the copy's files are locked; --progress lets the
         // launcher show source mods being compiled.
         var loaderPlan = Path.Combine(run, "modloader-plan.txt");
-        // --modset: the gameplay mods with their content hashes, for the backend (mod sync); --sync: after a mod sync, the
-        // host's mods instead of the player's own (ModSyncSession).
+        // --modset: the gameplay mods with their content hashes, for the backend (mod sync); --session-mods: the mods the
+        // session runs, which the backend can change without a restart (LiveMods); --sync: after a mod sync, the host's mods
+        // instead of the player's own (ModSyncSession).
         string[] stage = ["mods-stage", "--install", install.Root, "--plan", loaderPlan, "--logs", run, "--progress", Path.Combine(run, "mod-builds.json"),
-            "--modset", ModSetFile];
+            "--modset", ModSetFile, "--session-mods", SessionModsFile];
         if (options.ModSync != null) stage = [.. stage, "--sync", Path.GetFullPath(options.ModSync)];
         var planText = HellForgeCli(stage);
         if (Tools.ParseJson(planText ?? "") is not JsonObject plan) throw new SessionFailure("Mods could not be loaded; see cli-output.txt in this session's log folder.");
@@ -222,6 +223,7 @@ sealed class PlaySession(PlayOptions options)
     string? modList;
     // The session's mod set (mods-stage --modset), for the backend's mod sync.
     string ModSetFile => Path.Combine(run, "modset.json");
+    string SessionModsFile => Path.Combine(run, "session-mods.json");
 
     // What asked the session to stop: "stop" (the launcher) or "mod-sync" (the backend, to restart with a host's mods).
     string ReadSignal()
@@ -585,15 +587,18 @@ sealed class PlaySession(PlayOptions options)
         // The all-planets war (every planet but Super Earth a liberation) takes the live war's place.
         if (options.OpenWar) { start.ArgumentList.Add("--war"); start.ArgumentList.Add("open"); result["war"] = "open"; }
         else if (options.LiveWar != null) { start.ArgumentList.Add("--live-war"); start.ArgumentList.Add(Path.GetFullPath(options.LiveWar)); result["liveWar"] = true; }
+        // The game's live pipe, and the session's mods, which the launcher's Mods page can change without a restart
+        // (LiveMods; a multiplayer session's pipe comes with stats sharing). --modset: joiners lacking this session's mods may
+        // download them (ModSync); --mods: co-op plays with the host's Local Stats (StatsShare).
+        foreach (var argument in new[] { "--live-run", (string)result["runId"]!, "--mods", install.Mods, "--modset", ModSetFile, "--session-mods", SessionModsFile })
+            start.ArgumentList.Add(argument);
         if (options.Multiplayer)
         {
             var link = Path.Combine(Directory.CreateDirectory(Path.Combine(run, "steam-link")).FullName, "steam_api64.dll");
             File.Copy(realSteamApi, link);
             if (Tools.Sha256(link) != shimPins[CloudName]) throw new SessionFailure("Could not copy steam_api64.dll for the peer link.");
             var pipe = "hellforge-" + (string)result["runId"]!;
-            // --mods: co-op plays with the host's Local Stats (StatsShare): the host's backend reads it, a joiner's restores it
-            // --modset: joiners lacking this session's mods may download them (ModSync)
-            foreach (var argument in new[] { "--pipe", pipe, "--link", "steam:" + link, "--mod-digest", modDigest, "--mods", install.Mods, "--modset", ModSetFile })
+            foreach (var argument in new[] { "--pipe", pipe, "--link", "steam:" + link, "--mod-digest", modDigest })
                 start.ArgumentList.Add(argument);
             // --mod-list: the digest's mods one by one, so a refused join can say which differ (ModlistDiff)
             if (modList != null)

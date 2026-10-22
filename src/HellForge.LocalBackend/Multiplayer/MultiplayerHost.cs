@@ -110,6 +110,15 @@ public sealed class MultiplayerHost : IAsyncDisposable
         return host;
     }
 
+    // The session's mods changed while it runs (LiveMods): joins are checked against the new digest, and mod sync's offers
+    // and the directory's listing carry the new set.
+    public void ModsChanged(ModSet set)
+    {
+        Lobby.SetMods(set.Digest, ModlistDiff.Encode(set.Fingerprints()));
+        Sync?.SetOwn(set);
+        Log($"The session's mods changed live; their digest is now {set.Digest}.");
+    }
+
     // The session folder is the evidence folder's parent; the next session's mods go to the installation's temp folder.
     void StartSync(string modsFolder, string? modSetFile, string evidenceDirectory)
     {

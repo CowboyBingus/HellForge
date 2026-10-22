@@ -182,6 +182,15 @@ static uintptr_t BoosterRow(uint64_t value)
     return table ? table + (uintptr_t)value * BOOSTER_ROW : 0;
 }
 
+/* A booster edit's field in the table (0: not read as reviewed), or 0 with *why. Also live_mods.c's lookup. */
+static uintptr_t BoosterField(const StatEdit* e, uintptr_t table, const char** why)
+{
+    if (!table || strcmp(g_build, "25480438")) { *why = "the booster table is not as reviewed"; return 0; }
+    if (e->own || e->record < 1 || e->record >= (int64_t)BOOSTER_ROWS || e->offset < 4 || e->offset > BOOSTER_ROW - 4 || e->offset % 4)
+    { *why = "no such booster row or field"; return 0; }
+    return table + (uintptr_t)e->record * BOOSTER_ROW + e->offset;
+}
+
 /* Stats edits of the booster table, once it is readable (refused if it never is within 60 s of the entity data). */
 static void StatsBoostersReady(void)
 {
@@ -196,10 +205,10 @@ static void StatsBoostersReady(void)
     {
         StatEdit* e = &g_stats[i];
         if (strcmp(e->kind, "BoosterSettings") || !e->mod->loaded) continue;
-        if (!table || strcmp(g_build, "25480438")) StatsRefuse(e, "the booster table is not as reviewed");
-        else if (e->own || e->record < 1 || e->record >= (int64_t)BOOSTER_ROWS || e->offset < 4 || e->offset > BOOSTER_ROW - 4 || e->offset % 4)
-            StatsRefuse(e, "no such booster row or field");
-        else StatsWrite(e, table + (uintptr_t)e->record * BOOSTER_ROW + e->offset);
+        const char* why = NULL;
+        uintptr_t at = BoosterField(e, table, &why);
+        if (!at) StatsRefuse(e, why);
+        else StatsWrite(e, at);
     }
 }
 
@@ -226,6 +235,15 @@ static uintptr_t MeleeVolume(uint64_t rva)
     return 0;
 }
 
+/* A hit volume edit's field, or 0 with *why. Also live_mods.c's lookup. */
+static uintptr_t MeleeField(const StatEdit* e, const char** why)
+{
+    uintptr_t row = strcmp(g_build, "25480438") ? 0 : MeleeVolume((uint64_t)e->record);
+    if (!row) { *why = "the hit volume is not as reviewed"; return 0; }
+    if (e->own || e->offset < 4 || e->offset > MELEE_VOLUME_SIZE - 4 || e->offset % 4) { *why = "no such hit volume field"; return 0; }
+    return row + e->offset;
+}
+
 /* Stats edits of the hit volumes, once game.dll's data reads as reviewed (refused if it never does within 60 s). */
 static void StatsMeleeReady(void)
 {
@@ -240,10 +258,10 @@ static void StatsMeleeReady(void)
     {
         StatEdit* e = &g_stats[i];
         if (strcmp(e->kind, "MeleeHitVolume") || !e->mod->loaded) continue;
-        uintptr_t row = strcmp(g_build, "25480438") ? 0 : MeleeVolume((uint64_t)e->record);
-        if (!row) StatsRefuse(e, "the hit volume is not as reviewed");
-        else if (e->own || e->offset < 4 || e->offset > MELEE_VOLUME_SIZE - 4 || e->offset % 4) StatsRefuse(e, "no such hit volume field");
-        else StatsWrite(e, row + e->offset);
+        const char* why = NULL;
+        uintptr_t at = MeleeField(e, &why);
+        if (!at) StatsRefuse(e, why);
+        else StatsWrite(e, at);
     }
 }
 

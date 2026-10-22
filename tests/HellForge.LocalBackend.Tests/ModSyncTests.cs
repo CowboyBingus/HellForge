@@ -268,7 +268,7 @@ static class ModSyncTests
         var view = new SyncView(7, "offer", "Host\nName", 1234, 0, "Message", [new SyncItem(mod, SyncAction.Download, null)]);
         check(await new LiveSyncDisplay(live).ShowAsync(view, withMods: true), "The game took the offer.");
         await game;
-        check(lines.SequenceEqual(["syncmod\t7\t0\tdownload\tcode\t1234\ttest.tab\tNamewith a tab\t1", "syncstate\t7\toffer\tHostName\t1234\t0\t1\tMessage"]),
+        check(lines.SequenceEqual(["syncmod\t7\t0\tdownload\tcode\t1234\ttest.tab\tNamewith a tab\t1", "syncstate\t7\toffer\tHostName\t1234\t0\t1\t0\tMessage"]),
             "The lines: " + string.Join(" | ", lines));
         await writer.WriteLineAsync("syncanswer\t7\tblock\ttest.tab");
         check(answers.TryTake(out var answer, TimeSpan.FromSeconds(5)) && answer!.SequenceEqual(["syncanswer", "7", "block", "test.tab"]), "The game's answer arrives.");
