@@ -1,13 +1,15 @@
-/* HellForge mod SDK, version 6: the interface between HellForge and a code mod (docs/mods.md).
+/* HellForge mod SDK: the interface between HellForge and a code mod (HF_MOD_SDK_VERSION below; docs/modding/README.md).
  *
- * A code mod is a Windows x64 DLL in its mod folder, named by "code": {"dll": "...", "sdk": 1} in hellforge-mod.json. HellForge
- * loads it into the copied game at the start of a session (enabled mods, in the Mods page's load order: its bottom mod first) and calls its exported
+ * A code mod is a Windows x64 DLL in its mod folder, named by "code": {"dll": "...", "sdk": <the SDK it needs>} in
+ * hellforge-mod.json. HellForge loads it into the copied game at the start of a session and calls its exported
  *
  *     HF_MOD_EXPORT int hellforge_mod_init(const HfApi* api, HfMod* mod);
  *
- * once, on the loader's thread, while the game is still starting. Return 0 to stay loaded; anything else unloads the
- * mod and is reported. Keep the api pointer: it is valid for the whole session. Register for events to act once the
- * game's code and data exist; events are delivered on the loader's thread, in load order, never concurrently.
+ * once, on the loader's thread, while the game is still starting; mods are set up in the order of their ids (the same on
+ * every machine), and their edits apply in the Mods page's load order (its bottom mod first). Return 0 to stay loaded;
+ * anything else marks the mod not loaded (modloader.log says so; what it queued before still applies). Keep the api
+ * pointer: it is valid for the whole session. Register for events to act once the game's code and data exist; load
+ * events are delivered on the loader's watch thread, in the order mods registered, never two at once.
  *
  * Everything runs inside the offline HellForge copy only; the normal game is never touched. The loader does not catch a mod's crashes; the session log names the mod that was running. */
 #ifndef HELLFORGE_MOD_H
@@ -20,7 +22,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 12
+#define HF_MOD_SDK_VERSION 13
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -163,7 +165,8 @@ typedef struct HfBehaviour
  *     uint32_t damage = api->add_damage(mod, &heavy);
  *
  * Projectiles deal it through HfProjectile.damage. The game's damage list has no spare room, so HellForge moves it to
- * a larger copy (docs/mods.md "Adding damage"); ids are numbered in mod load order, the same in every game. */
+ * a larger copy (docs/modding/content.md "Projectiles and damage"); ids are numbered in the mods' set-up order (by mod
+ * id), the same in every game. */
 typedef struct HfDamage
 {
     uint32_t size;  /* sizeof(HfDamage) */
@@ -185,9 +188,10 @@ typedef struct HfDamage
  *     gatling.icon = "my_name/my_mod/icons/pelican_gatling";
  *     uint32_t type = api->add_stratagem(mod, &gatling);
  *
- * The game's stratagem list has no spare room, so HellForge moves it to a larger copy (docs/mods.md "Adding
- * stratagems"); types are numbered in mod load order, so every game numbers them alike. Players own it through the
- * local backend (it joins the catalogue and inventory for the session) and pick it in the loadout like any other. */
+ * The game's stratagem list has no spare room, so HellForge moves it to a larger copy (docs/internals.md
+ * "Stratagems"); types are numbered in the mods' set-up order (by mod id), so every game numbers them alike. Players
+ * own it through the local backend (it joins the catalogue and inventory for the session) and pick it in the loadout like
+ * any other. */
 /* An entity a stratagem's editor page shows, and the vanilla entity whose fields it shows for it (HfStratagem). */
 typedef struct HfEditorEntity
 {
@@ -241,7 +245,8 @@ typedef struct HfStratagem
      * controls the native HUD/ping colours. Handles are session-local; never save them. */
     uint32_t selection_category;
     /* SDK 8: the stratagem's place under its selection_category heading: lower comes first; equal orders (0 by
-     * default) keep add_stratagem call order, then mod load order. Ignored in vanilla sections. */
+     * default) follow the stratagem types: the mods' set-up order (by mod id), then add_stratagem call order. Ignored in
+     * vanilla sections. */
     int32_t selection_order;
 } HfStratagem;
 
@@ -257,7 +262,7 @@ typedef struct HfStratagem
  *     uint32_t type = api->add_projectile(mod, &bolt);
  *
  * A weapon fires it through HfWeapon.projectile. Every player's game must run the same mods: the modlist gate ensures
- * it, and types are numbered in mod load order, so every game numbers them alike. */
+ * it, and types are numbered in the mods' set-up order (by mod id), so every game numbers them alike. */
 typedef struct HfProjectile
 {
     uint32_t size;          /* sizeof(HfProjectile) */
@@ -347,7 +352,7 @@ typedef struct HfDifficulty
  * rows of the game, one per faction, offered only at the level; city copies of the ICBM objectives' stamps). */
 #define HF_DIFFICULTY_CITY_ICBM 0x40u
 
-/* ---- SDK 6: named fields, definition blocks and deferred edits (docs/mods.md "Named fields") --------------------- */
+/* ---- SDK 6: named fields, definition blocks and deferred edits (docs/modding/content.md) ------------------------- */
 
 /* Field types, as the mappings name them. */
 #define HF_TYPE_U8 1u
@@ -866,7 +871,9 @@ typedef struct HfApi
     /* A loaded module's base address and image size, or 0 ("game.dll", "helldivers2.exe"). */
     uintptr_t (*module_base)(const char* module, size_t* size);
 
-    /* The first match of an IDA-style byte pattern ("48 8B ?? 24 ?? E8") in the module's image, or 0. */
+    /* The first match of an IDA-style byte pattern ("48 8B ?? 24 ?? E8") in the module's image, or 0. It reads the code as
+     * it is now: a function another mod or HellForge hooked starts with a jump. To check a function before hooking
+     * it, use code_matches (SDK 13), which reads its bytes from before any hook. */
     uintptr_t (*find_pattern)(const char* module, const char* pattern);
 
     /* Memory: 0 on success. write makes the bytes writable for the write, restores their protection and flushes the
@@ -876,10 +883,13 @@ typedef struct HfApi
     /* Writes a u32 only if it holds `expect` (or already `value`): 0 written or already set, 1 left alone. */
     int (*write_u32_if)(HfMod* mod, uintptr_t address, uint32_t expect, uint32_t value);
 
-    /* Detours the function at `target` to `detour`; *original receives a pointer that calls the original code.
-     * 0 on success. Hooks stay for the session. Code another overlay already redirected (its jump stub in allocated
-     * memory, where MinHook finds no room) is chained: the stub's address becomes the detour, the overlay's code the
-     * original. */
+    /* Detours the function at `target` to `detour`; *original receives a pointer that calls the next hook in the
+     * function's chain, or its own code. 0 on success. Hooks stay for the session. Since SDK 13 every hook, a mod's or
+     * HellForge's own, joins one chain per function, so several mods can hook the same function: hook_ex (SDK 13) says
+     * the order, and this is hook_ex with priority 0. Call the original through `*original` every time, never a copy of
+     * it: HellForge rewrites it when another hook joins the chain after this one. Code another overlay already
+     * redirected (its jump stub in allocated memory, where MinHook finds no room) is chained: the stub's address
+     * becomes the detour, the overlay's code the original. */
     int (*hook)(HfMod* mod, uintptr_t target, void* detour, void** original);
 
     /* Network field types by name (after HF_EVENT_NETWORK_READY). get: 0 and *type filled, or 1. set_bits widens an
@@ -922,7 +932,7 @@ typedef struct HfApi
      * or 0 (the mod's log says why). The game has room for 48 new stratagems in all mods together. */
     uint32_t (*add_stratagem)(HfMod* mod, const HfStratagem* stratagem);
     /* The 400-byte settings row of a stratagem a mod added, once the game has loaded its stratagems, or 0. +0 type and
-     * +4 stable id must stay; HD2Runtime's research names the rest (docs/mods.md "Adding stratagems"). */
+     * +4 stable id must stay; HD2Runtime's research names the rest (docs/internals.md "Stratagems"). */
     uintptr_t (*stratagem_row)(uint32_t type);
     /* Adds a new entity (see HfEntity). Call it from hellforge_mod_init. Returns its resource id, or 0 (the mod's log
      * says why). Entities and weapons share room for 64. */
@@ -1083,6 +1093,26 @@ typedef struct HfApi
     /* ---- SDK 12 --------------------------------------------------------------------------------------------------- */
     /* HellForge's latest message for the player (HfNotice), as the session's backend posts it. Check hf->size. */
     void (*notice)(HfMod* mod, HfNotice* out);
+
+    /* ---- SDK 13 --------------------------------------------------------------------------------------------------- */
+    /* hook with an order: a function's hooks run first to last, each calling the next through its original. Mods'
+     * hooks run first, the highest `priority` first; equal priorities by load order, the mod higher on the Mods page
+     * first (a mod's own later hook on the same function before its earlier one). HellForge's own hooks (its events,
+     * the registry, the game thread) run last, nearest the game's code. The mod's log and modloader.log name each hook
+     * with its place in the chain, a function hooked by more than one mod or by HellForge too is logged as a shared
+     * hook with every owner in order, and the session folder's hooks.tsv lists every chain. Refused (1, the mod's log
+     * says why): the same detour on the same function twice, more than 16 hooks on one function or 1024 hooked
+     * functions in all. Check hf->size before calling. */
+    int (*hook_ex)(HfMod* mod, uintptr_t target, void* detour, void** original, int32_t priority);
+    /* 1 when the bytes at `address`, as they were before any hook HellForge placed (its own or a mod's), match the
+     * IDA-style pattern ("48 8B ?? 24"); 0 otherwise or when they cannot be read. The check to make before hooking a
+     * function: another mod that hooked it first does not fail it, where find_pattern and read would (they see the
+     * hook's jump). Only hooks are seen through: bytes a mod changed with write, or that HellForge rewrote, read as
+     * they are now. Check hf->size before calling. */
+    int (*code_matches)(uintptr_t address, const char* pattern);
+    /* Like read, with the bytes as they were before any hook HellForge placed (as code_matches reads them). 0 on
+     * success. */
+    int (*read_code)(uintptr_t address, void* buffer, size_t size);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

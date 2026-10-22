@@ -1,4 +1,4 @@
-# Builds a HellForge mod (docs/mods.md). A code mod: compiles the C or C++ sources in <mod folder>/src against the HellForge
+# Builds a HellForge mod (docs/modding/tools.md). A code mod: compiles the C or C++ sources in <mod folder>/src against the HellForge
 # mod SDK (native/mod-sdk/hellforge_mod.h) with the project's pinned Zig, into the DLL the mod's hellforge-mod.json names
 # ("code": {"dll"}), next to the manifest. A mod with a data spec (hellforge-data.json): checks it and, given an installation
 # (-Install, or HELLFORGE_INSTALL), builds its data from that installation's game copy into the installation's cache, as a

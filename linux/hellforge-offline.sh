@@ -23,7 +23,7 @@ unshare=unshare
 [ -x /usr/local/lib/hellforge/unshare ] && unshare=/usr/local/lib/hellforge/unshare
 if [ "$unshare" = unshare ] && [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo 0)" = 1 ]; then
   echo "This system only lets allowed programs make the network namespace HellForge runs in." >&2
-  echo "Run this once: sudo $(dirname "$0")/allow-namespace.sh   (docs/linux.md)" >&2
+  echo "Run this once: sudo bash $(dirname "$0")/allow-namespace.sh   (docs/linux.md)" >&2
   exit 1
 fi
 

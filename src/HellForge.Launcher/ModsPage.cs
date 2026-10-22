@@ -53,7 +53,8 @@ public partial class MainWindow
     }
 
     // Changes in the mods folder refresh the page shortly after they stop (a copy writes many files); HellForge's own
-    // writes there are left out: dot folders (.unpacked: zips' unpacked copies) and dot files, and the page's settings.
+    // writes there are left out: dot folders (.unpacked: zips' unpacked copies) and dot files, and the page's own saves of its
+    // settings (another program's changes to them do refresh it).
     void WatchMods()
     {
         if (paths.ModsFolder == null) return;
@@ -72,8 +73,10 @@ public partial class MainWindow
             {
                 var relative = Path.GetRelativePath(folder, path).Replace('\\', '/');
                 var name = Path.GetFileName(relative);
-                if (relative.Split('/').Any(p => p.StartsWith('.')) || name.StartsWith(ModSettings.FileName, StringComparison.OrdinalIgnoreCase) ||
-                    name.StartsWith(ModSettings.LegacyFileName, StringComparison.OrdinalIgnoreCase)) return;
+                if (relative.Split('/').Any(p => p.StartsWith('.')) || name.StartsWith(ModSettings.LegacyFileName, StringComparison.OrdinalIgnoreCase)) return;
+                // the page's own saves are drawn already; another program's (HellForge.Cli, a mod manager) are loaded
+                if (name.StartsWith(ModSettings.FileName, StringComparison.OrdinalIgnoreCase) &&
+                    (!name.Equals(ModSettings.FileName, StringComparison.OrdinalIgnoreCase) || OwnSettings(path))) return;
                 Dispatcher.UIThread.Post(() => { modsChanged.Stop(); modsChanged.Start(); });
             }
             modsWatcher = new FileSystemWatcher(folder) { IncludeSubdirectories = true, InternalBufferSize = 64 * 1024,
@@ -89,6 +92,13 @@ public partial class MainWindow
         {
             Append("The Mods page will not follow the mods folder (use Refresh): " + error.Message, Orange);
         }
+    }
+
+    // The settings file holds what this launcher saved last (ModSettings.LastWritten). Unreadable counts as changed.
+    static bool OwnSettings(string path)
+    {
+        try { return File.ReadAllText(path) == ModSettings.LastWritten; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return false; }
     }
 
     void RefreshMods()
@@ -108,7 +118,7 @@ public partial class MainWindow
         try { (mods, problems) = ModCatalog.Load(paths.ModsFolder); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            ModsSummary.Text = "Could not read the mods folder: " + error.Message;
+            ModsSummary.Text = "Could not read the mods folder: " + Privacy.Scrub(error.Message);
             return;
         }
         var active = ModCatalog.Active(mods);

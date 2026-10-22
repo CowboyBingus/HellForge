@@ -7,6 +7,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
     dotnet run --project tests/HellForge.Tests --no-build
     if ($LASTEXITCODE -ne 0) { throw 'Integration checks failed.' }
+    dotnet run --project tests/HellForge.LocalBackend.Tests --no-build
+    if ($LASTEXITCODE -ne 0) { throw 'Local backend checks failed.' }
 
     # NTFS junctions need no symbolic-link privilege. Keep all fixtures in artifacts.
     $fixtureRoot = Join-Path $projectRoot ('artifacts/path-tests/' + [guid]::NewGuid().ToString('N'))

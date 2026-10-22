@@ -1,0 +1,20 @@
+HellForge: additional permission under GNU GPL version 3 section 7
+
+HellForge is licensed under the GNU General Public License, version 3 (LICENSE), with the following additional
+permission. The parts listed in LICENSE-SDK (the mod SDK, the mod template and the example mods) are under the MIT No
+Attribution License instead.
+
+A "mod" is code or data that HellForge's mod loader (native/mod-loader) or HellForge's mod staging loads into the
+game, written against HellForge's mod SDK (native/mod-sdk/) or using the formats HellForge's documentation describes,
+that contains no part of HellForge other than the parts listed in LICENSE-SDK.
+
+If you modify HellForge, or any covered work, by linking or combining it with a mod, the copyright holders of HellForge
+grant you additional permission to convey the resulting combination, and the mod may be distributed under any terms
+its author chooses, without the terms of the GNU General Public License applying to the mod. This permission does not
+extend to HellForge itself, or to works based on HellForge other than mods, which stay under the GNU General Public
+License, version 3, with this permission.
+
+If you modify HellForge, you may extend this additional permission to your version, but you are not obliged to do so.
+If you do not wish to do so, delete this permission notice from your version.
+
+Copyright (c) 2026 SkyeShade and HellForge's contributors.

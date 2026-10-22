@@ -1,4 +1,4 @@
-/* Hell Forge: difficulty 11 (HellForge SDK 5, docs/mods.md "Adding a difficulty"; vanilla constants from SDK 6). */
+/* Hell Forge: difficulty 11 (HellForge SDK 5, docs/modding/content.md "A difficulty"; vanilla constants from SDK 6). */
 #include "hellforge_mod.h"
 
 HF_MOD_EXPORT int hellforge_mod_init(const HfApi* api, HfMod* mod)

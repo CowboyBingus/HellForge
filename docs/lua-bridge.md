@@ -1,25 +1,30 @@
 # Lua mods and the Lua bridge
 
-HellForge loads Lua mods: Bingus Shared Loader, HD2Runtime and the mods made for them. They are the player's own
-mods. They run on this player's game only, and they are not part of the modlist code, so friends do not need the same
-ones to play together. HellForge's code mods stay the layer that is the same for everyone in co-op.
+This page is for players who want to run Lua mods on HellForge, and for authors of Lua mods and runtimes who want to
+know how their changes reach the game. It covers adding Lua mods, what HD2Runtime does on HellForge, which edit wins a
+field, and the C interface the bridge exports.
 
-HD2Runtime does not write the game itself on HellForge. It finds HellForge's **Lua bridge** in the game and asks
-HellForge to make each change. A Lua mod's change is then a HellForge live edit, like the F8 editor's: the editor
-shows it with the mod's name, and HellForge keeps it when the game reloads its data. HD2Runtime's API stays the same,
-so a mod made for HD2Runtime runs unchanged.
+HellForge loads Lua mods: Bingus Shared Loader, HD2Runtime and the mods made for them. They are the player's own mods.
+They run on this player's game only and are not part of the modlist code, so friends do not need the same ones to play
+together. HellForge's code mods stay the layer that is the same for everyone in co-op (see the
+[modding guide](modding/README.md)).
+
+On HellForge, HD2Runtime does not write to the game itself. It finds HellForge's Lua bridge in the game and asks
+HellForge to make each change. A Lua mod's change is then a HellForge live edit, like the F8 editor's: the editor shows
+it with the mod's name, and HellForge keeps it when the game reloads its data. HD2Runtime's API stays the same, so a mod
+made for HD2Runtime runs unchanged.
 
 ## For players
 
-1. Add Bingus Shared Loader and HD2Runtime (a release with the HellForge bridge) on the Mods page, like
-   any other mod. HD2Runtime needs Bingus Shared Loader. HellForge does not ship either. HD2Runtime's file is
-   `HD2Runtime-<version>-runtime.zip`; `HD2Runtime-ModTemplate-<version>.zip` is a starter for writing HD2Runtime mods,
-   not a mod, and the Mods page says so if it is added.
+1. Add Bingus Shared Loader and HD2Runtime (a release with the HellForge bridge) on the Mods page, like any other mod.
+   HD2Runtime needs Bingus Shared Loader, and HellForge ships neither. HD2Runtime's file is
+   `HD2Runtime-<version>-runtime.zip`. `HD2Runtime-ModTemplate-<version>.zip` is a starter for writing HD2Runtime mods,
+   not a mod, and the Mods page says so if you add it.
 2. Add the Lua mods you want.
 
-Lua mods are listed with a **LUA** tag, in the cosmetic group. They are staged like any game patch. The F8 editor shows
-a value a Lua mod changed with the mod's name, `lua.<mod>`. Your own F8 changes win over a Lua mod's; a Lua mod's win
-over a code mod's.
+Lua mods are listed in the cosmetic group with a LUA tag, and they are staged like any game patch. The F8 editor shows
+a value a Lua mod changed with the mod's name, `lua.<mod>`. Your own F8 changes win over a Lua mod's, and a Lua mod's
+win over a code mod's.
 
 ## What HD2Runtime does on HellForge
 
@@ -34,18 +39,19 @@ over a code mod's.
 | Custom stratagems | Unavailable for good: custom stratagems are HellForge stratagem mods |
 | Enemy spawn weights and the director, enemy fields | Unavailable: HellForge has not mapped enemies yet |
 
-Unavailable calls answer `HELLFORGE_UNAVAILABLE` (a rejected handle, or nil, code and reason) and log it once, so a mod
-that uses one keeps running. `hd2.hellforge` says whether HD2Runtime runs on HellForge, and lists what is unavailable.
-HD2Runtime's own lobby sync (synced assets, beam conversions, the mission timer) and its public matchmaking check stay
-off: the session is HellForge's.
+An unavailable call answers `HELLFORGE_UNAVAILABLE` (a rejected handle, or nil, a code and a reason) and logs it once,
+so a mod that uses one keeps running. `hd2.hellforge` says whether HD2Runtime runs on HellForge and lists what is
+unavailable. HD2Runtime's own lobby sync (synced assets, beam conversions, the mission timer) and its public matchmaking
+check stay off, because the session is HellForge's.
 
-Every field HD2Runtime's catalogues let mods write has a route on HellForge (see "How HD2Runtime's fields map" below).
-A mod's own icon image for a stratagem answers `HELLFORGE_UNSUPPORTED`: HellForge does not load a Lua mod's images yet.
+Every field HD2Runtime's catalogues let mods write has a route on HellForge (see
+[how HD2Runtime's fields map](#how-hd2runtimes-fields-map)). A mod's own icon image for a stratagem answers
+`HELLFORGE_UNSUPPORTED`, because HellForge does not load a Lua mod's images yet.
 
 In a HellForge session whose bridge HD2Runtime cannot use (an older HellForge), its operations are refused with
-`HELLFORGE_UNAVAILABLE` and the reason: it never falls back to changing the game itself, over HellForge's changes. The
-Mods page says when an HD2Runtime has no bridge or an older one, and when Bingus Shared Loader or HD2Runtime is missing
-for an enabled Lua mod.
+`HELLFORGE_UNAVAILABLE` and the reason. HD2Runtime never falls back to changing the game itself over HellForge's
+changes. The Mods page says when an HD2Runtime has no bridge or an older one, and when Bingus Shared Loader or
+HD2Runtime is missing for an enabled Lua mod.
 
 ## Who wins a field
 
@@ -56,11 +62,12 @@ A field can carry live edits from several mods. They stack, and the record holds
 3. code mods
 
 An edit under another keeps its value and takes the field when the one above it goes. Entity deltas and status
-multipliers (`set_stat`) stack the same way. A row copy (`copy_row`) and a stratagem code are one value each: the
-later Lua mod's replaces the earlier's. A Lua or code mod's edit also
-stays under a value Local Stats saved and the boot pass wrote, while the record holds it. `get_live` and `get_stat`
-name a Lua mod's edit as the field's holder, with its value as the base, so the F8 editor shows "Mod: lua.<name>" and
-its reset goes back to the Lua mod's value. Code mods' live edits are not named, as before.
+multipliers (`set_stat`) stack the same way. A row copy (`copy_row`) and a stratagem code are one value each, so the
+later Lua mod's replaces the earlier one's. A Lua or code mod's edit also stays under a value that Local Stats saved and
+the boot pass wrote, for as long as the record holds it.
+
+`get_live` and `get_stat` name a Lua mod's edit as the field's holder, with its value as the base, so the F8 editor
+shows "Mod: lua.<name>" and its reset goes back to the Lua mod's value. Code mods' live edits are not named, as before.
 
 ## The C interface
 
@@ -81,15 +88,16 @@ its reset goes back to the Lua mod's value. Code mods' live edits are not named,
 | `hellforge_lua_heal` .. `hellforge_lua_stop_shots` | (bridge 3) The SDK 11 actions, with plain values for the ffi |
 | `game_state`, `find`, `load_package`, `set_passives`, `get_passives`, `log`, `last` | As the HfApi calls of those names |
 
-The game thread never calls into Lua: events wait in a queue (512 events) the runtime empties from its own update. A Lua
-runtime finds the bridge from the `HELLFORGE_MODLOADER` environment variable and the loaded DLL; outside a HellForge
-session neither is there.
+The game thread never calls into Lua. Events wait in a queue (512 events) that the runtime empties from its own update.
+A Lua runtime finds the bridge from the `HELLFORGE_MODLOADER` environment variable and the loaded DLL; outside a
+HellForge session neither is there.
 
 ## Events and actions (SDK 11, bridge 3)
 
-The SDK 11 events and actions (`hellforge_mod.h`) give HD2Runtime every event and action it had, and code mods the same
-ones. HD2Runtime builds its payloads from the raw events as its own sources did, and keeps its own checks and answers
-for the actions (its `runtime/hellforge_events.lua`, `runtime/hellforge_actions.lua`).
+The SDK 11 events and actions (`hellforge_mod.h`) give HD2Runtime every event and action it had, and give code mods
+the same ones ([Logic at run time](modding/runtime.md)). HD2Runtime builds its payloads from the raw events as its own
+sources did, and keeps its own checks and answers for the actions (its `runtime/hellforge_events.lua` and
+`runtime/hellforge_actions.lua`).
 
 | HD2Runtime | HellForge |
 |---|---|
@@ -108,7 +116,8 @@ for the actions (its `runtime/hellforge_events.lua`, `runtime/hellforge_actions.
 | `hd2.ownership.credit_to_player` | `credit_to_player` |
 | `hd2.freeze_mission_timer` | `freeze_mission_timer` |
 
-An action called off the game thread waits for the next game update (`HF_ACT_QUEUED`). Still not in HellForge:
+An action called off the game thread waits for the next game update (`HF_ACT_QUEUED`). These are still not in
+HellForge:
 
 | HD2Runtime call | Why |
 |---|---|
@@ -137,5 +146,5 @@ HD2Runtime's own source measured the health lost.
 | The G-109 Urchin's pulse explosion | `copy_row` into `ExplosionSettings` 369 (412, the final discharge, follows it) |
 | A stratagem's calldown code | `hellforge_lua_set_code` |
 
-A stratagem code changed in a mission shows in the HUD's stratagem list from the next mission: the game draws the list
-from the rows when it builds it. HD2Runtime's own HUD redraw follows only its own code arrays.
+A stratagem code changed in a mission shows in the HUD's stratagem list from the next mission, because the game draws
+the list from the rows when it builds it. HD2Runtime's own HUD redraw follows only its own code arrays.

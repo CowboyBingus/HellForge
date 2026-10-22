@@ -14,7 +14,7 @@ namespace HellForge.Core;
 //   data/   the game's own mod format (<bundle>.patch_<n>, .gpu_resources, .stream), staged into game/data per session;
 //   hellforge-data.json  a data spec: patches HellForge builds from the player's own game data (GameData/ModDataBuilder.cs)
 //           and stages like data/, so the mod ships no game bytes;
-//   native  engine edits HellForge applies in the running game's memory (docs/mods.md):
+//   native  engine edits HellForge applies in the running game's memory (docs/modding/data.md "Native edits in the manifest"):
 //     networkFieldTypes  widen a named network field type (only widen; kind, bits and min must be as expected);
 //     componentWrites    set u32 fields of an entity's component record, only from their expected vanilla value.
 // A gameplay mod changes how the game plays; friends must run the same gameplay mods to play together.
@@ -66,7 +66,7 @@ public static partial class ModCatalog
         File.Exists(Path.Combine(folder, ManifestName)) ? Path.Combine(folder, ManifestName)
         : File.Exists(Path.Combine(folder, LegacyManifestName)) ? Path.Combine(folder, LegacyManifestName) : null;
     // The mod SDK version this HellForge provides (native/mod-sdk/hellforge_mod.h).
-    public const int SdkVersion = 12;
+    public const int SdkVersion = 13;
 
     [GeneratedRegex("^[A-Za-z0-9_.-]{1,64}\\.dll$")]
     private static partial Regex DllName();
@@ -307,7 +307,7 @@ public static partial class ModCatalog
     static IEnumerable<(ModManifest Mod, string Lines)> Compared(IEnumerable<ModManifest> mods)
     {
         // by id, whatever the load order: friends need the same gameplay mods, not the same order. A different order is
-        // the players' to sort out (which mod wins a conflict, and new stratagems and weapons are numbered in load order).
+        // the players' to sort out (which mod wins a conflict); what mods add is numbered by mod id, the same for everyone.
         foreach (var mod in mods.Where(m => m.Gameplay && m.Id != LocalStatsId).OrderBy(m => m.Id, StringComparer.Ordinal))
         {
             var lines = new StringBuilder();
@@ -617,6 +617,9 @@ public static class ModSettings
     // The switches of installations from before the rename, read until the next change writes FileName.
     public const string LegacyFileName = "bts-mods.json";
 
+    // What this process wrote last: the Mods page tells its own saves from another program's (HellForge.Cli, a mod manager) by it.
+    public static string? LastWritten { get; private set; }
+
     // What the Mods page keeps: mods switched off, the order (top first; the bottom mod loads first, as in the
     // community's managers), and each cosmetic pack's choice.
     public sealed record State(HashSet<string> Disabled, List<string> Order, Dictionary<string, CosmeticPacks.Choice> Choices);
@@ -678,8 +681,10 @@ public static class ModSettings
             off = c.Value.Off.Order(StringComparer.Ordinal).ToList(),
             sub = c.Value.Sub.OrderBy(s => s.Key, StringComparer.Ordinal).ToDictionary(s => s.Key, s => s.Value)
         });
-        File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(new { format = 1, disabled = state.Disabled.Order(StringComparer.Ordinal), order = state.Order, packs },
-            new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        var text = JsonSerializer.Serialize(new { format = 1, disabled = state.Disabled.Order(StringComparer.Ordinal), order = state.Order, packs },
+            new JsonSerializerOptions { WriteIndented = true }) + "\n";
+        File.WriteAllText(path + ".tmp", text);
+        LastWritten = text;
         File.Move(path + ".tmp", path, overwrite: true);
         File.Delete(Path.Combine(modsFolder, LegacyFileName));
     }

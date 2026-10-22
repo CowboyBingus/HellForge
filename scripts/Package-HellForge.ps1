@@ -1,8 +1,8 @@
 # Builds artifacts/package/HellForge-Setup.exe, the one file a new player needs: the app as it goes into an installation
 # (scripts/Publish-HellForge.ps1 -PayloadFolder), zipped and embedded in the self-contained setup program (src/HellForge.Setup).
 # It contains HellForge only; every player's setup copies the game from their own Steam library.
-# -EnginePackage / -UnpinnedEngine: as Publish-HellForge.ps1 takes them (the pinned engine package by default).
-param([string]$EnginePackage,[switch]$UnpinnedEngine)
+# -EnginePackage / -SteamApi: as Publish-HellForge.ps1 takes them (by default it builds the engine from this repository).
+param([string]$EnginePackage,[string]$SteamApi)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -11,7 +11,7 @@ $package=Join-Path $project 'artifacts/package'
 $payload=Join-Path $package 'payload'
 $zip=Join-Path $package 'payload.zip'
 
-$engineArgs=@{};if($EnginePackage){$engineArgs.EnginePackage=$EnginePackage};if($UnpinnedEngine){$engineArgs.UnpinnedEngine=$true}
+$engineArgs=@{};if($EnginePackage){$engineArgs.EnginePackage=$EnginePackage};if($SteamApi){$engineArgs.SteamApi=$SteamApi}
 & (Join-Path $PSScriptRoot 'Publish-HellForge.ps1') -PayloadFolder $payload @engineArgs
 # Nothing that ships names the PC it was built on: its user folder (debug paths, __FILE__) or the git author's email.
 $private=@($env:USERPROFILE,$env:USERPROFILE.Replace('\','/'),(git -C $project config user.email))|Where-Object {$_}

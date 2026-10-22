@@ -2,7 +2,7 @@
  "scope": "Inventory templates for new local profiles. unlock-all is a development profile that grants every non-consumable catalogue item, including content the account may not own, and every booster.",
  "templates": {
   "starter": {
-   "description": "Fresh player after basic training: AR-23 Liberator, P-2 Peacemaker, G-12 High Explosive (the onboarding chain's unlock items are added by ProfileStore).",
+   "description": "Fresh player after basic training: AR-23 Liberator, P-2 Peacemaker, G-12 High Explosive (the onboarding chain's unlock items and the stratagems every account owns, Orbital Precision Strike and MG-43 Machine Gun, are added by ProfileStore).",
    "items": [
     {
      "mixId": 2852344585,

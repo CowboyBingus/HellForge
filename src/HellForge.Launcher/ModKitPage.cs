@@ -7,7 +7,7 @@ using HellForge.Core;
 
 namespace HellForge.Launcher;
 
-// The Mods page's mod kit (docs/first-mod.md): a mod starts as a copy of the SDK's template (app/sdk/templates/c-mod);
+// The Mods page's mod kit (docs/modding/first-mod.md): a mod starts as a copy of the SDK's template (app/sdk/templates/c-mod);
 // BUILD compiles a mod's sources with the SDK's pinned Zig, ZIP packs it to share, and the mod tools are fetched
 // on request. Builds wait while a session runs: the game has the mods' DLLs loaded.
 public partial class MainWindow

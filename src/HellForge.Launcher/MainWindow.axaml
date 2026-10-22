@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:HellForge.Launcher"
+        xmlns:core="clr-namespace:HellForge.Core;assembly=HellForge.Core"
         x:Class="HellForge.Launcher.MainWindow"
         Title="HellForge"
         Icon="/Assets/hellforge.ico"
@@ -89,7 +90,7 @@
                 <TextBox x:Name="NewProfileName" Watermark="Name, e.g. my-run" MaxLength="32" VerticalContentAlignment="Center" />
                 <ComboBox x:Name="TemplateCombo" Grid.Column="2" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                   <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="local:ProfileTemplate">
+                    <DataTemplate x:DataType="core:ProfileTemplate">
                       <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
                         <Border Classes="badge" IsVisible="{Binding IsDev}">
@@ -116,7 +117,7 @@
               <Grid ColumnDefinitions="*,8,Auto">
                 <ComboBox x:Name="ProfileCombo" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                   <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="local:LocalProfile">
+                    <DataTemplate x:DataType="core:LocalProfile">
                       <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
                         <Border Classes="badge" IsVisible="{Binding IsDev}">
@@ -295,10 +296,10 @@
                 <TextBlock Text="INSTALLATION" Classes="h2" Margin="0" />
                 <TextBlock x:Name="InstallText" TextWrapping="Wrap" />
                 <TextBlock Classes="muted" TextWrapping="Wrap"
-                           Text="Check and repair compares the game files with the supported build, copies any that are missing or damaged from Steam, and renews the firewall block and shortcuts." />
+                           Text="Check and repair compares the game files with the supported build, copies any that are missing or damaged from Steam, and places the network block and shortcuts again." />
                 <Button x:Name="RepairButton" Classes="ghost" Content="Check and repair" HorizontalAlignment="Left" Margin="0,6,0,0" />
                 <TextBlock Classes="muted" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="Uninstall removes HellForge's firewall rules (Windows asks for permission) and its shortcuts, then deletes this installation's folder once the launcher has closed. Your normal HELLDIVERS 2 and Steam are not touched." />
+                           Text="Uninstall removes HellForge's network block (Windows asks for permission) and its shortcuts, then deletes this installation's folder once the launcher has closed. Your normal HELLDIVERS 2 and Steam are not touched." />
                 <StackPanel Orientation="Horizontal" Spacing="10">
                   <Button x:Name="UninstallButton" Classes="ghost" Content="Uninstall HellForge..." />
                   <TextBlock x:Name="UninstallText" Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap" />
@@ -383,7 +384,7 @@
                 <TextBlock TextWrapping="Wrap"
                            Text="HellForge runs HELLDIVERS 2 against a local backend on this computer instead of the official servers." />
                 <TextBlock TextWrapping="Wrap" Classes="muted"
-                           Text="The copied game is blocked from the internet by permanent Windows firewall rules for its own files (the normal game and Steam are not affected). Settings > Installation > Uninstall HellForge removes them with the rest." />
+                           Text="A network block keeps the copied game off the internet. It covers only the copy's own programs, so the normal game and Steam are not affected. Settings > Installation > Uninstall HellForge removes it with the rest." />
                 <TextBlock TextWrapping="Wrap" Classes="muted"
                            Text="A Steam ownership check runs before every launch, so Steam must be running and signed in to an account that owns the game or has it through Steam Family Sharing." />
                 <TextBlock TextWrapping="Wrap" Classes="muted"

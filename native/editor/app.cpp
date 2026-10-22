@@ -253,7 +253,7 @@ void ReadSession()
 }
 bool Locked() { return g_session.role == HF_SESSION_JOINER; }
 
-/* HellForge's messages for the player (SDK 12, HfApi notice; docs/mods.md "A refused join"): why a friend's lobby
+/* HellForge's messages for the player (SDK 12, HfApi notice; docs/mods.md "Playing with friends"): why a friend's lobby
  * refused this game's join, or why a friend could not join this one. Each new one shows over the game for a while, the
  * editor open or not (Overlay draws it while the window is closed). */
 struct { uint32_t version = 0; bool error = false; std::string title; std::vector<std::string> lines; ULONGLONG at = 0; } g_notice;

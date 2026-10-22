@@ -1,5 +1,5 @@
 /* The mod SDK under its names from before the rename (HD2 Beyond The Stars): mods written against bts_mod.h still
- * build unchanged. New mods include hellforge_mod.h (docs/mods.md). The loader also accepts a DLL exporting
+ * build unchanged. New mods include hellforge_mod.h (docs/modding/README.md). The loader also accepts a DLL exporting
  * bts_mod_init, so mods built before the rename keep working without a rebuild. */
 #ifndef BTS_MOD_H
 #define BTS_MOD_H

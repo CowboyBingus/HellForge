@@ -1,4 +1,4 @@
-# hellforge_add_mod(<dll name> <sources>...): builds a HellForge code mod (docs/modding.md) against the mod SDK, into
+# hellforge_add_mod(<dll name> <sources>...): builds a HellForge code mod (docs/modding/tools.md) against the mod SDK, into
 # <dll name>.dll next to the mod's hellforge-mod.json, which must name it ("code": {"dll": "<dll name>.dll"}).
 # With HELLFORGE_INSTALL set to an installation (CMakePresets.json sets <Documents>/HellForge), every build also copies
 # the mod - manifest, DLL and data/ - into <installation>/mods/<mod folder name>, so the next session loads it.

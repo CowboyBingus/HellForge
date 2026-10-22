@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The engine's version (Directory.Build.props EngineVersion), as its package and engine.json carry it. -->
+  <PropertyGroup><Version>$(EngineVersion)</Version></PropertyGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../HellForge.Core/HellForge.Core.csproj" /></ItemGroup>
+</Project>

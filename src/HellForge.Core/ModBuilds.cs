@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace HellForge.Core;
 
-// Source-first mod builds (docs/sdk-roadmap.md phase 4, docs/mods.md "Source mods"): a code mod that ships its C or C++
+// Source-first mod builds (docs/sdk-roadmap.md phase 4, docs/modding/tools.md, docs/internals.md "Source mod builds"): a code mod that ships its C or C++
 // sources (src/) is compiled by HellForge before the session, with the SDK's pinned Zig and the same flags on every
 // machine, into <installation>/temp/mod-builds/<mod id>/, and loaded from there; a DLL in the mod's own folder is not used.
 //   key     a hash of the mod's manifest and every file under src/, the SDK's headers, the compiler pin and flags, and the

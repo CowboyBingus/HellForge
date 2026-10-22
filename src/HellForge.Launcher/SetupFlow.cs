@@ -12,13 +12,13 @@ using HellForge.Core;
 namespace HellForge.Launcher;
 
 // Setting up an installation: find HELLDIVERS 2 in Steam, confirm ownership, copy the game into the installation,
-// install its firewall block, optionally import earlier HellForge game data and create shortcuts. When Steam's own copy is
+// place its network block (WFP filters), optionally import earlier HellForge game data and create shortcuts. When Steam's own copy is
 // another build (Arrowhead patched the game) or missing, Steam itself downloads the supported build's depots through
 // its console (SteamDepotDownload) and the game is copied from there. Shown instead of the other
 // pages until the game is copied; Settings > Installation runs it again to check and repair.
 public partial class MainWindow
 {
-    enum SetupStep { Find, Ownership, Copy, Firewall, Import, Shortcuts }
+    enum SetupStep { Find, Ownership, Copy, NetworkBlock, Import, Shortcuts }
     static readonly string[] SetupStepNames =
         ["Find HELLDIVERS 2 in Steam", "Confirm you own the game", "Copy the game into this folder", "Block the copy from the internet",
             "Import earlier game data", "Create shortcuts"];
@@ -26,6 +26,9 @@ public partial class MainWindow
     readonly List<(Border Dot, TextBlock Detail)> setupRows = [];
     CancellationTokenSource? setupCancel;
     bool setupRunning;
+    // Build patches (by SHA-256) that failed in this launcher run: Check again uses Steam's download instead, and a
+    // re-published pack (another hash) is tried. Restarting the launcher tries a failed one again.
+    readonly HashSet<string> failedPatches = new(StringComparer.OrdinalIgnoreCase);
     DispatcherTimer? downloadTimer;
     string? downloadSteamRoot;
 
@@ -52,7 +55,7 @@ public partial class MainWindow
         }
         ImportBox.IsVisible = Directory.Exists(Path.Combine(EarlierGameData, "profiles")) || File.Exists(Path.Combine(EarlierGameData, "user_settings.config"));
         InstallCard.IsVisible = true;
-        InstallText.Text = $"{install.Root}  ·  HELLDIVERS 2 build {SupportedBuild.Current.BuildId}";
+        InstallText.Text = $"{Privacy.Scrub(install.Root)}  ·  HELLDIVERS 2 build {SupportedBuild.Current.BuildId}";
         SetupStartButton.Click += async (_, _) => await RunSetup();
         SetupPauseButton.Click += (_, _) => setupCancel?.Cancel();
         SetupBackButton.Click += (_, _) => LeaveSetup();
@@ -113,9 +116,16 @@ public partial class MainWindow
         try
         {
             SetRow(step, null, "Looking in your Steam libraries...", running: true);
+            // Linux (Wine/Proton) outside the namespace, such as the launcher HellForge-Setup.exe opens: the network block
+            // step could only fail there (Wine has no Windows Filtering Platform), after the whole copy.
+            if (LinuxNetworkBlock.UnderWine && !LinuxNetworkBlock.Requested)
+                throw new SetupStopped("On Linux, setup runs inside HellForge's network namespace. Close HellForge and start it with " +
+                    "app/linux/hellforge-linux.sh (docs/linux.md), then start setup there.");
             if (!LinuxNetworkBlock.Requested) await CheckFilteringEngine(install);
             var build = SupportedBuild.Current;
             var steamRoot = SteamLocator.SteamRoot() ?? throw new SetupStopped("Steam is not installed on this PC. Install Steam and HELLDIVERS 2, then start setup again.");
+            // The build patches published since this release (a game update gets one there, not a new HellForge).
+            using (var http = new HttpClient()) await Downpatcher.RefreshAsync(http, Path.Combine(install.Temp, "downpatch-index.json"));
             SteamGame? game;
             string? unusable = null;
             try { game = await Task.Run(() => SteamLocator.FindGame(steamRoot)); }
@@ -127,38 +137,57 @@ public partial class MainWindow
             else if (await Task.Run(() => SteamDepotDownload.IsComplete(steamRoot, build)))
             {
                 fromDepots = true;
-                SetRow(step, true, $"Build {build.BuildId}, downloaded by Steam into {SteamDepotDownload.ContentFolder(steamRoot, build)}");
+                SetRow(step, true, $"Build {build.BuildId}, downloaded by Steam into {Path.GetDirectoryName(SteamDepotDownload.DepotFolder(steamRoot, build, build.Depots[0].Id))}");
             }
-            else if (game != null && Downpatcher.FindPack(game.Report.Pin) is { } downpatch)
+            else if (game != null && Downpatcher.FindPack(game.Report.Pin) is { } downpatch && !failedPatches.Contains(downpatch.Sha256))
             {
                 downpatchPack = downpatch;
                 downpatchSource = game.Report.Source;
-                SetRow(step, true, $"Build {game.Report.Pin.BuildId} in {game.Report.Source} — a {downpatch.Size / 1e9:0.0} GB patch converts it to {build.BuildId}");
+                SetRow(step, true, $"Build {game.Report.Pin.BuildId} in {game.Report.Source}. A {downpatch.Size / 1e9:0.0} GB patch converts it to build {build.BuildId}.");
             }
-            // the game is there but busy (Steam updating it, the game running): that passes, so no download is offered
-            else if (game == null && unusable != null)
+            // the game is there but busy (Steam updating it, the game running): that passes, so no download is offered.
+            // Under Wine it does not pass: Steam's Linux libraries are on the Z: drive, which counts as a linked path
+            // ("Linked/reparse paths are not supported: Z:\", GitHub issue 1), so the download is the way there.
+            else if (game == null && unusable != null && !LinuxNetworkBlock.UnderWine)
                 throw new SetupStopped($"HELLDIVERS 2 is in Steam, but setup cannot use it right now: {unusable}");
             else
             {
-                var have = game != null ? $"HELLDIVERS 2 build {game.Report.Pin.BuildId}" : "no HELLDIVERS 2";
+                var have = game != null ? $"HELLDIVERS 2 build {game.Report.Pin.BuildId}"
+                    : unusable != null ? "a HELLDIVERS 2 setup cannot read from inside Wine" : "no HELLDIVERS 2";
                 ShowDownload(steamRoot, have);
-                throw new SetupWaiting($"Steam has {have}, but this version of HellForge needs build {build.BuildId}. Steam can download that exact " +
+                var noPatch = game == null ? ""
+                    : Downpatcher.FindPack(game.Report.Pin) != null ? $" The build patch for build {game.Report.Pin.BuildId} did not work earlier."
+                    : $" HellForge has no patch for build {game.Report.Pin.BuildId} yet; once one is published, Check again uses it.";
+                throw new SetupWaiting($"Steam has {have}, but this version of HellForge needs build {build.BuildId}.{noPatch} Steam can download that exact " +
                     "build for your account: follow the steps below. Setup continues by itself when the download is complete.");
             }
             // When downpatching, copy first so the supported build's steam_api64.dll is available for the ownership check
             // (the newer build's DLL may not work with the probe).
             if (downpatchPack != null)
             {
-                var copyRow = SetupSteps.Children[2];
-                var ownershipRow = SetupSteps.Children[1];
-                SetupSteps.Children.RemoveAt(2);
-                SetupSteps.Children.RemoveAt(1);
-                SetupSteps.Children.Insert(1, copyRow);
-                SetupSteps.Children.Insert(2, ownershipRow);
-                (setupRows[1], setupRows[2]) = (setupRows[2], setupRows[1]);
+                // Only the screen order changes: each step keeps its own row (setupRows by step), so the patch's progress
+                // and errors show on the copy row. (Swapping the rows here as well put them on "Confirm you own the game",
+                // and a second run swapped the screen order back.)
+                var copyRow = (Control)setupRows[(int)SetupStep.Copy].Dot.Parent!;
+                var ownershipRow = (Control)setupRows[(int)SetupStep.Ownership].Dot.Parent!;
+                if (SetupSteps.Children.IndexOf(copyRow) > SetupSteps.Children.IndexOf(ownershipRow))
+                {
+                    SetupSteps.Children.Remove(copyRow);
+                    SetupSteps.Children.Insert(SetupSteps.Children.IndexOf(ownershipRow), copyRow);
+                }
                 step = SetupStep.Copy;
                 SetRow(step, null, "Downloading and applying the build patch...", running: true);
-                await DownpatchGame(downpatchSource!, install, downpatchPack);
+                try { await DownpatchGame(downpatchSource!, install, downpatchPack); }
+                // the patch failed (its download, Steam's copy, the pack itself): Steam's own download of the build still
+                // works, and the files already patched are kept (each one has the build's hash), so it copies only the rest
+                catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or HttpRequestException
+                    or InvalidOperationException or Win32Exception)
+                {
+                    failedPatches.Add(downpatchPack.Sha256);
+                    ShowDownload(steamRoot, $"HELLDIVERS 2 build {game!.Report.Pin.BuildId}");
+                    throw new SetupWaiting($"The build patch did not work: {Describe(error)} Steam can download build {build.BuildId} for your " +
+                        "account instead: follow the steps below. Setup continues by itself when the download is complete.");
+                }
                 SetRow(step, true, $"{build.Files.Count} files ({build.TotalBytes / 1e9:0.0} GB), patched from build {downpatchPack.SourceBuild}.");
             }
 
@@ -170,11 +199,34 @@ public partial class MainWindow
 
             step = SetupStep.Ownership;
             SetRow(step, null, "Asking Steam...", running: true);
-            var ownership = await RunPowerShell(
-                $"-File {Arg(ScriptPath("Test-SteamOwnership.ps1"))} -NoBuild -PassThru -SteamApi {Arg(steamApi)} " +
-                $"-WorkRoot {Arg(Path.Combine(install.Temp, "ownership"))} -EvidencePath {Arg(Path.Combine(install.Logs, "setup-ownership.json"))}", install);
-            if (ownership.ExitCode != 0)
-                throw new SetupStopped("The ownership check did not pass: " + (ownership.Error.Length > 0 ? ownership.Error : $"exit code {ownership.ExitCode}.") +
+            // the evidence decides (SteamOwnershipCheck.Problem); under Wine, whose powershell.exe runs nothing, the probe
+            // runs directly
+            var evidence = Path.Combine(install.Logs, "setup-ownership.json");
+            var checkStarted = DateTime.UtcNow;
+            if (File.Exists(evidence)) File.Delete(evidence);
+            int ownershipExit;
+            string ownershipError;
+            if (LinuxNetworkBlock.UnderWine)
+            {
+                var probe = Path.GetFullPath(Path.Combine(paths.ScriptsFolder, "..", "steamprobe", "HellForge.SteamProbe.exe"));
+                try
+                {
+                    ownershipExit = await Task.Run(() => SteamOwnershipCheck.RunProbe(probe, steamApi, Path.Combine(install.Temp, "ownership"),
+                        evidence, TimeSpan.FromSeconds(15)));
+                    ownershipError = "";
+                }
+                catch (InvalidDataException error) { ownershipExit = 1; ownershipError = error.Message; }
+            }
+            else
+            {
+                var ownership = await RunPowerShell(
+                    $"-File {Arg(ScriptPath("Test-SteamOwnership.ps1"))} -NoBuild -PassThru -SteamApi {Arg(steamApi)} " +
+                    $"-WorkRoot {Arg(Path.Combine(install.Temp, "ownership"))} -EvidencePath {Arg(evidence)}", install);
+                (ownershipExit, ownershipError) = (ownership.ExitCode, ownership.Error);
+            }
+            if (ownershipExit == 0 && SteamOwnershipCheck.Problem(evidence, checkStarted) is { } problem) (ownershipExit, ownershipError) = (1, problem + ".");
+            if (ownershipExit != 0)
+                throw new SetupStopped("The ownership check did not pass: " + (ownershipError.Length > 0 ? ownershipError : $"exit code {ownershipExit}.") +
                     " Make sure Steam is running and signed in, then start setup again.");
             SetRow(step, true, "Steam confirmed the game on this account.");
 
@@ -194,7 +246,7 @@ public partial class MainWindow
                 SetRow(step, true, copied);
             }
 
-            step = SetupStep.Firewall;
+            step = SetupStep.NetworkBlock;
             SetRow(step, null, "Checking the network block...", running: true);
             if (await NetworkBlockInPlace(install)) SetRow(step, true, "Already in place.");
             else
@@ -252,7 +304,7 @@ public partial class MainWindow
         {
             SetRow(step, false, error is Win32Exception { NativeErrorCode: 1223 }
                 ? "Windows permission was declined. The network block is required; start setup again and allow it."
-                : error.Message);
+                : Describe(error));
             SetupStartButton.Content = "Try again";
             SetupBackButton.IsVisible = Nav.IsVisible;
         }
@@ -351,6 +403,12 @@ public partial class MainWindow
             "for your account. Open the Steam console, paste each command below and press Enter, one at a time. Steam then downloads about " +
             $"{build.TotalBytes / 1e9:0} GB into {SteamDepotDownload.ContentFolder(steamRoot, build)} (your normal game is not touched). " +
             "Steam shows no progress in its library for this; the bar below does.";
+        // Linux: Steam for Linux downloads into its own folder, which setup cannot read under Wine (Z: counts as a linked
+        // path); linux/hellforge-linux.sh moves the download into this prefix's Steam folder.
+        if (LinuxNetworkBlock.UnderWine)
+            DownloadIntro.Text += " On Linux, Steam puts the download in its own folder instead, and the bar stays empty: once the console " +
+                "says \"Depot download complete\" for every command, close HellForge and start it again with app/linux/hellforge-linux.sh, " +
+                "which moves the download into this prefix. Then press Check again.";
         DownloadCommands.Children.Clear();
         foreach (var command in SteamDepotDownload.Commands(build))
         {
@@ -386,6 +444,13 @@ public partial class MainWindow
             long done = states.Sum(s => s.Done), total = states.Sum(s => s.Total);
             DownloadProgress.Value = total > 0 ? done * 1000.0 / total : 0;
             DownloadText.Text = string.Join("   ", states.Select(s => $"depot {s.Depot.Id}: {(s.Complete ? "done" : $"{s.Done / 1e9:0.0} of {s.Total / 1e9:0.0} GB")}"));
+            // Near the end (a few files left, which the rounded GB cannot show), the files it still waits for, by name: a file
+            // Steam did not write, or wrote at another size (another build's), would otherwise hold the setup with no word.
+            var left = states.Where(s => !s.Complete).SelectMany(s => s.Waiting).ToList();
+            if (left.Count is > 0 and <= 5)
+                DownloadText.Text += "\nWaiting for " + string.Join(", ", left.Select(f => f.Path + (f.Have < 0 ? " (not there yet)"
+                    : f.Have > f.Size ? $" ({f.Have:N0} bytes, larger than this build's {f.Size:N0}: another build's file; delete it and run the download_depot command again)"
+                    : $" ({f.Have:N0} of {f.Size:N0} bytes)")));
             if (states.All(s => s.Complete))
             {
                 downloadTimer?.Stop();
@@ -393,7 +458,7 @@ public partial class MainWindow
                 if (!setupRunning) await RunSetup();
             }
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { DownloadText.Text = "Could not check the download: " + error.Message; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { DownloadText.Text = "Could not check the download: " + Privacy.Scrub(error.Message); }
         finally { checkingDownload = false; }
     }
 
@@ -417,9 +482,9 @@ public partial class MainWindow
 
     // The block leaves a marker when it was placed; reading WFP filters back needs administrator rights, so setup
     // trusts the marker rather than re-reading them without a prompt.
-    Task<bool> NetworkBlockInPlace(InstallLayout install) =>
-        Task.FromResult(File.Exists(Path.Combine(install.Root, "network-block", "wfp-block.json"))
-            && (LinuxNetworkBlock.Requested ? LinuxNetworkBlock.MarkerIsEmulated(install.Root) : !LinuxNetworkBlock.MarkerIsEmulated(install.Root)));
+    // On Windows its check program too, which every session runs (antivirus programs sometimes remove it): without it the
+    // block is placed again, which makes it again.
+    static Task<bool> NetworkBlockInPlace(InstallLayout install) => Task.FromResult(LinuxNetworkBlock.InPlace(install.Root));
 
     // The mods HellForge ships (BundledMods: the in-game editor, Hell Forge) are in mods/ from the start, not only once a
     // session has run. In the background: the editor's catalogue takes a moment to write.
@@ -442,7 +507,7 @@ public partial class MainWindow
         if (ModsPage.IsVisible) RefreshMods();
     }
 
-    // Uninstall: what HellForge put outside its folder goes first (the firewall rules, elevated, since they outlive the
+    // Uninstall: what HellForge put outside its folder goes first (the network block, elevated, since it outlives the
     // folder; the shortcuts), then a small script outside the folder deletes it once this launcher has exited. Nothing
     // is deleted when Windows' permission is declined, or while anything from the installation still runs.
     void AskUninstall(InstallLayout install)
@@ -458,16 +523,18 @@ public partial class MainWindow
     {
         UninstallConfirm.IsVisible = false;
         if (runner.IsRunning || setupRunning) { UninstallText.Text = "Stop the session (or setup) first."; return; }
+        // Linux (Wine/Proton): the removal runs Windows PowerShell, which a Wine prefix has only as a stub that does nothing.
+        if (LinuxNetworkBlock.UnderWine) { UninstallText.Text = "On Linux, remove HellForge by hand: see \"Removing HellForge\" in docs/linux.md."; return; }
         var running = Process.GetProcesses().Where(p => p.Id != Environment.ProcessId && IsFrom(p, install.Root)).Select(p => p.ProcessName).Distinct().ToList();
         if (running.Count > 0) { UninstallText.Text = "Close these first: " + string.Join(", ", running) + "."; return; }
         try { UninstallSafety(install.Root); }
-        catch (InvalidDataException refused) { UninstallText.Text = refused.Message; return; }
+        catch (InvalidDataException refused) { UninstallText.Text = Privacy.Scrub(refused.Message); return; }
         UninstallButton.IsEnabled = false;
         UninstallText.Text = "Removing the network block: Windows asks for permission...";
         try { await InstallNetworkBlock(install, uninstall: true); }
         catch (Exception error) when (error is SetupStopped or IOException or Win32Exception or InvalidOperationException or JsonException)
         {
-            UninstallText.Text = (error is Win32Exception ? "Windows did not give permission" : error.Message) + ": nothing was removed.";
+            UninstallText.Text = (error is Win32Exception ? "Windows did not give permission" : Privacy.Scrub(error.Message)) + ": nothing was removed.";
             UninstallButton.IsEnabled = true;
             return;
         }
@@ -627,4 +694,11 @@ public partial class MainWindow
 
     // Setup waits for something outside it (Steam downloading the supported build); not a failure.
     sealed class SetupWaiting(string message) : Exception(message);
+
+    // An error as setup shows it. The build patch's download (the only download setup makes): the cause, not "see inner
+    // exception".
+    static string Describe(Exception error) => error is HttpRequestException download
+        ? $"Could not download the build patch: {download.InnerException?.GetBaseException().Message ?? download.Message} " +
+          "Something on this PC may be blocking or inspecting HTTPS (an antivirus web shield, a VPN or a proxy); allow it, then try again."
+        : error.Message;
 }

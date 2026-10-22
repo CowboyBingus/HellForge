@@ -1,6 +1,6 @@
 # Fetches the tools a code mod is built with into tools/ (pinned, checksummed, nothing installed system-wide): Zig as the
 # C/C++ compiler (the same one the mod loader is built with), CMake and Ninja for IDEs that open CMake projects
-# (Rider, CLion, VS Code). See docs/modding.md. Usage: scripts/Setup-ModTools.ps1
+# (Rider, CLion, VS Code). See docs/modding/tools.md. Usage: scripts/Setup-ModTools.ps1
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -35,7 +35,7 @@ $pins=@((Get-Content -LiteralPath (Join-Path $project 'native/mod-sdk/tools.json
     ForEach-Object {@{name=$_.name;url=$_.url;sha=$_.sha256;exe=$_.exe}})
 foreach($tool in $pins){
     $destination=Join-Path $tools $tool.name
-    # Build-SdkShims.ps1 installs the same Zig without a marker; an existing one of the pinned version is kept.
+    # Get-BuildTools.ps1 installs the same Zig (with a marker of its own); an existing one of the pinned version is kept.
     if($tool.name -eq 'zig' -and (Test-Path -LiteralPath (Join-Path $destination 'zig.exe')) -and (& (Join-Path $destination 'zig.exe') version) -eq '0.17.0'){continue}
     $archive=Join-Path $downloads (Split-Path -Leaf $tool.url)
     Get-Pinned $tool.url $tool.sha $archive

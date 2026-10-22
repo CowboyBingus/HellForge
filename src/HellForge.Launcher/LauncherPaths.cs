@@ -3,9 +3,9 @@ using HellForge.Core;
 namespace HellForge.Launcher;
 
 // Every file the launcher reads or starts. An installation (hellforge-install.json in a folder above the launcher) keeps
-// everything inside its own folder. In the repository (a build of the launcher, for working on it) the engine is whatever
-// package scripts/Publish-HellForge.ps1 last unpacked into artifacts/engine, and the data comes from data/.
-sealed class LauncherPaths
+// everything inside its own folder. In the repository (a build of the launcher, for working on it) the engine is the one
+// scripts/Build-Engine.ps1 last staged in artifacts/engine-package/staging, and the data comes from data/.
+sealed class LauncherPaths : ISessionPaths
 {
     LauncherPaths(string root, string? installRoot, string hostRoot, string session, string scripts, string backend, string templates,
         string progression, string profilesRoot, string settingsFile, string sessionFile, string runsFolder)
@@ -29,7 +29,7 @@ sealed class LauncherPaths
     public string HostRoot { get; }
     // The engine's session runner (HellForge.Session.exe play ...): it owns every step of a session.
     public string Session { get; }
-    // The engine's readable scripts: the network block (Windows Firewall rules) and the Steam ownership check.
+    // The engine's readable scripts: the network block (WFP filters, or the older Windows Firewall rules) and the Steam ownership check.
     public string ScriptsFolder { get; }
     public string Backend { get; }
     public string TemplatesFile { get; }
@@ -45,7 +45,7 @@ sealed class LauncherPaths
     public static LauncherPaths ForRepository(string root)
     {
         var host = Path.Combine(root, "artifacts", "host-startup");
-        var engine = Path.Combine(root, "artifacts", "engine");
+        var engine = Path.Combine(root, "artifacts", "engine-package", "staging");
         return new(root, null, host, Path.Combine(engine, "session", "HellForge.Session.exe"), Path.Combine(engine, "scripts"),
             Path.Combine(engine, "backend", "HellForge.LocalBackend.exe"),
             Path.Combine(root, "data", "profile-templates.json"),
@@ -56,12 +56,9 @@ sealed class LauncherPaths
 
     public static LauncherPaths ForInstall(InstallLayout install)
     {
-        var app = install.App;
-        return new(install.Root, install.Root, install.Root, Path.Combine(app, "session", "HellForge.Session.exe"), Path.Combine(app, "scripts"),
-            Path.Combine(app, "backend", "HellForge.LocalBackend.exe"), Path.Combine(app, "profile-templates.json"),
-            Path.Combine(app, "progression-data.json"), install.Profiles,
-            Path.Combine(install.Root, "launcher-settings.json"),
-            Path.Combine(install.Logs, "play-session.json"), install.Sessions);
+        var files = new InstallSessionPaths(install);
+        return new(files.Root, files.InstallRoot, files.HostRoot, files.Session, files.ScriptsFolder, files.Backend, files.TemplatesFile,
+            files.ProgressionFile, files.ProfilesRoot, files.SettingsFile, files.SessionFile, files.RunsFolder);
     }
 
     // The installation containing the launcher, else the repository it was built in (the folder with the solution).

@@ -1,14 +1,13 @@
 # Publishes HellForge into an installation's app folder: the launcher, command-line tool and Steam ownership probe as
 # self-contained Windows builds (no .NET installation needed), the HellForge engine (its session runner, local backend,
-# mod loader and stand-ins, and the network block and ownership scripts: engine/hellforge-engine-<version>.zip, built from
-# the closed HellForge-Engine repository and pinned in engine.lock.json), the mod SDK, the bundled mods and the profile
-# templates. Everything else in the
+# mod loader and stand-ins, and the network block and ownership scripts: the package scripts/Build-Engine.ps1 builds from
+# this repository), the mod SDK, the bundled mods and the profile templates. Everything else in the
 # installation (game, user data, profiles, logs) is left alone. The new app is staged in the installation's temp folder
 # and swapped in at the end.
 # -PayloadFolder instead writes the same files (app\ and the top-level program) into a folder for scripts/Package-HellForge.ps1.
-# -EnginePackage: the engine package to use (a HellForge-Engine build); without it the pinned one in engine/. Either must
-# match the pin's SHA-256 unless -UnpinnedEngine is given (a local engine build under test).
-param([string]$InstallRoot,[string]$PayloadFolder,[string]$EnginePackage,[switch]$UnpinnedEngine)
+# The engine is built first (scripts/Build-Engine.ps1, with -SteamApi passed on); -EnginePackage uses a package built
+# already (artifacts/engine-package/hellforge-engine-<version>.zip) instead.
+param([string]$InstallRoot,[string]$PayloadFolder,[string]$EnginePackage,[string]$SteamApi)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $project=Split-Path -Parent $PSScriptRoot
@@ -28,15 +27,19 @@ if($InstallRoot){
     $PayloadFolder=[IO.Path]::GetFullPath($PayloadFolder)
     $staging=Join-Path $project 'artifacts/package/app-staging'
 }
-# The engine package: pinned, every file checked against its engine.json.
-$lock=Get-Content -LiteralPath (Join-Path $project 'engine.lock.json') -Raw|ConvertFrom-Json
+# The engine package, built from this repository unless -EnginePackage names one; every file is checked against its
+# engine.json below.
 if(-not $EnginePackage){
-    $EnginePackage=Join-Path $project ('engine/'+$lock.file)
-    if(-not(Test-Path -LiteralPath $EnginePackage)){throw ('The engine package is missing: engine/'+$lock.file)}
+    # its own PowerShell process: the engine build does not run reliably inside another script's session
+    $engineArgs=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'Build-Engine.ps1'));if($SteamApi){$engineArgs+=@('-SteamApi',$SteamApi)}
+    & powershell @engineArgs
+    if($LASTEXITCODE){throw 'Building the engine failed (scripts/Build-Engine.ps1).'}
+    $engineVersion=([xml](Get-Content -LiteralPath (Join-Path $project 'Directory.Build.props') -Raw)).Project.PropertyGroup.EngineVersion
+    $EnginePackage=Join-Path $project ('artifacts/engine-package/hellforge-engine-'+$engineVersion+'.zip')
 }
 $EnginePackage=[IO.Path]::GetFullPath($EnginePackage)
+if(-not(Test-Path -LiteralPath $EnginePackage)){throw ('The engine package is missing: '+$EnginePackage)}
 $engineHash=(Get-FileHash -LiteralPath $EnginePackage).Hash
-if($engineHash -cne $lock.sha256 -and -not $UnpinnedEngine){throw ('The engine package does not match engine.lock.json ('+$engineHash+'); pass -UnpinnedEngine to use it anyway.')}
 
 if(Test-Path -LiteralPath $staging){Remove-Item -LiteralPath $staging -Recurse -Force}
 New-Item -ItemType Directory $staging|Out-Null
@@ -62,18 +65,17 @@ foreach($entry in $engine.files.PSObject.Properties){
     if(-not(Test-Path -LiteralPath $file) -or (Get-FileHash -LiteralPath $file).Hash -cne $entry.Value){throw ('The engine package is damaged: '+$entry.Name)}
 }
 foreach($folder in @('session','backend','sdk-shims','scripts')){Move-Item -LiteralPath (Join-Path $engineFolder $folder) -Destination $staging}
-Copy-Item -LiteralPath (Join-Path $engineFolder 'LICENSE-ENGINE.txt') -Destination $staging
 Copy-Item -LiteralPath (Join-Path $engineFolder 'engine.json') -Destination $staging
 Remove-Item -LiteralPath $engineFolder -Recurse -Force
-# The mod SDK (docs/first-mod.md): the headers, CMake helpers and tool pins, the mod template, and the docs a modder needs.
+# The mod SDK (docs/modding/first-mod.md): the headers, CMake helpers and tool pins, the mod template, and the docs a modder needs.
 # Its tools (Zig, CMake, Ninja) are fetched into <installation>/tools on request (HellForge.Cli mod-tools), outside app/.
 $sdkTarget=New-Item -ItemType Directory (Join-Path $staging 'sdk')
 Copy-Item -Path (Join-Path $project 'native/mod-sdk/*') -Destination $sdkTarget -Recurse
 # The licences: HellForge's beside the app, the SDK's (MIT-0: mods owe nothing) beside the SDK too.
-foreach($name in @('LICENSE','LICENSE-SDK')){Copy-Item -LiteralPath (Join-Path $project $name) -Destination $staging}
+foreach($name in @('LICENSE','LICENSE-EXCEPTION','LICENSE-SDK')){Copy-Item -LiteralPath (Join-Path $project $name) -Destination $staging}
 Copy-Item -LiteralPath (Join-Path $project 'LICENSE-SDK') -Destination $sdkTarget
 Copy-Item -LiteralPath (Join-Path $project 'templates') -Destination $sdkTarget -Recurse
-# app/sdk/template-mod: the template filled in as "My Mod", to copy into <installation>/mods and rename (docs/first-mod.md).
+# app/sdk/template-mod: the template filled in as "My Mod", to copy into <installation>/mods and rename (docs/modding/first-mod.md).
 # Its paths are the ones a mod folder in mods/ has: ../../app/sdk and ../../tools.
 $filled=@{'{{id}}'='yourname.my-mod';'{{name}}'='My Mod';'{{dll}}'='my_mod';'{{sdk}}'='../../app/sdk';'{{tools}}'='../../tools';'{{install}}'=''}
 $template=Join-Path $project 'templates/c-mod'
@@ -85,8 +87,10 @@ foreach($file in Get-ChildItem -LiteralPath $template -Recurse -File){
     [IO.File]::WriteAllText($destination,$text.Replace("`r`n","`n"))
 }
 $sdkDocs=New-Item -ItemType Directory (Join-Path $sdkTarget 'docs')
-foreach($name in @('first-mod.md','sdk-reference.md','mods.md','modding.md','stratagem-categories.md')){Copy-Item -LiteralPath (Join-Path $project ('docs/'+$name)) -Destination $sdkDocs}
-# Example mods to read and copy into mods/ (docs/first-mod.md): their tracked files only (no local builds), with their
+# The modding guides (docs/modding) and the pages they link to, laid out as in the repository so their links work.
+Copy-Item -LiteralPath (Join-Path $project 'docs/modding') -Destination $sdkDocs -Recurse
+foreach($name in @('sdk-reference.md','mods.md','lua-bridge.md','external-launchers.md')){Copy-Item -LiteralPath (Join-Path $project ('docs/'+$name)) -Destination $sdkDocs}
+# Example mods to read and copy into mods/ (docs/modding/first-mod.md): their tracked files only (no local builds), with their
 # CMake include pointed at the SDK's own cmake folder. more-voices is left out: it waits for wrapped game functions.
 foreach($name in @('stratagem-compendium','stratagem-categories','blue-sentry','cube-gun','machine-gun-10k-code','talon-liberator','golden-liberator','hell-forge','hell-swarm','stats-example','machine-gun-10k','vanilla-plus')){
     foreach($file in @(git -C $project ls-files ('examples/mods/'+$name))){

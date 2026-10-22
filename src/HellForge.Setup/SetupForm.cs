@@ -117,7 +117,7 @@ sealed class SetupForm : Form
         {
             error = "Enter a valid folder path.";
         }
-        note.Text = error.Length > 0 ? error : message;
+        note.Text = Privacy.Scrub(error.Length > 0 ? error : message);
         note.ForeColor = error.Length > 0 ? Color.Firebrick : Color.DarkOrange;
         install.Enabled = error.Length == 0 && !busy;
         return error.Length == 0;

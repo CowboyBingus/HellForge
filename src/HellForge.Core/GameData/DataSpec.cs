@@ -15,7 +15,7 @@ namespace HellForge.Core.GameData;
 // A copy or include reads the player's game copy, or with "source": "steam" the game as Steam has it installed (a newer
 // build's resources, read from the player's own files like the rest; an include from Steam must be new to the copy).
 //   mesh     (on a unit copy) the mod's own geometry from an OBJ in the mod folder, in every render and shadow mesh.
-// docs/mods.md "Data specs" describes the format.
+// docs/modding/data.md "Data specs" describes the format.
 public sealed record DataSpec(IReadOnlyList<DataPatch> Patches, IReadOnlyList<string> Inputs)
 {
     public bool UsesSteam => Patches.Any(p => p.Resources.Any(r => r.Steam));

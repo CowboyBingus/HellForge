@@ -22,11 +22,29 @@ try
             mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>]
             build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> [--steam-data <Steam's game data folder>] --out <folder>]
             check-stats --mod <mod folder>
-            sdk-headers --repo <HellForge source folder> [--engine <HellForge-Engine folder>] [--mode write | check]
+            sdk-headers --repo <HellForge source folder> [--mode write | check]
             new-mod --id <owner.mod-name> --name <name> (--install <folder> | --out <folder>)
             build-mod --mod <mod folder>
             package-mod --mod <mod folder> [--out <folder>]
             mod-tools --install <installation or source folder> [--ide yes]
+
+            For launchers of their own (docs/external-launchers.md); --install defaults to the installation this is in:
+            play [--install <folder>] [--profile <name>] [--war live | frozen | open] [--local-playfab yes | no]
+                 [--multiplayer yes | no] [--engine-log yes | no] [--crash-dump yes | no] [--game-options <options>]
+                 [--wait yes] [--dry-run yes]
+            stop [--install <folder>] [--run <session folder>] [--wait yes]
+            status [--install <folder>]
+            profiles [--install <folder>] [--create <name> --template <template>]
+            fetch-war [--install <folder>]
+            mods [--install <folder>]
+            mod-add [--install <folder>] --file <.zip, .rar, .7z, hellforge-mod.json or manifest.json>
+            mod-remove [--install <folder>] --id <mod id>
+            mod-switch [--install <folder>] --id <mod id> --on yes | no
+            mod-order [--install <folder>] --ids <id,id,... top first>
+            mod-pack [--install <folder>] --id <pack id> (--option <name> [--on yes | no] [--variant <name>] | --all yes | no)
+            settings [--install <folder>] [--profile <name>] [--war live | frozen | open] [--local-playfab yes | no]
+                     [--multiplayer yes | no] [--engine-log yes | no] [--crash-dump yes | no] [--game-options <options>]
+            logs [--install <folder>] [--run <session id>] [--export <file.zip>]
 
             inspect prints JSON; prepare makes a full, hash-verified, unpatched copy; supported-build lists a
             Steam-validated install's depot files and hashes (names and hashes only) for HellForge to target.
@@ -40,7 +58,12 @@ try
             the DLL its manifest names. package-mod compiles a source mod, then zips it to share (the installation's exports
             folder, or --out): sources and files, no DLL a player's HellForge would rebuild, no IDE leftovers.
             mod-tools downloads that Zig (and CMake and Ninja for IDEs with --ide yes), pinned and checksummed.
-            No command launches the game, verifies ownership, or provides network isolation.
+            play starts a session as HellForge.exe's PLAY does, with the launcher's saved choices unless an option
+            replaces one; the engine's session runner does every check and cleanup itself. Without --wait it prints the
+            run once started and returns; with it, one JSON line per status until the session ends (exit code 0 when it
+            ended normally). stop asks the session to close the game. Mod changes wait until no session runs.
+            settings saves the choices play and the launcher start from, and prints them. logs lists the sessions,
+            newest first (--run: one session's files); --export zips one as the launcher's Save logs to Desktop does.
             Close Steam and the game before prepare; installations must remain idle.
             Failed preparations retain preparing.lock and must not be used.
             """);
@@ -61,12 +84,23 @@ try
         "mods-stage" => ["--install", "--plan", "--logs", "--progress"],
         "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--out"],
         "check-stats" => ["--mod"],
-        "sdk-headers" => ["--repo", "--engine", "--mode"],
+        "sdk-headers" => ["--repo", "--mode"],
         "editor-data" => ["--out", "--install", "--game"],
         "new-mod" => ["--id", "--name", "--install", "--out"],
         "build-mod" => ["--mod"],
         "package-mod" => ["--mod", "--out"],
         "mod-tools" => ["--install", "--ide"],
+        "play" => ["--install", "--profile", "--war", "--local-playfab", "--multiplayer", "--engine-log", "--crash-dump", "--game-options", "--wait", "--dry-run"],
+        "stop" => ["--install", "--run", "--wait"],
+        "status" or "fetch-war" or "mods" => ["--install"],
+        "profiles" => ["--install", "--create", "--template"],
+        "mod-add" => ["--install", "--file"],
+        "mod-remove" => ["--install", "--id"],
+        "mod-switch" => ["--install", "--id", "--on"],
+        "mod-order" => ["--install", "--ids"],
+        "mod-pack" => ["--install", "--id", "--option", "--on", "--variant", "--all"],
+        "settings" => ["--install", "--profile", "--war", "--local-playfab", "--multiplayer", "--engine-log", "--crash-dump", "--game-options"],
+        "logs" => ["--install", "--run", "--export"],
         _ => throw new ArgumentException($"Unknown command: {args[0]}")
     };
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -86,6 +120,43 @@ try
     object result;
     switch (args[0])
     {
+        case "play":
+            return Launch.Play(options);
+        case "stop":
+            return Launch.Stop(options);
+        case "status":
+            result = Launch.Status(options);
+            break;
+        case "profiles":
+            result = Launch.Profiles(options);
+            break;
+        case "fetch-war":
+            result = Launch.FetchWar(options);
+            break;
+        case "mods":
+            result = Launch.Mods(options);
+            break;
+        case "mod-add":
+            result = Launch.ModAdd(options, Required("--file"));
+            break;
+        case "mod-remove":
+            result = Launch.ModRemove(options, Required("--id"));
+            break;
+        case "mod-switch":
+            result = Launch.ModSwitch(options, Required("--id"), Required("--on"));
+            break;
+        case "mod-order":
+            result = Launch.ModOrder(options, Required("--ids"));
+            break;
+        case "mod-pack":
+            result = Launch.ModPack(options, Required("--id"));
+            break;
+        case "settings":
+            result = Launch.Settings(options);
+            break;
+        case "logs":
+            result = Launch.Logs(options);
+            break;
         case "discover":
             var steam = options.GetValueOrDefault("--steam-root") ??
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Steam");
@@ -265,7 +336,7 @@ try
         {
             var mode = options.GetValueOrDefault("--mode") ?? "write";
             if (mode is not ("write" or "check")) throw new ArgumentException("--mode must be write or check.");
-            var stale = SdkMappings.Sync(Path.GetFullPath(Required("--repo")), mode == "check", options.TryGetValue("--engine", out var engineRepo) ? Path.GetFullPath(engineRepo) : null);
+            var stale = SdkMappings.Sync(Path.GetFullPath(Required("--repo")), mode == "check");
             Console.WriteLine(JsonSerializer.Serialize(new { mode, stale }, CopyPreparer.JsonOptions));
             return mode == "check" && stale.Count > 0 ? 1 : 0;
         }

@@ -6,6 +6,7 @@
 # then recreates the same loopback ports inside the namespace. No route to the internet is added.
 set -euo pipefail
 command -v socat >/dev/null || { echo "need socat (install it with your package manager)" >&2; exit 1; }
+command -v ss >/dev/null || { echo "need ss (iproute2; iproute on Fedora)" >&2; exit 1; }
 dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
 # Loopback TCP listeners owned by the process named "steam".

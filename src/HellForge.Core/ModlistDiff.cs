@@ -5,7 +5,7 @@ namespace HellForge.Core;
 public sealed record ModFingerprint(string Id, string Name, string Version, string Hash);
 
 // What makes two modlists differ, mod by mod, for a refused join: the host's backend compares its gameplay mods with the
-// joiner's and both games say which differ (docs/mods.md, "A refused join"). On the wire a modlist is a line per
+// joiner's and both games say which differ (docs/mods.md, "Playing with friends"). On the wire a modlist is a line per
 // mod, "id \t name \t version \t hash".
 public static class ModlistDiff
 {

@@ -7,7 +7,8 @@ required in them:
   templates/          the mod template that new mods are made from
   examples/mods/      the example mods
 
-Everything else in HellForge is under the HellForge Source-Available License (LICENSE).
+Everything else in HellForge is under the GNU General Public License, version 3 (LICENSE), with the additional
+permission for mods in LICENSE-EXCEPTION.
 
 Copyright (c) 2026 SkyeShade
 

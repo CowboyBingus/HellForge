@@ -39,4 +39,83 @@ public static partial class SessionLogs
         }
         return new(removed, bytes, skipped);
     }
+
+    // A session as its run folder and result.json tell it (HellForge.Cli logs; launchers of their own list these).
+    public sealed record Run(string Id, string Folder, DateTime StartedUtc, string? Status, string? Failure, string? GameExitCode,
+        DateTime? CompletedUtc);
+
+    // The sessions in the sessions folder, newest first. A run whose result.json cannot be read (a session still starting,
+    // or one cut short) is listed with what its folder tells.
+    public static List<Run> Runs(string sessionsFolder)
+    {
+        if (!Directory.Exists(sessionsFolder)) return [];
+        var runs = new List<Run>();
+        foreach (var folder in new DirectoryInfo(sessionsFolder).GetDirectories().Where(d => RunId().IsMatch(d.Name)))
+        {
+            string? Text(System.Text.Json.JsonElement root, string name) =>
+                root.TryGetProperty(name, out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String ? value.GetString() : null;
+            DateTime? Time(string? text) => DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var time) ? time : null;
+            string? status = null, failure = null, exit = null;
+            DateTime? started = null, completed = null;
+            try
+            {
+                var result = Path.Combine(folder.FullName, "result.json");
+                if (File.Exists(result))
+                {
+                    using var stream = new FileStream(result, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var document = System.Text.Json.JsonDocument.Parse(stream);
+                    var root = document.RootElement;
+                    (status, failure, exit) = (Text(root, "status"), Text(root, "failure"), Text(root, "gameExitCode"));
+                    (started, completed) = (Time(Text(root, "startedUtc")), Time(Text(root, "completedUtc")));
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+            runs.Add(new(folder.Name, folder.FullName, started ?? folder.CreationTimeUtc, status, failure, exit, completed));
+        }
+        return [.. runs.OrderByDescending(r => r.StartedUtc).ThenByDescending(r => r.Id, StringComparer.Ordinal)];
+    }
+
+    public sealed record Exported(string Zip, int Files, int Skipped);
+
+    // A session's logs zipped to send to whoever helps (the launcher's Save logs to Desktop, HellForge.Cli logs --export).
+    // Text files and names in it do not name the PC (Privacy), whoever wrote them (a mod's own log, the game's console
+    // logs); other files (a crash dump) go in as they are. A running session still has its logs open, so each file is
+    // read with shared access, and one in use is left out (Skipped). The game's console logs are copied into the run
+    // (engine-logs) when it ends: while it runs, or if that copy failed, the ones the game wrote since the session started
+    // come from gameLogs (the installation's userdata/logs).
+    public static Exported Export(string run, string? gameLogs, string target)
+    {
+        // programs are left out: the run's steam-link folder holds a copy of Valve's steam_api64.dll, which is no log
+        var files = Directory.EnumerateFiles(run, "*", SearchOption.AllDirectories)
+            .Where(file => !Path.GetExtension(file).Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
+                           !Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+            .Select(file => (file, name: Path.Combine(Path.GetFileName(run), Path.GetRelativePath(run, file)))).ToList();
+        if (!Directory.Exists(Path.Combine(run, "engine-logs")) && gameLogs != null && Directory.Exists(gameLogs))
+        {
+            var started = Directory.GetCreationTimeUtc(run);
+            files.AddRange(new DirectoryInfo(gameLogs).GetFiles("console_*.txt")
+                .Where(f => f.LastWriteTimeUtc >= started && f.Length < 200L * 1024 * 1024)
+                .Select(f => (f.FullName, Path.Combine(Path.GetFileName(run), "engine-logs", "logs-" + f.Name))));
+        }
+        int written = 0, skipped = 0;
+        using (var zip = System.IO.Compression.ZipFile.Open(target, System.IO.Compression.ZipArchiveMode.Create))
+            foreach (var (file, name) in files)
+                try
+                {
+                    using var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    var entry = zip.CreateEntry(Privacy.Scrub(name).Replace(Path.DirectorySeparatorChar, '/'), System.IO.Compression.CompressionLevel.Optimal);
+                    using var destination = entry.Open();
+                    if (Privacy.IsText(file) && source.Length < 200L * 1024 * 1024)
+                    {
+                        using var buffer = new MemoryStream();
+                        source.CopyTo(buffer);
+                        destination.Write(Privacy.Current.ApplyBytes(buffer.ToArray()));
+                    }
+                    else source.CopyTo(destination);
+                    written++;
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { skipped++; }
+        return new(target, written, skipped);
+    }
 }

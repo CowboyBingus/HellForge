@@ -1,7 +1,7 @@
 # The native build tools, downloaded once into <root>/tools (gitignored), each pinned by SHA-256: portable Zig 0.17.0
 # (the C and C++ toolchain) and MinHook 1.3.4 (BSD-2, hooks for the in-game editor). Returns their paths:
 #     $tools=& scripts/Get-BuildTools.ps1; & $tools.Zig cc ...; $tools.MinHook (its source folder)
-# -Root: whose tools folder (the HellForge-Engine build passes its own).
+# -Root: whose tools folder (the repository's by default).
 param([string]$Root)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest

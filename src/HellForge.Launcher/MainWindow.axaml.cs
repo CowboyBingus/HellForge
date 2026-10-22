@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Avalonia;
+using HellForge.Core;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -207,8 +208,9 @@ public partial class MainWindow : Window
         modProblemsShown = false;
         Append("Starting play session.", LauncherLine);
         Append($"Profile: {profile.Name} (template {profile.Template}) in {profile.Folder}", LauncherLine);
-        if (LocalPlayFabBox.IsChecked == true) Append("Experimental: local PlayFab is on.", Orange);
-        if (SdkShimsBox.IsChecked == true) Append("Experimental: PlayFab SDK stand-ins are on.", Orange);
+        // both on by default (Settings > Multiplayer): only a switch turned off is worth a line
+        if (LocalPlayFabBox.IsChecked != true) Append("Local PlayFab is off (Settings > Multiplayer): co-op with friends needs it.", Orange);
+        if (SdkShimsBox.IsChecked != true) Append("Lobby and session through Steam friends is off (Settings > Multiplayer): co-op with friends needs it.", Orange);
         List<string> gameOptions;
         try { gameOptions = HellForge.Core.GameLaunchOptions.Parse(LaunchOptionsBox.Text); }
         catch (InvalidDataException error)
@@ -220,7 +222,8 @@ public partial class MainWindow : Window
         if (gameOptions.Count > 0) Append("Launch options: " + HellForge.Core.GameLaunchOptions.CommandLine(gameOptions), LauncherLine);
         try
         {
-            runner.Start(paths, profile, LocalPlayFabBox.IsChecked == true, SdkShimsBox.IsChecked == true, ProfileStore.LoadWar(paths), EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true, gameOptions);
+            runner.Start(paths, profile, new(LocalPlayFabBox.IsChecked == true, SdkShimsBox.IsChecked == true, ProfileStore.LoadWar(paths),
+                EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true, gameOptions));
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {
@@ -298,11 +301,7 @@ public partial class MainWindow : Window
 
     void FindRun()
     {
-        if (SessionFiles.ReadJson(paths.SessionFile) is not { } session) return;
-        var run = SessionFiles.Text(session, "run");
-        if (run.Length == 0 ||
-            !DateTime.TryParse(SessionFiles.Text(session, "startedUtc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var started) ||
-            started < launchedUtc.AddSeconds(-5)) return;
+        if (SessionRunner.RunSince(paths, launchedUtc) is not { } run) return;
         runDirectory = run;
         if (runPathText != null) runPathText.Text = run;
     }
@@ -332,12 +331,12 @@ public partial class MainWindow : Window
             case "awaiting_network_block_install":
                 RenderSteps(NetworkStep, false);
                 if (!stopRequested) SetStatus("Approve the Windows prompt to install the network block.", Phase.Attention,
-                    "Asked once: permanent firewall rules block the copied game from the internet. Later sessions need no prompt.");
+                    "Asked once: the network block keeps the copied game off the internet. Later sessions need no prompt.");
                 break;
             case "awaiting_windows_firewall_consent":
                 RenderSteps(NetworkStep, false);
-                if (!stopRequested) SetStatus("Approve the Windows prompt to add temporary firewall rules.", Phase.Attention,
-                    "The rules block the copied game from the internet for this session only.");
+                if (!stopRequested) SetStatus("Approve the Windows prompt to place a network block for this session.", Phase.Attention,
+                    "It keeps the copied game off the internet until the session ends.");
                 break;
             case "patching":
                 RenderSteps(LaunchStep, false);
@@ -369,9 +368,10 @@ public partial class MainWindow : Window
         }
     }
 
-    // The persistent network block stays installed; only the per-session guard (no Steam sign-in) removes rules.
-    static string Cleanup(JsonElement state) => SessionFiles.Text(state, "networkBlock") == "persistent" ? ""
-        : "Firewall rules removed: " + (state.TryGetProperty("firewallCleanup", out var cleanup) && SessionFiles.Text(cleanup, "rulesRemoved") == "true" ? "yes" : "unconfirmed") + ". ";
+    // The network block an installation keeps (WFP, the Linux namespace, persistent rules) stays; only a session that placed
+    // rules of its own for itself (older runners: firewallCleanup) reports taking them down.
+    static string Cleanup(JsonElement state) => !state.TryGetProperty("firewallCleanup", out _) ? ""
+        : "The session's network block removed: " + (state.TryGetProperty("firewallCleanup", out var cleanup) && SessionFiles.Text(cleanup, "rulesRemoved") == "true" ? "yes" : "unconfirmed") + ". ";
 
     LocalProfile Selected => ProfileCombo.SelectedItem as LocalProfile ?? profiles[0];
 
@@ -497,7 +497,7 @@ public partial class MainWindow : Window
 
     void Append(string text, IBrush brush)
     {
-        lines.Add(new LogLine(text, brush));
+        lines.Add(new LogLine(Privacy.Scrub(text), brush));
         while (lines.Count > MaxLogLines) lines.RemoveAt(0);
         QueueScroll();
     }
@@ -538,10 +538,11 @@ public partial class MainWindow : Window
     {
         if (BootProgress.IsVisible && !text.StartsWith("Compiling mods", StringComparison.Ordinal) && !text.StartsWith("Fetching the mod compiler", StringComparison.Ordinal))
             BootProgress.IsVisible = false;
-        StatusText.Text = text;
-        HintText.Text = hint;
+        // Shown text is screenshotted for help: it does not name the PC (Privacy).
+        StatusText.Text = Privacy.Scrub(text);
+        HintText.Text = Privacy.Scrub(hint);
         HintText.IsVisible = hint.Length > 0;
-        FailureText.Text = failure;
+        FailureText.Text = failure != null ? Privacy.Scrub(failure) : null;
         FailureText.IsVisible = failure != null;
         var (brush, label, pulse) = phase switch
         {
@@ -699,30 +700,9 @@ public partial class MainWindow : Window
             if (run == null) { Append("No session logs yet: play a session first.", Orange); return; }
             var target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
                 $"HellForge-logs-{DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.zip");
-            // A running session still has its logs open for writing, so each file is read with shared access. The game's
-            // console logs are copied into the session (engine-logs) only when it ends: while it runs, or if that copy
-            // failed, the ones the game wrote since the session started come from the installation's userdata/logs.
-            var files = Directory.EnumerateFiles(run, "*", SearchOption.AllDirectories)
-                .Select(file => (file, name: Path.Combine(Path.GetFileName(run), Path.GetRelativePath(run, file)))).ToList();
+            // the same zip as HellForge.Cli logs --export: scrubbed of the PC's names (SessionLogs.Export)
             var gameLogs = paths.InstallRoot != null ? Path.Combine(paths.InstallRoot, "userdata", "logs") : null;
-            if (!Directory.Exists(Path.Combine(run, "engine-logs")) && gameLogs != null && Directory.Exists(gameLogs))
-            {
-                var started = Directory.GetCreationTimeUtc(run);
-                files.AddRange(new DirectoryInfo(gameLogs).GetFiles("console_*.txt")
-                    .Where(f => f.LastWriteTimeUtc >= started && f.Length < 200L * 1024 * 1024)
-                    .Select(f => (f.FullName, Path.Combine(Path.GetFileName(run), "engine-logs", "logs-" + f.Name))));
-            }
-            var skipped = 0;
-            using (var zip = System.IO.Compression.ZipFile.Open(target, System.IO.Compression.ZipArchiveMode.Create))
-                foreach (var (file, name) in files)
-                    try
-                    {
-                        using var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                        var entry = zip.CreateEntry(name.Replace(Path.DirectorySeparatorChar, '/'), System.IO.Compression.CompressionLevel.Optimal);
-                        using var destination = entry.Open();
-                        source.CopyTo(destination);
-                    }
-                    catch (Exception error) when (error is IOException or UnauthorizedAccessException) { skipped++; }
+            var skipped = HellForge.Core.SessionLogs.Export(run, gameLogs, target).Skipped;
             Append("Saved the latest session's logs to " + target + (skipped > 0 ? $" ({skipped} files in use were left out)" : ""), Green);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -732,7 +712,7 @@ public partial class MainWindow : Window
     }
 
     // The HellForge Discord server: support, news and mods (the sidebar's Discord button).
-    const string DiscordInvite = "https://discord.gg/XQBY2xgc8Z";
+    const string DiscordInvite = "https://discord.gg/3Yye92xCzh";
 
     // A web page in the player's browser.
     async void OpenLink(string url)

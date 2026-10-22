@@ -1,7 +1,7 @@
 /* {{name}} ({{id}}): a HellForge code mod, made from HellForge's mod template.
  *
  * It starts with one change you can see in game: the AR-23 Liberator fires at 1200 rounds per minute with no recoil.
- * Replace it with your own. The first-mod guide (docs/first-mod.md) walks through it; the SDK reference
+ * Replace it with your own. The first-mod guide (docs/modding/first-mod.md) walks through it; the SDK reference
  * (docs/sdk-reference.md) lists every component, field and constant; hellforge_mod.h documents every call.
  *
  *   - Fields have names: HF_FIELD(Component, field), from the game's records (hellforge_components.h). A misspelt name
@@ -9,7 +9,7 @@
  *   - Vanilla content has constants: HF_ENTITY_..., HF_ITEM_..., HF_STRATAGEM_... (hellforge_content.h).
  *   - Definition blocks say what changes; the loader applies them whenever the game loads its data, and refuses (in the
  *     mod's log, with the line) anything it cannot check.
- * Build: BUILD on the launcher's Mods page, or HellForge.Cli build-mod --mod <this folder>. */
+ * Build: Build now in the mod's menu on the Mods page, or HellForge.Cli build-mod --mod <this folder>. */
 #include "hellforge_mod.h"
 
 static const HfSet liberatorSet[] = {

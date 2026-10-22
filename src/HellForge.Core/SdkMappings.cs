@@ -212,20 +212,16 @@ public sealed class SdkMappings
         [HeaderFiles[4]] = Reference(apiHeader),
     };
 
-    // The generated files the mod loader includes (native/mod-loader/...): they belong to the engine's repository.
-    static bool ForLoader(string path) => path.StartsWith("native/mod-loader/", StringComparison.Ordinal);
-
-    // Writes the generated files under the repository root, and the loader's under the engine's (when given; skipped
-    // otherwise); with check, only lists the ones that differ.
-    public static IReadOnlyList<string> Sync(string repository, bool check, string? engine = null)
+    // Writes the generated files under the repository root (the SDK's headers and reference, and the mod loader's
+    // tables in native/mod-loader); with check, only lists the ones that differ.
+    public static IReadOnlyList<string> Sync(string repository, bool check)
     {
         var stale = new List<string>();
         // Line endings as git checks them out (CRLF on Windows with core.autocrlf): compared and parsed as LF.
         var api = File.ReadAllText(Path.Combine(repository, "native", "mod-sdk", "hellforge_mod.h")).ReplaceLineEndings("\n");
         foreach (var (path, text) in Load(Path.Combine(repository, "mappings")).Generate(api))
         {
-            if (ForLoader(path) && engine == null) continue;
-            var file = Path.Combine(ForLoader(path) ? engine! : repository, path);
+            var file = Path.Combine(repository, path);
             if (File.Exists(file) && File.ReadAllText(file).ReplaceLineEndings("\n") == text.ReplaceLineEndings("\n")) continue;
             stale.Add(path);
             if (!check) File.WriteAllText(file, text);
@@ -328,52 +324,147 @@ public sealed class SdkMappings
     }
 
     // The SDK reference (docs/sdk-reference.md): every API call with its comment, every component and table with its
-    // fields, and every vanilla content constant.
+    // fields, and every vanilla content constant, after an opening and a contents list that links every section.
     string Reference(string? apiHeader)
     {
         var s = new StringBuilder();
-        s.Append($"""
-            # HellForge mod SDK reference (game build {Build})
-
-            {Generated.Replace("`hellforge sdk-headers`", "`HellForge.Cli sdk-headers`")} It comes from
-            `native/mod-sdk/hellforge_mod.h` (the API, as documented there) and `mappings/` (fields and content). For a first
-            mod, see [first-mod.md](first-mod.md); for how each part works, [mods.md](mods.md).
-
-            - [API](#api) · [Components](#components) · [Settings tables](#settings-tables) · [Content](#content)
-
-
-            """);
+        // Contents: each top-level section with the level-3 headings under it (title as linked, heading text).
+        var contents = new List<(string Section, List<(string Title, string Heading)> Entries)>();
+        void Section(string title, string intro)
+        {
+            contents.Add((title, []));
+            s.Append($"\n## {title}\n\n{intro}");
+        }
+        void Entry(string title, string heading)
+        {
+            contents[^1].Entries.Add((title, heading));
+            s.Append($"\n### {heading}\n");
+        }
         if (apiHeader != null)
         {
-            s.Append("## API\n\nThe `HfApi` table a mod's `hellforge_mod_init(const HfApi* hf, HfMod* mod)` receives. Functions are only ever added at the\nend; a mod checks `hf->version`.\n");
-            foreach (var line in ApiReference(apiHeader)) s.Append(line).Append('\n');
-            s.Append('\n');
+            Section("API", """
+                The `HfApi` table a mod's `hellforge_mod_init(const HfApi* hf, HfMod* mod)` receives. Functions are only ever added at
+                the end, and a mod checks `hf->version` to know which ones the loader has. Each section lists what one SDK version
+                added, in table order; a version that added nothing to the table has no section. Each entry gives the member's
+                name, its type, and its comment from `hellforge_mod.h`. Where one comment covers several members, it is on the
+                first of them.
+
+                See also: [Logic at run time](modding/runtime.md) for events, actions and live edits; [Content](modding/content.md)
+                for changing and adding content; [Hooks and game memory](modding/hooks.md) for `hook`, `find_pattern`, `read` and
+                `write`; [Debugging](modding/debugging.md) for the mod's log and refusals.
+
+                """);
+            foreach (var line in ApiReference(apiHeader))
+            {
+                if (line.StartsWith("\n### ", StringComparison.Ordinal))
+                {
+                    var heading = line[5..^1];
+                    var colon = heading.IndexOf(':');
+                    Entry(colon < 0 ? heading : heading[..colon], heading);
+                    s.Append('\n');
+                }
+                else s.Append(line).Append('\n');
+            }
         }
         string Applies(SdkField f) => f.Applies + (f.AppliesVerified ? "" : "?");
         void Component(SdkComponent c)
         {
-            s.Append($"\n### Hf{c.Name}\n\n`{c.Component}`: {(c.Table ? $"{c.Stride}-byte rows found by id" + (c.Row != null ? $", `api->{c.Row}`" : "") : $"component {c.Index}, {c.Stride}-byte records")}. {c.Meaning}.\n\n");
+            Entry($"Hf{c.Name}", $"Hf{c.Name}");
+            s.Append($"\n`{c.Component}`: {(c.Table ? $"{c.Stride}-byte rows found by id" + (c.Row != null ? $", `api->{c.Row}`" : "") : $"component {c.Index}, {c.Stride}-byte records")}. {c.Meaning}.\n\n");
             if (c.Fields.Count == 0) { s.Append("No fields mapped yet.\n"); return; }
             s.Append("| Field | Offset | Type | Applies | Meaning |\n|---|---|---|---|---|\n");
             foreach (var f in c.Fields)
                 s.Append($"| `{f.Name}` | +0x{f.Offset:X2} | {f.Type}{(f.Count > 1 || f.Type == "bytes" ? $"[{f.Count}]" : "")} | {Applies(f)} | {f.Meaning.Replace("|", "\\|")}{(f.Verified ? "" : " (unverified)")}{(f.Ref != null ? $" ({(f.Ref == "explosion" ? "an" : "a")} {f.Ref} reference)" : "")} |\n");
             foreach (var g in c.Groups) s.Append($"\nGroup `{g.Name}` ({g.Meaning}): {string.Join(", ", g.Fields.Select(f => $"`{f}`"))}.\n");
         }
-        s.Append("## Components\n\nEntity component records: `HF_FIELD(Component, field)` names a field, `hf_record(mod, entity, HfComponent)` gives a typed\npointer. *Applies* is when a live change takes effect (`now`, `respawn`, `mission`; `?` inferred, not yet confirmed).\n");
+        Section("Components", """
+            Entity component records. In a definition block, `HF_FIELD(Component, field)` names a field; for an entity's own
+            record, `hf_record(mod, entity, HfComponent)` gives a typed pointer (both in `hellforge_mod.h`). Each entry starts
+            with the game's name for the component, its component number and its record size, then lists its fields:
+
+            - Offset: where the field starts in the record, in bytes.
+            - Type: `u8`, `u16`, `u32`, `i32`, `f32`, `u64` or `bytes`, with a count in brackets for an array.
+            - Applies: when a live change takes effect in a running game. `now` is the next time the game reads it, `respawn`
+              when the entity is next made (a spawn, a re-equip, the next call-in), `mission` when a mission loads. A `?` means
+              inferred, not yet confirmed.
+            - Meaning: what the field does. "(unverified)" marks a field named from research but not yet confirmed in the game;
+              "(a projectile reference)" and the like mark a field whose value is a row of that table.
+
+            Each component's layout is the game build its offsets were reviewed on. The loader refuses fields of a layout it
+            does not have, so a mod built against another layout is reported instead of run.
+
+            See also: [Content](modding/content.md) for changing existing content by field name, [Logic at run
+            time](modding/runtime.md) for live edits, [Stats mods](modding/stats-mods.md) for number changes without code, and
+            [Debugging](modding/debugging.md) for why a field was refused.
+
+            """);
         foreach (var c in Components.Where(c => !c.Table)) Component(c);
-        s.Append("\n## Settings tables\n\nRows of the game's settings tables, found by their id (`set_live`, `set_field`), or through a row function.\n");
+        Section("Settings tables", """
+            Rows of the game's settings tables, found by their id (`set_live`, `set_field`), or through a row function where the
+            entry names one (`api->...`). The columns are the same as for components; each entry gives the row size instead of
+            a component number.
+
+            See also: [Content](modding/content.md) for settings rows and their row functions, [Logic at run
+            time](modding/runtime.md) for live edits, and [Stats mods](modding/stats-mods.md) for projectiles, damage, explosions
+            and statuses without code.
+
+            """);
         foreach (var c in Components.Where(c => c.Table)) Component(c);
-        s.Append("\n## Content\n\nVanilla content constants (`hellforge_content.h`); `hf->find(HF_KIND_..., \"name\")` resolves the same names at run time.\n");
+        Section("Content", """
+            Vanilla content constants (`hellforge_content.h`), one list per kind. `hf->find(HF_KIND_..., "name")` resolves the
+            same names at run time. Each list is folded: open it to see every constant with its value and the game's name for
+            it.
+
+            See also: [Content](modding/content.md) for finding content, including content other mods added.
+
+            """);
         foreach (var kind in Kinds)
         {
             var items = Content.Where(c => c.Kind == kind.Key).ToList();
             if (items.Count == 0) continue;
-            s.Append($"\n### {kind.Prefix}... ({items.Count}, `{KindConstant(kind.Prefix)}`)\n\n{kind.Doc.Replace("\n * ", " ")}\n\n<details><summary>All {items.Count}</summary>\n\n| Constant | Value | Name |\n|---|---|---|\n");
+            Entry($"{kind.Prefix}...", $"{kind.Prefix}... ({items.Count}, `{KindConstant(kind.Prefix)}`)");
+            s.Append($"\n{kind.Doc.Replace("\n * ", " ")}\n\n<details><summary>All {items.Count}</summary>\n\n| Constant | Value | Name |\n|---|---|---|\n");
             foreach (var item in items)
                 s.Append($"| `{kind.Prefix}{item.Constant}` | {(kind.Wide ? $"0x{item.Id:X16}" : item.Id > 0xFFFF || kind.Key == "traits" ? $"0x{item.Id:X}" : item.Id.ToString(CultureInfo.InvariantCulture))} | {item.Name.Replace("|", "\\|")}{(item.Note.Length > 0 ? " - " + item.Note.Replace("|", "\\|") : "")} |\n");
             s.Append("\n</details>\n");
         }
-        return s.ToString().ReplaceLineEndings("\n");
+
+        var page = new StringBuilder();
+        page.Append($"""
+            # HellForge mod SDK reference (game build {Build})
+
+            For code mod authors who need to look something up: every call in the `HfApi` table, every component and settings
+            table field, and every vanilla content constant, for game build {Build}. To learn how to make a mod, follow the
+            guide in [modding/README.md](modding/README.md), starting with [your first mod](modding/first-mod.md), and keep this
+            page open beside it. Models, textures, effects, sounds and icons are covered in [Data mods](modding/data.md).
+
+            Search the page for the name you need (a call such as `set_live`, a struct such as `HfWeaponMagazine`, a constant
+            such as `HF_ITEM_...`), or use the contents below.
+
+            This page is generated by `HellForge.Cli sdk-headers` from `native/mod-sdk/hellforge_mod.h` (the API, as documented
+            there) and `mappings/` (fields and content); do not edit it by hand. To change it, edit those sources and regenerate
+            (docs/sdk-roadmap.md, "Mappings"; [Tools and sharing](modding/tools.md) has the command).
+
+            ## Contents
+
+
+            """);
+        foreach (var (section, entries) in contents)
+            page.Append($"- [{section}](#{Anchor(section)})" +
+                (entries.Count > 0 ? ": " + string.Join(", ", entries.Select(e => $"[{e.Title}](#{Anchor(e.Heading)})")) : "") + "\n");
+        page.Append(s);
+        return page.ToString().ReplaceLineEndings("\n");
+    }
+
+    // The anchor GitHub gives a heading: its text without markup, lower case, punctuation other than - and _ dropped,
+    // spaces as hyphens.
+    static string Anchor(string heading)
+    {
+        var text = new StringBuilder();
+        foreach (var ch in heading.Replace("`", "").ToLowerInvariant())
+            if (char.IsLetterOrDigit(ch) || ch is '-' or '_') text.Append(ch);
+            else if (ch == ' ') text.Append('-');
+        return text.ToString();
     }
 
     // HfApi's members, each with the comment above it, grouped by the SDK version that added them.
@@ -407,13 +498,13 @@ public sealed class SdkMappings
             var data = System.Text.RegularExpressions.Regex.Match(line, @"^(\w+)\s+(\w+);\s*(?:/\*\s*(.*?)\s*\*/)?$");
             if (member.Success)
             {
-                yield return $"- **`{member.Groups[2].Value}`** `{member.Groups[1].Value} ({member.Groups[3].Value})`" +
-                    (comment.Count > 0 ? ": " + string.Join(" ", comment) : "");
+                yield return $"- `{member.Groups[2].Value}`: `{member.Groups[1].Value} ({member.Groups[3].Value})`" +
+                    (comment.Count > 0 ? ". " + string.Join(" ", comment) : "");
                 comment.Clear();
             }
             else if (data.Success)
             {
-                yield return $"- **`{data.Groups[2].Value}`** `{data.Groups[1].Value}`" + (data.Groups[3].Value.Length > 0 ? ": " + data.Groups[3].Value : "");
+                yield return $"- `{data.Groups[2].Value}`: `{data.Groups[1].Value}`" + (data.Groups[3].Value.Length > 0 ? ". " + data.Groups[3].Value : "");
                 comment.Clear();
             }
             else if (line.Length == 0) comment.Clear();

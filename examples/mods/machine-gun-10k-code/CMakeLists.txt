@@ -1,4 +1,4 @@
-# Machine Gun 10k as a CMake project (docs/modding.md): open this folder in Rider, CLion or VS Code, or build it with
+# Machine Gun 10k as a CMake project (docs/modding/tools.md): open this folder in Rider, CLion or VS Code, or build it with
 #   cmake --preset default && cmake --build --preset default
 cmake_minimum_required(VERSION 3.25)
 project(machine_gun_10k C)

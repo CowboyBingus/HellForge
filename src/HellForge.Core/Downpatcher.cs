@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace HellForge.Core;
 
@@ -11,9 +12,17 @@ namespace HellForge.Core;
 public sealed record DownpatchPack(string SourceBuild, string TargetBuild, string Url, string Sha256, long Size,
     string SourceExeSha256 = "", string SourceGameDllSha256 = "");
 
-public static class Downpatcher
+// Patches HELLDIVERS 2 as Steam has it into the supported build. Packs are listed in downpatch/index.json on
+// files.hf-mod.com (scripts/New-DownpatchPack.ps1 builds one for each new Steam build), so a game update needs a new pack,
+// not a new HellForge. The list only says which pack to try: whatever a pack holds, every file it writes must be one of
+// the supported build's files with Steam's SHA-1 for it (supported-build.json, part of this release), else setup stops.
+public static partial class Downpatcher
 {
-    public static readonly DownpatchPack[] Packs =
+    public const string IndexUrl = "https://files.hf-mod.com/downpatch/index.json";
+    const string PackPrefix = "https://files.hf-mod.com/downpatch/";
+
+    // Packs known when this release was made: used when the list cannot be read and was never read before.
+    public static readonly DownpatchPack[] BuiltIn =
     [
         new("25988413", "25480438",
             "https://files.hf-mod.com/downpatch/downpatch-25988413-to-25480438.zip",
@@ -23,7 +32,70 @@ public static class Downpatcher
             "A457433F0EB766FBE15A6DE5A16F0FBBB1FD3C840C5607A5F0B2EBF53B112949")
     ];
 
+    static DownpatchPack[] known = BuiltIn;
+
+    // The packs setup can use now: the published list (or its cached copy) with the built-in ones.
+    public static IReadOnlyList<DownpatchPack> Packs => Volatile.Read(ref known);
+
+    // HDiffPatch v5.1.3's Windows build: the release zip and the hpatchz.exe in it, pinned.
     const string HpatchzUrl = "https://github.com/sisong/HDiffPatch/releases/download/v5.1.3/hdiffpatch_v5.1.3_bin_windows64.zip";
+    const string HpatchzZipSha256 = "77F141386E5D8F785C1C846E10FBBC19B6C05AA00E3F59CC44670FB3F0E2AE94";
+    const string HpatchzSha256 = "9703C694B5955C576D9F0E26E98B60941F0BBB53B382B1F1988D75D461E580CB";
+
+    public enum ListSource { Online, Cached, BuiltIn }
+
+    // Reads the published list into Packs; when it cannot be fetched, the copy saved last time (cacheFile), else only the
+    // built-in packs. Entries that are not well formed are left out.
+    public static async Task<ListSource> RefreshAsync(HttpClient http, string cacheFile, CancellationToken cancellation = default)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            timeout.CancelAfter(TimeSpan.FromSeconds(15));
+            var text = await http.GetStringAsync(IndexUrl, timeout.Token);
+            var packs = ParseIndex(text);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(cacheFile))!);
+            File.WriteAllText(cacheFile + ".partial", text);
+            File.Move(cacheFile + ".partial", cacheFile, overwrite: true);
+            Volatile.Write(ref known, Merge(packs));
+            return ListSource.Online;
+        }
+        catch (Exception error) when (error is HttpRequestException or InvalidDataException or JsonException or IOException or UnauthorizedAccessException ||
+                                      error is OperationCanceledException && !cancellation.IsCancellationRequested) { }
+        try
+        {
+            if (File.Exists(cacheFile))
+            {
+                Volatile.Write(ref known, Merge(ParseIndex(File.ReadAllText(cacheFile))));
+                return ListSource.Cached;
+            }
+        }
+        catch (Exception error) when (error is InvalidDataException or JsonException or IOException or UnauthorizedAccessException) { }
+        Volatile.Write(ref known, BuiltIn);
+        return ListSource.BuiltIn;
+    }
+
+    [GeneratedRegex("^[0-9]{1,12}$")] private static partial Regex BuildId();
+    [GeneratedRegex("^[0-9A-Fa-f]{64}$")] private static partial Regex Sha256Hex();
+    [GeneratedRegex("^[A-Za-z0-9._-]+\\.zip$")] private static partial Regex PackName();
+
+    // The list's packs that are well formed and on files.hf-mod.com/downpatch/; throws when the list itself is not one.
+    public static IReadOnlyList<DownpatchPack> ParseIndex(string json)
+    {
+        var index = JsonSerializer.Deserialize<DownpatchIndex>(json, ManifestJson) ?? throw new InvalidDataException("Empty patch list.");
+        if (index.SchemaVersion != 1 || index.Packs == null) throw new InvalidDataException($"Patch list version {index.SchemaVersion} is not one this HellForge reads.");
+        return [.. index.Packs.OfType<DownpatchIndexEntry>().Where(p => BuildId().IsMatch(p.SourceBuild ?? "") && BuildId().IsMatch(p.TargetBuild ?? "") &&
+                p.Url != null && p.Url.StartsWith(PackPrefix, StringComparison.Ordinal) && PackName().IsMatch(p.Url[PackPrefix.Length..]) &&
+                Sha256Hex().IsMatch(p.Sha256 ?? "") && p.Size > 0 && p.Size < 64L << 30 &&
+                (p.SourceExeSha256 is null or "" || Sha256Hex().IsMatch(p.SourceExeSha256)) &&
+                (p.SourceGameDllSha256 is null or "" || Sha256Hex().IsMatch(p.SourceGameDllSha256)))
+            .Select(p => new DownpatchPack(p.SourceBuild!, p.TargetBuild!, p.Url!, p.Sha256!.ToUpperInvariant(), p.Size,
+                p.SourceExeSha256?.ToUpperInvariant() ?? "", p.SourceGameDllSha256?.ToUpperInvariant() ?? ""))];
+    }
+
+    // The published packs first (a re-made pack replaces the built-in one for its builds), then the built-in ones.
+    static DownpatchPack[] Merge(IReadOnlyList<DownpatchPack> published) =>
+        [.. published, .. BuiltIn.Where(b => !published.Any(p => p.SourceBuild == b.SourceBuild && p.TargetBuild == b.TargetBuild))];
 
     public static DownpatchPack? FindPack(string sourceBuild) =>
         Packs.FirstOrDefault(p => p.SourceBuild == sourceBuild && p.TargetBuild == SupportedBuild.Current.BuildId);
@@ -50,18 +122,23 @@ public static class Downpatcher
 
         var hpatchz = await EnsureHpatchz(tempFolder, http, cancellation);
         var packPath = await DownloadPack(tempFolder, pack, http, downloadProgress, cancellation);
-        ApplyPack(steamGame, gameDestination, packPath, hpatchz, http, applyProgress, cancellation);
+        ApplyPack(steamGame, gameDestination, packPath, pack, SupportedBuild.Current, hpatchz, http, applyProgress, cancellation);
+    }
+
+    static string Sha256(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
+        return Convert.ToHexString(SHA256.HashData(stream));
     }
 
     static async Task<string> EnsureHpatchz(string tempFolder, HttpClient http, CancellationToken cancellation)
     {
         var toolsDir = Path.Combine(tempFolder, "tools");
         var hpatchz = Path.Combine(toolsDir, "hpatchz.exe");
-        if (File.Exists(hpatchz)) return hpatchz;
+        if (File.Exists(hpatchz) && Sha256(hpatchz) == HpatchzSha256) return hpatchz;
 
         Directory.CreateDirectory(toolsDir);
         var zipPath = Path.Combine(toolsDir, "hdiffpatch.zip");
-
         using (var response = await http.GetAsync(HpatchzUrl, HttpCompletionOption.ResponseHeadersRead, cancellation))
         {
             response.EnsureSuccessStatusCode();
@@ -69,11 +146,19 @@ public static class Downpatcher
             await using var file = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None);
             await stream.CopyToAsync(file, cancellation);
         }
-
-        var extractDir = Path.Combine(toolsDir, "hdiffpatch");
-        if (Directory.Exists(extractDir)) Directory.Delete(extractDir, recursive: true);
-        ZipFile.ExtractToDirectory(zipPath, extractDir);
-        File.Copy(Path.Combine(extractDir, "windows64", "hpatchz.exe"), hpatchz, overwrite: true);
+        if (Sha256(zipPath) != HpatchzZipSha256)
+        {
+            File.Delete(zipPath);
+            throw new InvalidDataException("The patch tool (HDiffPatch 5.1.3) did not download intact; try again.");
+        }
+        using (var zip = ZipFile.OpenRead(zipPath))
+        {
+            var entry = zip.GetEntry("windows64/hpatchz.exe") ?? throw new InvalidDataException("The patch tool's zip has no windows64/hpatchz.exe.");
+            entry.ExtractToFile(hpatchz + ".partial", overwrite: true);
+        }
+        File.Delete(zipPath);
+        if (Sha256(hpatchz + ".partial") != HpatchzSha256) throw new InvalidDataException("The patch tool is not the pinned hpatchz.exe.");
+        File.Move(hpatchz + ".partial", hpatchz, overwrite: true);
         return hpatchz;
     }
 
@@ -82,7 +167,8 @@ public static class Downpatcher
     {
         var packPath = Path.Combine(tempFolder, $"downpatch-{pack.SourceBuild}-to-{pack.TargetBuild}.zip");
 
-        if (File.Exists(packPath) && new FileInfo(packPath).Length == pack.Size)
+        // a pack downloaded before (setup stopped later): kept only while it is still the listed one
+        if (File.Exists(packPath) && new FileInfo(packPath).Length == pack.Size && Sha256(packPath).Equals(pack.Sha256, StringComparison.OrdinalIgnoreCase))
         {
             progress?.Invoke(pack.Size, pack.Size);
             return packPath;
@@ -104,63 +190,81 @@ public static class Downpatcher
             while ((read = await stream.ReadAsync(buffer, cancellation)) > 0)
             {
                 cancellation.ThrowIfCancellationRequested();
+                downloaded += read;
+                if (downloaded > pack.Size) break;
                 sha.AppendData(buffer, 0, read);
                 await file.WriteAsync(buffer.AsMemory(0, read), cancellation);
-                downloaded += read;
                 progress?.Invoke(downloaded, pack.Size);
             }
         }
 
         var hash = Convert.ToHexString(sha.GetHashAndReset());
-        if (!hash.Equals(pack.Sha256, StringComparison.OrdinalIgnoreCase))
+        if (downloaded != pack.Size || !hash.Equals(pack.Sha256, StringComparison.OrdinalIgnoreCase))
         {
             File.Delete(partial);
-            throw new InvalidDataException($"Patch pack corrupted during download (expected SHA-256 {pack.Sha256[..16]}...).");
+            throw new InvalidDataException($"The build patch did not download intact (expected SHA-256 {pack.Sha256[..16]}...); try again.");
         }
 
         File.Move(partial, packPath, overwrite: true);
         return packPath;
     }
 
-    static readonly Dictionary<string, string> DownloadOverrides = new(StringComparer.OrdinalIgnoreCase)
+    // The first pack patched data/settings.ini from Steam's copy, which players change: this one file comes from here
+    // instead. Later packs carry it themselves (an add). Checked against the build's hash like every other file.
+    static readonly Dictionary<string, string> DownloadOverrides = new(StringComparer.Ordinal)
     {
         ["data/settings.ini"] = "https://files.hf-mod.com/downpatch/settings-25480438.ini"
     };
 
-    static void ApplyPack(string steamGame, string gameDestination, string packPath, string hpatchz,
-        HttpClient http, Action<long, long, string>? progress, CancellationToken cancellation)
+    // Writes the build's files into gameDestination from the pack. The pack's manifest must name exactly the build's files
+    // and nothing else; each one written must have the build's size and SHA-1, or setup stops before it is used.
+    public static void ApplyPack(string steamGame, string gameDestination, string packPath, DownpatchPack pack, SupportedBuild build,
+        string hpatchz, HttpClient? http, Action<long, long, string>? progress, CancellationToken cancellation)
     {
         using var zip = ZipFile.OpenRead(packPath);
         var manifestEntry = zip.GetEntry("downpatch.json")
-            ?? throw new InvalidDataException("Patch pack has no downpatch.json.");
+            ?? throw new InvalidDataException("The build patch has no downpatch.json.");
 
         DownpatchManifest manifest;
         using (var reader = new StreamReader(manifestEntry.Open()))
             manifest = JsonSerializer.Deserialize<DownpatchManifest>(reader.ReadToEnd(), ManifestJson)
-                ?? throw new InvalidDataException("Empty downpatch manifest.");
+                ?? throw new InvalidDataException("The build patch's manifest is empty.");
+        if (manifest.TargetBuild != build.BuildId || manifest.TargetBuild != pack.TargetBuild || manifest.SourceBuild != pack.SourceBuild)
+            throw new InvalidDataException($"The build patch is for {manifest.SourceBuild} to {manifest.TargetBuild}, not {pack.SourceBuild} to {build.BuildId}.");
+
+        // exactly the build's files: a path outside the list (or ../) never reaches the file system
+        var listed = build.Files.ToDictionary(f => f.Path, StringComparer.Ordinal);
+        var named = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in manifest.Files ?? [])
+            if (file == null || !listed.ContainsKey(file.Path) || !named.Add(file.Path))
+                throw new InvalidDataException($"The build patch names a file that is not one of build {build.BuildId}'s once: {file?.Path}.");
+        if (named.Count != listed.Count)
+            throw new InvalidDataException($"The build patch leaves out {listed.Count - named.Count} of build {build.BuildId}'s files.");
 
         long done = 0;
-        long total = manifest.Files.Sum(f => f.Op == "patch" ? f.TargetSize : f.Size);
-
-        foreach (var file in manifest.Files)
+        long total = build.TotalBytes;
+        foreach (var file in manifest.Files!)
         {
             cancellation.ThrowIfCancellationRequested();
-            var hasOverride = DownloadOverrides.TryGetValue(file.Path, out var overrideUrl);
+            var expected = listed[file.Path];
             var destPath = Path.Combine(gameDestination, file.Path.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-            var expectedSize = file.Op == "patch" ? file.TargetSize : file.Size;
 
-            if (File.Exists(destPath) && new FileInfo(destPath).Length == expectedSize)
+            if (Matches(destPath, expected))
             {
-                done += expectedSize;
+                done += expected.Size;
                 progress?.Invoke(done, total, file.Path);
                 continue;
             }
 
             var partial = destPath + ".partial";
+            var src = Path.Combine(steamGame, file.Path.Replace('/', Path.DirectorySeparatorChar));
+            string FromSteam() => File.Exists(src) ? src
+                : throw new InvalidDataException($"Steam is missing {file.Path}; validate the game in Steam and start setup again.");
 
-            if (hasOverride)
+            if (DownloadOverrides.TryGetValue(file.Path, out var overrideUrl) && file.Op != "add")
             {
+                if (http == null) throw new InvalidOperationException("No HTTP client for " + file.Path + ".");
                 using var response = http.GetAsync(overrideUrl, cancellation).GetAwaiter().GetResult();
                 response.EnsureSuccessStatusCode();
                 using var stream = response.Content.ReadAsStreamAsync(cancellation).GetAwaiter().GetResult();
@@ -170,36 +274,23 @@ public static class Downpatcher
             else switch (file.Op)
             {
                 case "copy":
-                {
-                    var src = Path.Combine(steamGame, file.Path.Replace('/', Path.DirectorySeparatorChar));
-                    if (!File.Exists(src))
-                        throw new InvalidDataException($"Steam is missing {file.Path}; validate the game in Steam and start setup again.");
-                    File.Copy(src, partial, overwrite: true);
+                    File.Copy(FromSteam(), partial, overwrite: true);
                     break;
-                }
                 case "patch":
                 {
-                    var src = Path.Combine(steamGame, file.Path.Replace('/', Path.DirectorySeparatorChar));
-                    if (!File.Exists(src))
-                        throw new InvalidDataException($"Steam is missing {file.Path}; validate the game in Steam and start setup again.");
-                    var patchEntry = zip.GetEntry($"patches/{file.PatchFile}")
-                        ?? throw new InvalidDataException($"Patch pack is missing patches/{file.PatchFile}.");
-                    var patchTemp = Path.Combine(Path.GetTempPath(), $"hf-patch-{Guid.NewGuid():N}.hdiff");
+                    var from = FromSteam();
+                    var patchEntry = (file.PatchFile is { Length: > 0 } name ? zip.GetEntry("patches/" + name) : null)
+                        ?? throw new InvalidDataException($"The build patch is missing the patch for {file.Path}.");
+                    var patchTemp = Path.Combine(Path.GetDirectoryName(packPath)!, $"hf-patch-{Guid.NewGuid():N}.hdiff");
                     try
                     {
                         patchEntry.ExtractToFile(patchTemp, overwrite: true);
-                        var psi = new ProcessStartInfo(hpatchz)
-                        {
-                            ArgumentList = { "-f", src, patchTemp, partial },
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true
-                        };
+                        // hpatchz writes progress to its console: not redirected, so a full pipe never stalls it
+                        var psi = new ProcessStartInfo(hpatchz) { ArgumentList = { "-f", from, patchTemp, partial }, UseShellExecute = false, CreateNoWindow = true };
                         using var proc = Process.Start(psi) ?? throw new InvalidOperationException("hpatchz did not start.");
                         proc.WaitForExit();
                         if (proc.ExitCode != 0)
-                            throw new InvalidDataException($"Patching {file.Path} failed (hpatchz exit code {proc.ExitCode}).");
+                            throw new InvalidDataException($"Patching {file.Path} failed (hpatchz exit code {proc.ExitCode}): validate the game in Steam and start setup again.");
                     }
                     finally
                     {
@@ -209,29 +300,41 @@ public static class Downpatcher
                 }
                 case "add":
                 {
-                    var addEntry = zip.GetEntry($"add/{file.Path}")
-                        ?? throw new InvalidDataException($"Patch pack is missing add/{file.Path}.");
+                    var addEntry = zip.GetEntry("add/" + file.Path)
+                        ?? throw new InvalidDataException($"The build patch is missing add/{file.Path}.");
                     addEntry.ExtractToFile(partial, overwrite: true);
                     break;
                 }
                 default:
-                    throw new InvalidDataException($"Unknown operation in patch manifest: {file.Op}");
+                    throw new InvalidDataException($"Unknown operation in the build patch: {file.Op}");
             }
 
-            var info = new FileInfo(partial);
-            if (!info.Exists)
-                throw new InvalidDataException($"Patching produced no output for {file.Path}.");
-            if (info.Length != expectedSize)
-                throw new InvalidDataException(
-                    $"Patching produced a wrong-sized {file.Path} (expected {expectedSize}, got {info.Length}).");
+            if (!Matches(partial, expected))
+            {
+                if (File.Exists(partial)) File.Delete(partial);
+                throw new InvalidDataException(file.Op is "copy" or "patch"
+                    ? $"{file.Path} did not come out as build {build.BuildId}: Steam's copy is not the build this patch was made from. Validate the game in Steam and start setup again."
+                    : $"{file.Path} in the build patch is not build {build.BuildId}'s.");
+            }
             File.Move(partial, destPath, overwrite: true);
 
-            done += expectedSize;
+            done += expected.Size;
             progress?.Invoke(done, total, file.Path);
         }
     }
 
-    sealed record DownpatchManifest(string SourceBuild, string TargetBuild, DownpatchFile[] Files);
+    static bool Matches(string path, SupportedFile file)
+    {
+        var info = new FileInfo(path);
+        return info.Exists && info.Length == file.Size && SupportedBuild.Sha1(path).Equals(file.Sha1, StringComparison.OrdinalIgnoreCase);
+    }
+
+    sealed record DownpatchIndex(int SchemaVersion, DownpatchIndexEntry?[]? Packs);
+
+    sealed record DownpatchIndexEntry(string? SourceBuild, string? TargetBuild, string? Url, string? Sha256, long Size,
+        string? SourceExeSha256, string? SourceGameDllSha256);
+
+    sealed record DownpatchManifest(string SourceBuild, string TargetBuild, DownpatchFile[]? Files);
 
     sealed record DownpatchFile
     {

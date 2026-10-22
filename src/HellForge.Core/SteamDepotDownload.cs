@@ -7,7 +7,9 @@ namespace HellForge.Core;
 // every file is hashed against the build's list. HellForge downloads nothing itself and ships no game content.
 public static class SteamDepotDownload
 {
-    public sealed record DepotState(SupportedDepot Depot, long Done, long Total)
+    // Waiting: the depot's files not (yet) present with their listed size, as (path, the size on disk or -1 when missing,
+    // the listed size).
+    public sealed record DepotState(SupportedDepot Depot, long Done, long Total, IReadOnlyList<(string Path, long Have, long Size)> Waiting)
     {
         public bool Complete => Done == Total;
     }
@@ -15,8 +17,18 @@ public static class SteamDepotDownload
     public static string ContentFolder(string steamRoot, SupportedBuild build) =>
         Path.Combine(steamRoot, "steamapps", "content", "app_" + build.AppId);
 
+    // Where else download_depot may have put it: the Linux Steam client downloads relative to the folder its program runs
+    // from, so <Steam>/ubuntu12_32/steamapps/content (or ubuntu12_64, or steamrt64 for the 64-bit client) instead of
+    // <Steam>/steamapps/content (GitHub issue 11).
+    static readonly string[] ClientFolders = ["ubuntu12_32", "ubuntu12_64", "steamrt64"];
+
+    static IEnumerable<string> ContentFolders(string steamRoot, SupportedBuild build) =>
+        [ContentFolder(steamRoot, build), .. ClientFolders.Select(client => Path.Combine(steamRoot, client, "steamapps", "content", "app_" + build.AppId))];
+
+    // The depot's folder: the first place Steam put it, else the usual one (while nothing is there yet).
     public static string DepotFolder(string steamRoot, SupportedBuild build, uint depot) =>
-        Path.Combine(ContentFolder(steamRoot, build), "depot_" + depot);
+        ContentFolders(steamRoot, build).Select(folder => Path.Combine(folder, "depot_" + depot)).FirstOrDefault(Directory.Exists)
+        ?? Path.Combine(ContentFolder(steamRoot, build), "depot_" + depot);
 
     public static IReadOnlyList<string> Commands(SupportedBuild build) =>
         [.. build.Depots.Select(depot => $"download_depot {build.AppId} {depot.Id} {depot.ManifestId}")];
@@ -30,13 +42,15 @@ public static class SteamDepotDownload
         [.. build.Depots.Select(depot =>
         {
             long done = 0, total = 0;
+            var waiting = new List<(string, long, long)>();
             foreach (var file in build.Files.Where(f => f.Depot == depot.Id))
             {
                 total += file.Size;
                 var info = new FileInfo(Locate(steamRoot, build, file));
                 if (info.Exists && info.Length == file.Size) done += file.Size;
+                else waiting.Add((file.Path, info.Exists ? info.Length : -1, file.Size));
             }
-            return new DepotState(depot, done, total);
+            return new DepotState(depot, done, total, waiting);
         })];
 
     public static bool IsComplete(string steamRoot, SupportedBuild build) => Status(steamRoot, build).All(depot => depot.Complete);
@@ -44,12 +58,14 @@ public static class SteamDepotDownload
     // Removes the build's depot folders after the game is copied (and the app folder when nothing else is in it).
     public static void Delete(string steamRoot, SupportedBuild build)
     {
-        foreach (var depot in build.Depots)
+        foreach (var app in ContentFolders(steamRoot, build))
         {
-            var folder = DepotFolder(steamRoot, build, depot.Id);
-            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+            foreach (var depot in build.Depots)
+            {
+                var folder = Path.Combine(app, "depot_" + depot.Id);
+                if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+            }
+            if (Directory.Exists(app) && !Directory.EnumerateFileSystemEntries(app).Any()) Directory.Delete(app);
         }
-        var app = ContentFolder(steamRoot, build);
-        if (Directory.Exists(app) && !Directory.EnumerateFileSystemEntries(app).Any()) Directory.Delete(app);
     }
 }

@@ -49,6 +49,32 @@ Test("Steam ownership requires the correct app, live subscription, the owner or 
         Check(!SteamOwnershipPolicy.ConfirmsCurrentClientOwner(rejected), "Incomplete ownership observation accepted.");
 });
 
+Test("The ownership check passes only on fresh evidence that confirms this app; a check that wrote nothing fails", () =>
+{
+    var folder = Directory.CreateDirectory(Path.Combine(root, "ownership-evidence")).FullName;
+    var started = DateTime.UtcNow;
+    string Evidence(string name, string json) { var path = Path.Combine(folder, name); File.WriteAllText(path, json); return path; }
+    string Report(string status, bool confirmed, uint app, DateTime at) =>
+        $$"""{"status": "{{status}}", "checkedUtc": "{{at:o}}", "appId": {{app}}, "localClientOwnershipConfirmed": {{(confirmed ? "true" : "false")}}}""";
+    Check(SteamOwnershipCheck.Problem(Evidence("ok.json", Report(SteamOwnershipCheck.Confirmed, true, 553850, started.AddSeconds(1))), started) == null,
+        "Good evidence refused.");
+    // Wine's powershell.exe returns 0 having run nothing: no evidence at all
+    Check(SteamOwnershipCheck.Problem(Path.Combine(folder, "none.json"), started) != null, "Missing evidence passed.");
+    foreach (var (name, json) in new[]
+    {
+        ("unverified.json", Report("ownership_unverified", false, 553850, started)),
+        ("half.json", Report(SteamOwnershipCheck.Confirmed, false, 553850, started)),
+        ("other-app.json", Report(SteamOwnershipCheck.Confirmed, true, 480, started)),
+        ("stale.json", Report(SteamOwnershipCheck.Confirmed, true, 553850, started.AddMinutes(-10))),
+        ("broken.json", "{not json"),
+        ("array.json", "[]")
+    })
+        Check(SteamOwnershipCheck.Problem(Evidence(name, json), started) != null, "Evidence passed: " + name);
+    // the probe path (under Wine) takes only the supported build's own steam_api64.dll
+    var fake = Evidence("steam_api64.dll", "not Valve's");
+    Reject(() => SteamOwnershipCheck.RunProbe(Path.Combine(folder, "probe.exe"), fake, folder, Path.Combine(folder, "e.json"), TimeSpan.FromSeconds(1)));
+});
+
 Test("Setup finds the downpatchable game: Steam's flags as bits, every library, the patch by build id or by file hashes", () =>
 {
     // a queued or paused update leaves the files usable; updating, validating, missing files or a running game do not
@@ -324,6 +350,27 @@ Test("The game is copied from Steam's depot downloads of the supported build, wh
     Check(!Directory.Exists(SteamDepotDownload.ContentFolder(steam, build)), "The download was not deleted.");
 });
 
+Test("On Linux, the depot downloads Steam put under its client's folder (ubuntu12_32, steamrt64) are found and deleted too", () =>
+{
+    var (manifest, source, depotCache) = DepotFixture("depot-download-linux");
+    var build = SupportedBuild.FromSteam(manifest, depotCache);
+    var steam = Path.Combine(root, "depot-download-linux-steam");
+    var client = Path.Combine(steam, "ubuntu12_32", "steamapps", "content", "app_" + build.AppId);
+    foreach (var file in build.Files)
+    {
+        var target = Path.Combine(client, "depot_" + file.Depot, file.Path);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Copy(Path.Combine(source, file.Path), target);
+    }
+    Check(SteamDepotDownload.IsComplete(steam, build) && SteamDepotDownload.Locate(steam, build, build.Files[0]).StartsWith(client, StringComparison.Ordinal),
+        "The download under ubuntu12_32 was not found.");
+    var destination = Path.Combine(root, "depot-download-linux-install", "game");
+    GameCopier.CopyFromDepots(steam, destination, build);
+    Check(build.Verify(destination).Count == 0, "The copy from the ubuntu12_32 download is not the build.");
+    SteamDepotDownload.Delete(steam, build);
+    Check(!Directory.Exists(client) && !SteamDepotDownload.IsComplete(steam, build), "The ubuntu12_32 download was not deleted.");
+});
+
 Test("Migration copies profiles, settings and game user data into an installation without overwriting", () =>
 {
     var old = Path.Combine(root, "migration", "host-startup");
@@ -452,6 +499,9 @@ ModKitTests.Register(Test, Check, Reject, root);
 BundledModsTests.Register(Test, Check, Reject, root);
 CosmeticPacksTests.Register(Test, Check, Reject, root);
 EditorTests.Register(Test, Check, Reject, root);
+SessionLaunchTests.Register(Test, Check, Reject, root);
+PrivacyTests.Register(Test, Check, Reject, root);
+DownpatchTests.Register(Test, Check, Reject, root);
 
 Console.WriteLine($"{passed} passed; {failed} failed. Synthetic fixtures: {root}");
 return failed == 0 ? 0 : 1;

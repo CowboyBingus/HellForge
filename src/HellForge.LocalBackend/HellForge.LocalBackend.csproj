@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- The engine's version (Directory.Build.props EngineVersion), as its package and engine.json carry it. -->
+  <PropertyGroup><Version>$(EngineVersion)</Version></PropertyGroup>
+  <!-- The local backend: published with NativeAOT (scripts/Build-Engine.ps1), one native program with no .NET installation needed. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StackTraceSupport>false</StackTraceSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../HellForge.Core/HellForge.Core.csproj" /></ItemGroup>
+  <!-- The data files are embedded resources: no loose copies beside the program, nor the web SDK's assets manifest. -->
+  <ItemGroup><Content Update="*.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" /></ItemGroup>
+  <PropertyGroup><GenerateStaticWebAssetsManifest>false</GenerateStaticWebAssetsManifest><StaticWebAssetsEnabled>false</StaticWebAssetsEnabled></PropertyGroup>
+  <ItemGroup><EmbeddedResource Include="startup-fixtures.json" /><EmbeddedResource Include="item-catalog.json" /><EmbeddedResource Include="../../data/profile-templates.json" LogicalName="HellForge.LocalBackend.profile-templates.json" /><EmbeddedResource Include="../../data/progression-data.json" LogicalName="HellForge.LocalBackend.progression-data.json" /><EmbeddedResource Include="war-data.json" /><EmbeddedResource Include="planet-sectors.json" /><EmbeddedResource Include="game-client-config.json" /></ItemGroup>
+</Project>

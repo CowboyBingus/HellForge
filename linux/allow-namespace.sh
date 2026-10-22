@@ -6,10 +6,10 @@
 # can be run only by root and the user who ran this (its group); for them it lifts the restriction (any namespace, not
 # only HellForge's), for everyone else the system keeps it. hellforge-offline.sh uses the copy when it is there. The copy
 # does not follow util-linux updates: run this again after one.
-#   sudo ./allow-namespace.sh            install (again after a system update of util-linux, to refresh the copy)
-#   sudo ./allow-namespace.sh --remove   undo
+#   sudo bash allow-namespace.sh            install (again after a system update of util-linux, to refresh the copy)
+#   sudo bash allow-namespace.sh --remove   undo
 set -euo pipefail
-[ "$(id -u)" = 0 ] || { echo "run it with sudo: sudo $0 ${*:-}" >&2; exit 1; }
+[ "$(id -u)" = 0 ] || { echo "run it with sudo: sudo bash $0 ${*:-}" >&2; exit 1; }
 copy=/usr/local/lib/hellforge/unshare
 profile=/etc/apparmor.d/hellforge-unshare
 

@@ -1,5 +1,5 @@
 /* The Stratagem Compendium's entry point: every family registers its stratagems from hellforge_mod_init (compendium.h).
- * Build: HellForge builds the sources before each session (docs/mods.md "Source mods"), or
+ * Build: HellForge builds the sources before each session (docs/modding/tools.md), or
  * scripts/Build-Mod.ps1 examples/mods/stratagem-compendium. */
 #include "compendium.h"
 

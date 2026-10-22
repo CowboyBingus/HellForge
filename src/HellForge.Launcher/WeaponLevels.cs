@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using HellForge.Core;
 
 namespace HellForge.Launcher;
 
@@ -133,6 +134,10 @@ public partial class MainWindow
 {
     readonly Dictionary<uint, NumericUpDown> weaponLevelInputs = [];
     List<WeaponMastery> weaponMasteries = [];
+    // The levels the inputs were last filled with (or saved), and whose profile: the launcher refreshes the profile page
+    // every second, and rebuilding the inputs each time threw away levels typed but not yet saved.
+    Dictionary<uint, int> weaponLevelsShown = [];
+    string? weaponLevelsProfile;
 
     void InitializeWeaponLevels()
     {
@@ -149,28 +154,48 @@ public partial class MainWindow
             var error = WeaponLevelData.Save(paths, Selected.ProfileFile, levels);
             WeaponLevelsStatus.Text = error ?? "Saved. The next session uses these levels.";
             WeaponLevelsStatus.Foreground = error != null ? Red : Light;
+            if (error == null) weaponLevelsShown = levels;
             ShowProfile();
         };
     }
 
     void ShowWeaponLevels(JsonElement? profile)
     {
-        WeaponLevelsList.Children.Clear();
-        weaponLevelInputs.Clear();
         if (profile is not { } data)
         {
+            WeaponLevelsList.Children.Clear();
+            weaponLevelInputs.Clear();
+            weaponLevelsShown = [];
+            weaponLevelsProfile = null;
             WeaponLevelsCard.IsVisible = false;
             return;
         }
+        var levels = WeaponLevelData.Levels(data);
+        // Same profile, already filled in: keep the inputs while the player has unsaved changes, and when the saved levels
+        // are still the ones shown. Only another profile, or levels a session changed on disk, refill them.
+        if (weaponLevelsProfile == Selected.ProfileFile && weaponLevelInputs.Count > 0)
+        {
+            var edited = weaponLevelInputs.Any(p => (int)(p.Value.Value ?? 0) != weaponLevelsShown.GetValueOrDefault(p.Key));
+            var unchanged = weaponMasteries.All(w => Math.Min(levels.GetValueOrDefault(w.Package), w.MaxLevel) == weaponLevelsShown.GetValueOrDefault(w.Package));
+            if (edited || unchanged)
+            {
+                SetWeaponLevelsLocked(runner.IsRunning);
+                return;
+            }
+        }
+        WeaponLevelsList.Children.Clear();
+        weaponLevelInputs.Clear();
         weaponMasteries = WeaponLevelData.Load(paths);
         WeaponLevelsCard.IsVisible = weaponMasteries.Count > 0;
-        var levels = WeaponLevelData.Levels(data);
+        weaponLevelsProfile = Selected.ProfileFile;
+        weaponLevelsShown = [];
+        foreach (var weapon in weaponMasteries) weaponLevelsShown[weapon.Package] = Math.Min(levels.GetValueOrDefault(weapon.Package), weapon.MaxLevel);
         foreach (var weapon in weaponMasteries)
         {
             var input = new NumericUpDown
             {
                 Minimum = 0, Maximum = weapon.MaxLevel, Increment = 1, FormatString = "0", Width = 120,
-                Value = Math.Min(levels.GetValueOrDefault(weapon.Package), weapon.MaxLevel), VerticalAlignment = VerticalAlignment.Center,
+                Value = weaponLevelsShown[weapon.Package], VerticalAlignment = VerticalAlignment.Center,
             };
             weaponLevelInputs[weapon.Package] = input;
             var row = new DockPanel { Margin = new(0, 0, 24, 6) };
