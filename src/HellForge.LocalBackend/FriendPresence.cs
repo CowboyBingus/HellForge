@@ -102,7 +102,7 @@ public sealed class FriendPresence
     }
 
     // PUT /lobby/<id>/live: the game's live mission state (missionTime, playerPositions, objective and outpost masks,
-    // state), never seen from a solo host so far (knowledge base: hellforge-steam-lobby-directory).
+    // state), never seen from a solo host so far (docs/multiplayer.md step 7).
     public void SetLocalLive(string lobbyId, JsonElement body)
     {
         if (body.ValueKind != JsonValueKind.Object) return;

@@ -7,8 +7,8 @@ namespace HellForge.LocalBackend.Multiplayer;
 
 // The lobby directory on Steam matchmaking (ISteamMatchmaking009, the game's app 553850). This machine's listing is an
 // Invisible Steam lobby the backend holds beside the game's own regular one, its data the listing's; a search is
-// RequestLobbyList with the coarse filters (worldwide, at most 50), each result's data read whole. Measured by the probe
-// (2026-10-22, knowledge base hellforge-steam-lobby-directory): both lobbies coexist, a new lobby is searchable after
+// RequestLobbyList with the coarse filters (worldwide, at most 50), each result's data read whole. Measured on Steam
+// (2026-10-22): both lobbies coexist, a new lobby is searchable after
 // about 0.9 s, a search takes about 200 ms, NotEqual and two numerical filters on one key combine, a 4,000-character
 // value is kept. Every Steam call runs on the peer link's thread (SteamPeerTransport pumps this); others queue work.
 public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirectory

@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 
 namespace HellForge.LocalBackend.Multiplayer;
 
-// The lobby directory (knowledge base: hellforge-steam-lobby-directory): every backend lists the public lobby it hosts,
+// The lobby directory (docs/multiplayer.md step 7): every backend lists the public lobby it hosts,
 // and a searching backend answers the game's Galactic Map search (PFMultiplayerFindLobbies) and the /lobby/accounts that
 // follows from the listings it found. On Steam it is one Invisible Steam lobby per listing (SteamLobbyDirectory); tests
 // use MemoryLobbyDirectory, the two-backend loopback harness FolderLobbyDirectory.

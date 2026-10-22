@@ -296,8 +296,8 @@ public static class LocalBackend
                                 outcome = "lobby_live_published";
                                 break;
                             }
-                            // Never seen called by the game so far (knowledge base: hellforge-steam-lobby-directory); a lobby
-                            // unknown here is a 404, logged with its outcome.
+                            // Never seen called by the game so far (docs/multiplayer.md step 7); a lobby unknown here is a
+                            // 404, logged with its outcome.
                             case "live" or "get":
                             {
                                 var found = route.Shape == "live" ? presence.LiveRecord(segments[0]) : presence.LobbyRecord(segments[0]);

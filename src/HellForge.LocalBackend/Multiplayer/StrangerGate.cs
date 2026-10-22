@@ -1,7 +1,7 @@
 namespace HellForge.LocalBackend.Multiplayer;
 
-// What a backend takes from someone who is not a Steam friend (knowledge base: hellforge-steam-lobby-directory, "Decisions
-// that reverse"). Strangers only come through the lobby directory:
+// What a backend takes from someone who is not a Steam friend (docs/multiplayer.md step 7). Strangers only come through
+// the lobby directory:
 //   - a join to the public lobby listed here (lobby.join), at most JoinsPerPeer a minute from one machine and JoinsInAll
 //     from everyone;
 //   - everything that follows once this machine deals with them (Related: a member of a lobby hosted here, the host of a

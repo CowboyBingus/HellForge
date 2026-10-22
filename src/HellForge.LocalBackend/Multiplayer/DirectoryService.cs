@@ -5,8 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace HellForge.LocalBackend.Multiplayer;
 
-// The Galactic Map's public lobbies through the lobby directory (LobbyDirectory.cs; knowledge base:
-// hellforge-steam-lobby-directory).
+// The Galactic Map's public lobbies through the lobby directory (LobbyDirectory.cs; docs/multiplayer.md step 7).
 //   publish: the public lobby this machine's game hosts is listed while it can be joined (privacy number_key6 0, not
 //            locked, not full), with its search properties, the game's lobby record (PUT /lobby; only the host's account
 //            id kept, player names kept), its live record, its mod set and whether its host plays with edited stats. A

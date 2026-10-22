@@ -431,8 +431,8 @@ The two-PC test written for it (the user and a friend, both on the installer):
 
 ### Step 6: mod sync, a joiner takes the host's mods (2026-10-22)
 
-Built 2026-10-22 and tested on one PC only. Players see it in [Playing with other mods](mods.md). Protocol
-`hellforge-mp-7`.
+Built 2026-10-22. On two PCs a refusal and its offer are confirmed; the download and restart are not yet. Players see
+it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
 
 - Each session writes its mod set (`<run>/modset.json`, from `mods-stage --modset`): every gameplay mod with its
   content hash, class (content, code, bundled), load-order place, folder and counted files. The backend reads it with
