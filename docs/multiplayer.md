@@ -429,6 +429,61 @@ The two-PC test written for it (the user and a friend, both on the installer):
 6. Collect both sessions' logs (launcher Console > "Save logs to Desktop"): `multiplayer.log` ("Stats:" lines) and
    `modloader.log` / `mod-zz.local.stats.log` ("session:", "live set") on each side.
 
+### Step 6: mod sync, a joiner takes the host's mods (2026-10-22)
+
+Built 2026-10-22 and tested on one PC only. Players see it in [Playing with other mods](mods.md). Protocol
+`hellforge-mp-7`.
+
+- Each session writes its mod set (`<run>/modset.json`, from `mods-stage --modset`): every gameplay mod with its
+  content hash, class (content, code, bundled), load-order place, folder and counted files. The backend reads it with
+  `--modset`.
+- **Host** (`Multiplayer/ModSync.cs`):
+  - A joiner refused for different gameplay mods is first sent the set without its folders:
+    `mods.offer [lobby id, set JSON, sharing 0|1]`. Then comes the refusal, as before: `lobby.refused [reason,
+    line...]`, its lines shown by both games. When the host shares, the joiner's last line says the MOD SYNC window
+    offers the download. A backend from before ignores the offer.
+  - A joiner takes an offer only for a join it asked for in the last minute.
+  - The joiner's machine may then download for 10 minutes:
+    - `mods.files [req, id, hash]` → `mods.filelist [req, ok, count, (path, size, sha256)...]`;
+    - `mods.get [req, id, hash, path, offset, length ≤ 128 KiB]` → `mods.chunk [req, ok, offset, bytes]`;
+    - or `[req, refused, reason]`.
+  - It serves only a mod in its set (not a bundled one), only a file that mod counts, and only within the file's size.
+  - One worker reads the files, at most 8 queued requests per machine, paced to 1 MiB/s per machine and 2 MiB/s in
+    total.
+  - `"share": false` in `hellforge-mods.json` stops it.
+- **Joiner:**
+  - The offer becomes the game's (`ModSyncPlan` in HellForge.Core). The loader's live pipe gets
+    `syncmod` lines and then `syncstate` (`native/mod-loader/live.c`, SDK 13 `sync_state`/`sync_mod`), and the in-game
+    editor opens its MOD SYNC dialog. The answer comes back as `syncanswer <version> <answer> [<mod id>]`.
+  - The offer is also written to `<run>/backend/mod-sync.json`.
+  - On accept it downloads, four requests in flight. The manifest comes first: a declared code mod that is not on
+    the verified list stops there.
+  - Each file is checked against its listed size and SHA-256, and the whole mod by `SyncedStore.Install`, before it
+    goes to `mods/.synced/`.
+  - On restart it writes `<install>/temp/mod-sync/session.json` (`ModSyncSession`) and `mod-sync` into
+    `stop-observation.signal`. The session runner reports `restart: mod-sync`, and the launcher starts the next
+    session with `--mod-sync <file>` (`mods-stage --sync`).
+  - That session plays the host's mods, each found by id and content hash, in the host's order. If they do not make
+    the host's modlist digest, it plays the player's own mods and reports why.
+- **Still to do:**
+  - rejoining by itself after the restart (the player joins again from the social tab or the map);
+  - strangers' downloads, which come with the lobby directory's stranger support (the transport still accepts
+    friends only);
+  - a launcher prompt for sessions without the in-game editor.
+
+**To test on two PCs:**
+1. The host enables a content mod (a data patch or stats mod) and a code mod; the friend has neither.
+2. The friend joins. Check that the MOD SYNC dialog opens, lists the content mod as downloading and the code mod as
+   "install it yourself", and refuses to start.
+3. The host turns the code mod off and starts a new session. The friend joins again, then DOWNLOAD AND RESTART:
+   - check the progress bar and that the files land in `mods/.synced`;
+   - check that the session restarts with "Playing with <host>'s mods" in the launcher;
+   - check that joining again from the social tab works.
+4. Time how long a large download takes, and whether the host notices it in game (it is paced to 1 MiB/s).
+5. BLOCK a mod from the dialog: the next join to that lobby shows it blocked; unblock it on the Mods page.
+6. Collect both sessions' `multiplayer.log` ("Mod sync:" lines), `backend/mod-sync.json` and `modloader.log`
+   ("mod sync" lines).
+
 ### Co-op diagnostics (engine 0.1.19, the 0.1.11 diagnostics beta)
 
 `coop-diagnostics.log` was added for the two-PC test of 2026-10-21 (0.1.8), which left these open: a friend's Pelican

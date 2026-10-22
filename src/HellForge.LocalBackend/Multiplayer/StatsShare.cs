@@ -29,6 +29,8 @@ public sealed class StatsShare : IAsyncDisposable
     readonly Func<ulong, string> nameOf;
     readonly Action<string> log;
     readonly LiveEditServer live;
+    // The session's live-edit pipe, which mod sync shares (ModSync's offers to the game, its answers back).
+    public LiveEditServer Live => live;
     readonly StatsSync sync = new();
     readonly SemaphoreSlim applying = new(1, 1);
     readonly object gate = new();

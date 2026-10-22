@@ -34,13 +34,14 @@ public sealed class LobbyService
     // host will not take (full, locked, other gameplay mods or HellForge version) fail with it: a code of HellForge's own
     // (0x8923B701) left the joining game retrying, stuck on "connecting". The reason goes to the joiner's backend in
     // "lobby.refused" [reason, line...] and its multiplayer.log; the lines (what the joiner's game shows: which mods differ,
-    // say) go to its game (Refused), and the host's game is told too (RefusedFriend).
+    // say) go to its game (Refused), and the host's game is told too (RefusedFriend). For other gameplay mods the host's
+    // mod set goes to the joiner just before, in its own frame (ModSync: "mods.offer"), which older backends ignore.
     public const uint LobbyNotJoinable = 0x89236227;
     public const uint ModlistMismatch = LobbyNotJoinable;
     // The HellForge multiplayer protocol a joiner's backend speaks; a host refuses other versions, since mixed builds fail in
     // confusing ways (second two-PC test: an outdated friend got no missions and could not rejoin). Raise it whenever
     // backends or stand-ins change behaviour the other side relies on.
-    public const string Protocol = "hellforge-mp-6"; // 6: mods set up in id order and added entities numbered by resource id (engine 0.1.4: content numbered alike whatever the load order), the editor's mod content values in stats.set; 5: the host's stats, Local Stats left the mod digest
+    public const string Protocol = "hellforge-mp-7"; // 7: a refusal for different gameplay mods carries the host's mod set, and joiners download it (ModSync); 6: mods set up in id order and added entities numbered by resource id (engine 0.1.4: content numbered alike whatever the load order), the editor's mod content values in stats.set; 5: the host's stats, Local Stats left the mod digest
     const int MemberRemovedRemoteLeft = 2, DisconnectingLobbyDeleted = 1;
     static readonly HashSet<string> Requests = ["lobby.create", "lobby.join", "lobby.update", "lobby.leave"];
     static readonly HashSet<string> Events = ["lobby.result", "lobby.memberAdded", "lobby.memberRemoved", "lobby.updated", "lobby.disconnected"];
@@ -62,6 +63,15 @@ public sealed class LobbyService
     // after the failed join's answer, so it is taken from them for a while either way.
     readonly Dictionary<ulong, DateTime> joining = [];
     static readonly TimeSpan RefusalWindow = TimeSpan.FromSeconds(30);
+
+    // Mod sync (ModSync). Host: a joiner with other gameplay mods is refused; ModsRefused (joiner, lobby id) offers them this
+    // host's mods first and says whether they may download them (the joiner's game is then told so). Called under this
+    // service's lock: it must not call back into it.
+    public Func<ulong, string, bool>? ModsRefused { get; set; }
+    // Joins this machine asked for in the last minute: lobby id -> owner, kept whatever their answers (a mod offer, a
+    // refusal or the failed join's result, in any order).
+    readonly Dictionary<string, (ulong Owner, DateTime At)> joins = new(StringComparer.Ordinal);
+    static readonly TimeSpan JoinMemory = TimeSpan.FromMinutes(1);
 
     public LobbyService(IPeerTransport? transport, Action<Frame> toLocal, Action<string> log, string modDigest, WarClock? warClock = null,
         string? modList = null)
@@ -213,6 +223,8 @@ public sealed class LobbyService
                 lobbyId = parts[1];
                 remote[lobbyId] = owner;
                 joining[owner] = DateTime.UtcNow;
+                foreach (var old in joins.Where(j => DateTime.UtcNow - j.Value.At > JoinMemory).Select(j => j.Key).ToList()) joins.Remove(old);
+                joins[lobbyId] = (owner, DateTime.UtcNow);
                 frame.Add(modDigest);
                 frame.Add(Protocol);
                 if (modList != null) frame.Add(modList);
@@ -233,6 +245,12 @@ public sealed class LobbyService
         }
         forwarded[op] = (owner, lobbyId);
         Send(owner, frame);
+    }
+
+    // Whether this machine asked owner to join lobbyId in the last minute (a mod offer from them counts only then).
+    public bool JoinedRecently(ulong owner, string lobbyId)
+    {
+        lock (gate) return joins.TryGetValue(lobbyId, out var join) && join.Owner == owner && DateTime.UtcNow - join.At <= JoinMemory;
     }
 
     // An event from a friend's backend reaches this machine's DLL only if that friend owns the lobby it is about.
@@ -302,9 +320,12 @@ public sealed class LobbyService
                     // the joiner's mods one by one (after its digest and protocol; a joiner from before sends none)
                     var theirs = node != LocalNode && frame.Count > index + 2 ? ModlistDiff.Decode(frame.Text(index + 2)) : null;
                     var mine = modList != null ? ModlistDiff.Decode(modList) : null;
+                    // mod sync: the joiner's backend gets this host's mod set first; when it may download it, its game is told so
+                    var offered = node != LocalNode && ModsRefused?.Invoke(node, lobby.Id) == true;
                     Refuse(node, op, lobby.Id, "different gameplay mods; enable the same gameplay mods (see the launcher's MODS page) and start a new session.",
                         ["Your gameplay mods don't match the host's.", .. Differences(theirs, mine, asHost: false),
-                            "Turn on the same gameplay mods on the launcher's MODS page, then start a new session."],
+                            offered ? "HellForge's MOD SYNC window offers to download the host's mods and restart with them."
+                                : "Turn on the same gameplay mods on the launcher's MODS page, then start a new session."],
                         ["Their gameplay mods don't match yours.", .. Differences(mine, theirs, asHost: true)]);
                     return;
                 }

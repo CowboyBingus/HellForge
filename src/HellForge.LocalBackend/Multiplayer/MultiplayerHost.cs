@@ -1,4 +1,5 @@
 using System.Globalization;
+using HellForge.Core;
 
 namespace HellForge.LocalBackend.Multiplayer;
 
@@ -22,6 +23,9 @@ public sealed class MultiplayerHost : IAsyncDisposable
     public PartyService Party { get; }
     // The host's stats for joiners, and this game's when joined (null without a peer link or the session's mods folder).
     public StatsShare? Stats { get; private set; }
+    // Mod sync: joiners download this session's mods, and this machine the mods of a host it could not join (null
+    // without a peer link or the session's mods folder).
+    public ModSync? Sync { get; private set; }
 
     readonly WarClock? warClock;
     AccountKeyExchange? keyExchange;
@@ -62,6 +66,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
                 else if (frame.Type is "presence" or "presence.hello") FromPeerPresence(peer, frame);
                 else if (frame.Type.StartsWith("party.", StringComparison.Ordinal)) Party.FromPeer(peer, frame);
                 else if (frame.Type.StartsWith("stats.", StringComparison.Ordinal)) Stats?.FromPeer(peer, frame);
+                else if (frame.Type.StartsWith("mods.", StringComparison.Ordinal)) Sync?.FromPeer(peer, frame);
                 else if (frame.Type == "war.clock" && warClock != null && Lobby.HostsJoinedLobby(peer) && long.TryParse(frame.Text(0), out var seconds))
                 {
                     warClock.Set(seconds);
@@ -70,8 +75,9 @@ public sealed class MultiplayerHost : IAsyncDisposable
             };
     }
 
+    // modSetFile: the session's mod set (mods-stage --modset), which joiners lacking its mods may download.
     public static MultiplayerHost Start(string pipeName, string link, string modDigest, string evidenceDirectory, WarClock? warClock = null,
-        AccountKeys? accountKeys = null, FriendPresence? presence = null, string? modsFolder = null, string? modList = null)
+        AccountKeys? accountKeys = null, FriendPresence? presence = null, string? modsFolder = null, string? modList = null, string? modSetFile = null)
     {
         var host = new MultiplayerHost(pipeName, link, modDigest, evidenceDirectory, warClock, accountKeys, presence, modList);
         host.transport?.Start();
@@ -85,6 +91,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
             }
             catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException) { host.Log("Stats sharing is off: " + error.Message); }
         }
+        if (host.transport != null && modsFolder != null) host.StartSync(modsFolder, modSetFile, evidenceDirectory);
         // The transport knows this machine's SteamID only once started.
         if (host.transport != null && accountKeys != null) host.keyExchange = new AccountKeyExchange(host.transport, accountKeys, host.Log);
         host.pipes.Start();
@@ -92,6 +99,26 @@ public sealed class MultiplayerHost : IAsyncDisposable
         host.Log($"Multiplayer ready: pipe {pipeName}, link {(host.transport == null ? "none" : link.Split(':')[0])}" +
             (host.transport != null ? $", local peer {LobbyService.EntityId(host.transport.LocalId)}" : "") + ".");
         return host;
+    }
+
+    // The session folder is the evidence folder's parent; the next session's mods go to the installation's temp folder.
+    void StartSync(string modsFolder, string? modSetFile, string evidenceDirectory)
+    {
+        ModSet? own = null;
+        try { if (modSetFile != null) own = ModSet.Parse(File.ReadAllText(modSetFile), local: true); }
+        catch (Exception error) when (error is InvalidDataException or IOException) { Log("Mod sync: this session's mod set could not be read, so joiners cannot download it: " + error.Message); }
+        var install = new InstallLayout(Path.GetDirectoryName(Path.GetFullPath(modsFolder))!);
+        Sync = new ModSync(transport!, modsFolder, own, Path.GetDirectoryName(Path.GetFullPath(evidenceDirectory))!, evidenceDirectory,
+            ModSyncSession.PathIn(install), FriendName, Log);
+        Lobby.ModsRefused = Sync.OfferMods;
+        Sync.Expected = Lobby.JoinedRecently;
+        if (Stats?.Live is { } live)
+        {
+            Sync.Display = new LiveSyncDisplay(live);
+            live.Received += parts => { if (parts[0] == "syncanswer") Sync.Answer(parts); };
+            live.StateChanged += () => { if (live.Connected) Sync.Republish(); };
+        }
+        Log($"Mod sync: {(own != null ? own.Mods.Count + " gameplay mods to share" : "nothing to share")}; offers go to {(Sync.Display != null ? "the game" : "the session log only")}.");
     }
 
     // A friend's name as Steam shows it, for the joiner's editor ("Host: <name>").
@@ -223,6 +250,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (heartbeat != null) await heartbeat.DisposeAsync();
+        if (Sync != null) await Sync.DisposeAsync();
         if (Stats != null) await Stats.DisposeAsync();
         await pipes.DisposeAsync();
         transport?.Dispose();

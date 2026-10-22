@@ -153,7 +153,12 @@ sealed class PlaySession(PlayOptions options)
         // Mods: stage data mods (and remove the last session's) before the copy's files are locked; --progress lets the
         // launcher show source mods being compiled.
         var loaderPlan = Path.Combine(run, "modloader-plan.txt");
-        var planText = HellForgeCli("mods-stage", "--install", install.Root, "--plan", loaderPlan, "--logs", run, "--progress", Path.Combine(run, "mod-builds.json"));
+        // --modset: the gameplay mods with their content hashes, for the backend (mod sync); --sync: after a mod sync, the
+        // host's mods instead of the player's own (ModSyncSession).
+        string[] stage = ["mods-stage", "--install", install.Root, "--plan", loaderPlan, "--logs", run, "--progress", Path.Combine(run, "mod-builds.json"),
+            "--modset", ModSetFile];
+        if (options.ModSync != null) stage = [.. stage, "--sync", Path.GetFullPath(options.ModSync)];
+        var planText = HellForgeCli(stage);
         if (Tools.ParseJson(planText ?? "") is not JsonObject plan) throw new SessionFailure("Mods could not be loaded; see cli-output.txt in this session's log folder.");
         if ((bool?)plan["loaderRequired"] == true)
         {
@@ -172,8 +177,10 @@ sealed class PlaySession(PlayOptions options)
             ["problems"] = plan["problems"]?.DeepClone() ?? new JsonArray(),
             ["stagedFiles"] = (plan["staged"] as JsonArray)?.Count ?? 0,
             ["codeMods"] = plan["codeMods"]?.DeepClone(),
-            ["digest"] = modDigest
+            ["digest"] = modDigest,
+            ["syncedWith"] = plan["syncedWith"]?.DeepClone()
         };
+        if ((string?)plan["syncedWith"] is { } syncedWith) Say($"Playing with {syncedWith}'s mods (mod sync).");
         foreach (var problem in plan["problems"] as JsonArray ?? []) Say("Mod not loaded: " + (string?)problem);
 
         // Every game file is held read-only for the session, then verified against the supported build while
@@ -207,6 +214,15 @@ sealed class PlaySession(PlayOptions options)
 
     string modDigest = "none", profileDirectoryUsed = "";
     string? modList;
+    // The session's mod set (mods-stage --modset), for the backend's mod sync.
+    string ModSetFile => Path.Combine(run, "modset.json");
+
+    // What asked the session to stop: "stop" (the launcher) or "mod-sync" (the backend, to restart with a host's mods).
+    string ReadSignal()
+    {
+        try { return File.ReadAllText(Path.Combine(run, "stop-observation.signal")).Trim(); }
+        catch (IOException) { return ""; }
+    }
     bool modNative;
 
     // Network block (the readable scripts in app/scripts): $HellForgeInstallRoot names the installation's rule group.
@@ -569,7 +585,9 @@ sealed class PlaySession(PlayOptions options)
             if (Tools.Sha256(link) != shimPins[CloudName]) throw new SessionFailure("Could not copy steam_api64.dll for the peer link.");
             var pipe = "hellforge-" + (string)result["runId"]!;
             // --mods: co-op plays with the host's Local Stats (StatsShare): the host's backend reads it, a joiner's restores it
-            foreach (var argument in new[] { "--pipe", pipe, "--link", "steam:" + link, "--mod-digest", modDigest, "--mods", install.Mods }) start.ArgumentList.Add(argument);
+            // --modset: joiners lacking this session's mods may download them (ModSync)
+            foreach (var argument in new[] { "--pipe", pipe, "--link", "steam:" + link, "--mod-digest", modDigest, "--mods", install.Mods, "--modset", ModSetFile })
+                start.ArgumentList.Add(argument);
             // --mod-list: the digest's mods one by one, so a refused join can say which differ (ModlistDiff)
             if (modList != null)
             {
@@ -660,7 +678,13 @@ sealed class PlaySession(PlayOptions options)
                 File.AppendAllText(observations, row.ToJsonString() + "\n", new UTF8Encoding(false));
                 nextSample = clock.ElapsedMilliseconds + 30000;
             }
-            if (File.Exists(Path.Combine(run, "stop-observation.signal"))) { result["observationStoppedBySignal"] = true; break; }
+            if (File.Exists(Path.Combine(run, "stop-observation.signal")))
+            {
+                result["observationStoppedBySignal"] = true;
+                // The backend's mod sync stops the session to start it again with the host's mods: the launcher does that.
+                if (ReadSignal() == "mod-sync") result["restart"] = "mod-sync";
+                break;
+            }
             Thread.Sleep(1000);
         }
         result["gameExitedNaturally"] = job.Process.HasExited;
