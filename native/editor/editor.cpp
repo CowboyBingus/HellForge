@@ -61,6 +61,7 @@ static RawInputBufferFn g_rawInputBuffer;
 
 static CRITICAL_SECTION g_lock;   /* ImGui: the window thread's messages and the render thread's frames */
 static volatile LONG g_open;      /* the window is shown */
+static volatile LONG g_modal;     /* the MOD SYNC prompt is shown over the game, the window closed */
 static ID3D12CommandQueue* g_queue;
 static int g_ready, g_failed;
 static HWND g_window;
@@ -101,11 +102,12 @@ static DWORD WINAPI SaveThread(void*)
 
 static void SaveSoon(int ms) { g_saveAt = GetTickCount64() + (ULONGLONG)ms; }
 static void CloseEditor() { InterlockedExchange(&g_open, 0); g_saveAt = 0; }
-/* A mod sync offer opens the window by itself, as F8 would. */
-static void OpenEditor()
+/* A mod sync offer shows its prompt over the game by itself, the window closed: the input is the prompt's, as it is
+ * the window's. */
+static void ShowModal(bool on)
 {
-    InterlockedExchange(&g_open, 1);
-    if (g_clipCursor) g_clipCursor(NULL);
+    InterlockedExchange(&g_modal, on ? 1 : 0);
+    if (on && g_clipCursor) g_clipCursor(NULL);
 }
 
 /* Called every frame, open or not: starts a save once the queued changes have settled. */
@@ -145,7 +147,7 @@ static LRESULT CALLBACK EditorProc(HWND window, UINT message, WPARAM w, LPARAM l
         if (open && g_clipCursor) g_clipCursor(NULL);
         return 0;
     }
-    if (g_open && g_ready)
+    if ((g_open || g_modal) && g_ready)
     {
         EnterCriticalSection(&g_lock);
         /* a button or the wheel where the mouse is (ImGui learns the position only from moves: the first click after
@@ -167,11 +169,11 @@ static LRESULT CALLBACK EditorProc(HWND window, UINT message, WPARAM w, LPARAM l
     return CallWindowProcW(g_gameProc, window, message, w, l);
 }
 
-static BOOL WINAPI ClipCursorDetour(const RECT* rect) { return g_open ? TRUE : g_clipCursor(rect); }
-static BOOL WINAPI SetCursorPosDetour(int x, int y) { return g_open ? TRUE : g_setCursorPos(x, y); }
+static BOOL WINAPI ClipCursorDetour(const RECT* rect) { return g_open || g_modal ? TRUE : g_clipCursor(rect); }
+static BOOL WINAPI SetCursorPosDetour(int x, int y) { return g_open || g_modal ? TRUE : g_setCursorPos(x, y); }
 static UINT WINAPI RawInputBufferDetour(PRAWINPUT data, PUINT size, UINT header)
 {
-    if (g_open && data != NULL) { UINT dropped = g_rawInputBuffer(data, size, header); (void)dropped; return 0; }
+    if ((g_open || g_modal) && data != NULL) { UINT dropped = g_rawInputBuffer(data, size, header); (void)dropped; return 0; }
     return g_rawInputBuffer(data, size, header);
 }
 
@@ -328,9 +330,11 @@ static void Render(IDXGISwapChain3* swapChain)
     }
     if (g_ready && g_saveFailed) { InterlockedExchange(&g_saveFailed, 0); editorapp::SaveStatus(false, g_saveStatus); }
     if (g_ready) editorapp::Tick();
-    /* the window, or while it is closed HellForge's message over the game (no input, the game's own cursor kept) */
-    bool overlay = g_ready && !g_open && editorapp::NoticeShown();
-    if (g_ready && (g_open || overlay))
+    /* the window; while it is closed the MOD SYNC prompt alone over the game, or else HellForge's message (no input, the
+     * game's own cursor kept) */
+    bool modal = g_ready && !g_open && g_modal;
+    bool overlay = g_ready && !g_open && !modal && editorapp::NoticeShown();
+    if (g_ready && (g_open || modal || overlay))
     {
         DXGI_SWAP_CHAIN_DESC desc;
         if (FAILED(swapChain->GetDesc(&desc))) { LeaveCriticalSection(&g_lock); return; }
@@ -362,6 +366,7 @@ static void Render(IDXGISwapChain3* swapChain)
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
         if (overlay) editorapp::Overlay(ImGui::GetBackgroundDrawList(), width, height);
+        else if (modal) editorapp::Modal(ImGui::GetBackgroundDrawList(), width, height, io.DeltaTime);
         else editorapp::Frame(ImGui::GetBackgroundDrawList(), width, height, io.DeltaTime);
         ImGui::Render();
 
@@ -612,7 +617,7 @@ extern "C" HF_MOD_EXPORT int hellforge_mod_init(const HfApi* hf, HfMod* mod)
     size_t slash = folder.find_last_of("\\/");
     if (slash != std::string::npos) g_modsFolder = folder.substr(0, slash);
     InitializeCriticalSection(&g_lock);
-    editorapp::Host host = {hf, mod, folder, g_modsFolder, CloseEditor, SaveSoon, OpenEditor};
+    editorapp::Host host = {hf, mod, folder, g_modsFolder, CloseEditor, SaveSoon, ShowModal};
     editorapp::Init(host);
     /* Once the game runs and has its device: entity data loads after the renderer is up. */
     return hf->on(mod, HF_EVENT_ENTITIES_READY, Start, NULL);

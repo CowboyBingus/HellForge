@@ -2467,13 +2467,13 @@ bool Pressed(ImGuiKey key) { return ImGui::IsKeyPressed(key, true); }
 /* ---- mod sync (SDK 13): a lobby whose host plays with other gameplay mods ----
  * The session's backend offers to download the host's mods and restart the session with them (docs/mods.md "Playing
  * with other mods"); the loader hands the offer over (sync_state, sync_mod) and the player's answer back (sync_answer).
- * Tick reads it every 30 frames. An offer that needs the player (new, ready, blocked, failed) opens the window on this
- * dialog. Closing the window answers no, except while downloading: the download goes on, and the dialog is back when it
- * is ready. */
+ * Tick reads it every 30 frames. An offer that needs the player (new, ready, blocked, failed) shows this dialog by itself:
+ * alone over the game, with no editor behind it, or in the window when that is open. Esc or closing the window answers
+ * no, except while downloading: the download goes on, and the dialog is back when it is ready. */
 struct
 {
     bool on = false;     /* the dialog is shown */
-    bool opened = false; /* the offer opened the window: answering closes it again */
+    bool alone = false;  /* it is shown over the game by itself, the window closed */
     bool sent = false;   /* an answer went: the buttons wait for the backend's next state */
     HfSyncState state{}; /* as last read */
     std::vector<HfSyncMod> mods;
@@ -2483,6 +2483,33 @@ bool g_windowShown; /* Opened() to Closed() */
 
 bool HasSync() { return g_host.api->size >= offsetof(HfApi, sync_answer) + sizeof(void*) && g_host.api->sync_state != nullptr; }
 
+/* Keys let go while the editor was closed went to the game, not to ImGui: forget every key state on opening and closing,
+ * or a key held then (Escape) counts as held when it opens again and closes it at once. */
+void ForgetKeys()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    io.ClearEventsQueue();
+    io.ClearInputKeys();
+    io.ClearInputMouse();
+    io.InputQueueCharacters.resize(0);
+    /* where the mouse is now (the queue held the moves): a click before any move lands where it is */
+    POINT at;
+    HWND window = GetForegroundWindow();
+    if (window != nullptr && GetCursorPos(&at) && ScreenToClient(window, &at)) io.AddMousePosEvent((float)at.x, (float)at.y);
+}
+
+/* The dialog alone over the game, the window closed: the editor holds the game's input for it, as for the window. */
+void ShowSyncAlone(bool on)
+{
+    if (g_sync.alone == on) return;
+    g_sync.alone = on;
+    g_host.modal(on);
+    ForgetKeys();
+    sounds::EditorOpen(on);
+    g_host.api->log(g_host.mod, on ? "editor: the mod sync prompt shows over the game, the window closed" : "editor: the mod sync prompt goes");
+    if (on) Sound(sounds::SHOW);
+}
+
 std::string SizeText(uint64_t bytes)
 {
     char text[32];
@@ -2491,11 +2518,11 @@ std::string SizeText(uint64_t bytes)
     return text;
 }
 
-/* The dialog goes, and the window with it when the offer opened it. */
+/* The dialog goes (an open window stays). */
 void CloseSync()
 {
     g_sync.on = false;
-    if (g_sync.opened) { g_sync.opened = false; g_host.close(); }
+    ShowSyncAlone(false);
 }
 
 void AnswerSync(uint32_t answer, const char* id = nullptr)
@@ -2547,8 +2574,8 @@ void ReadSync()
         g_edit.on = false;
         g_seen.erase("sync");
     }
-    /* the window opens on it (again, when it was closed while downloading) */
-    if (!g_windowShown) { g_sync.opened = true; g_host.open(); }
+    /* over the game (again, when it was hidden while downloading), or in the open window */
+    if (!g_windowShown) ShowSyncAlone(true);
     else if (fresh) Sound(sounds::OPEN);
 }
 
@@ -2602,7 +2629,10 @@ void SyncKeys()
     const char* primary = SyncPrimary(&answer);
     if ((ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) && primary[0] && !g_sync.sent)
         AnswerSync(answer);
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) g_host.close(); /* Closed() answers */
+    if (!ImGui::IsKeyPressed(ImGuiKey_Escape, false)) return;
+    if (g_windowShown) g_host.close(); /* Closed() answers */
+    else if (g_sync.sent || g_sync.state.state == HF_SYNC_DOWNLOADING) { ShowSyncAlone(false); Sound(sounds::BACK); } /* it goes on */
+    else AnswerSync(HF_SYNC_DECLINE);
 }
 
 void DrawSync()
@@ -2611,7 +2641,8 @@ void DrawSync()
     const HfSyncState& s = g_sync.state;
     int n = (int)g_sync.mods.size();
     bool bad = s.state == HF_SYNC_BLOCKED || s.state == HF_SYNC_FAILED;
-    g_cv.Rect(0, 0, PANEL_W, g_panelH, C(0, 0, 0, 120), 8);
+    if (g_sync.alone) g_cv.Rect(-g_cv.ox, -g_cv.oy, g_cv.width, g_cv.height, C(0, 0, 0, 150), 8); /* the game, dimmed */
+    else g_cv.Rect(0, 0, PANEL_W, g_panelH, C(0, 0, 0, 120), 8);
     float w = std::min(900.0f, PANEL_W - 60), h = std::clamp(214.0f + 40.0f * (float)std::max(1, n), 320.0f, g_panelH - 80);
     float x = (PANEL_W - w) / 2, y = (g_panelH - h) / 2;
     g_cv.Block();
@@ -2685,7 +2716,7 @@ void DrawSync()
     }
     std::string keys = "\xE2\x86\x91\xE2\x86\x93 select   B block the mod   ";
     if (primary[0]) keys += std::string("Enter ") + primary + "   ";
-    keys += s.state == HF_SYNC_DOWNLOADING ? "Esc hide (the download goes on)" : "Esc close";
+    keys += s.state == HF_SYNC_DOWNLOADING ? "Esc hide (the download goes on)" : "Esc close (no)";
     g_cv.Text(keys, x + 24, y + h - 20, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, 0, 11));
 }
 
@@ -4084,24 +4115,26 @@ void Overlay(ImDrawList* list, float width, float height)
     g_cv.End();
 }
 
-/* Keys let go while the editor was closed went to the game, not to ImGui: forget every key state on opening and closing,
- * or a key held then (Escape) counts as held when it opens again and closes it at once. */
-void ForgetKeys()
+void Modal(ImDrawList* list, float width, float height, float dt)
 {
+    g_time += dt;
+    g_frame++;
+    float ox, oy, s;
+    Layout(width, height, &ox, &oy, &s);
+    g_cv.Begin(list, ox, oy, s, width, height);
     ImGuiIO& io = ImGui::GetIO();
-    io.ClearEventsQueue();
-    io.ClearInputKeys();
-    io.ClearInputMouse();
-    io.InputQueueCharacters.resize(0);
-    /* where the mouse is now (the queue held the moves): a click before any move lands where it is */
-    POINT at;
-    HWND window = GetForegroundWindow();
-    if (window != nullptr && GetCursorPos(&at) && ScreenToClient(window, &at)) io.AddMousePosEvent((float)at.x, (float)at.y);
+    g_cv.Input(io.MousePos.x, io.MousePos.y, ImGui::IsMouseClicked(0), ImGui::IsMouseClicked(1), io.MouseWheel);
+    if (g_sync.on) SyncKeys();
+    DrawSync();
+    DrawNotice();
+    if (g_cv.Clicked()) Sound(sounds::CLICK);
+    g_cv.End();
 }
 
 void Opened()
 {
     g_windowShown = true;
+    ShowSyncAlone(false); /* F8 over the prompt: the window opens on the dialog */
     ForgetKeys();
     sounds::Report("the editor opens");
     sounds::EditorOpen(true);
@@ -4114,9 +4147,8 @@ void Opened()
 void Closed()
 {
     g_windowShown = false;
-    /* the window closed on an offer: no, unless it is downloading (the dialog is back when the download is ready) */
-    if (g_sync.on && !g_sync.sent && g_sync.state.state != HF_SYNC_DOWNLOADING) { g_sync.opened = false; AnswerSync(HF_SYNC_DECLINE); }
-    else g_sync.opened = false;
+    /* the window closed on an offer: no, unless it is downloading (the dialog is back over the game when it is ready) */
+    if (g_sync.on && !g_sync.sent && g_sync.state.state != HF_SYNC_DOWNLOADING) AnswerSync(HF_SYNC_DECLINE);
     ForgetKeys();
     g_picker.on = false;
     sounds::Report("the editor closes");

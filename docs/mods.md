@@ -76,7 +76,7 @@ A different HellForge version is reported the same way, and the joiner is told w
 bundled in-game editor draws these notices. With it switched off, only the logs say why: `backend/multiplayer.log` in
 each session's folder, the first lines of the list.
 
-When the host lets joiners download their mods, the joiner's game also offers to sync to them (below).
+When the host lets joiners download their mods, the joiner also gets the MOD SYNC prompt (below).
 
 In co-op everyone plays with the host's Local Stats (the in-game editor's saved changes), so yours is not part of the
 modlist code.
@@ -84,8 +84,9 @@ modlist code.
 ## Playing with other mods
 
 Joining a lobby whose host runs other gameplay mods does not just fail. The host's backend refuses the join (above) and
-sends its mod set with the refusal. The in-game editor then shows a **MOD SYNC** dialog listing each of the host's mods
-and what happens to it:
+sends its mod set with the refusal. A **MOD SYNC** prompt then shows over the game by itself, without the editor
+window behind it (the in-game editor draws it). It holds the mouse and keyboard until it is answered, and lists each of
+the host's mods and what happens to it:
 
 | Shown as | Meaning |
 |---|---|
@@ -96,10 +97,11 @@ and what happens to it:
 | needs another HellForge | a mod HellForge ships differs: both players need the same HellForge |
 | off for this session | one of your own gameplay mods that the host does not run |
 
-**DOWNLOAD AND RESTART** downloads what it can. **RESTART TO JOIN** then ends the session and the launcher starts a new
-one with the host's mods, in the host's load order, plus your own cosmetic mods and Local Stats. Join the lobby again
-from the social tab or the map. Only that one session plays the host's mods: your Mods page and its switches never
-change, and the next session you start yourself runs your own mods again.
+**DOWNLOAD AND RESTART** downloads what it can; **Esc** hides the prompt while the download goes on, and it comes back
+when the mods are ready. **CANCEL** or **Esc** before that answers no. **RESTART TO JOIN** then ends the session and
+the launcher starts a new one with the host's mods, in the host's load order, plus your own cosmetic mods and Local
+Stats. Join the lobby again from the social tab or the map. Only that one session plays the host's mods: your Mods page
+and its switches never change, and the next session you start yourself runs your own mods again.
 
 **What may download (the trust rule).** Your backend decides each mod's class from the bytes it received, never from
 what the host says:
@@ -115,7 +117,7 @@ files. Every file must have a safe path and match the size and SHA-256 the host 
 have the expected id and version, rehash to the host's content hash, and be content or verified code. Only then is it
 kept, in `mods/.synced/<id>@<hash>/`; a failed download is deleted. Normal sessions never load that folder.
 
-**Blocking.** **BLOCK** on a row of the dialog (or **B**) puts that mod on your blocklist: lobbies running it are not
+**Blocking.** **BLOCK** on a row of the prompt (or **B**) puts that mod on your blocklist: lobbies running it are not
 offered again. Unblock it on the launcher's Mods page (MOD SYNC card).
 
 **Hosting.** Players who join you may download your gameplay mods' counted files for 10 minutes after their join is
@@ -132,9 +134,9 @@ not join:
 - lobbies whose host plays with edited stats (Local Stats, the in-game editor's values or arm swaps). Joiners play with
   the host's stats, so these are hidden unless "Show public lobbies whose host plays with edited stats" is on.
 
-Lobbies with other mods you can download still show. Joining one opens the MOD SYNC dialog.
+Lobbies with other mods you can download still show. Joining one shows the MOD SYNC prompt.
 
-For mod authors, the dialog is the SDK 14 calls `sync_state`, `sync_mod` and `sync_answer`
+For mod authors, the prompt is the SDK 14 calls `sync_state`, `sync_mod` and `sync_answer`
 ([sdk-reference.md](sdk-reference.md)).
 
 If a mod does not show up in game, see [troubleshooting](troubleshooting.md#sessions-that-fail). For the docs map, see
