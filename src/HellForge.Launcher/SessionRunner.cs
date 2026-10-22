@@ -19,7 +19,9 @@ sealed class SessionRunner
     public bool IsRunning => controller is { HasExited: false };
 
     // The template only matters when the backend creates the profile on first use.
-    public void Start(LauncherPaths paths, LocalProfile profile, bool localPlayFab, bool sdkShims, string war, bool engineLog, bool crashDump = false, IReadOnlyList<string>? gameOptions = null)
+    // modSync: the next session's mods after a mod sync (ModSyncSession), for this one session.
+    public void Start(LauncherPaths paths, LocalProfile profile, bool localPlayFab, bool sdkShims, string war, bool engineLog, bool crashDump = false, IReadOnlyList<string>? gameOptions = null,
+        string? modSync = null)
     {
         if (!IsSupported) throw new PlatformNotSupportedException(UnsupportedMessage);
         if (IsRunning) return;
@@ -42,6 +44,7 @@ sealed class SessionRunner
         if (engineLog) start.ArgumentList.Add("--engine-log");
         // the player's launch options, for the session runner to add to the game's command line (GameLaunchOptions)
         if (gameOptions is { Count: > 0 }) { start.ArgumentList.Add("--game-options"); start.ArgumentList.Add(GameLaunchOptions.CommandLine(gameOptions)); }
+        if (modSync != null) { start.ArgumentList.Add("--mod-sync"); start.ArgumentList.Add(modSync); }
         // The mod loader has HellForge.Cli write a full dump at the game's first crash (WriteCrashDump); the game inherits
         // the session runner's environment.
         if (crashDump)

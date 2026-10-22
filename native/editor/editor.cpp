@@ -101,6 +101,12 @@ static DWORD WINAPI SaveThread(void*)
 
 static void SaveSoon(int ms) { g_saveAt = GetTickCount64() + (ULONGLONG)ms; }
 static void CloseEditor() { InterlockedExchange(&g_open, 0); g_saveAt = 0; }
+/* A mod sync offer opens the window by itself, as F8 would. */
+static void OpenEditor()
+{
+    InterlockedExchange(&g_open, 1);
+    if (g_clipCursor) g_clipCursor(NULL);
+}
 
 /* Called every frame, open or not: starts a save once the queued changes have settled. */
 static void SaveTick()
@@ -606,7 +612,7 @@ extern "C" HF_MOD_EXPORT int hellforge_mod_init(const HfApi* hf, HfMod* mod)
     size_t slash = folder.find_last_of("\\/");
     if (slash != std::string::npos) g_modsFolder = folder.substr(0, slash);
     InitializeCriticalSection(&g_lock);
-    editorapp::Host host = {hf, mod, folder, g_modsFolder, CloseEditor, SaveSoon};
+    editorapp::Host host = {hf, mod, folder, g_modsFolder, CloseEditor, SaveSoon, OpenEditor};
     editorapp::Init(host);
     /* Once the game runs and has its device: entity data loads after the renderer is up. */
     return hf->on(mod, HF_EVENT_ENTITIES_READY, Start, NULL);

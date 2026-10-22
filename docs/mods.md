@@ -38,12 +38,57 @@ say why, over the game (the in-game editor draws it, open or not, for 20 seconds
 joiner sees "Couldn't join <host>" with each mod that differs (one the host has and they do not, one only they have,
 another version, or the same version with other files), the host sees "<friend> couldn't join" with the same list from
 their side. Another HellForge version, a full or a locked lobby are said the same way. Both sessions'
-`multiplayer.log` keep the full list. The game's own "couldn't join" message shows as well.
+`multiplayer.log` keep the full list. The game's own "couldn't join" message shows as well. When the host's mods can
+be downloaded, the joiner's editor also opens its MOD SYNC dialog (below).
 
 Switches, the order and packs' options are saved in `mods/hellforge-mods.json`
-(`{"format":1,"disabled":[ids],"order":[ids, top first],"packs":{id:{"off":[options],"sub":{option:variant}}}}`;
+(`{"format":1,"disabled":[ids],"order":[ids, top first],"packs":{id:{"off":[options],"sub":{option:variant}}},"blocked":[ids],"share":true}`;
 mods are on by default) and apply to the next session; they are locked while a session runs. A disabled mod is not
 staged, applied, checked for conflicts or counted in the modlist code.
+
+## Playing with other mods (mod sync)
+
+Joining a lobby whose host runs other gameplay mods does not just fail. The host's backend refuses the join (above) and
+sends its mod set beside the refusal. The in-game editor then opens on a **MOD SYNC** dialog (SDK 13 `sync_state`,
+`sync_mod`, `sync_answer`) listing each of the host's mods and what happens to it:
+
+| Shown as | Meaning |
+|---|---|
+| you have it | an installed mod (on or off) or one downloaded before has the same id and content |
+| downloads | it comes from the host's backend over the Steam peer link |
+| install it yourself | the host does not share their mods, or it runs code that HellForge has not verified |
+| blocked | it is on your blocklist, so the lobby cannot be joined |
+| needs another HellForge | a mod HellForge ships differs: both players need the same HellForge |
+| off for this session | one of your own gameplay mods that the host does not run |
+
+**DOWNLOAD AND RESTART** downloads what it can. **RESTART TO JOIN** then ends the session and the launcher starts a new
+one with the host's mods, in the host's load order, plus your own cosmetic mods and Local Stats. Join the lobby again
+from the social tab or the map. Only that one session plays the host's mods: your Mods page and its switches never
+change, and the next session you start yourself runs your own mods again.
+
+**What may download (the trust rule).** Your backend decides each mod's class from the bytes it received, never from
+what the host says:
+- *Content* mods download from any host: data patches without Lua, data specs, stats and native edits.
+- *Code* mods (a DLL, C or C++ sources HellForge compiles, or a patch holding Lua) download only when HellForge's
+  verified list names that exact content: `data/verified-mods.json`, shipped with each HellForge release, entries
+  `{"id","name","version","hash","reviewed"}`. The hash is the mod's content hash: the SHA-256 of the lines the modlist
+  code takes from it (`ModSets.ContentHash`). Any other code mod is one you install yourself.
+- *Bundled* mods (the in-game editor) never download.
+
+**Checks.** The manifest comes first: a mod that declares code and is not verified stops there, before its other
+files. Every file must have a safe path and match the size and SHA-256 the host listed. The finished mod must parse,
+have the expected id and version, rehash to the host's content hash, and be content or verified code. Only then is it
+kept, in `mods/.synced/<id>@<hash>/`; a failed download is deleted. Normal sessions never load that folder.
+
+**Blocking.** **BLOCK** on a row of the dialog (or **B**) puts that mod on your blocklist (`"blocked"`): lobbies running
+it are not offered again. Unblock it on the launcher's Mods page (MOD SYNC card).
+
+**Hosting.** Players who join you may download your gameplay mods' counted files for 10 minutes after their join is
+refused. Your backend serves them at most 1 MB/s per player and 2 MB/s in total, so your own game keeps its link. Turn
+it off with "Let players who join me download my gameplay mods" on the Mods page (`"share": false`).
+
+**Downloaded mods.** The Mods page shows how many there are and how much space they take, with a button that deletes
+them all.
 
 ## Manifest
 
@@ -64,7 +109,8 @@ staged, applied, checked for conflicts or counted in the modlist code.
 - `icon`: a PNG or JPEG in the mod folder, shown on the Mods page (square looks best); without one the row shows the
   name's initials.
 - `gameplay` (default true): a gameplay mod changes how the game plays. Friends compare a digest of their gameplay
-  mods (ids, versions and exact files) before a join and must match; cosmetic mods (`false`) are not compared.
+  mods (ids, versions and exact files) before a join and must match, or sync to the host's (mod sync, above);
+  cosmetic mods (`false`) are not compared.
 - A mod must change something: native edits, code, data files or a data spec (`hellforge-data.json`, below).
 
 ## Code mods

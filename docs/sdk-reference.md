@@ -115,6 +115,12 @@ end; a mod checks `hf->version`.
 
 - **`notice`** `void (HfMod* mod, HfNotice* out)`: HellForge's latest message for the player (HfNotice), as the session's backend posts it. Check hf->size.
 
+### SDK 13: mod sync (HfSyncState; check hf->size before calling)
+
+- **`sync_state`** `int (HfMod* mod, HfSyncState* out)`: The current offer: 1 with *out filled (at most out->size bytes), 0 none (solo, or no backend connected).
+- **`sync_mod`** `int (HfMod* mod, uint32_t index, HfSyncMod* out)`: The index-th mod of the current offer: 1 with *out filled (at most out->size bytes), 0 past the last.
+- **`sync_answer`** `int (HfMod* mod, uint32_t version, uint32_t answer, const char* mod_id)`: Sends the player's answer (HF_SYNC_ACCEPT ...) to the offer of that version; mod_id names the mod for HF_SYNC_BLOCK (NULL otherwise). 1 sent; 0 not (another offer came since, or no backend connected).
+
 ## Components
 
 Entity component records: `HF_FIELD(Component, field)` names a field, `hf_record(mod, entity, HfComponent)` gives a typed

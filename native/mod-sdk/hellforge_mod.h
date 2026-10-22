@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 12
+#define HF_MOD_SDK_VERSION 13
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -773,6 +773,56 @@ typedef struct HfModInfo
     uint32_t loaded;    /* 1: it loaded (a mod whose hellforge_mod_init declined, or whose DLL failed, is 0) */
 } HfModInfo;
 
+/* Mod sync (SDK 13, sync_state): a join refused because the host runs other gameplay mods. The session's backend plans
+ * the difference and offers to download the host's mods and restart with them (docs/mods.md "Playing with other mods");
+ * an editor shows the offer and sends the player's answer (sync_answer). version changes with every new offer; a
+ * download's progress (done) changes without it. */
+#define HF_SYNC_NONE 0u        /* no offer */
+#define HF_SYNC_OFFER 1u       /* the lobby needs mods: HF_SYNC_ACCEPT downloads them (or, with bytes 0, restarts) */
+#define HF_SYNC_BLOCKED 2u     /* the lobby cannot be joined: a blocked mod, or one to install by hand (message says) */
+#define HF_SYNC_DOWNLOADING 3u /* downloading from the host: done of bytes */
+#define HF_SYNC_READY 4u       /* everything is here: HF_SYNC_RESTART restarts the session with the host's mods */
+#define HF_SYNC_FAILED 5u      /* the download or its checks failed (message says why) */
+typedef struct HfSyncState
+{
+    uint32_t size;      /* sizeof(HfSyncState): set by the caller */
+    uint32_t state;     /* HF_SYNC_... */
+    uint32_t version;   /* the offer's: sync_answer names it */
+    uint32_t mods;      /* the mods sync_mod lists */
+    uint64_t bytes;     /* the bytes to download */
+    uint64_t done;      /* downloaded so far */
+    char host[64];      /* the host's name (UTF-8) */
+    char message[192];  /* what the backend says about it (UTF-8), or "" */
+} HfSyncState;
+
+/* One mod of an offer (sync_mod): what happens to it. */
+#define HF_SYNC_MOD_HAVE 0u     /* this machine has it (installed or synced before) */
+#define HF_SYNC_MOD_DOWNLOAD 1u /* downloads from the host */
+#define HF_SYNC_MOD_MANUAL 2u   /* the player installs it by hand (a code mod HellForge has not verified, or the host does not share) */
+#define HF_SYNC_MOD_BLOCKED 3u  /* on the player's blocklist */
+#define HF_SYNC_MOD_UPDATE 4u   /* part of HellForge, another version: both players need the same HellForge */
+#define HF_SYNC_MOD_OFF 5u      /* one of this machine's own, off for the synced session (the host does not run it) */
+#define HF_SYNC_CLASS_CONTENT 0u /* data, stats or native edits: no code */
+#define HF_SYNC_CLASS_CODE 1u    /* a DLL, sources HellForge builds, or Lua */
+#define HF_SYNC_CLASS_BUNDLED 2u /* shipped with HellForge (the in-game editor) */
+typedef struct HfSyncMod
+{
+    uint32_t size;      /* sizeof(HfSyncMod): set by the caller */
+    uint32_t action;    /* HF_SYNC_MOD_... */
+    uint32_t kind;      /* HF_SYNC_CLASS_... */
+    uint32_t reserved;
+    uint64_t bytes;     /* its size */
+    char id[65];
+    char name[81];      /* UTF-8 */
+    char version[33];
+} HfSyncMod;
+
+/* The player's answer to an offer (sync_answer). */
+#define HF_SYNC_ACCEPT 1u  /* download (HF_SYNC_OFFER) */
+#define HF_SYNC_DECLINE 2u /* no: the offer goes (a download stops) */
+#define HF_SYNC_RESTART 3u /* restart the session with the host's mods (HF_SYNC_READY, or an offer with nothing to download) */
+#define HF_SYNC_BLOCK 4u   /* put mod_id on the blocklist; the offer goes */
+
 typedef struct HfEntityDef HfEntityDef;
 
 /* Definition-block lists are arrays ending in {0}. */
@@ -1083,6 +1133,15 @@ typedef struct HfApi
     /* ---- SDK 12 --------------------------------------------------------------------------------------------------- */
     /* HellForge's latest message for the player (HfNotice), as the session's backend posts it. Check hf->size. */
     void (*notice)(HfMod* mod, HfNotice* out);
+
+    /* ---- SDK 13: mod sync (HfSyncState; check hf->size before calling) ------------------------------------------- */
+    /* The current offer: 1 with *out filled (at most out->size bytes), 0 none (solo, or no backend connected). */
+    int (*sync_state)(HfMod* mod, HfSyncState* out);
+    /* The index-th mod of the current offer: 1 with *out filled (at most out->size bytes), 0 past the last. */
+    int (*sync_mod)(HfMod* mod, uint32_t index, HfSyncMod* out);
+    /* Sends the player's answer (HF_SYNC_ACCEPT ...) to the offer of that version; mod_id names the mod for
+     * HF_SYNC_BLOCK (NULL otherwise). 1 sent; 0 not (another offer came since, or no backend connected). */
+    int (*sync_answer)(HfMod* mod, uint32_t version, uint32_t answer, const char* mod_id);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
