@@ -15,13 +15,18 @@ launcher's bottom-left corner.
   signed in to an account that owns the game or has it through Steam Family Sharing.
 - **Offline.** The copy talks to a local backend on your PC instead of Arrowhead's online services; a network block
   in the Windows Filtering Platform stops it reaching anything but this PC. It never connects to official servers, so it cannot be used to play online
-  with a modified game. The one multiplayer feature is co-op with your Steam friends (below). The galactic war can follow
+  with a modified game. Multiplayer is co-op with other HellForge players only (below). The galactic war can follow
   the live war read-only from the community mirror [api.helldivers2.dev](https://api.helldivers2.dev), stay HellForge's
   frozen war, or open every planet to liberation (Settings > Galactic war).
 - **Profiles** are local. A new profile starts with every item unlocked; other templates can be picked.
-- **Co-op with Steam friends** is the only multiplayer: you host or join friends from your Steam friends list who also run
-  HellForge, with the same gameplay mods (HellForge checks them before a join). There is no matchmaking, no public
-  lobbies and no play with the normal game's players.
+- **Co-op with other HellForge players.** You host or join Steam friends who run HellForge, and public lobbies of other
+  HellForge players show on the Galactic Map: HellForge lists them on Steam's lobby service, never on Arrowhead's. A
+  public lobby shows its players' names and its host's Steam account id to anyone who looks.
+  - Joining a lobby whose host runs other gameplay mods offers to download them and restart with the host's mods. Mods
+    that run code (a DLL, sources or Lua) download only when HellForge has verified that exact version.
+  - A blocklist hides lobbies running mods you don't want. Lobbies whose host plays with edited stats (which you would
+    play with) are hidden unless you show them on the Mods page.
+  - There is no play with the normal game's players.
 - Everything HellForge writes stays inside its folder, apart from the network block and optional shortcuts.
 
 ## Install (players)

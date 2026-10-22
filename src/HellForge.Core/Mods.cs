@@ -623,7 +623,8 @@ public static class ModLoaderPlan
 }
 
 // The Mods page's settings: <installation>/mods/hellforge-mods.json {"format":1,"disabled":[ids],"order":[ids],"packs":{...},
-// "blocked":[ids],"share":true}. Mods are on by default, so a mod dropped into the folder loads without any setup.
+// "blocked":[ids],"share":true,"showEditedStats":false}. Mods are on by default, so a mod dropped into the folder loads
+// without any setup.
 public static class ModSettings
 {
     public const string FileName = "hellforge-mods.json";
@@ -633,10 +634,12 @@ public static class ModSettings
     // What the Mods page keeps: mods switched off, the order (top first; the bottom mod loads first, as in the
     // community's managers), and each cosmetic pack's choice. Mod sync (ModSyncPlan): mods whose lobbies the player never
     // wants to see or join (Blocked, by id), and whether joiners may download this player's mods when hosting (Share).
+    // The Galactic Map's public lobbies: whether lobbies whose host plays with edited stats (which joiners take) are shown.
     public sealed record State(HashSet<string> Disabled, List<string> Order, Dictionary<string, CosmeticPacks.Choice> Choices)
     {
         public HashSet<string> Blocked { get; } = new(StringComparer.Ordinal);
         public bool Share { get; set; } = true;
+        public bool ShowEditedStats { get; set; }
     }
 
     public static State Read(string modsFolder)
@@ -654,6 +657,7 @@ public static class ModSettings
             if (root.TryGetProperty("blocked", out var blocked) && blocked.ValueKind == JsonValueKind.Array)
                 foreach (var e in blocked.EnumerateArray()) if (e.ValueKind == JsonValueKind.String) state.Blocked.Add(e.GetString()!);
             if (root.TryGetProperty("share", out var share) && share.ValueKind == JsonValueKind.False) state.Share = false;
+            if (root.TryGetProperty("showEditedStats", out var edited) && edited.ValueKind == JsonValueKind.True) state.ShowEditedStats = true;
             if (root.TryGetProperty("order", out var order) && order.ValueKind == JsonValueKind.Array)
                 foreach (var e in order.EnumerateArray()) if (e.ValueKind == JsonValueKind.String && !state.Order.Contains(e.GetString()!)) state.Order.Add(e.GetString()!);
             if (root.TryGetProperty("packs", out var packs) && packs.ValueKind == JsonValueKind.Object)
@@ -698,6 +702,9 @@ public static class ModSettings
     // Hosting: whether joiners who lack this player's mods may download them from this machine.
     public static void SetShare(string modsFolder, bool share) => Change(modsFolder, state => state.Share = share);
 
+    // The Galactic Map: whether public lobbies whose host plays with edited stats are shown.
+    public static void SetShowEditedStats(string modsFolder, bool show) => Change(modsFolder, state => state.ShowEditedStats = show);
+
     static void Change(string modsFolder, Action<State> change)
     {
         var state = Read(modsFolder);
@@ -715,7 +722,8 @@ public static class ModSettings
                 ["sub"] = new JsonObject(c.Value.Sub.OrderBy(s => s.Key, StringComparer.Ordinal).Select(s => KeyValuePair.Create(s.Key, (JsonNode?)s.Value)))
             }))),
             ["blocked"] = new JsonArray([.. state.Blocked.Order(StringComparer.Ordinal).Select(id => (JsonNode?)id)]),
-            ["share"] = state.Share
+            ["share"] = state.Share,
+            ["showEditedStats"] = state.ShowEditedStats
         };
         File.WriteAllText(path + ".tmp", root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
         File.Move(path + ".tmp", path, overwrite: true);

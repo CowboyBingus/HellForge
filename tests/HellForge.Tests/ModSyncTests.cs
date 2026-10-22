@@ -165,9 +165,11 @@ static class ModSyncTests
             ModSettings.SetOrder(mods, ["test.b", "test.a"]);
             ModSettings.SetBlocked(mods, "bad.mod", true);
             ModSettings.SetShare(mods, false);
+            check(!ModSettings.Read(mods).ShowEditedStats, "Edited stats lobbies are hidden by default.");
+            ModSettings.SetShowEditedStats(mods, true);
             var state = ModSettings.Read(mods);
-            check(state.Blocked.SetEquals(["bad.mod"]) && !state.Share && state.Disabled.SetEquals(["test.off"]) && state.Order.SequenceEqual(["test.b", "test.a"]),
-                "Blocklist, share and the existing settings all kept.");
+            check(state.Blocked.SetEquals(["bad.mod"]) && !state.Share && state.ShowEditedStats && state.Disabled.SetEquals(["test.off"]) && state.Order.SequenceEqual(["test.b", "test.a"]),
+                "Blocklist, share, edited stats and the existing settings all kept.");
             ModSettings.SetBlocked(mods, "bad.mod", false);
             ModSettings.SetShare(mods, true);
             state = ModSettings.Read(mods);

@@ -42,7 +42,7 @@ their side. Another HellForge version, a full or a locked lobby are said the sam
 be downloaded, the joiner's editor also opens its MOD SYNC dialog (below).
 
 Switches, the order and packs' options are saved in `mods/hellforge-mods.json`
-(`{"format":1,"disabled":[ids],"order":[ids, top first],"packs":{id:{"off":[options],"sub":{option:variant}}},"blocked":[ids],"share":true}`;
+(`{"format":1,"disabled":[ids],"order":[ids, top first],"packs":{id:{"off":[options],"sub":{option:variant}}},"blocked":[ids],"share":true,"showEditedStats":false}`;
 mods are on by default) and apply to the next session; they are locked while a session runs. A disabled mod is not
 staged, applied, checked for conflicts or counted in the modlist code.
 
@@ -89,6 +89,16 @@ it off with "Let players who join me download my gameplay mods" on the Mods page
 
 **Downloaded mods.** The Mods page shows how many there are and how much space they take, with a button that deletes
 them all.
+
+**Public lobbies on the Galactic Map.** The map lists other HellForge players' public lobbies, except the ones you could
+not join:
+- lobbies running a blocked mod;
+- lobbies running mods that would have to be installed by hand;
+- lobbies whose host plays with edited stats (Local Stats, the in-game editor's values or arm swaps). Joiners play with
+  the host's stats, so these are hidden unless "Show public lobbies whose host plays with edited stats" is on
+  (`"showEditedStats"`).
+
+Lobbies with other mods you can download still show. Joining one opens the MOD SYNC dialog.
 
 ## Manifest
 
