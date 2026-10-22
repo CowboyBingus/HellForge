@@ -48,10 +48,34 @@ packs, Lua mods and mods that say they are cosmetic; friends need not have the s
 - Mod notices, at the top in red, say why a mod could not be loaded.
 - The modlist code friends must match is at the bottom of the page.
 
-Changes apply to the next session. While a session runs, the page is locked and the session keeps the mods it started
-with.
+Changes apply to the next session. While a session runs, a switch the running game can take changes it at once, and
+everything else waits for the next session ([Changing mods while you play](#changing-mods-while-you-play)).
 
 The page saves its switches, order and pack options in `mods/hellforge-mods.json`.
+
+## Changing mods while you play
+
+While a session runs, the Mods page's switches still work:
+- **Stats mods change the running game at once.** These are mods whose only changes are stats (`hellforge-stats.json`)
+  and `componentWrites`. Switching one on or off, or saving an edit to its stats file, goes straight to the game. The
+  console says what changed.
+  - Each value applies as a live edit does: now, on respawn, or at the next mission. The stats editor shows which.
+  - A changed mod keeps its place in the load order. The mods above it still win where they change the same value,
+    Local Stats included. A code mod's edit of a field stays on top of the stats under it.
+- **Everything else is saved for the next session,** and the page says why. That covers code mods (a DLL or sources),
+  Lua, data patches and cosmetic packs, network field types, stats with `"own": true`, and a new order. The order and
+  packs' options stay locked while a session runs.
+- **Only while no friend is in your game.** Friends need the same mods, so the game refuses a change while one is
+  connected. After a change, friends who join need your new mods, which mod sync offers them.
+- **A session that plays a host's mods** (after a mod sync) keeps them. Your Mods page applies to your next session.
+
+How it works:
+- **The session's files.** The session's backend compares the mods the session runs (`session-mods.json` in its log
+  folder) with the Mods page's (HellForge.Core `LiveModPlan`).
+- **One change.** It sends the in-game loader the whole change over the live pipe, and the loader takes all of it or
+  none.
+- **Afterwards.** The session's modlist code, `modset.json`, its lobby and its public listing follow the new mods.
+- **Logs.** Each change is logged in the session's `backend/live-mods.log`, and the loader's side in `modloader.log`.
 
 ## Load order
 
@@ -97,10 +121,16 @@ the host's mods and what happens to it:
 | needs another HellForge | a mod HellForge ships differs: both players need the same HellForge |
 | off for this session | one of your own gameplay mods that the host does not run |
 
-**DOWNLOAD AND RESTART** downloads what it can; **Esc** hides the prompt while the download goes on, and it comes back
-when the mods are ready. **CANCEL** or **Esc** before that answers no. **RESTART TO JOIN** then ends the session and
-the launcher starts a new one with the host's mods, in the host's load order, plus your own cosmetic mods and Local
-Stats. Join the lobby again from the social tab or the map. Only that one session plays the host's mods: your Mods page
+**DOWNLOAD AND RESTART** downloads what it can. **Esc** hides the prompt while the download goes on, and it comes back
+when the mods are ready. **CANCEL** or **Esc** before that answers no.
+
+Then one of two buttons plays the host's mods, in the host's load order, plus your own cosmetic mods and Local Stats:
+- **RESTART TO JOIN** ends the session, and the launcher starts a new one with them.
+- **APPLY AND JOIN** replaces it when every difference with the host's mods can change while you play (above). The
+  running game takes the host's mods without a restart. If the game refuses the change, the session restarts as
+  before.
+
+Either way, join the lobby again from the social tab or the map. Only that session plays the host's mods: your Mods page
 and its switches never change, and the next session you start yourself runs your own mods again.
 
 **What may download (the trust rule).** Your backend decides each mod's class from the bytes it received, never from

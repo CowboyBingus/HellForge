@@ -2606,14 +2606,17 @@ bool SyncBlockable(const HfSyncMod& mod)
         (state == HF_SYNC_OFFER || state == HF_SYNC_DOWNLOADING || state == HF_SYNC_READY);
 }
 
+/* The running game takes the host's mods without a restart (HF_SYNC_LIVE: the backend can change them live). */
+bool SyncLive() { return (g_sync.state.flags & HF_SYNC_LIVE) != 0; }
+
 /* The dialog's first button and its answer, by state ("" none). */
 const char* SyncPrimary(uint32_t* answer)
 {
     const HfSyncState& s = g_sync.state;
     *answer = s.state == HF_SYNC_OFFER ? (s.bytes > 0 ? HF_SYNC_ACCEPT : HF_SYNC_RESTART) : s.state == HF_SYNC_READY ? HF_SYNC_RESTART :
         s.state == HF_SYNC_BLOCKED || s.state == HF_SYNC_FAILED ? HF_SYNC_DECLINE : 0;
-    if (s.state == HF_SYNC_OFFER) return s.bytes > 0 ? "DOWNLOAD AND RESTART" : "RESTART TO JOIN";
-    if (s.state == HF_SYNC_READY) return "RESTART TO JOIN";
+    if (s.state == HF_SYNC_OFFER) return s.bytes > 0 ? "DOWNLOAD AND RESTART" : SyncLive() ? "APPLY AND JOIN" : "RESTART TO JOIN";
+    if (s.state == HF_SYNC_READY) return SyncLive() ? "APPLY AND JOIN" : "RESTART TO JOIN";
     if (s.state == HF_SYNC_BLOCKED || s.state == HF_SYNC_FAILED) return "OK";
     return "";
 }
@@ -2654,7 +2657,8 @@ void DrawSync()
     std::string say = s.message[0] ? s.message :
         s.state == HF_SYNC_OFFER ? "The host plays with gameplay mods you don't have. Get them, restart with the host's mods, then join again." :
         s.state == HF_SYNC_DOWNLOADING ? "Downloading the host's mods; each file is checked before it is kept." :
-        s.state == HF_SYNC_READY ? "Every mod is here. Restart with the host's mods, then join the lobby again." :
+        s.state == HF_SYNC_READY ? (SyncLive() ? "Every mod is here. Play with the host's mods now, without a restart, then join the lobby again." :
+            "Every mod is here. Restart with the host's mods, then join the lobby again.") :
         s.state == HF_SYNC_BLOCKED ? "You cannot join this lobby with these mods." : "The download failed.";
     g_cv.Text(say, x + 24, y + 58, T(SZ_SMALL, bad ? ERROR_ : DIM, ui::BODY, ui::LEFT, w - 48, 11));
     float hy = y + 80;
@@ -2710,7 +2714,7 @@ void DrawSync()
     {
         float pw = std::max(150.0f, g_cv.Measure(primary, SZ_TAB, ui::TITLE) + 40);
         bx -= pw;
-        if (Button(g_sync.sent ? (answer == HF_SYNC_RESTART ? "RESTARTING..." : "STARTING...") : primary, bx, y + h - 66, pw, 30,
+        if (Button(g_sync.sent ? (answer == HF_SYNC_RESTART ? (SyncLive() ? "APPLYING..." : "RESTARTING...") : "STARTING...") : primary, bx, y + h - 66, pw, 30,
                 g_sync.sent ? DISABLED : bad ? NORMAL : PRIMARY, ui::Id("syncprimary"), 11))
             AnswerSync(answer);
     }

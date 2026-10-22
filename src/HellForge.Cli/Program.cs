@@ -19,7 +19,7 @@ try
             create-install --root <folder>
             prepare-session --install <folder> --profile <name>
             migrate --install <folder> --from <artifacts/host-startup> [--appdata <folder>]
-            mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>] [--modset <file>] [--sync <mod sync session file>]
+            mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>] [--modset <file>] [--sync <mod sync session file>] [--session-mods <file>]
             build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> [--steam-data <Steam's game data folder>] --out <folder>]
             check-stats --mod <mod folder>
             sdk-headers --repo <HellForge source folder> [--mode write | check]
@@ -81,7 +81,7 @@ try
         "create-install" => ["--root"],
         "prepare-session" => ["--install", "--profile"],
         "migrate" => ["--install", "--from", "--appdata"],
-        "mods-stage" => ["--install", "--plan", "--logs", "--progress", "--modset", "--sync"],
+        "mods-stage" => ["--install", "--plan", "--logs", "--progress", "--modset", "--sync", "--session-mods"],
         "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--out"],
         "check-stats" => ["--mod"],
         "sdk-headers" => ["--repo", "--mode"],
@@ -254,6 +254,8 @@ try
             // the digest's mods one by one (ModlistDiff's wire form), so a refused co-op join can say which differ.
             var modSet = ModSet.Of(active);
             if (options.TryGetValue("--modset", out var modSetPath)) modSet.Write(modSetPath);
+            // --session-mods: the mods the session runs, so its backend can change them live (LiveModPlan)
+            if (options.TryGetValue("--session-mods", out var sessionModsPath)) SessionMods.Of(loadOrder, active, syncedWith ?? "").Write(sessionModsPath);
             var (digest, compared) = (modSet.Digest, modSet.Fingerprints());
             result = new
             {

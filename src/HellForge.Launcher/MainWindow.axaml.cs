@@ -336,6 +336,7 @@ public partial class MainWindow : Window
     void ShowState(JsonElement state)
     {
         var stopped = !runner.IsRunning;
+        SetLiveBackend(stopped ? null : SessionFiles.Text(state, "backendOrigin"));
         ShowModProblems(state);
         switch (SessionFiles.Text(state, "status"))
         {
@@ -591,6 +592,7 @@ public partial class MainWindow : Window
         ProfileCombo.IsEnabled = NewProfileButton.IsEnabled = !running;
         CreateProfileButton.IsEnabled = !running && TemplateCombo.SelectedItem != null;
         if (running && NewProfileForm.IsVisible) ShowNewProfileForm(false);
+        if (!running) SetLiveBackend(null);
         SetModsLocked(running);
         SetWeaponLevelsLocked(running);
         UpdateSettingsImport();
