@@ -150,10 +150,14 @@ public sealed class MultiplayerHost : IAsyncDisposable
         (transport as IFriendSource)?.HellForgeFriends.FirstOrDefault(f => f.SteamId == peer)?.Name ?? Directory?.HostName(peer) ??
         (transport?.IsFriend(peer) == false ? "Player " : "Steam friend ") + LobbyService.EntityId(peer);
 
+    // HELLFORGE_TEST_STRANGERS=1: friends are treated as strangers (testing the lobby directory's stranger path with two
+    // friends' PCs; docs/multiplayer.md step 7).
     static IPeerTransport? CreateTransport(string link, Action<string> log)
     {
         if (link == "none") return null;
-        if (link.StartsWith("steam:", StringComparison.Ordinal)) return new SteamPeerTransport(link[6..], log);
+        var strangers = Environment.GetEnvironmentVariable("HELLFORGE_TEST_STRANGERS") == "1";
+        if (strangers) log("Test mode (HELLFORGE_TEST_STRANGERS): Steam friends are treated as strangers: no presence, the directory's gate.");
+        if (link.StartsWith("steam:", StringComparison.Ordinal)) return new SteamPeerTransport(link[6..], log) { TreatFriendsAsStrangers = strangers };
         var parts = link.Split(':');
         if (parts is ["udp", var id, var port, var peers] && LobbyService.TryNode(id, out var localId) && int.TryParse(port, out var localPort))
         {
@@ -165,7 +169,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
                     throw new ArgumentException("Bad udp peer: " + entry);
                 table[peer] = peerPort;
             }
-            return new UdpLoopbackTransport(localId, localPort, table);
+            return new UdpLoopbackTransport(localId, localPort, table) { TreatPeersAsStrangers = strangers };
         }
         throw new ArgumentException("--link must be none, steam:<steam_api64.dll> or udp:<id>:<port>:<peer>=<port>,...");
     }

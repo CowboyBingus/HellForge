@@ -62,7 +62,11 @@ public sealed class InMemoryNetwork
 // Loopback does not lose datagrams in practice; this transport makes no delivery promise beyond that.
 public sealed class UdpLoopbackTransport : IPeerTransport, IFriendSource
 {
-    public IReadOnlyList<FriendPresence.Friend> HellForgeFriends => [.. peers.Keys.Order().Select(k => new FriendPresence.Friend(k, $"Friend {k:X}"))];
+    public IReadOnlyList<FriendPresence.Friend> HellForgeFriends =>
+        TreatPeersAsStrangers ? [] : [.. peers.Keys.Order().Select(k => new FriendPresence.Friend(k, $"Friend {k:X}"))];
+    // Test mode (HELLFORGE_TEST_STRANGERS=1): the configured peers are strangers, not friends.
+    public bool TreatPeersAsStrangers { get; init; }
+    public bool IsFriend(ulong peer) => !TreatPeersAsStrangers;
 
     readonly UdpClient socket;
     readonly IReadOnlyDictionary<ulong, IPEndPoint> peers;

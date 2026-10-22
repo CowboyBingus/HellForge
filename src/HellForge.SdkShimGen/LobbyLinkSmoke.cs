@@ -392,11 +392,13 @@ public static unsafe class LobbyLinkSmoke
         return (library, player);
     }
 
-    internal static Process StartBackend(string backend, string evidence, string pipe, string link, params string[] more)
+    internal static Process StartBackend(string backend, string evidence, string pipe, string link, IEnumerable<string>? more = null,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo("dotnet") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var argument in new[] { backend, "--port", "0", "--evidence", evidence, "--lifetime-seconds", "120", "--pipe", pipe, "--link", link, "--mod-digest", "smoke" }.Concat(more))
+        foreach (var argument in new[] { backend, "--port", "0", "--evidence", evidence, "--lifetime-seconds", "120", "--pipe", pipe, "--link", link, "--mod-digest", "smoke" }.Concat(more ?? []))
             start.ArgumentList.Add(argument);
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>()) start.Environment[name] = value;
         var process = Process.Start(start) ?? throw new IOException("Could not start the backend.");
         process.OutputDataReceived += (_, _) => { };
         process.ErrorDataReceived += (_, _) => { };

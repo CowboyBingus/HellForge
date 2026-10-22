@@ -535,14 +535,26 @@ Built 2026-10-22 and tested on one PC only.
   - `HellForge.SdkShimGen smoke-lobby-search <stand-ins> <HellForge.LocalBackend.dll>`: two backends over loopback UDP
     sharing a folder directory (`--directory`), and two lobby stand-ins through the PlayFab C API. The friend's
     search finds the host's lobby about 0.35 s after it is listed, joins with the connection string it found, and
-    stops finding it about 0.35 s after the host leaves.
+    stops finding it about 0.35 s after the host leaves. It runs twice: as friends, then as strangers
+    (`HELLFORGE_TEST_STRANGERS`, below). As strangers the join passes the gate, no presence is swapped, and the map's
+    record for the host is the listing's (names kept, other account ids 0).
+- **Test mode for two friends' PCs: `HELLFORGE_TEST_STRANGERS=1`.** A backend started with it treats every Steam
+  friend as a stranger:
+  - no presence, so the social tab lists none;
+  - the stranger gate applies;
+  - Steam sessions are accepted only by the directory's rule.
+
+  `multiplayer.log` says "Test mode (HELLFORGE_TEST_STRANGERS)". Set it on both PCs before starting the launcher
+  (the session runner and the backend inherit it), for example in Command Prompt:
+  `set HELLFORGE_TEST_STRANGERS=1` then `start "" "<installation>\HellForge.exe"`. Steam itself still sees two friends;
+  nothing in the directory depends on that.
 - **Not yet known:**
   - whether the Galactic Map shows a marker and hover card from these records (which string keys the map lists);
   - whether the hover card works with the other members' account ids at 0;
   - Steam's search rate limits;
   - the map's exact filter string (now logged).
 
-**To test on two PCs that are not Steam friends:**
+**To test on two PCs that are not Steam friends** (or two friends' PCs with `HELLFORGE_TEST_STRANGERS=1` on both):
 1. Both turn on multiplayer and Local PlayFab. The host opens a Public lobby on a planet.
 2. The other player opens the Galactic Map on that planet. Check:
    - a marker and a hover card with the host's name;

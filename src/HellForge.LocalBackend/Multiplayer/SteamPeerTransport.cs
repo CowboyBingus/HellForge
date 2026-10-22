@@ -37,10 +37,13 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
     public ulong LocalId { get; private set; }
     public event Action<ulong, byte[]>? Received;
     volatile IReadOnlyList<FriendPresence.Friend> hellforgeFriends = [];
-    public IReadOnlyList<FriendPresence.Friend> HellForgeFriends => hellforgeFriends;
+    public IReadOnlyList<FriendPresence.Friend> HellForgeFriends => TreatFriendsAsStrangers ? [] : hellforgeFriends;
+    // Test mode (HELLFORGE_TEST_STRANGERS=1, MultiplayerHost): Steam friends are treated as strangers, so two friends' PCs
+    // test what strangers go through (the directory's gate, no presence). Steam itself is unchanged.
+    public bool TreatFriendsAsStrangers { get; init; }
     // Every Steam friend's SteamID, refreshed with the friend scan.
     volatile HashSet<ulong> friendIds = [];
-    public bool IsFriend(ulong peer) => friendIds.Contains(peer);
+    public bool IsFriend(ulong peer) => !TreatFriendsAsStrangers && friendIds.Contains(peer);
     // Whether a session from someone who is not a Steam friend is accepted (asked on the Steam thread; must be quick).
     public Func<ulong, bool>? AcceptStranger { get; set; }
     public SteamLobbyDirectory Directory { get; }
@@ -151,7 +154,8 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
                     {
                         var remote = *(ulong*)(parameter + 8);
                         if (id == SessionFailed) log("A Steam peer session failed.");
-                        else if (relationship(friends, remote) == FriendRelationshipFriend || AcceptStranger?.Invoke(remote) == true) accept(messages, parameter);
+                        else if (!TreatFriendsAsStrangers && relationship(friends, remote) == FriendRelationshipFriend || AcceptStranger?.Invoke(remote) == true)
+                            accept(messages, parameter);
                         else if (DateTime.UtcNow - strangerLogged > TimeSpan.FromMinutes(1))
                         {
                             strangerLogged = DateTime.UtcNow;
