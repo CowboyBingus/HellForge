@@ -103,13 +103,16 @@ If you write `mods\hellforge-mods.json` yourself, it looks like this:
   "format": 1,
   "disabled": ["owner.mod-id"],
   "order": ["top.mod", "next.mod"],
-  "packs": { "pack.<guid>": { "off": ["Option name"], "sub": { "Option name": "Variant name" } } }
+  "packs": { "pack.<guid>": { "off": ["Option name"], "sub": { "Option name": "Variant name" } } },
+  "blocked": ["owner.mod-id"],
+  "share": true
 }
 ```
 
 Mods are on unless `disabled` lists them. `order` is top first, and mods missing from it go to the top of their group.
 A pack's `off` lists the options switched off, and `sub` the variant picked for an option that has variants (otherwise
-the first one is used). Write the whole file at once, to a temporary file and then a rename, as HellForge does.
+the first one is used). `blocked` lists the mods mod sync never offers (see [mods.md](mods.md#playing-with-other-mods)),
+and `share` (default true) lets players who join you download your gameplay mods. Write the whole file at once, to a temporary file and then a rename, as HellForge does.
 
 ## Profiles and settings
 

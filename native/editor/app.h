@@ -14,6 +14,7 @@ struct Host
     std::string modFolder, modsFolder;
     void (*close)(void);       /* closes the window (Escape, the X) */
     void (*saveSoon)(int ms);  /* saves the Local Stats changes in ms */
+    void (*open)(void);        /* opens the window (a mod sync offer came) */
 };
 
 void Init(const Host& host);

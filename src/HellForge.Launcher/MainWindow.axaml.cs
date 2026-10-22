@@ -178,7 +178,8 @@ public partial class MainWindow : Window
         }, TaskScheduler.Default);
     }
 
-    void Start()
+    // modSync: start with a host's mods after a mod sync (the backend stopped the last session for it).
+    void Start(string? modSync = null)
     {
         if (runner.IsRunning) return;
         runDirectory = null;  // Forget the previous run so its final state does not overwrite this one.
@@ -223,7 +224,7 @@ public partial class MainWindow : Window
         try
         {
             runner.Start(paths, profile, new(LocalPlayFabBox.IsChecked == true, SdkShimsBox.IsChecked == true, ProfileStore.LoadWar(paths),
-                EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true, gameOptions));
+                EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true, gameOptions, modSync));
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {
@@ -283,6 +284,14 @@ public partial class MainWindow : Window
         }
         var runnerExited = runner.CollectExited();
         if (runnerExited) PruneSessionLogs();
+        // Mod sync: the backend stopped the session so that it starts again with the host's mods it downloaded.
+        if (runnerExited && runDirectory != null && !stopRequested && paths.InstallRoot != null &&
+            SessionFiles.ReadJson(Path.Combine(runDirectory, "result.json")) is { } final && SessionFiles.Text(final, "restart") == "mod-sync")
+        {
+            Append("Restarting with the host's mods (mod sync). Join their lobby again from the social tab or the map.", LauncherLine);
+            Start(HellForge.Core.ModSyncSession.PathIn(new HellForge.Core.InstallLayout(paths.InstallRoot)));
+            return;
+        }
         if (runnerExited && runDirectory == null)
         {
             if (stopRequested)

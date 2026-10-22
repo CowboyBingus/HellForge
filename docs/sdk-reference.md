@@ -141,6 +141,12 @@ for changing and adding content; [Hooks and game memory](modding/hooks.md) for `
 - `code_matches`: `int (uintptr_t address, const char* pattern)`. 1 when the bytes at `address`, as they were before any hook HellForge placed (its own or a mod's), match the IDA-style pattern ("48 8B ?? 24"); 0 otherwise or when they cannot be read. The check to make before hooking a function: another mod that hooked it first does not fail it, where find_pattern and read would (they see the hook's jump). Only hooks are seen through: bytes a mod changed with write, or that HellForge rewrote, read as they are now. Check hf->size before calling.
 - `read_code`: `int (uintptr_t address, void* buffer, size_t size)`. Like read, with the bytes as they were before any hook HellForge placed (as code_matches reads them). 0 on success.
 
+### SDK 13: mod sync (HfSyncState; check hf->size before calling)
+
+- **`sync_state`** `int (HfMod* mod, HfSyncState* out)`: The current offer: 1 with *out filled (at most out->size bytes), 0 none (solo, or no backend connected).
+- **`sync_mod`** `int (HfMod* mod, uint32_t index, HfSyncMod* out)`: The index-th mod of the current offer: 1 with *out filled (at most out->size bytes), 0 past the last.
+- **`sync_answer`** `int (HfMod* mod, uint32_t version, uint32_t answer, const char* mod_id)`: Sends the player's answer (HF_SYNC_ACCEPT ...) to the offer of that version; mod_id names the mod for HF_SYNC_BLOCK (NULL otherwise). 1 sent; 0 not (another offer came since, or no backend connected).
+
 ## Components
 
 Entity component records. In a definition block, `HF_FIELD(Component, field)` names a field; for an entity's own
