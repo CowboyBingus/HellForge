@@ -175,6 +175,18 @@ public partial class MainWindow
         shareRow.Children.Add(share);
         shareRow.Children.Add(new TextBlock { Text = "Let players who join me download my gameplay mods", VerticalAlignment = VerticalAlignment.Center });
         panel.Children.Add(shareRow);
+        // Joiners play with the host's stats: public lobbies whose host edited them are hidden on the Galactic Map unless shown.
+        var edited = new ToggleSwitch { IsChecked = settings.ShowEditedStats, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
+        edited.IsCheckedChanged += (_, _) =>
+        {
+            try { ModSettings.SetShowEditedStats(modsFolder, edited.IsChecked == true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the mod sync setting: " + error.Message, Red); }
+        };
+        var editedRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        editedRow.Children.Add(edited);
+        editedRow.Children.Add(new TextBlock { Text = "Show public lobbies whose host plays with edited stats (you would play with theirs)", VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(editedRow);
 
         panel.Children.Add(new TextBlock { Text = settings.Blocked.Count == 0
             ? "No blocked mods. BLOCK on the in-game MOD SYNC prompt hides lobbies that run a mod."

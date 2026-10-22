@@ -196,6 +196,13 @@ public partial class MainWindow : Window
                     failure: paths.InstallRoot != null ? "Reinstall HellForge: " + file + " is missing." : "Sessions run in installations made with HellForge-Setup.");
                 return;
             }
+        // Without Local PlayFab the game's own lobby search would list vanilla players' Steam lobbies: the session runner
+        // refuses multiplayer then, and so does the launcher, with the switch to change.
+        if (SdkShimsBox.IsChecked == true && LocalPlayFabBox.IsChecked != true)
+        {
+            SetStatus("Multiplayer needs Local PlayFab.", Phase.Failed, failure: "Turn on Experiments > Local PlayFab (or turn off the PlayFab SDK stand-ins) and press PLAY again.");
+            return;
+        }
         // A name typed into the open new-profile form is created and used rather than dropped.
         if (NewProfileForm.IsVisible && !string.IsNullOrWhiteSpace(NewProfileName.Text) && !CreateProfile()) return;
         var profile = Selected;
