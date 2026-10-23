@@ -29,6 +29,8 @@ sealed class PlaySession(PlayOptions options)
     static readonly bool Debug = Environment.GetEnvironmentVariable("HELLFORGE_DEBUG") == "1";
     InstallLayout install = null!;
     // gameOut: where the game writes its logs and the editor its sandboxed saves (run, or run/game labelled low when sandboxed)
+    string SandboxUserData => Path.Combine(gameOut, "userdata");
+    string profileName = "";
     string gameOut = "", run = "", copy = "", exe = "", gameDll = "", bundle = "", shimOriginals = "", app = "";
     string? normal, hint, erlBackup, profileFolder;
     string[] erlBefore = [];
@@ -85,7 +87,7 @@ sealed class PlaySession(PlayOptions options)
         run = Directory.CreateDirectory(Path.Combine(install.Sessions, runId)).FullName;
         // Sandboxed, the game may write only into folders labelled low: its logs go to run/game, and the rest of the run
         // folder (this runner's files, the backend's evidence and the DLL it loads) stays out of its reach.
-        gameOut = options.Sandbox ? Directory.CreateDirectory(Path.Combine(run, "game")).FullName : run;
+        gameOut = options.Sandbox ? LowIntegrityHelper.CreateLowFolder(Path.Combine(run, "game")) : run;
         log = new StreamWriter(Path.Combine(run, "session.log"), append: true, new UTF8Encoding(false));
         result["runId"] = runId;
         result["status"] = "preparing";
@@ -151,7 +153,7 @@ sealed class PlaySession(PlayOptions options)
                 if (File.Exists(Path.Combine(candidate, "bin", "helldivers2.exe"))) { normal = candidate; break; }
             }
         result["normalGame"] = normal;
-        var profileName = Path.GetFileName(profileDirectory);
+        profileName = Path.GetFileName(profileDirectory);
         if (!System.Text.RegularExpressions.Regex.IsMatch(profileName, "^[a-z0-9-]{1,32}$")) throw new SessionFailure("The profile folder name is not a valid profile name.");
 
         // A session that was cut short leaves the stand-ins in the copy: put the saved originals back first. Their pins
@@ -235,7 +237,16 @@ sealed class PlaySession(PlayOptions options)
                     "(or restart the PC) and press Play again.");
             }
         }
-        var prepared = Tools.ParseJson(HellForgeCli("prepare-session", "--install", install.Root, "--profile", profileName) ?? "")
+        // Sandboxed, the game's user data is a copy in gameOut, which carries the low label (SandboxFolders): the profile's
+        // settings and saves and the shader cache go in now and come back once the game is gone.
+        string[] prepare = ["prepare-session", "--install", install.Root, "--profile", profileName];
+        if (options.Sandbox)
+        {
+            var copiedIn = SandboxFolders.Copy(install.UserData, SandboxUserData, SandboxFolders.UserDataParts(profileName));
+            result["sandboxCopiedIn"] = new JsonObject { ["files"] = copiedIn.Files, ["bytes"] = copiedIn.Bytes, ["skipped"] = copiedIn.Skipped };
+            prepare = [.. prepare, "--user-data", SandboxUserData];
+        }
+        var prepared = Tools.ParseJson(HellForgeCli(prepare) ?? "")
             ?? throw new SessionFailure("Session preparation failed; see cli-output.txt in this session's log folder.");
         if (prepared["problems"] is JsonArray { Count: > 0 } problems)
             throw new SessionFailure($"The game copy is not the supported build ({(string?)problems[0]}); repair it from the launcher.");
@@ -550,6 +561,12 @@ sealed class PlaySession(PlayOptions options)
         if (authorization.Elapsed.TotalSeconds >= 120) throw new SessionFailure("Ownership authorization expired.");
 
         profileFolder = Path.Combine(install.UserData, "environment");
+        if (options.Sandbox)
+        {
+            // the game's AppData and temp: a copy in gameOut too, back at the end
+            SandboxFolders.Copy(install.UserData, gameOut, ["environment"]);
+            profileFolder = Path.Combine(gameOut, "environment");
+        }
         foreach (var folder in new[] { "Roaming", "Local", "Temp" }) Directory.CreateDirectory(Path.Combine(profileFolder, folder));
         var requestLog = Path.Combine(run, "backend", "requests.jsonl");
         long requestOffset = 0;
@@ -575,11 +592,10 @@ sealed class PlaySession(PlayOptions options)
         {
             bridgeSuffix = (string)result["runId"]!;
             Environment.SetEnvironmentVariable("HELLFORGE_BRIDGE_PIPE", bridgeSuffix);
-            // The folders the game writes: its environment (AppData, temp, shader cache), its profile's user data (settings,
-            // saves, the cloud folder) and gameOut. The first two keep the label: HellForge reads nothing in them as
-            // trusted. The editor's saves go to gameOut/sandbox-stats, applied after the game is gone (SandboxStats).
+            // Everything the game writes is in gameOut, made with a low label that its folders inherit: its logs, its
+            // environment and user data (copies), and the editor's saves (gameOut/sandbox-stats, applied after the game is
+            // gone: SandboxStats).
             var sandboxStats = Directory.CreateDirectory(Path.Combine(gameOut, "sandbox-stats")).FullName;
-            LowIntegrityHelper.LabelFoldersLow([profileFolder!, Path.GetFullPath((string?)result["userData"] ?? install.UserData), gameOut]);
             Environment.SetEnvironmentVariable("HELLFORGE_SANDBOX_STATS", sandboxStats);
             lowToken = LowIntegrityHelper.CreateLowToken();
             result["sandbox"] = true;
@@ -976,6 +992,19 @@ sealed class PlaySession(PlayOptions options)
                 };
                 Say($"WARNING: {planted.Files.Count} file(s) appeared in the mods folder during the session" +
                     (planted.DisabledMods.Count > 0 ? $"; {planted.DisabledMods.Count} mod(s) they appeared in switched off until you turn them on in Mods." : "."));
+            });
+        if (options.Sandbox && (bool?)result["jobEmpty"] == true && gameStarted != null)
+            Try("sandboxCopyBackError", () =>
+            {
+                // the game's data back where the next session reads it (written by the game: files only, bounded)
+                var back = SandboxFolders.Copy(SandboxUserData, install.UserData, SandboxFolders.UserDataParts(profileName));
+                var environment = SandboxFolders.Copy(gameOut, install.UserData, ["environment"]);
+                result["sandboxCopiedBack"] = new JsonObject
+                {
+                    ["files"] = back.Files + environment.Files, ["bytes"] = back.Bytes + environment.Bytes, ["skipped"] = back.Skipped + environment.Skipped
+                };
+                if (back.Skipped + environment.Skipped > 0)
+                    Say($"{back.Skipped + environment.Skipped} file(s) the game wrote were not copied back (links, or over the size limit).");
             });
         if (options.Sandbox && (bool?)result["jobEmpty"] == true)
             Try("sandboxStatsError", () =>

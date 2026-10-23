@@ -30,8 +30,11 @@ static class SessionJobTests
             using var pipe = HellForge.Core.PipeServer.Create(name, 1);
             HellForge.Core.PipeServer.LowIntegrityClients = false;
             check(HellForge.Core.PipeServer.LabelLevel(pipe.SafePipeHandle) == 0x1000, "The pipe carries a low label.");
-            var labelled = Directory.CreateDirectory(Path.Combine(root, "sandbox-low", "game")).FullName;
-            HellForge.Session.LowIntegrityHelper.LabelFoldersLow([labelled]);
+            // made new with its label, as the session makes run/game (relabelling an existing folder needs WRITE_OWNER)
+            Directory.CreateDirectory(Path.Combine(root, "sandbox-low"));
+            var labelled = HellForge.Session.LowIntegrityHelper.CreateLowFolder(Path.Combine(root, "sandbox-low", "game"));
+            reject(() => HellForge.Session.LowIntegrityHelper.CreateLowFolder(labelled));
+            var inside = Directory.CreateDirectory(Path.Combine(labelled, "userdata", "profiles")).FullName;
             // a folder at this process's own level: refused to the game only when this process is above low (a workspace
             // labelled low runs its tests at low integrity)
             var above = HellForge.Session.LowIntegrityHelper.CurrentLevel() > 0x1000;
@@ -40,7 +43,7 @@ static class SessionJobTests
             try
             {
                 var waiting = pipe.WaitForConnectionAsync();
-                var command = $"/d /c \"echo from the game> \\\\.\\pipe\\{name} & echo x> \"{Path.Combine(labelled, "written.txt")}\" & echo x> \"{Path.Combine(other, "written.txt")}\"\"";
+                var command = $"/d /c \"echo from the game> \\\\.\\pipe\\{name} & echo x> \"{Path.Combine(labelled, "written.txt")}\" & echo x> \"{Path.Combine(inside, "written.txt")}\" & echo x> \"{Path.Combine(other, "written.txt")}\"\"";
                 using var job = new HostBoundedProcess(cmd, command, Environment.SystemDirectory, "", 30, token: token);
                 job.Resume();
                 check(waiting.Wait(20000), "The low-integrity process opened the pipe.");
@@ -48,6 +51,7 @@ static class SessionJobTests
                 check(reader.ReadLine()?.Trim() == "from the game", "Its message arrived.");
                 check(job.Process.WaitForExit(20000), "The test process ended.");
                 check(File.Exists(Path.Combine(labelled, "written.txt")), "It wrote into the folder labelled low.");
+                check(File.Exists(Path.Combine(inside, "written.txt")), "And into a folder made inside it later, which inherits the label.");
                 if (above)
                     check(!File.Exists(Path.Combine(other, "written.txt")), "It could not write into a folder at the player's level.");
             }

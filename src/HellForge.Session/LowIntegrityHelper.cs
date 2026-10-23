@@ -6,8 +6,8 @@ namespace HellForge.Session;
 /// <summary>
 /// Low-integrity process tokens and folder labels for the sandboxed game session (docs/steam-bridge.md, "The rest of a
 /// low-integrity session"). A low-integrity process cannot write to the player's files, registry or other processes
-/// ("no write up"), even from native code calling the kernel directly. The folders the game needs to write are labelled
-/// low before launch.
+/// ("no write up"), even from native code calling the kernel directly. The folders the game writes are made new with a
+/// low label (CreateLowFolder).
 /// </summary>
 static class LowIntegrityHelper
 {
@@ -53,38 +53,31 @@ static class LowIntegrityHelper
     }
 
     /// <summary>
-    /// Labels a folder with a Low mandatory integrity level, inherited by its children (OI and CI). A normal-integrity
-    /// process can label objects at or below its own level without elevation.
+    /// Creates a new folder whose security descriptor carries a Low mandatory label, inherited by everything created in it
+    /// (OI and CI); its access list is inherited as usual. A label is set this way, at creation and at or below one's own
+    /// integrity, without WRITE_OWNER, which relabelling an existing folder needs and a standard account seldom has. Throws
+    /// when the folder exists already.
     /// </summary>
-    public static void LabelFolderLow(string path)
+    public static string CreateLowFolder(string path)
     {
+        var full = Path.GetFullPath(path);
+        if (Directory.Exists(full) || File.Exists(full)) throw new IOException($"{full} exists already; a low folder is made new.");
         nint sd = 0;
         try
         {
             if (!ConvertStringSecurityDescriptorToSecurityDescriptor("S:(ML;OICI;NW;;;LW)", 1, out sd, out _))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "ConvertStringSecurityDescriptorToSecurityDescriptor");
-
-            if (!GetSecurityDescriptorSacl(sd, out bool present, out nint sacl, out _) || !present)
-                throw new InvalidOperationException("SACL not present in the low-label descriptor.");
-
-            uint err = SetNamedSecurityInfoW(path, 1, 0x10, nint.Zero, nint.Zero, nint.Zero, sacl);
-            if (err != 0) throw new Win32Exception((int)err, $"SetNamedSecurityInfo({path})");
+            var attributes = new SECURITY_ATTRIBUTES { Length = Marshal.SizeOf<SECURITY_ATTRIBUTES>(), SecurityDescriptor = sd };
+            if (!CreateDirectoryW(full, ref attributes))
+            {
+                var error = Marshal.GetLastWin32Error();
+                throw new Win32Exception(error, $"Creating the low-integrity folder {full} failed: {new Win32Exception(error).Message} ({error})");
+            }
+            return full;
         }
         finally
         {
             if (sd != 0) LocalFree(sd);
-        }
-    }
-
-    /// <summary>
-    /// Labels several folders and creates them if they do not exist. Each is labelled Low with OI+CI inheritance.
-    /// </summary>
-    public static void LabelFoldersLow(IEnumerable<string> paths)
-    {
-        foreach (string path in paths)
-        {
-            Directory.CreateDirectory(path);
-            LabelFolderLow(path);
         }
     }
 
@@ -117,6 +110,12 @@ static class LowIntegrityHelper
     [StructLayout(LayoutKind.Sequential)]
     struct TOKEN_MANDATORY_LABEL { public SID_AND_ATTRIBUTES Label; }
 
+    [StructLayout(LayoutKind.Sequential)]
+    struct SECURITY_ATTRIBUTES { public int Length; public nint SecurityDescriptor; public int InheritHandle; }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool CreateDirectoryW(string path, ref SECURITY_ATTRIBUTES attributes);
+
     [DllImport("advapi32.dll", SetLastError = true)]
     static extern bool OpenProcessToken(nint process, uint access, out nint token);
 
@@ -135,12 +134,6 @@ static class LowIntegrityHelper
 
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string sddl, uint revision, out nint sd, out uint size);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    static extern bool GetSecurityDescriptorSacl(nint sd, out bool present, out nint sacl, out bool defaulted);
-
-    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    static extern uint SetNamedSecurityInfoW(string name, int objectType, uint info, nint owner, nint group, nint dacl, nint sacl);
 
     [DllImport("advapi32.dll", SetLastError = true)]
     static extern bool GetTokenInformation(nint token, int cls, nint info, int size, out int returned);

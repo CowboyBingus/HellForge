@@ -103,6 +103,40 @@ static class ModsHoldTests
             reject(() => ModsHold.Take(mods).Dispose());
         });
 
+        test("Sandboxed sessions: the game's data is copied in and back, files only, never through a junction, and bounded", () =>
+        {
+            var install = Directory.CreateDirectory(Path.Combine(root, "sandbox-copy", "userdata")).FullName;
+            var session = Path.Combine(root, "sandbox-copy", "run", "game", "userdata");
+            Directory.CreateDirectory(Path.Combine(install, "profiles", "default", "saves"));
+            File.WriteAllText(Path.Combine(install, "profiles", "default", "saves", "save.dat"), "save");
+            Directory.CreateDirectory(Path.Combine(install, "profiles", "other"));
+            File.WriteAllText(Path.Combine(install, "profiles", "other", "x.dat"), "other profile");
+            Directory.CreateDirectory(Path.Combine(install, "shader_cache"));
+            File.WriteAllText(Path.Combine(install, "shader_cache", "cache.bin"), new string('c', 1000));
+            File.WriteAllText(Path.Combine(install, "dearimgui.ini"), "[ImGui]");
+            Directory.CreateDirectory(Path.Combine(install, "logs"));
+            File.WriteAllText(Path.Combine(install, "logs", "old.txt"), "log");
+            var copied = SandboxFolders.Copy(install, session, SandboxFolders.UserDataParts("default"));
+            check(copied is { Files: 3, Skipped: 0 } && File.Exists(Path.Combine(session, "profiles", "default", "saves", "save.dat")) &&
+                !Directory.Exists(Path.Combine(session, "profiles", "other")) && !Directory.Exists(Path.Combine(session, "logs")),
+                "In: the profile, the shader cache and the ImGui settings; not other profiles or logs: " + copied);
+
+            // the game wrote a save, and a junction to a folder outside (a low process can make one in its own folder)
+            File.WriteAllText(Path.Combine(session, "profiles", "default", "saves", "save.dat"), "save 2");
+            var outside = Directory.CreateDirectory(Path.Combine(root, "sandbox-copy", "outside")).FullName;
+            File.WriteAllText(Path.Combine(outside, "secret.txt"), "not the game's");
+            var junction = Path.Combine(session, "profiles", "default", "link");
+            using (var made = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/d /c mklink /J \"{junction}\" \"{outside}\"")
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!)
+                made.WaitForExit();
+            check(Directory.Exists(junction), "The junction was made.");
+            var back = SandboxFolders.Copy(session, install, SandboxFolders.UserDataParts("default"));
+            check(File.ReadAllText(Path.Combine(install, "profiles", "default", "saves", "save.dat")) == "save 2" && back.Skipped == 1 &&
+                !File.Exists(Path.Combine(install, "profiles", "default", "link", "secret.txt")), "Back: the new save; the junction is not followed: " + back);
+            check(SandboxFolders.Copy(session, install, SandboxFolders.UserDataParts("default"), maxBytes: 10) is { Skipped: > 0 }, "A copy stops at its byte limit.");
+            Directory.Delete(junction);
+        });
+
         test("Sandboxed editor saves: changes are applied onto the files as they are now, each checked", () =>
         {
             var mods = Folder(root, "sandbox-stats");
