@@ -86,7 +86,8 @@ modlist code.
 Joining a lobby whose host runs other gameplay mods does not just fail. The host's backend refuses the join (above) and
 sends its mod set with the refusal. A **MOD SYNC** prompt then shows over the game by itself, without the editor
 window behind it (the in-game editor draws it). It holds the mouse and keyboard until it is answered, and lists each of
-the host's mods and what happens to it:
+the host's mods and what happens to it. With the in-game editor switched off on the Mods page, the launcher's Play page
+shows the same prompt instead, with the same buttons (BLOCK is the in-game prompt's only):
 
 | Shown as | Meaning |
 |---|---|

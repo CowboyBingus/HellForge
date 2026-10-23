@@ -501,9 +501,10 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
     session with `--mod-sync <file>` (`mods-stage --sync`).
   - That session plays the host's mods, each found by id and content hash, in the host's order. If they do not make
     the host's modlist digest, it plays the player's own mods and reports why.
-- **Still to do:**
-  - rejoining by itself after the restart (the player joins again from the social tab or the map);
-  - a launcher prompt for sessions without the in-game editor.
+  - With the in-game editor switched off, the launcher shows the offer from `mod-sync.json` on its Play page
+    (`ModSyncPrompt.cs`, `ModSyncOffer`) and writes the answer to `<run>/backend/mod-sync-answer.json`, which the backend
+    takes within a second, as the game's `syncanswer`.
+- **Still to do:** rejoining by itself after the restart (the player joins again from the social tab or the map).
 
 **To test on two PCs:**
 1. The host enables a content mod (a data patch or stats mod) and a code mod; the friend has neither.

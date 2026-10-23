@@ -184,6 +184,7 @@ public partial class MainWindow : Window
         if (runner.IsRunning) return;
         runDirectory = null;  // Forget the previous run so its final state does not overwrite this one.
         launchedUtc = default;
+        NoteSessionEditor();
         if (!SessionRunner.IsSupported)
         {
             SetStatus(SessionRunner.UnsupportedMessage, Phase.Idle);
@@ -288,6 +289,8 @@ public partial class MainWindow : Window
             if (SessionFiles.ReadJson(Path.Combine(runDirectory, "result.json")) is { } state) ShowState(state);
             // Mods are built before the script writes its first result.json: their progress shows from the start.
             else if (!stopRequested && ShowModBuilds(out var built)) RenderSteps(BuildStep, false, built);
+            if (runner.IsRunning) ShowModSync(runDirectory);
+            else ModSyncCard.IsVisible = false;
         }
         var runnerExited = runner.CollectExited();
         if (runnerExited) PruneSessionLogs();

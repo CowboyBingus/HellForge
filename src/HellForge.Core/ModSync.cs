@@ -415,6 +415,63 @@ public static class SyncedStore
     }
 }
 
+// The offer as a session's backend writes it for launchers (<run>/backend/mod-sync.json), and the player's answer a
+// launcher writes back (<run>/backend/mod-sync-answer.json), which the backend takes once a second. For sessions whose
+// game has no in-game editor to show the MOD SYNC prompt; the answer is the one the prompt sends (sync_answer).
+public sealed record ModSyncOffer(int Version, string State, string Host, long Bytes, long Done, string Message, IReadOnlyList<ModSyncOffer.Mod> Mods)
+{
+    public sealed record Mod(string Id, string Name, string Version, string Class, string Action, long Bytes);
+
+    public const string FileName = "mod-sync.json", AnswerFileName = "mod-sync-answer.json";
+    public static readonly IReadOnlySet<string> Answers = new HashSet<string>(StringComparer.Ordinal) { "accept", "decline", "restart", "block" };
+
+    // The offer in a session's backend folder; null when there is none or it cannot be read (being written).
+    public static ModSyncOffer? Read(string backendFolder)
+    {
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(Path.Combine(backendFolder, FileName))) is not JsonObject root) return null;
+            static string Text(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : "";
+            static long Number(JsonNode? node) => node is JsonValue value && value.TryGetValue<long>(out var number) ? number : 0;
+            var mods = root["mods"] is JsonArray list
+                ? list.OfType<JsonObject>().Select(m => new Mod(Text(m["id"]), Text(m["name"]), Text(m["version"]), Text(m["class"]), Text(m["action"]), Number(m["bytes"]))).ToList()
+                : [];
+            return new ModSyncOffer((int)Number(root["version"]), Text(root["state"]), Text(root["host"]), Number(root["bytes"]), Number(root["done"]), Text(root["message"]), mods);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { return null; }
+    }
+
+    // The player's answer to the offer of that version: written whole (a temporary file, then a rename).
+    public static void Answer(string backendFolder, int version, string answer, string? modId = null)
+    {
+        if (!Answers.Contains(answer) || (answer == "block") != (modId != null) || modId != null && !ModCatalog.IsModId(modId))
+            throw new InvalidDataException($"{answer} {modId} is not an answer to a mod sync offer.");
+        var path = Path.Combine(backendFolder, AnswerFileName);
+        File.WriteAllText(path + ".tmp", new JsonObject { ["version"] = version, ["answer"] = answer, ["mod"] = modId }.ToJsonString());
+        File.Move(path + ".tmp", path, overwrite: true);
+    }
+
+    // The backend's side: the waiting answer as a syncanswer line's parts, and the file gone; null when there is none or
+    // it is not an answer (it is deleted either way).
+    public static IReadOnlyList<string>? TakeAnswer(string backendFolder)
+    {
+        var path = Path.Combine(backendFolder, AnswerFileName);
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var text = File.ReadAllText(path);
+            File.Delete(path);
+            var root = JsonNode.Parse(text) as JsonObject;
+            var version = root?["version"] is JsonValue v && v.TryGetValue<int>(out var number) && number >= 0 ? number : -1;
+            var answer = root?["answer"] is JsonValue a && a.TryGetValue<string>(out var word) ? word : "";
+            var mod = root?["mod"] is JsonValue m && m.TryGetValue<string>(out var id) ? id : null;
+            if (version < 0 || !Answers.Contains(answer) || (answer == "block") != (mod != null) || mod != null && !ModCatalog.IsModId(mod)) return null;
+            return mod == null ? ["syncanswer", version.ToString(CultureInfo.InvariantCulture), answer] : ["syncanswer", version.ToString(CultureInfo.InvariantCulture), answer, mod];
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { return null; }
+    }
+}
+
 // The session after a sync: the host's gameplay mods in the host's load order, found by id and content hash, then this
 // player's own cosmetic mods and Local Stats. <installation>/temp/mod-sync/session.json, written by the joiner's backend
 // once everything is here; used once, by the session the launcher starts with --mod-sync.

@@ -27,7 +27,7 @@ public sealed class ModSync : IAsyncDisposable
     public const int ChunkBytes = 128 << 10, Window = 4, QueuedPerPeer = 8;
     public const long PeerRate = 1 << 20, TotalRate = 2 << 20;
     public static readonly TimeSpan GrantTime = TimeSpan.FromMinutes(10), RequestTimeout = TimeSpan.FromSeconds(30);
-    public const string StopSignal = "stop-observation.signal", StopReason = "mod-sync", OfferFile = "mod-sync.json";
+    public const string StopSignal = "stop-observation.signal", StopReason = "mod-sync", OfferFile = ModSyncOffer.FileName;
 
     readonly IPeerTransport transport;
     readonly string modsFolder;
@@ -54,6 +54,24 @@ public sealed class ModSync : IAsyncDisposable
         this.log = log;
         this.verified = verified ?? VerifiedMods.Contains;
         serving = Task.Run(ServeAsync);
+        launcherAnswers = Task.Run(TakeLauncherAnswersAsync);
+    }
+
+
+    // A launcher's answer (ModSyncOffer.Answer), for a game without the in-game editor: looked for once a second while an
+    // offer is open, and taken as the game's would be.
+    async Task TakeLauncherAnswersAsync()
+    {
+        while (!stop.IsCancellationRequested)
+        {
+            try { await Task.Delay(1000, stop.Token); }
+            catch (OperationCanceledException) { return; }
+            bool open;
+            lock (gate) open = offer != null;
+            if (!open || ModSyncOffer.TakeAnswer(evidenceDirectory) is not { } parts) continue;
+            log($"Mod sync: the launcher answered {parts[2]} to offer {parts[1]}.");
+            Answer(parts);
+        }
     }
 
     // Where the offer is shown: the game (LiveSyncDisplay) or a test.
@@ -66,6 +84,7 @@ public sealed class ModSync : IAsyncDisposable
         requests.Writer.TryComplete();
         try { await serving; }
         catch (OperationCanceledException) { }
+        await launcherAnswers;
         stop.Dispose();
     }
 
@@ -90,7 +109,7 @@ public sealed class ModSync : IAsyncDisposable
     readonly Dictionary<ulong, int> queued = [];
     readonly Channel<(ulong Peer, Frame Frame)> requests = Channel.CreateUnbounded<(ulong, Frame)>(new UnboundedChannelOptions { SingleReader = true });
     readonly Dictionary<ulong, long> peerNext = [];
-    readonly Task serving;
+    readonly Task serving, launcherAnswers;
     long totalNext;
 
     // A joiner with other gameplay mods is about to be refused (LobbyService.ModsRefused): this session's mod set goes to
