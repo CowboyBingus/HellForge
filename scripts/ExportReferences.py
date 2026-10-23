@@ -235,6 +235,12 @@ def main(runtime, out_json, out_header):
         if name in hosts:
             continue
         direct = [r for r in roles.values() if r.get('status') == 'ACTIVE_DIRECT' and r.get('writable', True)]
+        # Where WeaponRounds +64 and ProjectileWeapon +0 carry the same projectile, the shot takes WeaponRounds +64 when
+        # the weapon has no magazine or heat (none of these do): the type resolver (game.dll 0x7456D0) checks heat (flag
+        # bit 9), then a magazine (bit 7), then rounds (bit 8, +0x40), and every live WeaponRounds weapon in the decoded
+        # snapshots (SG-8 Punisher, SG-88 Break-Action Shotgun) has bit 8.
+        direct = direct or [r for r in roles.values() if r.get('status') == 'AMBIGUOUS' and r.get('member') == 'WeaponRounds +64' and
+                            r.get('candidatesAgree') and r.get('reason', '').startswith('Both WeaponRounds PrimaryProjectileType and ProjectileWeapon +0')]
         if direct and direct[0].get('member') == 'ProjectileWeapon +0':
             hosts[name] = {'mechanism': 'component', 'class': direct[0].get('compatibilityClass')}
         elif direct and direct[0].get('member') == 'WeaponRounds +64':

@@ -9,6 +9,7 @@
     <EmbeddedResource Include="../../mappings/boosters.json" LogicalName="HellForge.Core.mappings.boosters.json" />
     <EmbeddedResource Include="../../mappings/passives.json" LogicalName="HellForge.Core.mappings.passives.json" />
     <EmbeddedResource Include="../../mappings/references.json" LogicalName="HellForge.Core.mappings.references.json" />
+    <EmbeddedResource Include="../../mappings/projectile-sources.json" LogicalName="HellForge.Core.mappings.projectile-sources.json" />
     <EmbeddedResource Include="../../mappings/armor-perks.json" LogicalName="HellForge.Core.mappings.armor-perks.json" />
     <EmbeddedResource Include="../../mappings/hd2r-keys.json" LogicalName="HellForge.Core.mappings.hd2r-keys.json" />
     <EmbeddedResource Include="../../mappings/vehicles.json" LogicalName="HellForge.Core.mappings.vehicles.json" />

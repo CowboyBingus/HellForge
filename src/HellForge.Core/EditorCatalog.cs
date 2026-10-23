@@ -252,7 +252,7 @@ public static class EditorCatalog
 
     // What a reference row picks (projectile, explosion, status), from its mapping's "ref"; a weapon's ammunition delta
     // is its projectile.
-    static string? Pick(StatsField f) => f.Kind == "EntityDelta" ? (f.Component == "321:0" ? "projectile" : null) :
+    static string? Pick(StatsField f) => f.Kind == "EntityDelta" ? (f.Component is "321:0" or "117:64" or "117:68" ? "projectile" : null) :
         SdkMappings.Current.FieldAt(f.Kind == "component" ? f.Component : f.Kind, f.Offset, f.Storage)?.Ref is { } r && r != "damage" ? r : null;
 
     // The page's attack branch of a key ("" its main round), as StatsCatalog places it.
@@ -564,7 +564,8 @@ public static class EditorCatalog
             page.Insert(callIn.c != null ? callIn.i + 1 : page.Count, podCategory); /* right after the call-in */
         }
         // A weapon HD2R Editor offers no projectile swap for: why (shown on its page).
-        var refused = item.Parts.Where(p => p.Category == "weapons").Select(p => ReferenceData.Value["refused"]![p.Target]).FirstOrDefault(r => r != null);
+        var refused = item.Parts.Where(p => p.Category == "weapons" && !StatsSchema.Current.Targets["weapons"][p.Target].Fields.Keys.Any(k => k.EndsWith(".projectile", StringComparison.Ordinal)))
+            .Select(p => ReferenceData.Value["refused"]![p.Target]).FirstOrDefault(r => r != null);
         return new JsonObject
         {
             ["id"] = item.Id, ["name"] = item.Name, ["category"] = category, ["subtitle"] = item.Group,

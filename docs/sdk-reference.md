@@ -14,7 +14,7 @@ there) and `mappings/` (fields and content); do not edit it by hand. To change i
 
 ## Contents
 
-- [API](#api): [SDK 1](#sdk-1), [SDK 2](#sdk-2), [SDK 3](#sdk-3), [SDK 4](#sdk-4), [SDK 5](#sdk-5), [SDK 6](#sdk-6), [SDK 7](#sdk-7), [SDK 9](#sdk-9), [SDK 10](#sdk-10), [SDK 11](#sdk-11-actions-hf_act_-check-hf-size-before-calling), [SDK 12](#sdk-12), [SDK 13](#sdk-13), [SDK 14](#sdk-14-mod-sync-hfsyncstate-check-hf-size-before-calling)
+- [API](#api): [SDK 1](#sdk-1), [SDK 2](#sdk-2), [SDK 3](#sdk-3), [SDK 4](#sdk-4), [SDK 5](#sdk-5), [SDK 6](#sdk-6), [SDK 7](#sdk-7), [SDK 9](#sdk-9), [SDK 10](#sdk-10), [SDK 11](#sdk-11-actions-hf_act_-check-hf-size-before-calling), [SDK 12](#sdk-12), [SDK 13](#sdk-13), [SDK 14](#sdk-14-mod-sync-hfsyncstate-check-hf-size-before-calling), [SDK 15](#sdk-15)
 - [Components](#components): [HfProjectileWeapon](#hfprojectileweapon), [HfWeaponData](#hfweapondata), [HfWeaponMagazine](#hfweaponmagazine), [HfTag](#hftag), [HfMount](#hfmount), [HfBehavior](#hfbehavior), [HfLoadoutPackage](#hfloadoutpackage), [HfDeposit](#hfdeposit), [HfHealth](#hfhealth), [HfJumppack](#hfjumppack), [HfRecharge](#hfrecharge), [HfShield](#hfshield), [HfHellpodPayload](#hfhellpodpayload), [HfSensorEye](#hfsensoreye), [HfTurret](#hfturret), [HfWeaponWindUp](#hfweaponwindup), [HfBeamWeapon](#hfbeamweapon), [HfWeaponHeat](#hfweaponheat), [HfEagle](#hfeagle), [HfThrower](#hfthrower), [HfBombardment](#hfbombardment), [HfExplosive](#hfexplosive), [HfThrowable](#hfthrowable), [HfVehicleMotion](#hfvehiclemotion), [HfWeaponCharge](#hfweaponcharge), [HfWeaponReload](#hfweaponreload), [HfWeaponRounds](#hfweaponrounds), [HfArcWeapon](#hfarcweapon), [HfHiveMind](#hfhivemind), [HfOrbitalAbility](#hforbitalability), [HfRotation](#hfrotation), [HfDisplacement](#hfdisplacement), [HfSeekingMissile](#hfseekingmissile), [HfLoadoutEntry](#hfloadoutentry), [HfHellpodRack](#hfhellpodrack), [HfAvatar](#hfavatar), [HfInventory](#hfinventory), [HfMeleeWeapon](#hfmeleeweapon), [HfAbilityWeapon](#hfabilityweapon), [HfUnit](#hfunit), [HfSquadTransportFormation](#hfsquadtransportformation), [HfSquadTransport](#hfsquadtransport), [HfGore](#hfgore), [HfAiSpawner](#hfaispawner), [HfStratagemBlocker](#hfstratagemblocker), [HfBughole](#hfbughole)
 - [Settings tables](#settings-tables): [HfDifficultySettings](#hfdifficultysettings), [HfDamageInfo](#hfdamageinfo), [HfProjectileSettings](#hfprojectilesettings), [HfStratagemSettings](#hfstratagemsettings), [HfExplosionSettings](#hfexplosionsettings), [HfArcSettings](#hfarcsettings), [HfBeamSettings](#hfbeamsettings), [HfStatusEffectSettings](#hfstatuseffectsettings), [HfBoosterSettings](#hfboostersettings), [HfPassiveModifier](#hfpassivemodifier), [HfPassiveStat](#hfpassivestat), [HfMeleeHitVolume](#hfmeleehitvolume), [HfEnemyRoster](#hfenemyroster), [HfEnemyRosterLevel11](#hfenemyrosterlevel11), [HfEnemyComposition](#hfenemycomposition), [HfDemolitionTemplate](#hfdemolitiontemplate)
 - [Content](#content): [HF_ITEM_...](#hf_item_-168-hf_kind_item), [HF_PROJECTILE_...](#hf_projectile_-61-hf_kind_projectile), [HF_STRATAGEM_...](#hf_stratagem_-149-hf_kind_stratagem), [HF_BEHAVIOUR_...](#hf_behaviour_-2-hf_kind_behaviour), [HF_ENTITY_...](#hf_entity_-369-hf_kind_entity), [HF_DAMAGE_...](#hf_damage_-1-hf_kind_damage), [HF_PACKAGE_...](#hf_package_-1-hf_kind_package), [HF_TAG_...](#hf_tag_-1-hf_kind_tag), [HF_TRAIT_...](#hf_trait_-29-hf_kind_trait), [HF_CATEGORY_...](#hf_category_-5-hf_kind_category), [HF_BEAM_...](#hf_beam_-3-hf_kind_beam), [HF_BOOSTER_...](#hf_booster_-20-hf_kind_booster)
@@ -147,6 +147,10 @@ for changing and adding content; [Hooks and game memory](modding/hooks.md) for `
 - `sync_mod`: `int (HfMod* mod, uint32_t index, HfSyncMod* out)`. The index-th mod of the current offer: 1 with *out filled (at most out->size bytes), 0 past the last.
 - `sync_answer`: `int (HfMod* mod, uint32_t version, uint32_t answer, const char* mod_id)`. Sends the player's answer (HF_SYNC_ACCEPT ...) to the offer of that version; mod_id names the mod for HF_SYNC_BLOCK, HF_SYNC_TRUST and HF_SYNC_OPEN (NULL otherwise). 1 sent; 0 not (another offer came since, or no backend connected).
 
+### SDK 15
+
+- `stats_source`: `uint32_t (HfMod* mod)`. Whose stats the lobby plays with: HF_STATS_HOST or HF_STATS_OWN (see HF_STATS_OWN). Check hf->size.
+
 ## Components
 
 Entity component records. In a definition block, `HF_FIELD(Component, field)` names a field; for an entity's own
@@ -262,7 +266,7 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
 | `magazine_type` | +0x00 | u32 | respawn? | 1: rounds follow pattern (unverified) |
-| `pattern` | +0x04 | u32[32] | respawn? | projectile types of successive rounds |
+| `pattern` | +0x04 | u32[32] | respawn? | projectile types of successive rounds; with magazine_type 1, round n fires entry (n - 1) % count (game.dll 0x7456D0); never 0 inside the count, which is fixed at spawn (a projectile reference) |
 | `first_projectile` | +0x84 | u32 | respawn? | the projectile type chambered first (unverified) |
 | `capacity` | +0x88 | u32 | respawn? | rounds per magazine (a turret's live count is an 11-bit network field: at most 2047) |
 | `starting_magazines` | +0x8C | u32 | respawn? | spare magazines at the start (unverified) |
@@ -845,10 +849,13 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
 | `level_1_threshold` | +0x00 | f32 | respawn? | Heat level 1 threshold (heat_units) (unverified) |
+| `level_1_projectile` | +0x04 | u32 | respawn? | the projectile a shot at heat level 1 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_1_self_status` | +0x14 | u32 | respawn? | Heat level 1 status on the wielder (unverified) (a status reference) |
 | `level_2_threshold` | +0x18 | f32 | respawn? | Heat level 2 threshold (heat_units) (unverified) |
+| `level_2_projectile` | +0x1C | u32 | respawn? | the projectile a shot at heat level 2 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_2_self_status` | +0x2C | u32 | respawn? | Heat level 2 status on the wielder (unverified) (a status reference) |
 | `level_3_threshold` | +0x30 | f32 | respawn? | Heat level 3 threshold (heat_units) (unverified) |
+| `level_3_projectile` | +0x34 | u32 | respawn? | the projectile a shot at heat level 3 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_3_self_status` | +0x44 | u32 | respawn? | Heat level 3 status on the wielder (unverified) (a status reference) |
 | `fire_rate_multiplier_max` | +0x48 | f32 | respawn? | Fire rate multiplier at maximum heat (multiplier) (unverified) |
 | `fire_rate_curve_exponent` | +0x4C | f32 | respawn? | Heat fire rate curve exponent (factor) (unverified) |
@@ -958,8 +965,11 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
 | `level_1` | +0x00 | f32 | respawn? | Minimum charge time (seconds) (unverified) |
+| `level_1_projectile` | +0x04 | u32 | respawn? | the projectile a release at charge level 1 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_2` | +0x18 | f32 | respawn? | Full charge time (seconds) (unverified) |
+| `level_2_projectile` | +0x1C | u32 | respawn? | the projectile a release at charge level 2 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_3` | +0x30 | f32 | respawn? | Overcharge time (seconds) (unverified) |
+| `level_3_projectile` | +0x34 | u32 | respawn? | the projectile a release at charge level 3 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `minimum_seconds` | +0x48 | f32 | respawn? | Projectile speed multiplier at minimum charge (deprecated id) (multiplier) (unverified) |
 | `maximum_seconds` | +0x4C | f32 | respawn? | Projectile speed multiplier at full overcharge (deprecated id) (multiplier) (unverified) |
 | `damage_multiplier_min` | +0x50 | f32 | respawn? | Damage multiplier at minimum charge (multiplier) (unverified) |

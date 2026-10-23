@@ -25,6 +25,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
     public PartyService Party { get; }
     // The host's stats for joiners, and this game's when joined (null without a peer link or the session's mods folder).
     public StatsShare? Stats { get; private set; }
+    public AssetShare? Assets { get; private set; }
     // Mod sync: joiners download this session's mods, and this machine the mods of a host it could not join (null
     // without a peer link or the session's mods folder).
     public ModSync? Sync { get; private set; }
@@ -80,6 +81,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
                 else if (frame.Type is "presence" or "presence.hello") FromPeerPresence(peer, frame);
                 else if (frame.Type.StartsWith("party.", StringComparison.Ordinal)) Party.FromPeer(peer, frame);
                 else if (frame.Type.StartsWith("stats.", StringComparison.Ordinal)) Stats?.FromPeer(peer, frame);
+                else if (frame.Type.StartsWith("assets.", StringComparison.Ordinal)) Assets?.FromPeer(peer, frame);
                 else if (frame.Type.StartsWith("mods.", StringComparison.Ordinal)) Sync?.FromPeer(peer, frame);
                 else if (frame.Type == "war.clock" && warClock != null && Lobby.HostsJoinedLobby(peer) && long.TryParse(frame.Text(0), out var seconds))
                 {
@@ -105,8 +107,11 @@ public sealed class MultiplayerHost : IAsyncDisposable
         {
             try
             {
-                host.Stats = new StatsShare(host.transport, host.Lobby, pipeName["hellforge-".Length..], modsFolder, host.FriendName, host.Log);
-                host.Log("Stats: co-op plays with the host's Local Stats; this game's live-edit pipe is served here.");
+                host.Stats = new StatsShare(host.transport, host.Lobby, pipeName["hellforge-".Length..], modsFolder, host.FriendName, host.Log,
+                    () => ModSettings.Read(modsFolder).HostStats);
+                var stats = host.Stats;
+                host.Assets = new AssetShare(host.transport, host.Lobby, stats.Live, host.Log, () => stats.LocalStats, () => stats.LobbyPlaysHostStats);
+                host.Log("Stats: every player keeps their own unless the host shares its (the Mods page); the lobby's packages load on every machine; this game's live-edit pipe is served here.");
             }
             catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException) { host.Log("Stats sharing is off: " + error.Message); }
         }
@@ -166,7 +171,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
     {
         if (transport == null) return;
         if (directory != null && presence != null)
-            Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.Edited == true,
+            Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.SharesEdited == true,
                 listPublic: modsFolder != null ? () => ModSettings.Read(modsFolder).ListPublic : null);
         gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, Log, Lobby.Welcome);
         if (transport is SteamPeerTransport steam) steam.AcceptStranger = peer => Directory?.Listing == true || Related(peer) || Lobby.Welcome(peer);
@@ -316,6 +321,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
         Rejoin?.Dispose();
         if (Directory != null) await Directory.DisposeAsync();
         if (Sync != null) await Sync.DisposeAsync();
+        if (Assets != null) await Assets.DisposeAsync();
         if (Stats != null) await Stats.DisposeAsync();
         await pipes.DisposeAsync();
         transport?.Dispose();

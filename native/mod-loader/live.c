@@ -9,14 +9,20 @@
  *             reset <seq> <kind> <component> <resource hex> <record> <offset> <storage>
  *             base <seq> <kind> <component> <resource hex> <record> <offset> <storage>   (without Local Stats' edits)
  *             get <seq> <kind> <component> <resource hex> <record> <offset> <storage>
- *             session <seq> <solo|host|joiner> [<host name>]
+ *             session <seq> <solo|host|joiner> [stats=<own|host>] [<host name>]   (a joiner without stats= plays with
+ *                     the host's stats, as before SDK 15)
  *             notice <seq> <error|info> <title> [<line>...]   (SDK 12: a message the in-game editor shows the player)
+ *             preload <seq> <package id hex>,... or -      (the lobby's packages, for friends' changes: packages.c)
+ *             shots <seq> <peer hex>:<weapon resource hex>=<projectile type>,... or -   (each player's projectile
+ *                     swaps, which their shots fire on this machine: shots.c)
  *             syncmod <seq> <version> <index> <have|download|manual|blocked|update|off|trust> <content|code|bundled|raw> <bytes>
  *                     <id> <name> <mod version> <https:// url or ->
  *             syncstate <seq> <version> <none|offer|blocked|downloading|ready|failed> <host name> <bytes> <done> <mods>
  *                       <message>                                      (syncmod, syncstate: SDK 14, mod sync)
  *   loader:   <seq> ok <now|respawn|mission> [<value hex>]     or     <seq> refused <reason>
  *             syncanswer <version> <accept|decline|restart|block|trust|open> <mod id or ->   (unasked: the player's answer)
+ *             packages <package id hex>,... or -          (unasked: this machine's own packages, sent on connecting and
+ *                                                           whenever they change, for friends to load: packages.c)
  * A request names a field as the stats schema does (kind "component" and a component record, or a settings kind and
  * its row id; a stratagem by its stable id), so the editor sends what it would save. Each becomes a set_live edit of the
  * Local Stats mod (zz.local.stats), whose file the editor saves into: same checks, same conflict reports. */
@@ -28,6 +34,7 @@ static HfMod g_liveModStorage;
 static HfMod* g_liveMod;
 static SRWLOCK g_sessionLock = SRWLOCK_INIT;
 static HfSession g_session;
+static uint32_t g_sessionStats; /* HF_STATS_...: whose stats the lobby plays with */
 
 /* SDK 6, session: the co-op role the session's backend last gave (solo until it says otherwise). */
 static void ApiSession(HfMod* mod, HfSession* out)
@@ -39,16 +46,31 @@ static void ApiSession(HfMod* mod, HfSession* out)
     ReleaseSRWLockShared(&g_sessionLock);
 }
 
-static void SetSession(uint32_t role, const char* host)
+/* SDK 15, stats_source: HF_STATS_HOST in a lobby whose host shares its stats (joined or hosting), else HF_STATS_OWN. */
+static uint32_t ApiStatsSource(HfMod* mod)
 {
+    (void)mod;
+    AcquireSRWLockShared(&g_sessionLock);
+    uint32_t stats = g_sessionStats;
+    ReleaseSRWLockShared(&g_sessionLock);
+    return stats;
+}
+
+/* stats: whose stats the lobby plays with, as the session's backend sends it with the role (solo: always this machine's). */
+static void SetSession(uint32_t role, uint32_t stats, const char* host)
+{
+    if (role == HF_SESSION_SOLO) stats = HF_STATS_OWN;
     AcquireSRWLockExclusive(&g_sessionLock);
-    if (g_session.role != role || strcmp(g_session.host, host))
+    if (g_session.role != role || g_sessionStats != stats || strcmp(g_session.host, host))
     {
         g_session.role = role;
+        g_sessionStats = stats;
         snprintf(g_session.host, sizeof g_session.host, "%s", host);
         g_session.version++;
-        Note("session: %s%s%s%s", role == HF_SESSION_JOINER ? "joined, playing with the host's stats" : role == HF_SESSION_HOST ?
-            "hosting: friends play with this machine's stats" : "solo", host[0] ? " (host: " : "", host, host[0] ? ")" : "");
+        Note("session: %s%s%s%s", role == HF_SESSION_JOINER ? (stats == HF_STATS_HOST ? "joined, playing with the host's stats" :
+            "joined, every player keeps their own stats") : role == HF_SESSION_HOST ? (stats == HF_STATS_HOST ?
+            "hosting: friends play with this machine's stats" : "hosting: every player keeps their own stats") : "solo",
+            host[0] ? " (host: " : "", host, host[0] ? ")" : "");
     }
     ReleaseSRWLockExclusive(&g_sessionLock);
 }
@@ -107,6 +129,39 @@ static char g_liveOut[1024];
 static size_t g_liveOutUsed;
 static int g_liveConnected;
 static HANDLE g_liveOutEvent;
+static volatile LONG g_packagesDirty; /* this machine's own packages changed since the last "packages" line */
+
+/* packages.c: this machine's own packages changed; LiveWatch sends them (called with no lock held, from any thread). */
+static void LivePackagesChanged(void)
+{
+    InterlockedExchange(&g_packagesDirty, 1);
+    if (g_liveOutEvent != NULL) SetEvent(g_liveOutEvent);
+}
+
+/* preload: the lobby's packages (list: 16 hex digits each, comma separated, or "-"), each asked for as a friend's. At
+ * most 256: four players' 64. */
+static void PreloadLine(const char* seq, const char* list, char* reply, size_t size)
+{
+    enum { PRELOAD_MAX = 256 };
+    uint64_t ids[PRELOAD_MAX];
+    int count = 0;
+    for (const char* at = list; strcmp(list, "-") && *at;)
+    {
+        size_t length = strcspn(at, ",");
+        int hex = length == 16 && count < PRELOAD_MAX;
+        for (size_t i = 0; hex && i < length; i++) hex = (at[i] >= '0' && at[i] <= '9') || ((at[i] | 0x20) >= 'a' && (at[i] | 0x20) <= 'f');
+        if (!hex) { snprintf(reply, size, "%s\trefused\tmalformed preload", seq); return; }
+        ids[count++] = strtoull(at, NULL, 16);
+        at += length + (at[length] == ',');
+    }
+    int resident, loading, refused, fresh;
+    const char* why;
+    PackagesForFriends(ids, count, &resident, &loading, &refused, &fresh, &why);
+    if (fresh > 0 || refused > 0)
+        Note("lobby assets: %d package(s) for friends' changes, %d new: %d resident, %d loading, %d refused%s%s", count, fresh, resident, loading,
+            refused, why != NULL ? ": " : "", why != NULL ? why : "");
+    snprintf(reply, size, "%s\tok\tnow", seq);
+}
 
 static int SyncName(const char* text, const char* const* names, int count)
 {
@@ -507,8 +562,18 @@ static void LiveRequest(char* line, char* reply, size_t size)
     if (!strcmp(f[0], "session") && n >= 3)
     {
         uint32_t role = !strcmp(f[2], "joiner") ? HF_SESSION_JOINER : !strcmp(f[2], "host") ? HF_SESSION_HOST : HF_SESSION_SOLO;
-        SetSession(role, n >= 4 ? f[3] : "");
+        int marked = n >= 4 && !strncmp(f[3], "stats=", 6);
+        uint32_t stats = marked && !strcmp(f[3] + 6, "own") ? HF_STATS_OWN : HF_STATS_HOST;
+        SetSession(role, stats, n >= 4 + marked ? f[3 + marked] : "");
         snprintf(reply, size, "%s\tok\tnow", seq);
+        return;
+    }
+    if (!strcmp(f[0], "preload") && n == 3) { PreloadLine(seq, f[2], reply, size); return; }
+    if (!strcmp(f[0], "shots") && n == 3)
+    {
+        const char* why = NULL;
+        if (ShotsSetRules(f[2], &why)) snprintf(reply, size, "%s	ok	now", seq);
+        else snprintf(reply, size, "%s	refused	%s", seq, why);
         return;
     }
     if (!strcmp(f[0], "notice") && n >= 4)
@@ -598,7 +663,8 @@ static int LiveSend(HANDLE pipe, OVERLAPPED* op, const char* text)
     return length > 0 && (size_t)length < sizeof line && LiveWrite(pipe, op, line, (size_t)length);
 }
 
-/* The queued answers (sync_answer), written here: this thread is the pipe's only writer. */
+/* The queued answers (sync_answer) and, when they changed, this machine's own packages, written here: this thread is the
+ * pipe's only writer. */
 static int LiveFlush(HANDLE pipe, OVERLAPPED* op)
 {
     char out[sizeof g_liveOut];
@@ -607,7 +673,12 @@ static int LiveFlush(HANDLE pipe, OVERLAPPED* op)
     memcpy(out, g_liveOut, used);
     g_liveOutUsed = 0;
     ReleaseSRWLockExclusive(&g_liveOutLock);
-    return used == 0 || LiveWrite(pipe, op, out, used);
+    if (used != 0 && !LiveWrite(pipe, op, out, used)) return 0;
+    if (!InterlockedExchange(&g_packagesDirty, 0)) return 1;
+    char list[PKG_MAX_HELD * 17 + 2], line[sizeof list + 16];
+    PackagesOwnList(list, sizeof list);
+    int length = snprintf(line, sizeof line, "packages\t%s\n", list);
+    return length > 0 && (size_t)length < sizeof line && LiveWrite(pipe, op, line, (size_t)length);
 }
 
 /* Connects to the launcher's pipe while the session runs; one connection at a time. The pipe is overlapped: a
@@ -637,7 +708,8 @@ static DWORD WINAPI LiveWatch(void* parameter)
         snprintf(hello, sizeof hello, "hello\t%d\t%s\t%s", LIVE_PROTOCOL, g_build, g_statsSchema[0] ? g_statsSchema : "-");
         char buffer[8192], reply[512];
         size_t used = 0;
-        int open = LiveSend(pipe, &writeOp, hello), reading = 0;
+        InterlockedExchange(&g_packagesDirty, 1); /* the backend gets this machine's own packages as it connects */
+        int open = LiveSend(pipe, &writeOp, hello) && LiveFlush(pipe, &writeOp), reading = 0;
         while (open)
         {
             if (!reading)
@@ -679,7 +751,9 @@ static DWORD WINAPI LiveWatch(void* parameter)
         ReleaseSRWLockExclusive(&g_liveOutLock);
         CloseHandle(pipe);
         Note("live editor disconnected");
-        SetSession(HF_SESSION_SOLO, ""); /* the backend is gone: nothing tells this game it is joined */
+        SetSession(HF_SESSION_SOLO, HF_STATS_OWN, ""); /* the backend is gone: nothing tells this game it is joined */
+        const char* none;
+        ShotsSetRules("-", &none); /* nor whose swaps friends' shots fire */
         SyncClear();
     }
 }

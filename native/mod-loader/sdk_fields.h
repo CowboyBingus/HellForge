@@ -71,7 +71,7 @@ static const SdkField kSdkFieldsWeaponData[] = {
 };
 static const SdkField kSdkFieldsWeaponMagazine[] = {
     {"magazine_type", 0, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
-    {"pattern", 4, 128, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"pattern", 4, 128, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_PROJECTILE},
     {"first_projectile", 132, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
     {"capacity", 136, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
     {"starting_magazines", 140, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
@@ -683,10 +683,13 @@ static const SdkField kSdkFieldsBeamWeapon[] = {
 };
 static const SdkField kSdkFieldsWeaponHeat[] = {
     {"level_1_threshold", 0, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"level_1_projectile", 4, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_PROJECTILE},
     {"level_1_self_status", 20, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_STATUS},
     {"level_2_threshold", 24, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"level_2_projectile", 28, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_PROJECTILE},
     {"level_2_self_status", 44, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_STATUS},
     {"level_3_threshold", 48, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"level_3_projectile", 52, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_PROJECTILE},
     {"level_3_self_status", 68, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_STATUS},
     {"fire_rate_multiplier_max", 72, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
     {"fire_rate_curve_exponent", 76, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
@@ -761,8 +764,11 @@ static const SdkField kSdkFieldsVehicleMotion[] = {
 };
 static const SdkField kSdkFieldsWeaponCharge[] = {
     {"level_1", 0, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"level_1_projectile", 4, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_PROJECTILE},
     {"level_2", 24, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"level_2_projectile", 28, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_PROJECTILE},
     {"level_3", 48, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"level_3_projectile", 52, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_PROJECTILE},
     {"minimum_seconds", 72, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
     {"maximum_seconds", 76, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
     {"damage_multiplier_min", 80, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
@@ -1109,14 +1115,14 @@ static const SdkComponent kSdkComponents[] = {
     {"Turret", "TurretComponentData", 25480438u, 76u, kSdkFieldsTurret, 7, 0, 248},
     {"WeaponWindUp", "WeaponWindUpComponentData", 25480438u, 36u, kSdkFieldsWeaponWindUp, 2, 0, 70},
     {"BeamWeapon", "BeamWeaponComponentData", 25480438u, 120u, kSdkFieldsBeamWeapon, 4, 0, 270},
-    {"WeaponHeat", "WeaponHeatComponentData", 25480438u, 592u, kSdkFieldsWeaponHeat, 25, 0, 266},
+    {"WeaponHeat", "WeaponHeatComponentData", 25480438u, 592u, kSdkFieldsWeaponHeat, 28, 0, 266},
     {"Eagle", "EagleComponentData", 25480438u, 152u, kSdkFieldsEagle, 6, 0, 320},
     {"Thrower", "ThrowerComponentData", 25480438u, 752u, kSdkFieldsThrower, 2, 0, 258},
     {"Bombardment", "BombardmentComponentData", 25480438u, 192u, kSdkFieldsBombardment, 12, 0, 193},
     {"Explosive", "ExplosiveComponentData", 25480438u, 360u, kSdkFieldsExplosive, 4, 0, 255},
     {"Throwable", "ThrowableComponentData", 25480438u, 360u, kSdkFieldsThrowable, 14, 0, 259},
     {"VehicleMotion", "VehicleMotionComponentData", 25480438u, 456u, kSdkFieldsVehicleMotion, 1, 0, 225},
-    {"WeaponCharge", "WeaponChargeComponentData", 25480438u, 216u, kSdkFieldsWeaponCharge, 17, 0, 204},
+    {"WeaponCharge", "WeaponChargeComponentData", 25480438u, 216u, kSdkFieldsWeaponCharge, 20, 0, 204},
     {"WeaponReload", "WeaponReloadComponentData", 25480438u, 80u, kSdkFieldsWeaponReload, 1, 0, 113},
     {"WeaponRounds", "WeaponRoundsComponentData", 25480438u, 136u, kSdkFieldsWeaponRounds, 7, 0, 117},
     {"ArcWeapon", "ArcWeaponComponentData", 25480438u, 80u, kSdkFieldsArcWeapon, 1, 0, 265},

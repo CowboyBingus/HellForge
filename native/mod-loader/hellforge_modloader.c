@@ -654,6 +654,7 @@ static int ApiSubscribe(HfMod* mod, uint32_t kind, HfListener listener, void* us
 #include "passives.c"
 #include "perks.c"
 #include "actions.c" /* after refs.c (packages) and events.c (the readers) */
+#include "shots.c" /* after actions.c: the players (event_polls.c), RefCheck (refs.c), the field records (fields.c) */
 
 static void Deliver(HfEvent event)
 {
@@ -811,7 +812,7 @@ static DWORD WINAPI Watch(void* parameter)
         if ((g_statCount || g_statsProbeCount) && !(g_statsTablesDone[0] && g_statsTablesDone[1] && g_statsTablesDone[2]) && g_fired[HF_EVENT_GAME_LOADED])
             StatsTablesReady(ApiModuleBase("game.dll", NULL));
         if (g_fired[HF_EVENT_PROJECTILES_READY]) StatsExtraReady();
-        if (g_fired[HF_EVENT_GAME_LOADED]) { StatsBoostersReady(); StatsMeleeReady(); StatsDirectorReady(); }
+        if (g_fired[HF_EVENT_GAME_LOADED]) { StatsBoostersReady(); StatsMeleeReady(); StatsDirectorReady(); ShotsTick(); }
         if (g_fired[HF_EVENT_GAME_LOADED] && g_tickState == 0) TickInstall();
         if (g_fired[HF_EVENT_GAME_LOADED]) InstallLoadoutPreview();
         if (g_fired[HF_EVENT_GAME_LOADED]) EventsInstall();
@@ -1024,7 +1025,7 @@ __declspec(dllexport) int hellforge_loader_start(const wchar_t* plan)
         ApiRegisterEntity, ApiCopyField, ApiSetField, ApiSetTag, ApiMount, ApiRecord, ApiFind, ApiEditEntity, ApiSetLive, ApiGetLive, ApiSetPassives, ApiGetPassives,
         ApiOnGameThread, ApiLoadPackage, ApiLastLog, ApiLogsFolder, ApiGetStat, ApiSession, ApiSubscribe, ApiGameState, ApiContent, ApiAddAbility, ApiAddStratagemCategory, ApiSetStat, ApiCopyRow, ApiMods,
         ApiHeal, ApiHealLimb, ApiInjure, ActLimbState, ApiApplyStatus, ApiAddVelocity, ApiResupply, ApiSpawnExplosion, ApiSpawnProjectile,
-        ApiCreditToPlayer, ApiFreezeTimer, ApiSpawnPelican, ApiModifyShots, ApiHoming, ApiStopShots, ApiNotice, ApiHookEx, ApiCodeMatches, ApiReadCode, ApiSyncState, ApiSyncMod, ApiSyncAnswer};
+        ApiCreditToPlayer, ApiFreezeTimer, ApiSpawnPelican, ApiModifyShots, ApiHoming, ApiStopShots, ApiNotice, ApiHookEx, ApiCodeMatches, ApiReadCode, ApiSyncState, ApiSyncMod, ApiSyncAnswer, ApiStatsSource};
     int setupOrder[MAX_MODS];
     SetupOrder(setupOrder);
     if (g_modCount > 1) Note("code mods are set up in the order of their ids (the same on every machine); their edits apply in load order");

@@ -1,6 +1,6 @@
 # HellForge roadmap
 
-What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-23 for HellForge 0.3.0-dev.1.
+What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-23 for HellForge 0.3.0-dev.2.
 Nothing here has a date, and stability comes first.
 
 ## At a glance
@@ -9,7 +9,7 @@ Nothing here has a date, and stability comes first.
 |---|---|---|
 | Local game copy | Done | Shipped in 0.2.0 |
 | Co-op with friends | Done | Shipped in 0.2.0 |
-| [Mod SDK](sdk-roadmap.md) | Done | SDK 14; some events and registries left |
+| [Mod SDK](sdk-roadmap.md) | Done | SDK 15; some events and registries left |
 | Build patches for newer Steam builds | Done | Each new Steam build needs a new patch |
 | Open source | Done | GPL-3 |
 | In-game editor | Mostly done | Player's kit mostly ported; enemies and structures built; missions left |
@@ -38,7 +38,7 @@ subfactions, custom missions, and mod content in progression. The [SDK roadmap](
 The rest of this page goes through each item. Contributors will find more detail in [engine-roadmap.md](engine-roadmap.md)
 (session runner, local backend, mod loader, stand-ins) and [sdk-roadmap.md](sdk-roadmap.md) (the mod SDK).
 
-Versions: HellForge 0.3.0-dev.1, engine 0.1.29, mod SDK 14.
+Versions: HellForge 0.3.0-dev.2, engine 0.1.30, mod SDK 15.
 
 ## Done in 0.2.0-beta
 
@@ -83,6 +83,16 @@ mod sync with its restart and rejoin; and a public lobby on the map. The editor'
 RivaTuner closed.
 
 ## Next: stability and co-op
+
+In co-op, every player will keep their own in-game editor changes, and joiners can edit too. HellForge loads what each
+player's changes need on every machine, so a friend's swapped vehicle weapon or hellpod payload shows up instead of a
+purple question mark. A host can still have everyone play with their changes, with a switch on the Mods page. A
+player's projectile swaps fire as theirs on every screen, and everyone else's guns keep their own: hand-held weapons,
+the ones whose round comes from their ammunition or rounds feed (the Liberator, the shotguns), underbarrels (the
+One-Two's grenade) and programmable rounds ([multiplayer.md, shots in co-op](multiplayer.md#shots-in-co-op)). Vehicle
+weapons are next. Every hand-held weapon's round can be swapped in the editor now: ammunition options, charge and heat
+levels and magazine patterns included. This is built on the `lobby-asset-sync` branch and needs a two-PC test
+([multiplayer.md, step 10](multiplayer.md#step-10-every-players-own-stats-and-the-lobbys-assets-2026-10-23)).
 
 When the host goes back to the ship in the middle of a mission, everyone else gets dropped to the main menu. The fix
 will keep the lobby and network alive and hand ownership to another player. If the host quits HellForge entirely, the
@@ -195,7 +205,8 @@ The in-game editor should eventually edit every field the HD2R Editor does
 ([SDK roadmap, phase 5a](sdk-roadmap.md#the-in-game-editor-phase-5a)). That happens in three steps:
 
 1. Weapons and the rest of the player's kit. Weapons, stratagems, backpacks, vehicles, boosters, the Helldiver and
-   armor are mostly ported. Still to do: beam conversion, the HD2R rows that have no HellForge field yet (a coverage
+   armor are mostly ported. The GL-15 Evictor, M90A, P-11, P-4, P-69, R-6 and SG-97, blocked before, now have their
+   Projectile row, and so do the One-Two's and Arbitrator's underbarrels. Still to do: beam conversion, the HD2R rows that have no HellForge field yet (a coverage
    count will show which), and checking in game when each field takes effect.
 2. Enemies: their stats, damage zones and attacks, spawn rosters and compositions. Being built on the `editor-content`
    branch: the in-game editor now has the HD2R Editor's Enemies pages (Terminids, Automatons, Illuminate, Structures,

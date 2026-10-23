@@ -615,6 +615,15 @@ static void ApplyEdit(FieldEdit* e)
     /* the game's own difficulty table (no level 11): every copy that held the same bytes */
     if (e->table && !strcmp(e->component->component, "DifficultySettings") && e->field->size <= sizeof was)
         DifficultyMirror((uintptr_t)record, e->field->offset, was, bytes, e->field->size);
+    /* a weapon's projectile changed live (the editor's swap): this machine's own, for co-op's shots (shots.c) */
+    if (!e->table && e->field->size == 4 && ShotsSlotOf(e->component->component, e->field->offset) >= 0)
+    {
+        uint32_t now;
+        memcpy(&now, bytes, 4);
+        uint32_t before;
+        memcpy(&before, was, 4);
+        ShotsNoteLocal(e->entity, ShotsSlotOf(e->component->component, e->field->offset), before, now);
+    }
     e->failed = 0;
 }
 

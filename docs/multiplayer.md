@@ -22,14 +22,19 @@ reaches PlayFab, Arrowhead's services or vanilla players' sessions.
 3. Start a session. In the game's social menu, the friends list shows Steam friends who are playing HELLDIVERS 2 with
    HellForge running, and you join their game from there. Steam sign-in, Steam friends and Steam lobbies are the real
    ones.
-4. While you are in a friend's lobby, you play with the host's Local Stats (the in-game editor's saved changes). Your
-   in-game editor turns grey and read-only, with "READ-ONLY · HOST: <name>" in its header. The host's shows "HOSTING ·
-   FRIENDS PLAY WITH YOUR STATS".
-5. When the host leaves, the lobby closes for everyone, as HD2's host ends the session. Your own stats come back.
+4. In a friend's lobby, every player keeps their own in-game editor changes and can keep making them. HellForge
+   loads what each player's changes need on every machine (a vehicle's swapped weapon, a pod's pickup), so friends
+   don't see missing assets. The editor's header shows "JOINED · <name> · YOUR OWN STATS", and the host's shows
+   "HOSTING · EVERYONE KEEPS THEIR OWN". A host can instead have everyone play with the host's changes: "When I host,
+   everyone plays with my editor changes" on the launcher's Mods page (MOD SYNC card). Then a joiner's editor turns
+   grey and read-only, with "READ-ONLY · HOST: <name>", and the host's shows "HOSTING · FRIENDS PLAY WITH YOUR STATS".
+   [Stats in co-op](#stats-in-co-op) says what each way means for what other players see.
+5. When the host leaves, the lobby closes for everyone, as HD2's host ends the session. If you were playing with the
+   host's stats, your own come back.
 6. The game's own Privacy setting (Options) decides who may join a lobby you host:
    - **Public:** any HellForge player. The lobby is listed for other HellForge players, who see it on the Galactic Map
      and can join it from there. It shows its players' names and the host's Steam account id. Lobbies a player could
-     not join (a blocked mod, mods to install by hand, or a host who plays with edited stats unless shown) are left off
+     not join (a blocked mod, mods to install by hand, or a host who shares edited stats unless shown) are left off
      their map. A Steam friend's lobby is shown even when it runs code mods HellForge has not checked (when the friend
      shares their mods, the default): joining it brings the MOD SYNC prompt, where you can trust them.
    - **Friends only:** your Steam friends, and players you invite. It is not listed.
@@ -442,30 +447,126 @@ taken to be SteamID64s; unanswered ids are logged.
 
 ### Stats in co-op
 
-Everyone in a session plays with the host's Local Stats. How it was built is under
-[step 5](#step-5-stats-in-co-op-the-hosts-values-everywhere-2026-10-17).
+By default every player keeps their own Local Stats, and joiners can edit as the host can. A host may share its stats
+instead (ModSettings `hostStats`, the Mods page switch "When I host, everyone plays with my editor changes"); then
+everyone in its lobby plays with the host's. Protocol `hellforge-mp-8`. How host's stats were first built is under
+[step 5](#step-5-stats-in-co-op-the-hosts-values-everywhere-2026-10-17), and the per-player default under
+[step 10](#step-10-every-players-own-stats-and-the-lobbys-assets-2026-10-23).
+
+What each way means in game, from HD2Runtime's live tests (`docs/projectile-homing.md`, the Gas EAT test in
+`research/docs/runtime-peer-messaging-F5FEE03DCFDB.md`): every machine simulates its own copy of each shot from its
+own data, and the shooter's machine decides the hit and the damage. With their own stats, each player's weapons hit as
+their own edits say, while friends see those shots as their own data has them (a swapped round flying as the stock
+one, say). A vehicle's arm swap is a type-record edit on the machine that calls the vehicle in, so vehicles a player
+calls in carry that player's swaps. Whatever a change puts in the game for everyone (that vehicle's weapon, a pod's
+pickup) needs its package on every machine: [Assets in co-op](#assets-in-co-op).
 
 - The Local Stats mod (`zz.local.stats`) is not part of the modlist digest, so friends with different saved changes can
   play together. Every other gameplay mod must still match.
-- The host's backend (`StatsShare`, `src/HellForge.LocalBackend/Multiplayer/StatsShare.cs`) checks once a second for
-  changes to `mods/zz.local.stats/hellforge-stats.json` (the session passes `--mods`), the editor's `mod-stats.json`
-  (mod content values) and the editor settings' `mounts` (arm swaps and hellpod payloads). A friend admitted to a lobby
-  hosted here gets them at once, and every friend gets them again on each change (the editor saves on APPLY, RESET ITEM
-  and preset import), as `stats.set` [version, then each file gzipped].
-- The joiner's backend accepts `stats.set` only from the host of the lobby it joined, writes the files into the editor's
-  folder as `host-stats.json`, `host-mod-stats.json` and `host-mounts.json`, and serves the session's live-edit pipe
-  (`\\.\pipe\hellforge-live-<run id>`, `native/mod-loader/live.c`). `HellForge.Core.StatsSync` turns the host's file
-  into live edits of the Local Stats mod: `set` for the host's values, `base` for the joiner's own saved changes the
-  host does not have. Attachments and status multipliers go over the pipe too.
-- The game is told its role over the pipe (`session`: solo, host, or joiner with the host's name; `HfApi.session` for
-  mods). A joiner's in-game editor allows browsing and export, and refuses typing, APPLY, RESET ITEM, RESET TO DEFAULTS
-  and preset import.
-- When the host leaves, closes the lobby or stops answering (15 s), the host files are deleted and the joiner's own
-  values come back (`set`, or `reset` where it had none).
+- The host's backend (`StatsShare`, `src/HellForge.LocalBackend/Multiplayer/StatsShare.cs`) sends every friend admitted
+  to a lobby hosted here `stats.set` [version, then three files gzipped, then `host` or `own`], again whenever its
+  switch or a shared file changes. Sharing, the files are `mods/zz.local.stats/hellforge-stats.json` (the session
+  passes `--mods`), the editor's `mod-stats.json` (mod content values) and the editor settings' `mounts` (arm swaps and
+  hellpod payloads), checked once a second (the editor saves on APPLY, RESET ITEM and preset import). Not sharing, the
+  files are sent empty.
+- The joiner's backend accepts `stats.set` only from the host of the lobby it joined. With `own` its game keeps its own
+  values. With `host` it writes the files into the editor's folder as `host-stats.json`, `host-mod-stats.json` and
+  `host-mounts.json`, and serves the session's live-edit pipe (`\\.\pipe\hellforge-live-<run id>`,
+  `native/mod-loader/live.c`). `HellForge.Core.StatsSync` turns the host's file into live edits of the Local Stats mod:
+  `set` for the host's values, `base` for the joiner's own saved changes the host does not have. Attachments and status
+  multipliers go over the pipe too.
+- The game is told its role over the pipe (`session`: solo, host or joiner, `stats=own` or `stats=host`, and the host's
+  name; `HfApi.session` and, from SDK 15, `HfApi.stats_source` for mods). A joiner playing with the host's stats has an
+  in-game editor that allows browsing and export, and refuses typing, APPLY, RESET ITEM, RESET TO DEFAULTS and preset
+  import.
+- When the host leaves, closes the lobby, stops answering (15 s) or stops sharing, the host files are deleted and the
+  joiner's own values come back (`set`, or `reset` where it had none).
 - Not synced: a stats mod's own records (`"own"`), and armor perks, which are solo only (with more than one player,
   everyone gets the armor's own).
-- Trust: joiners take the host's values. Between friends that is fine; a public lobby whose host plays with edited
-  stats is hidden from other players' maps unless they choose to show such lobbies.
+- Trust: joiners of a sharing host take its values. Between friends that is fine; a public lobby whose host shares
+  edited stats is hidden from other players' maps unless they choose to show such lobbies.
+
+### Assets in co-op
+
+What one player's change puts in the game for everyone (a vehicle's swapped weapon, a pod's pickup, a swapped round's
+effects) is made on every machine, and a machine without its package shows a missing asset (the purple question mark)
+or an invisible effect. HellForge loads a change's packages on the machine that makes it
+([internals.md](internals.md#packages)); `AssetShare` (`src/HellForge.LocalBackend/Multiplayer/AssetShare.cs`) has every
+other machine in the lobby load them too.
+
+- The mod loader sends its own packages up the live pipe whenever they change, as `packages <ids>` (16 hex digits
+  each, comma separated, `-` none): those it holds for this machine's edits, mods and actions
+  (`native/mod-loader/packages.c`).
+- A joiner's backend sends its game's to the host of the lobby it joined, numbered: `assets.mine` [version, ids]. The
+  host keeps each friend's, and sends the lobby's (its own and every friend's) to every friend, numbered, whenever they
+  change: `assets.lobby` [version, ids, the version of that friend's own it holds]. A joiner whose latest the host lacks
+  sends it again. Lists are at most 64 ids a player and 256 a lobby; malformed ones are dropped and logged.
+- Each backend asks its game to load the lobby's packages less its own: `preload <ids>` over the live pipe, again
+  whenever they change and when the game connects again. The loader asks for each as for its own edits' (catalogue
+  packages only, requested on the game thread, never with the reference map 3/4 full), but a friend's may not take the
+  last 16 of HellForge's 64: those stay for this machine's own. Every new one is logged in `modloader.log` ("lobby
+  assets: ...").
+- Packages are never released, so a change taken back leaves its package loaded for the session.
+- Nothing yet makes a change wait until friends have its package. A friend's game starts loading as soon as the change
+  is applied (and on joining), which is normally long before anyone calls in what it changed; a vehicle called in at
+  once may still show a missing asset on a friend's screen until its package is resident.
+
+### Shots in co-op
+
+Every machine simulates every player's shots from its own data, and nothing about a shot's projectile type travels over
+the network (a remote shot is the local fire function run from the shooter's replicated trigger, or an explicit fire
+message that carries no type). So without more, a player's projectile swap fired as the stock round on the others'
+screens, and on the swapping player's screen the others' guns fired the swap too. Research:
+`HD2Mods\research\projectile-per-player` (from a decoded snapshot of build 25480438).
+
+- The mod loader (`native/mod-loader/shots.c`) hooks the ProjectileWeapon fire function (game.dll 0x6128B0) after the
+  game has chosen a shot's type (0x614081, before the pellet loop and the projectile pool's constructor), for this
+  machine's own shots and its copies of the others' alike, and each pellet (0x615940) where a weapon's programmable
+  round replaces it while its function is on (0x615B23, ProjectileWeapon +0x240). Every site's bytes are checked first.
+- It finds the shooter: the weapon's wielder (the Wieldable manager), matched to a player's Helldiver (the player list:
+  peer and avatar). A player's peer is their SteamID64.
+- Each player's swaps come from their Local Stats (the editor's Projectile and Programmable ammo projectile rows) and
+  travel with the lobby's assets: `assets.mine` adds `<weapon resource hex>=<type>[/r|/f|/<stock>]`, `assets.lobby`
+  adds every player's `<peer hex>:...`, and each backend sends its game `shots <rules>` over the live pipe. Not while the
+  host shares its stats (`shots -`): then every machine already plays with the same. The weapon is the one firing
+  (`StatsSchema.ProjectileSwaps` maps each Projectile row to it; an ammunition every weapon equipping it shares maps to
+  each of them), and the suffix says which of its rounds the swap replaces, recognised on each machine by its stock type:
+  - none: ProjectileWeapon +0 (most weapons, and the Maelstrom's and Bastion's machine guns and the M-1000 Maxigun,
+    whose round it is after all);
+  - `/r`: WeaponRounds +64, a rounds feed (the DBS-2, R-2124, SG-22, SG-451 and SG-8S; the GL-15 Evictor, M90A, P-11
+    Stim Pistol, P-4 Senator, P-69 Veto, R-6 Deadeye and SG-97 Sweeper, whose ProjectileWeapon +0 holds the same round;
+    and the One-Two's and Arbitrator's underbarrels, weapons of their own). The type resolver (0x7456D0) checks heat
+    (flag bit 9), then a magazine (bit 7), then rounds (bit 8, WeaponRounds +0x40); every live WeaponRounds weapon in
+    the decoded snapshots (SG-8 Punisher, SG-88 Break-Action Shotgun) has bit 8, and these have no magazine or heat. The
+    AC-8, SG-88, GL-52, the Breakthrough's right gun and the GP-31 too; +0x44, a second mode's round, is left alone;
+  - `/<stock>`: the round with that stock type. An ammunition's entity delta: the six weapons whose magazines chamber
+    it (AR-23 Liberator, JAR-5 Dominator, P-19 Redeemer, P-2 Peacemaker, R-63 Diligence, SG-225 Breaker), the SMG-37
+    Defender, and every ammunition option of the SG-8 Punisher and SG-20 Halt (WeaponRounds +64 / +68, written into the
+    weapon's own copy when it is built) and the MP-98 Knight. A magazine pattern's entry (MG-43, MGX-42, the A/G-16 and
+    A/MG-43 sentries: round n fires entry (n - 1) % count, the tracer included). A charge level's projectile (PLAS-101,
+    PLAS-15, PLAS-45: WeaponCharge +4 / +28 / +52, passed at release) or a heat level's (LAS-17: WeaponHeat +4 / +28 /
+    +52 at 50, 100 and 190 heat). Where those come from: `mappings/projectile-sources.json`
+    (`scripts/ExportProjectileSources.py`, research `HD2Mods\research\blocked-projectile-swaps`). This machine's own
+    swap of one is its own rule (the loader does not tie a delta to its weapon). Rounds of one weapon with the same stock
+    type (an MG-43's four normal pattern entries, the Loyalist's full charge and overcharge) are one round in co-op: the
+    last edit of them is the one the others see;
+  - `/f`: the programmable round (ProjectileWeapon +0x240: the GR-8 Recoilless Rifle, RL-77 Airburst, AC-8 Autocannon
+    and W.A.S.P.), a swap of its own beside the weapon's normal one.
+- A shot fires: the shooter's swap of that round (by its stock type: a type this machine's own swap made stands for the
+  stock round it replaced), if they have one and its row and packages are ready here; else, for this machine's player,
+  what the game chose; else, for another player, the stock round. A round no swap names stays. Shots by no
+  player (sentries, enemies) are left alone; a weapon with a swap in the lobby that fires with no player found as its
+  wielder is logged once (`shots: ... no player found as its wielder`), the first thing to check if an underbarrel's
+  swap does not show.
+- Choosing the type before the pellet loop gives the shot the swapped round's whole row: flight, direct damage, impact
+  and expiry explosions, and a shotgun's pellet count. The weapon stays the source's: its ammunition, rate, recoil and
+  sounds.
+- A weapon firing an entity (the W.A.S.P.'s missiles, the Spear's, the Commando's) spawns it only on the machine with
+  authority over the weapon (0x615BE2: entity info +0x14 bit 0, its wielder's), and the entity reaches the others: it
+  is the shooter's own, with their swap, already. The editor offers no swap of the entity itself (the Spear, Commando,
+  P-33, P-92 and the Patriot's left arm have no Projectile row).
+- Not covered: beams (they choose no row). A swap that follows the gun itself (dropped and picked up by another player)
+  needs the weapon's network identity through drops, which the research leaves to in-game tests.
 
 ### When the host leaves
 
@@ -502,8 +603,9 @@ one HellForge runs (25480438) use Easy Anti-Cheat instead.
 
 ### Tests
 
-`tests/HellForge.LocalBackend.Tests` holds the multiplayer, stats sharing, mod sync, rejoin and directory checks
-(`MultiplayerTests.cs`, `StatsShareTests.cs`, `ModSyncTests.cs`, `ModSyncSpeedTests.cs`, `RejoinTests.cs`, `DirectoryTests.cs`);
+`tests/HellForge.LocalBackend.Tests` holds the multiplayer, stats sharing, asset sharing, mod sync, rejoin and directory
+checks (`MultiplayerTests.cs`, `StatsShareTests.cs`, `AssetShareTests.cs`, `ModSyncTests.cs`, `ModSyncSpeedTests.cs`,
+`RejoinTests.cs`, `DirectoryTests.cs`);
 `tests/HellForge.Tests` has Core's mod sync checks (`ModSyncTests.cs`). `HellForge.SdkShimGen smoke-lobby-link` runs
 two backend processes over loopback UDP and two copies of each stand-in through the PlayFab C APIs: create, join,
 member data, Party connect, endpoints, a 1,200-byte message and a broadcast, an invitation, a kick, and leaving. Last,
@@ -513,7 +615,7 @@ whose game receives the host's invitation once it has its own lobby, and joins w
 friends and again as strangers: the friend's search finds the host's lobby, joins it, and stops finding it after the
 host leaves.
 
-## History: research and build log (2026-10-14 to 2026-10-22)
+## History: research and build log (2026-10-14 to 2026-10-23)
 
 This section is the record of how co-op was researched and built. It describes the game and HellForge as they were at
 each date, and some of it is out of date: where it differs from the sections above, the sections above describe the
@@ -988,6 +1090,32 @@ Public lobby; B turns on the launcher's engine log for the last step):
    - `multiplayer.log` ("Rejoin:" lines on B, "rejoin" lines on A);
    - B's `PlayFabMultiplayerWin.dll` log ("invited to lobby", `InviteReceived`, `PFMultiplayerJoinLobby`);
    - B's engine log (`Lobby: InviteReceived`).
+
+### Step 10: every player's own stats, and the lobby's assets (2026-10-23)
+
+Built 2026-10-23 and tested on one PC only: `HellForge.LocalBackend.Tests` (`StatsShareTests`: shared, not shared,
+shared again; `AssetShareTests`: a host and two joiners), the loader's fixture (`stats_test.c`: `preload`, the 16 kept
+for this machine's own, the `packages` line, `session ... stats=`) and the editor's overlay test (read-only only while
+playing with the host's stats). What it does is in [Stats in co-op](#stats-in-co-op) and
+[Assets in co-op](#assets-in-co-op). HD2Runtime's own synced asset loading (its `hd2as` lobby key,
+`docs/asset-loading.md`) was never proven live; this is HellForge's over its backends' channel.
+
+**To test on two PCs** (A hosts, B joins; both with the "When I host ..." switch off, the default):
+1. B swaps a vehicle's weapon in the in-game editor (Mounted Weapons) to one A's loadout never brings, and APPLY. A
+   swaps a hellpod's payload the same way. Check that each editor stays editable, with "JOINED · <A> · YOUR OWN STATS"
+   on B's and "HOSTING · EVERYONE KEEPS THEIR OWN" on A's.
+2. Check `modloader.log` on each: "lobby assets: ... package(s) for friends' changes" with the other's packages, and
+   "package ... requested" for them. `multiplayer.log` has "Assets:" lines on both.
+3. Start a mission. B calls in the swapped vehicle, and A the swapped pod. Check that each sees the other's swapped
+   weapon and pickup, not a purple question mark. Note what each player sees of the other's weapon firing and what it
+   hits.
+4. B changes a hand-held weapon's projectile (say the AR/GL-21 One-Two's to the PLAS-1 Scorcher's) and fires it. With
+   the per-player shots (shots.c) A sees B's swapped round too, and A's own One-Two still fires its own. Note whether
+   enemies A sees die as B sees them die. Then the same with a Liberator (its round comes from its ammunition), the
+   One-Two's grenade launcher (its own weapon, fed by rounds) and a Recoilless Rifle's programmable round.
+5. A turns the switch on: B's editor turns read-only ("READ-ONLY · HOST: <A>") and B plays with A's stats. A turns it
+   off: B's own come back.
+6. Collect both sessions' logs (launcher Console > "Save logs to Desktop").
 
 ### Co-op diagnostics (engine 0.1.19, the 0.1.11 diagnostics beta)
 
