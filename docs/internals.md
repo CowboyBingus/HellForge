@@ -704,22 +704,26 @@ Editor's layout and look.
 
 Its catalogue (`editor-catalog.json`, from `HellForge.Cli editor-data`) holds the primaries, secondaries, throwables,
 stratagems and boosters with their stats fields, and the armor perks (two choice rows with a picker, kept in the
-editor's settings and set again at every boot).
+editor's settings and set again at every boot). Its weapon and grenade silhouettes are the game's own HUD sprites, and
+its text is in the game's own FS Sinclair, both extracted from the installation's game copy into the editor's folder
+(`game-icons.bin`, `fs-sinclair*.ttf`; never published). Its buttons play the game's menu sounds through the game's own
+UI sound path (checked byte for byte; silent on another build).
 
 The ENEMIES group is the HD2R Editor's Enemies pages: Terminids, Automatons, Illuminate, Structures and Other Entities.
 These are the 1,170-odd entities HD2Runtime's enemy catalogue lists, from `mappings/entities.json`
 (`scripts/ExportEntities.py`, which reads HD2Runtime's `domains/enemy_authoring.lua` and `enemy_controls.lua` as
 literals). Each entity's page has Health & Armor, a group per damage zone, a group per attack, and its other sections
-(Spawning, Shield, Size & Geometry...), with only the fields whose exact bytes the engine maps (`mappings/components.json`):
-about 17,200 of the HD2R Editor's rows. With a third path, the exporter writes the rest by entity and reason, which is the
-list of what to map next. Rows are keyed as the HD2R Editor's are (`en|<entity>|<path>:<zone or attack>:<field>`), so
-its presets import and export them, and a stats file saves them under `"enemies"`. The Helldiver's own entity adds its
-main health and armor to the Helldiver page, and the MS-11 Solo Silo's rack and missile are parts of its stratagem's
-page (`StatsSchema.EntityParts`), each leaving out bytes the page shows already. Only an enemy class's main health and
-zone armor are proven in game (HD2Runtime's evidence); the rest are marked unverified. Its weapon and grenade silhouettes are the game's own HUD sprites, and
-its text is in the game's own FS Sinclair, both extracted from the installation's game copy into the editor's folder
-(`game-icons.bin`, `fs-sinclair*.ttf`; never published). Its buttons play the game's menu sounds through the game's own
-UI sound path (checked byte for byte; silent on another build).
+(Spawning, Director Multipliers, Shield, Size & Geometry...), with only the fields whose exact bytes the engine maps
+(`mappings/components.json`): about 35,800 of the HD2R Editor's rows. `scripts/ImportSchemaMappings.py <HD2Runtime>`
+names the fields of components the mappings have (each damage zone's, the HiveMind's director multipliers) into them;
+`HellForge.Cli sdk-headers` then regenerates the engine's tables and `ExportEntities.py` offers them. With a third path,
+the exporter writes the rest by entity and reason: components the engine has no mapping for yet (Unit, AiSpawner,
+SquadTransport...) and rows the HD2R Editor only shows. Rows are keyed as the HD2R Editor's are
+(`en|<entity>|<path>:<zone or attack>:<field>`), so its presets import and export them, and a stats file saves them under
+`"enemies"`. The Helldiver's own entity adds its main fields (health, armor, constitution, regeneration) to the Helldiver
+page, and the MS-11 Solo Silo's rack and missile are parts of its stratagem's page (`StatsSchema.EntityParts`), each
+leaving out bytes the page shows already. Only an enemy class's main health and zone armor are proven in game
+(HD2Runtime's evidence); the rest are marked unverified.
 
 Every change and reset is staged until APPLY (F9), so DISCARD takes any of them back. Once applied, a change goes
 through `set_live` and into Local Stats, so it comes back at every boot.

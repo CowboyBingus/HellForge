@@ -235,7 +235,7 @@ public static class StatsCatalog
                 return ("zones", section, Array.IndexOf(new[] { "Head", "Body", "Left arm", "Right arm", "Left leg", "Right leg" }, section));
             return key.Split('.') switch
             {
-                ["entity", "health" or "armor"] => ("identity:health", "Health", -1),
+                ["entity", not "explosive_damage_percentage"] => ("identity:health", "Health", -1), // its avatar's main fields
                 [_, "speed", ..] => ("identity:speed", "Speed", 0),
                 [_, "stamina", ..] => ("identity:stamina", "Stamina", 1),
                 [_, "supply", ..] => ("identity:refill", "Player refill", 2),

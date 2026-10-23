@@ -178,17 +178,22 @@ def representable(value, storage, integer):
     return abs(rounded - value) <= 1e-9 * max(1, abs(value))
 
 
+SIZES = {'u8': 1, 'u16': 2, 'u32': 4, 'i32': 4, 'f32': 4, 'u64': 8}
+
+
 def mapped():
-    """HellForge's engine fields: component or settings table name -> the offsets it maps."""
+    """HellForge's engine fields: component or settings table name -> the (offset, storage) it maps, every element of an
+    array field included (SdkMappings.FieldAt: a field of that type at the offset or inside an array of it)."""
     data = json.loads((REPO / 'mappings' / 'components.json').read_text(encoding='utf-8'))['components']
-    return {c['component']: {f['offset'] for f in c['fields'].values()} for c in data.values()}
+    return {c['component']: {(f['offset'] + i * SIZES.get(f['type'], 1), f['type']) for f in c['fields'].values() for i in range(f.get('count', 1))}
+            for c in data.values()}
 
 
 def export(runtime):
     database = merged(runtime)
     units = {f['id']: f.get('unit') for f in json.loads((runtime / 'schemas' / 'enemy_fields.json').read_text(encoding='utf-8'))['fields']}
     engine = mapped()
-    entities, editable, blocked_count = {}, 0, 0
+    entities, editable, blocked_count, unmapped = {}, 0, 0, []
     for name, entry in sorted(database['enemies'].items()):
         zones = {z['id']: z for z in lst(entry.get('zones'))}
         attacks = {a['id']: a for a in lst(entry.get('attacks'))}
@@ -231,8 +236,13 @@ def export(runtime):
                 reason = 'Its authored value cannot be shown and restored exactly'
             elif (low is not None and authored < low) or (high is not None and authored > high):
                 reason = 'Its authored value lies outside the write range'
-            elif backing['offset'] not in engine.get(component or kind, ()):
+            elif (component or kind) not in engine:
+                reason = "HellForge's engine has no %s mapping yet" % (component or kind)
+            elif (backing['offset'], storage) not in engine[component or kind]:
                 reason = "HellForge's engine does not map %s +%d yet" % (component or kind, backing['offset'])
+                # a field of a component the engine knows: scripts/ImportSchemaMappings.py names it from this
+                unmapped.append({'kind': kind, 'component': component or kind, 'offset': backing['offset'], 'storage': storage,
+                                 'key': f['id'], 'zone': f.get('zone') if f['path'] == 'damage_zone' else None, 'label': human(f['id'])})
             if reason:
                 blocked[key] = reason
                 continue
@@ -256,7 +266,7 @@ def export(runtime):
                           'resource': entry['resource'], 'fields': fields, 'blocked': reasons}
         editable += len(fields)
         blocked_count += len(blocked)
-    return entities, editable, blocked_count
+    return entities, editable, blocked_count, unmapped
 
 
 def write(path, head, entities, part):
@@ -287,7 +297,7 @@ def main(runtime, out, blocked_out=None):
     # The domains by their bytes: a checkout's VERSION file is not always the release its domains came from.
     sources = {n: hashlib.sha256((runtime / 'domains' / (n + '.lua')).read_bytes().replace(b'\r\n', b'\n')).hexdigest().upper()
                for n in ('enemy_authoring', 'enemy_controls')}
-    entities, editable, blocked = export(runtime)
+    entities, editable, blocked, _ = export(runtime)
     out = Path(out)
     write(out, {'format': 1, 'build': '25480438', 'sources': sources,
                 'note': "The HD2R Editor's Enemies pages: entities and the fields HellForge's engine can write (scripts/ExportEntities.py). "

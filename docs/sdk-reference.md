@@ -336,6 +336,15 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
 | `health` | +0x00 | i32 | respawn? | entity.health (unverified) |
+| `health_change_rate` | +0x04 | f32 | respawn? | Health change rate (unverified) |
+| `health_change_rate_disabled` | +0x08 | u8 | respawn? | Health change rate disabled (unverified) |
+| `regeneration_cooldown` | +0x0C | f32 | respawn? | Regeneration cooldown (unverified) |
+| `regeneration_segments` | +0x10 | u32 | respawn? | Regeneration segments (unverified) |
+| `regeneration_change_rate` | +0x14 | f32 | respawn? | Regeneration change rate (unverified) |
+| `constitution` | +0x18 | i32 | respawn? | Constitution (unverified) |
+| `constitution_rate` | +0x1C | f32 | respawn? | Constitution rate (unverified) |
+| `zone_bleedout_change_rate` | +0x24 | f32 | respawn? | Zone bleedout change rate (unverified) |
+| `durable_resistance_7` | +0x10C | f32 | respawn? | Durable resistance (unverified) |
 | `armor_118` | +0x118 | u32 | respawn? | Main armor (armor_class) (unverified) |
 | `explosive_damage_percentage` | +0x184 | f32 | respawn? | Explosion damage share (unverified) |
 | `damage_multiplier_4` | +0x2CC | u32 | respawn? | Damage multiplier (unverified) |
@@ -343,194 +352,390 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | `durable_resistance_4` | +0x2D4 | f32 | respawn? | Durable damage share (unverified) |
 | `armor` | +0x2E0 | u32 | respawn? | zone.armor (unverified) |
 | `health_2f0` | +0x2F0 | i32 | respawn? | zone.health (unverified) |
+| `zone_0_constitution` | +0x2F4 | i32 | respawn? | Constitution (unverified) |
+| `zone_0_downs_on_death` | +0x2FB | u8 | respawn? | Downs on death (unverified) |
+| `zone_0_fatal` | +0x2FC | u8 | respawn? | Fatal (unverified) |
 | `affects_main_health` | +0x300 | f32 | respawn? | Damage forwarded to main health (ratio) (unverified) |
 | `zone_0_affected_by_explosions` | +0x34B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_0_explosive_damage_percentage` | +0x34C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_0_main_health_capped` | +0x35C | u8 | respawn? | Main health capped (unverified) |
 | `damage_multiplier_3` | +0x4F4 | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps_3` | +0x4F8 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance_3` | +0x4FC | f32 | respawn? | Durable damage share (unverified) |
 | `armor_2` | +0x508 | u32 | respawn? | Shield plate armor (unverified) |
 | `health_2` | +0x518 | i32 | respawn? | Shield plate health (unverified) |
+| `zone_1_constitution` | +0x51C | i32 | respawn? | Constitution (unverified) |
+| `zone_1_downs_on_death` | +0x523 | u8 | respawn? | Downs on death (unverified) |
+| `zone_1_fatal` | +0x524 | u8 | respawn? | Fatal (unverified) |
 | `zone_1_affects_main_health` | +0x528 | f32 | respawn? | Affects main health (unverified) |
 | `zone_1_affected_by_explosions` | +0x573 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_1_explosive_damage_percentage` | +0x574 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_1_main_health_capped` | +0x584 | u8 | respawn? | Main health capped (unverified) |
 | `damage_multiplier` | +0x71C | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps` | +0x720 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance` | +0x724 | f32 | respawn? | Durable damage share (unverified) |
 | `zone_2_armor` | +0x730 | u32 | respawn? | Armor (unverified) |
 | `zone_2_health` | +0x740 | i32 | respawn? | Health (unverified) |
+| `zone_2_constitution` | +0x744 | i32 | respawn? | Constitution (unverified) |
+| `zone_2_downs_on_death` | +0x74B | u8 | respawn? | Downs on death (unverified) |
+| `zone_2_fatal` | +0x74C | u8 | respawn? | Fatal (unverified) |
 | `zone_2_affects_main_health` | +0x750 | f32 | respawn? | Affects main health (unverified) |
 | `zone_2_affected_by_explosions` | +0x79B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_2_explosive_damage_percentage` | +0x79C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_2_main_health_capped` | +0x7AC | u8 | respawn? | Main health capped (unverified) |
 | `damage_multiplier_2` | +0x944 | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps_2` | +0x948 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance_2` | +0x94C | f32 | respawn? | Durable damage share (unverified) |
 | `zone_3_armor` | +0x958 | u32 | respawn? | Armor (unverified) |
 | `zone_3_health` | +0x968 | i32 | respawn? | Health (unverified) |
+| `zone_3_constitution` | +0x96C | i32 | respawn? | Constitution (unverified) |
+| `zone_3_downs_on_death` | +0x973 | u8 | respawn? | Downs on death (unverified) |
+| `zone_3_fatal` | +0x974 | u8 | respawn? | Fatal (unverified) |
 | `zone_3_affects_main_health` | +0x978 | f32 | respawn? | Affects main health (unverified) |
 | `zone_3_affected_by_explosions` | +0x9C3 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_3_explosive_damage_percentage` | +0x9C4 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_3_main_health_capped` | +0x9D4 | u8 | respawn? | Main health capped (unverified) |
 | `damage_multiplier_5` | +0xB6C | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps_5` | +0xB70 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance_5` | +0xB74 | f32 | respawn? | Durable damage share (unverified) |
 | `zone_4_armor` | +0xB80 | u32 | respawn? | Armor (unverified) |
 | `zone_4_health` | +0xB90 | i32 | respawn? | Health (unverified) |
+| `zone_4_constitution` | +0xB94 | i32 | respawn? | Constitution (unverified) |
+| `zone_4_downs_on_death` | +0xB9B | u8 | respawn? | Downs on death (unverified) |
+| `zone_4_fatal` | +0xB9C | u8 | respawn? | Fatal (unverified) |
 | `zone_4_affects_main_health` | +0xBA0 | f32 | respawn? | Affects main health (unverified) |
 | `zone_4_affected_by_explosions` | +0xBEB | u8 | respawn? | Own explosion share (unverified) |
 | `zone_4_explosive_damage_percentage` | +0xBEC | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_4_main_health_capped` | +0xBFC | u8 | respawn? | Main health capped (unverified) |
 | `damage_multiplier_6` | +0xD94 | u32 | respawn? | Damage multiplier (unverified) |
 | `damage_multiplier_dps_6` | +0xD98 | u32 | respawn? | Damage over time multiplier (unverified) |
 | `durable_resistance_6` | +0xD9C | f32 | respawn? | Durable damage share (unverified) |
 | `zone_5_armor` | +0xDA8 | u32 | respawn? | Armor (unverified) |
 | `zone_5_health` | +0xDB8 | i32 | respawn? | Health (unverified) |
+| `zone_5_constitution` | +0xDBC | i32 | respawn? | Constitution (unverified) |
+| `zone_5_downs_on_death` | +0xDC3 | u8 | respawn? | Downs on death (unverified) |
+| `zone_5_fatal` | +0xDC4 | u8 | respawn? | Fatal (unverified) |
 | `zone_5_affects_main_health` | +0xDC8 | f32 | respawn? | Affects main health (unverified) |
 | `zone_5_affected_by_explosions` | +0xE13 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_5_explosive_damage_percentage` | +0xE14 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_5_main_health_capped` | +0xE24 | u8 | respawn? | Main health capped (unverified) |
+| `zone_6_durable_resistance` | +0xFC4 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_6_armor` | +0xFD0 | u32 | respawn? | Armor (unverified) |
 | `zone_6_health` | +0xFE0 | i32 | respawn? | Health (unverified) |
+| `zone_6_constitution` | +0xFE4 | i32 | respawn? | Constitution (unverified) |
+| `zone_6_downs_on_death` | +0xFEB | u8 | respawn? | Downs on death (unverified) |
+| `zone_6_fatal` | +0xFEC | u8 | respawn? | Fatal (unverified) |
 | `zone_6_affects_main_health` | +0xFF0 | f32 | respawn? | Affects main health (unverified) |
 | `zone_6_affected_by_explosions` | +0x103B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_6_explosive_damage_percentage` | +0x103C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_6_main_health_capped` | +0x104C | u8 | respawn? | Main health capped (unverified) |
+| `zone_7_durable_resistance` | +0x11EC | f32 | respawn? | Durable resistance (unverified) |
 | `zone_7_armor` | +0x11F8 | u32 | respawn? | Armor (unverified) |
 | `zone_7_health` | +0x1208 | i32 | respawn? | Health (unverified) |
+| `zone_7_constitution` | +0x120C | i32 | respawn? | Constitution (unverified) |
+| `zone_7_downs_on_death` | +0x1213 | u8 | respawn? | Downs on death (unverified) |
+| `zone_7_fatal` | +0x1214 | u8 | respawn? | Fatal (unverified) |
 | `zone_7_affects_main_health` | +0x1218 | f32 | respawn? | Affects main health (unverified) |
 | `zone_7_affected_by_explosions` | +0x1263 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_7_explosive_damage_percentage` | +0x1264 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_7_main_health_capped` | +0x1274 | u8 | respawn? | Main health capped (unverified) |
+| `zone_8_durable_resistance` | +0x1414 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_8_armor` | +0x1420 | u32 | respawn? | Armor (unverified) |
 | `zone_8_health` | +0x1430 | i32 | respawn? | Health (unverified) |
+| `zone_8_constitution` | +0x1434 | i32 | respawn? | Constitution (unverified) |
+| `zone_8_downs_on_death` | +0x143B | u8 | respawn? | Downs on death (unverified) |
+| `zone_8_fatal` | +0x143C | u8 | respawn? | Fatal (unverified) |
 | `zone_8_affects_main_health` | +0x1440 | f32 | respawn? | Affects main health (unverified) |
 | `zone_8_affected_by_explosions` | +0x148B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_8_explosive_damage_percentage` | +0x148C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_8_main_health_capped` | +0x149C | u8 | respawn? | Main health capped (unverified) |
+| `zone_9_durable_resistance` | +0x163C | f32 | respawn? | Durable resistance (unverified) |
 | `zone_9_armor` | +0x1648 | u32 | respawn? | Armor (unverified) |
 | `zone_9_health` | +0x1658 | i32 | respawn? | Health (unverified) |
+| `zone_9_constitution` | +0x165C | i32 | respawn? | Constitution (unverified) |
+| `zone_9_downs_on_death` | +0x1663 | u8 | respawn? | Downs on death (unverified) |
+| `zone_9_fatal` | +0x1664 | u8 | respawn? | Fatal (unverified) |
 | `zone_9_affects_main_health` | +0x1668 | f32 | respawn? | Affects main health (unverified) |
 | `zone_9_affected_by_explosions` | +0x16B3 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_9_explosive_damage_percentage` | +0x16B4 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_9_main_health_capped` | +0x16C4 | u8 | respawn? | Main health capped (unverified) |
+| `zone_10_durable_resistance` | +0x1864 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_10_armor` | +0x1870 | u32 | respawn? | Armor (unverified) |
 | `zone_10_health` | +0x1880 | i32 | respawn? | Health (unverified) |
+| `zone_10_constitution` | +0x1884 | i32 | respawn? | Constitution (unverified) |
+| `zone_10_downs_on_death` | +0x188B | u8 | respawn? | Downs on death (unverified) |
+| `zone_10_fatal` | +0x188C | u8 | respawn? | Fatal (unverified) |
 | `zone_10_affects_main_health` | +0x1890 | f32 | respawn? | Affects main health (unverified) |
 | `zone_10_affected_by_explosions` | +0x18DB | u8 | respawn? | Own explosion share (unverified) |
 | `zone_10_explosive_damage_percentage` | +0x18DC | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_10_main_health_capped` | +0x18EC | u8 | respawn? | Main health capped (unverified) |
+| `zone_11_durable_resistance` | +0x1A8C | f32 | respawn? | Durable resistance (unverified) |
 | `zone_11_armor` | +0x1A98 | u32 | respawn? | Armor (unverified) |
 | `zone_11_health` | +0x1AA8 | i32 | respawn? | Health (unverified) |
+| `zone_11_constitution` | +0x1AAC | i32 | respawn? | Constitution (unverified) |
+| `zone_11_downs_on_death` | +0x1AB3 | u8 | respawn? | Downs on death (unverified) |
+| `zone_11_fatal` | +0x1AB4 | u8 | respawn? | Fatal (unverified) |
 | `zone_11_affects_main_health` | +0x1AB8 | f32 | respawn? | Affects main health (unverified) |
 | `zone_11_affected_by_explosions` | +0x1B03 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_11_explosive_damage_percentage` | +0x1B04 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_11_main_health_capped` | +0x1B14 | u8 | respawn? | Main health capped (unverified) |
+| `zone_12_durable_resistance` | +0x1CB4 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_12_armor` | +0x1CC0 | u32 | respawn? | Armor (unverified) |
 | `zone_12_health` | +0x1CD0 | i32 | respawn? | Health (unverified) |
+| `zone_12_constitution` | +0x1CD4 | i32 | respawn? | Constitution (unverified) |
+| `zone_12_downs_on_death` | +0x1CDB | u8 | respawn? | Downs on death (unverified) |
+| `zone_12_fatal` | +0x1CDC | u8 | respawn? | Fatal (unverified) |
 | `zone_12_affects_main_health` | +0x1CE0 | f32 | respawn? | Affects main health (unverified) |
 | `zone_12_affected_by_explosions` | +0x1D2B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_12_explosive_damage_percentage` | +0x1D2C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_12_main_health_capped` | +0x1D3C | u8 | respawn? | Main health capped (unverified) |
+| `zone_13_durable_resistance` | +0x1EDC | f32 | respawn? | Durable resistance (unverified) |
 | `zone_13_armor` | +0x1EE8 | u32 | respawn? | Armor (unverified) |
 | `zone_13_health` | +0x1EF8 | i32 | respawn? | Health (unverified) |
+| `zone_13_constitution` | +0x1EFC | i32 | respawn? | Constitution (unverified) |
+| `zone_13_downs_on_death` | +0x1F03 | u8 | respawn? | Downs on death (unverified) |
+| `zone_13_fatal` | +0x1F04 | u8 | respawn? | Fatal (unverified) |
 | `zone_13_affects_main_health` | +0x1F08 | f32 | respawn? | Affects main health (unverified) |
 | `zone_13_affected_by_explosions` | +0x1F53 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_13_explosive_damage_percentage` | +0x1F54 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_13_main_health_capped` | +0x1F64 | u8 | respawn? | Main health capped (unverified) |
+| `zone_14_durable_resistance` | +0x2104 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_14_armor` | +0x2110 | u32 | respawn? | Armor (unverified) |
 | `zone_14_health` | +0x2120 | i32 | respawn? | Health (unverified) |
+| `zone_14_constitution` | +0x2124 | i32 | respawn? | Constitution (unverified) |
+| `zone_14_downs_on_death` | +0x212B | u8 | respawn? | Downs on death (unverified) |
+| `zone_14_fatal` | +0x212C | u8 | respawn? | Fatal (unverified) |
 | `zone_14_affects_main_health` | +0x2130 | f32 | respawn? | Affects main health (unverified) |
 | `zone_14_affected_by_explosions` | +0x217B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_14_explosive_damage_percentage` | +0x217C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_14_main_health_capped` | +0x218C | u8 | respawn? | Main health capped (unverified) |
+| `zone_15_durable_resistance` | +0x232C | f32 | respawn? | Durable resistance (unverified) |
 | `zone_15_armor` | +0x2338 | u32 | respawn? | Armor (unverified) |
 | `zone_15_health` | +0x2348 | i32 | respawn? | Health (unverified) |
+| `zone_15_constitution` | +0x234C | i32 | respawn? | Constitution (unverified) |
+| `zone_15_downs_on_death` | +0x2353 | u8 | respawn? | Downs on death (unverified) |
+| `zone_15_fatal` | +0x2354 | u8 | respawn? | Fatal (unverified) |
 | `zone_15_affects_main_health` | +0x2358 | f32 | respawn? | Affects main health (unverified) |
 | `zone_15_affected_by_explosions` | +0x23A3 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_15_explosive_damage_percentage` | +0x23A4 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_15_main_health_capped` | +0x23B4 | u8 | respawn? | Main health capped (unverified) |
+| `zone_16_durable_resistance` | +0x2554 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_16_armor` | +0x2560 | u32 | respawn? | Armor (unverified) |
 | `zone_16_health` | +0x2570 | i32 | respawn? | Health (unverified) |
+| `zone_16_constitution` | +0x2574 | i32 | respawn? | Constitution (unverified) |
+| `zone_16_downs_on_death` | +0x257B | u8 | respawn? | Downs on death (unverified) |
+| `zone_16_fatal` | +0x257C | u8 | respawn? | Fatal (unverified) |
 | `zone_16_affects_main_health` | +0x2580 | f32 | respawn? | Affects main health (unverified) |
 | `zone_16_affected_by_explosions` | +0x25CB | u8 | respawn? | Own explosion share (unverified) |
 | `zone_16_explosive_damage_percentage` | +0x25CC | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_16_main_health_capped` | +0x25DC | u8 | respawn? | Main health capped (unverified) |
+| `zone_17_durable_resistance` | +0x277C | f32 | respawn? | Durable resistance (unverified) |
 | `zone_17_armor` | +0x2788 | u32 | respawn? | Armor (unverified) |
 | `zone_17_health` | +0x2798 | i32 | respawn? | Health (unverified) |
+| `zone_17_constitution` | +0x279C | i32 | respawn? | Constitution (unverified) |
+| `zone_17_downs_on_death` | +0x27A3 | u8 | respawn? | Downs on death (unverified) |
+| `zone_17_fatal` | +0x27A4 | u8 | respawn? | Fatal (unverified) |
 | `zone_17_affects_main_health` | +0x27A8 | f32 | respawn? | Affects main health (unverified) |
 | `zone_17_affected_by_explosions` | +0x27F3 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_17_explosive_damage_percentage` | +0x27F4 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_17_main_health_capped` | +0x2804 | u8 | respawn? | Main health capped (unverified) |
+| `zone_18_durable_resistance` | +0x29A4 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_18_armor` | +0x29B0 | u32 | respawn? | Armor (unverified) |
 | `zone_18_health` | +0x29C0 | i32 | respawn? | Health (unverified) |
+| `zone_18_constitution` | +0x29C4 | i32 | respawn? | Constitution (unverified) |
+| `zone_18_downs_on_death` | +0x29CB | u8 | respawn? | Downs on death (unverified) |
+| `zone_18_fatal` | +0x29CC | u8 | respawn? | Fatal (unverified) |
 | `zone_18_affects_main_health` | +0x29D0 | f32 | respawn? | Affects main health (unverified) |
 | `zone_18_affected_by_explosions` | +0x2A1B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_18_explosive_damage_percentage` | +0x2A1C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_18_main_health_capped` | +0x2A2C | u8 | respawn? | Main health capped (unverified) |
+| `zone_19_durable_resistance` | +0x2BCC | f32 | respawn? | Durable resistance (unverified) |
 | `zone_19_armor` | +0x2BD8 | u32 | respawn? | Armor (unverified) |
 | `zone_19_health` | +0x2BE8 | i32 | respawn? | Health (unverified) |
+| `zone_19_constitution` | +0x2BEC | i32 | respawn? | Constitution (unverified) |
+| `zone_19_downs_on_death` | +0x2BF3 | u8 | respawn? | Downs on death (unverified) |
+| `zone_19_fatal` | +0x2BF4 | u8 | respawn? | Fatal (unverified) |
 | `zone_19_affects_main_health` | +0x2BF8 | f32 | respawn? | Affects main health (unverified) |
 | `zone_19_affected_by_explosions` | +0x2C43 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_19_explosive_damage_percentage` | +0x2C44 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_19_main_health_capped` | +0x2C54 | u8 | respawn? | Main health capped (unverified) |
+| `zone_20_durable_resistance` | +0x2DF4 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_20_armor` | +0x2E00 | u32 | respawn? | Armor (unverified) |
 | `zone_20_health` | +0x2E10 | i32 | respawn? | Health (unverified) |
+| `zone_20_constitution` | +0x2E14 | i32 | respawn? | Constitution (unverified) |
+| `zone_20_downs_on_death` | +0x2E1B | u8 | respawn? | Downs on death (unverified) |
+| `zone_20_fatal` | +0x2E1C | u8 | respawn? | Fatal (unverified) |
 | `zone_20_affects_main_health` | +0x2E20 | f32 | respawn? | Affects main health (unverified) |
 | `zone_20_affected_by_explosions` | +0x2E6B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_20_explosive_damage_percentage` | +0x2E6C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_20_main_health_capped` | +0x2E7C | u8 | respawn? | Main health capped (unverified) |
+| `zone_21_durable_resistance` | +0x301C | f32 | respawn? | Durable resistance (unverified) |
 | `zone_21_armor` | +0x3028 | u32 | respawn? | Armor (unverified) |
 | `zone_21_health` | +0x3038 | i32 | respawn? | Health (unverified) |
+| `zone_21_constitution` | +0x303C | i32 | respawn? | Constitution (unverified) |
+| `zone_21_downs_on_death` | +0x3043 | u8 | respawn? | Downs on death (unverified) |
+| `zone_21_fatal` | +0x3044 | u8 | respawn? | Fatal (unverified) |
 | `zone_21_affects_main_health` | +0x3048 | f32 | respawn? | Affects main health (unverified) |
 | `zone_21_affected_by_explosions` | +0x3093 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_21_explosive_damage_percentage` | +0x3094 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_21_main_health_capped` | +0x30A4 | u8 | respawn? | Main health capped (unverified) |
+| `zone_22_durable_resistance` | +0x3244 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_22_armor` | +0x3250 | u32 | respawn? | Armor (unverified) |
 | `zone_22_health` | +0x3260 | i32 | respawn? | Health (unverified) |
+| `zone_22_constitution` | +0x3264 | i32 | respawn? | Constitution (unverified) |
+| `zone_22_downs_on_death` | +0x326B | u8 | respawn? | Downs on death (unverified) |
+| `zone_22_fatal` | +0x326C | u8 | respawn? | Fatal (unverified) |
 | `zone_22_affects_main_health` | +0x3270 | f32 | respawn? | Affects main health (unverified) |
 | `zone_22_affected_by_explosions` | +0x32BB | u8 | respawn? | Own explosion share (unverified) |
 | `zone_22_explosive_damage_percentage` | +0x32BC | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_22_main_health_capped` | +0x32CC | u8 | respawn? | Main health capped (unverified) |
+| `zone_23_durable_resistance` | +0x346C | f32 | respawn? | Durable resistance (unverified) |
 | `zone_23_armor` | +0x3478 | u32 | respawn? | Armor (unverified) |
 | `zone_23_health` | +0x3488 | i32 | respawn? | Health (unverified) |
+| `zone_23_constitution` | +0x348C | i32 | respawn? | Constitution (unverified) |
+| `zone_23_downs_on_death` | +0x3493 | u8 | respawn? | Downs on death (unverified) |
+| `zone_23_fatal` | +0x3494 | u8 | respawn? | Fatal (unverified) |
 | `zone_23_affects_main_health` | +0x3498 | f32 | respawn? | Affects main health (unverified) |
 | `zone_23_affected_by_explosions` | +0x34E3 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_23_explosive_damage_percentage` | +0x34E4 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_23_main_health_capped` | +0x34F4 | u8 | respawn? | Main health capped (unverified) |
+| `zone_24_durable_resistance` | +0x3694 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_24_armor` | +0x36A0 | u32 | respawn? | Armor (unverified) |
 | `zone_24_health` | +0x36B0 | i32 | respawn? | Health (unverified) |
+| `zone_24_constitution` | +0x36B4 | i32 | respawn? | Constitution (unverified) |
+| `zone_24_downs_on_death` | +0x36BB | u8 | respawn? | Downs on death (unverified) |
+| `zone_24_fatal` | +0x36BC | u8 | respawn? | Fatal (unverified) |
 | `zone_24_affects_main_health` | +0x36C0 | f32 | respawn? | Affects main health (unverified) |
 | `zone_24_affected_by_explosions` | +0x370B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_24_explosive_damage_percentage` | +0x370C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_24_main_health_capped` | +0x371C | u8 | respawn? | Main health capped (unverified) |
+| `zone_25_durable_resistance` | +0x38BC | f32 | respawn? | Durable resistance (unverified) |
 | `zone_25_armor` | +0x38C8 | u32 | respawn? | Armor (unverified) |
 | `zone_25_health` | +0x38D8 | i32 | respawn? | Health (unverified) |
+| `zone_25_constitution` | +0x38DC | i32 | respawn? | Constitution (unverified) |
+| `zone_25_downs_on_death` | +0x38E3 | u8 | respawn? | Downs on death (unverified) |
+| `zone_25_fatal` | +0x38E4 | u8 | respawn? | Fatal (unverified) |
 | `zone_25_affects_main_health` | +0x38E8 | f32 | respawn? | Affects main health (unverified) |
 | `zone_25_affected_by_explosions` | +0x3933 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_25_explosive_damage_percentage` | +0x3934 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_25_main_health_capped` | +0x3944 | u8 | respawn? | Main health capped (unverified) |
+| `zone_26_durable_resistance` | +0x3AE4 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_26_armor` | +0x3AF0 | u32 | respawn? | Armor (unverified) |
 | `zone_26_health` | +0x3B00 | i32 | respawn? | Health (unverified) |
+| `zone_26_constitution` | +0x3B04 | i32 | respawn? | Constitution (unverified) |
+| `zone_26_downs_on_death` | +0x3B0B | u8 | respawn? | Downs on death (unverified) |
+| `zone_26_fatal` | +0x3B0C | u8 | respawn? | Fatal (unverified) |
 | `zone_26_affects_main_health` | +0x3B10 | f32 | respawn? | Affects main health (unverified) |
 | `zone_26_affected_by_explosions` | +0x3B5B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_26_explosive_damage_percentage` | +0x3B5C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_26_main_health_capped` | +0x3B6C | u8 | respawn? | Main health capped (unverified) |
+| `zone_27_durable_resistance` | +0x3D0C | f32 | respawn? | Durable resistance (unverified) |
 | `zone_27_armor` | +0x3D18 | u32 | respawn? | Armor (unverified) |
 | `zone_27_health` | +0x3D28 | i32 | respawn? | Health (unverified) |
+| `zone_27_constitution` | +0x3D2C | i32 | respawn? | Constitution (unverified) |
+| `zone_27_downs_on_death` | +0x3D33 | u8 | respawn? | Downs on death (unverified) |
+| `zone_27_fatal` | +0x3D34 | u8 | respawn? | Fatal (unverified) |
 | `zone_27_affects_main_health` | +0x3D38 | f32 | respawn? | Affects main health (unverified) |
 | `zone_27_affected_by_explosions` | +0x3D83 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_27_explosive_damage_percentage` | +0x3D84 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_27_main_health_capped` | +0x3D94 | u8 | respawn? | Main health capped (unverified) |
+| `zone_28_durable_resistance` | +0x3F34 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_28_armor` | +0x3F40 | u32 | respawn? | Armor (unverified) |
 | `zone_28_health` | +0x3F50 | i32 | respawn? | Health (unverified) |
+| `zone_28_constitution` | +0x3F54 | i32 | respawn? | Constitution (unverified) |
+| `zone_28_downs_on_death` | +0x3F5B | u8 | respawn? | Downs on death (unverified) |
+| `zone_28_fatal` | +0x3F5C | u8 | respawn? | Fatal (unverified) |
 | `zone_28_affects_main_health` | +0x3F60 | f32 | respawn? | Affects main health (unverified) |
 | `zone_28_affected_by_explosions` | +0x3FAB | u8 | respawn? | Own explosion share (unverified) |
 | `zone_28_explosive_damage_percentage` | +0x3FAC | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_28_main_health_capped` | +0x3FBC | u8 | respawn? | Main health capped (unverified) |
+| `zone_29_durable_resistance` | +0x415C | f32 | respawn? | Durable resistance (unverified) |
 | `zone_29_armor` | +0x4168 | u32 | respawn? | Armor (unverified) |
 | `zone_29_health` | +0x4178 | i32 | respawn? | Health (unverified) |
+| `zone_29_constitution` | +0x417C | i32 | respawn? | Constitution (unverified) |
+| `zone_29_downs_on_death` | +0x4183 | u8 | respawn? | Downs on death (unverified) |
+| `zone_29_fatal` | +0x4184 | u8 | respawn? | Fatal (unverified) |
 | `zone_29_affects_main_health` | +0x4188 | f32 | respawn? | Affects main health (unverified) |
 | `zone_29_affected_by_explosions` | +0x41D3 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_29_explosive_damage_percentage` | +0x41D4 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_29_main_health_capped` | +0x41E4 | u8 | respawn? | Main health capped (unverified) |
+| `zone_30_durable_resistance` | +0x4384 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_30_armor` | +0x4390 | u32 | respawn? | Armor (unverified) |
 | `zone_30_health` | +0x43A0 | i32 | respawn? | Health (unverified) |
+| `zone_30_constitution` | +0x43A4 | i32 | respawn? | Constitution (unverified) |
+| `zone_30_downs_on_death` | +0x43AB | u8 | respawn? | Downs on death (unverified) |
+| `zone_30_fatal` | +0x43AC | u8 | respawn? | Fatal (unverified) |
 | `zone_30_affects_main_health` | +0x43B0 | f32 | respawn? | Affects main health (unverified) |
 | `zone_30_affected_by_explosions` | +0x43FB | u8 | respawn? | Own explosion share (unverified) |
 | `zone_30_explosive_damage_percentage` | +0x43FC | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_30_main_health_capped` | +0x440C | u8 | respawn? | Main health capped (unverified) |
+| `zone_31_durable_resistance` | +0x45AC | f32 | respawn? | Durable resistance (unverified) |
 | `zone_31_armor` | +0x45B8 | u32 | respawn? | Armor (unverified) |
 | `zone_31_health` | +0x45C8 | i32 | respawn? | Health (unverified) |
+| `zone_31_constitution` | +0x45CC | i32 | respawn? | Constitution (unverified) |
+| `zone_31_downs_on_death` | +0x45D3 | u8 | respawn? | Downs on death (unverified) |
+| `zone_31_fatal` | +0x45D4 | u8 | respawn? | Fatal (unverified) |
 | `zone_31_affects_main_health` | +0x45D8 | f32 | respawn? | Affects main health (unverified) |
 | `zone_31_affected_by_explosions` | +0x4623 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_31_explosive_damage_percentage` | +0x4624 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_31_main_health_capped` | +0x4634 | u8 | respawn? | Main health capped (unverified) |
+| `zone_32_durable_resistance` | +0x47D4 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_32_armor` | +0x47E0 | u32 | respawn? | Armor (unverified) |
 | `zone_32_health` | +0x47F0 | i32 | respawn? | Health (unverified) |
+| `zone_32_constitution` | +0x47F4 | i32 | respawn? | Constitution (unverified) |
+| `zone_32_downs_on_death` | +0x47FB | u8 | respawn? | Downs on death (unverified) |
+| `zone_32_fatal` | +0x47FC | u8 | respawn? | Fatal (unverified) |
 | `zone_32_affects_main_health` | +0x4800 | f32 | respawn? | Affects main health (unverified) |
 | `zone_32_affected_by_explosions` | +0x484B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_32_explosive_damage_percentage` | +0x484C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_32_main_health_capped` | +0x485C | u8 | respawn? | Main health capped (unverified) |
+| `zone_33_durable_resistance` | +0x49FC | f32 | respawn? | Durable resistance (unverified) |
 | `zone_33_armor` | +0x4A08 | u32 | respawn? | Armor (unverified) |
 | `zone_33_health` | +0x4A18 | i32 | respawn? | Health (unverified) |
+| `zone_33_constitution` | +0x4A1C | i32 | respawn? | Constitution (unverified) |
+| `zone_33_downs_on_death` | +0x4A23 | u8 | respawn? | Downs on death (unverified) |
+| `zone_33_fatal` | +0x4A24 | u8 | respawn? | Fatal (unverified) |
 | `zone_33_affects_main_health` | +0x4A28 | f32 | respawn? | Affects main health (unverified) |
 | `zone_33_affected_by_explosions` | +0x4A73 | u8 | respawn? | Own explosion share (unverified) |
 | `zone_33_explosive_damage_percentage` | +0x4A74 | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_33_main_health_capped` | +0x4A84 | u8 | respawn? | Main health capped (unverified) |
+| `zone_34_durable_resistance` | +0x4C24 | f32 | respawn? | Durable resistance (unverified) |
 | `zone_34_armor` | +0x4C30 | u32 | respawn? | Armor (unverified) |
 | `zone_34_health` | +0x4C40 | i32 | respawn? | Health (unverified) |
+| `zone_34_constitution` | +0x4C44 | i32 | respawn? | Constitution (unverified) |
+| `zone_34_downs_on_death` | +0x4C4B | u8 | respawn? | Downs on death (unverified) |
+| `zone_34_fatal` | +0x4C4C | u8 | respawn? | Fatal (unverified) |
 | `zone_34_affects_main_health` | +0x4C50 | f32 | respawn? | Affects main health (unverified) |
 | `zone_34_affected_by_explosions` | +0x4C9B | u8 | respawn? | Own explosion share (unverified) |
 | `zone_34_explosive_damage_percentage` | +0x4C9C | f32 | respawn? | Explosion damage taken (unverified) |
+| `zone_34_main_health_capped` | +0x4CAC | u8 | respawn? | Main health capped (unverified) |
+| `zone_35_durable_resistance` | +0x4E4C | f32 | respawn? | Durable resistance (unverified) |
+| `zone_35_armor` | +0x4E58 | u32 | respawn? | Armor (unverified) |
+| `zone_35_health` | +0x4E68 | i32 | respawn? | Health (unverified) |
+| `zone_35_constitution` | +0x4E6C | i32 | respawn? | Constitution (unverified) |
+| `zone_35_downs_on_death` | +0x4E73 | u8 | respawn? | Downs on death (unverified) |
+| `zone_35_fatal` | +0x4E74 | u8 | respawn? | Fatal (unverified) |
+| `zone_35_affects_main_health` | +0x4E78 | f32 | respawn? | Affects main health (unverified) |
+| `zone_35_explosive_damage_percentage` | +0x4EC4 | f32 | respawn? | Explosive damage percentage (unverified) |
+| `zone_35_main_health_capped` | +0x4ED4 | u8 | respawn? | Main health capped (unverified) |
+| `zone_36_durable_resistance` | +0x5074 | f32 | respawn? | Durable resistance (unverified) |
+| `zone_36_armor` | +0x5080 | u32 | respawn? | Armor (unverified) |
+| `zone_36_health` | +0x5090 | i32 | respawn? | Health (unverified) |
+| `zone_36_constitution` | +0x5094 | i32 | respawn? | Constitution (unverified) |
+| `zone_36_downs_on_death` | +0x509B | u8 | respawn? | Downs on death (unverified) |
+| `zone_36_fatal` | +0x509C | u8 | respawn? | Fatal (unverified) |
+| `zone_36_affects_main_health` | +0x50A0 | f32 | respawn? | Affects main health (unverified) |
+| `zone_36_explosive_damage_percentage` | +0x50EC | f32 | respawn? | Explosive damage percentage (unverified) |
+| `zone_36_main_health_capped` | +0x50FC | u8 | respawn? | Main health capped (unverified) |
+| `zone_37_durable_resistance` | +0x529C | f32 | respawn? | Durable resistance (unverified) |
+| `zone_37_armor` | +0x52A8 | u32 | respawn? | Armor (unverified) |
+| `zone_37_health` | +0x52B8 | i32 | respawn? | Health (unverified) |
+| `zone_37_constitution` | +0x52BC | i32 | respawn? | Constitution (unverified) |
+| `zone_37_downs_on_death` | +0x52C3 | u8 | respawn? | Downs on death (unverified) |
+| `zone_37_fatal` | +0x52C4 | u8 | respawn? | Fatal (unverified) |
+| `zone_37_affects_main_health` | +0x52C8 | f32 | respawn? | Affects main health (unverified) |
+| `zone_37_explosive_damage_percentage` | +0x5314 | f32 | respawn? | Explosive damage percentage (unverified) |
+| `zone_37_main_health_capped` | +0x5324 | u8 | respawn? | Main health capped (unverified) |
 
 ### HfJumppack
 
@@ -576,6 +781,7 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 |---|---|---|---|---|
 | `radius` | +0x00 | f32 | respawn? | shield.radius (unverified) |
 | `durability` | +0x4C | f32 | respawn? | shield.durability (unverified) |
+| `armor` | +0x50 | f32 | respawn? | Armor (unverified) |
 | `recharge_delay` | +0x58 | f32 | respawn? | shield.recharge_delay (unverified) |
 | `broken_recharge_delay` | +0x5C | f32 | respawn? | shield.broken_recharge_delay (unverified) |
 | `recharge_rate` | +0x60 | f32 | respawn? | shield.recharge_rate (unverified) |
@@ -806,6 +1012,100 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
 | `mission_duration` | +0x74 | f32 | respawn? | Mission timer in seconds (60 to 2500; the game cuts longer countdowns to 2500). Set it aboard the ship before launch (unverified) |
+| `patrol_clock_rate_players_1` | +0x1F0 | f32 | respawn? | Patrol clock rate players 1 (unverified) |
+| `patrol_clock_rate_players_2` | +0x1F4 | f32 | respawn? | Patrol clock rate players 2 (unverified) |
+| `patrol_clock_rate_players_3` | +0x1F8 | f32 | respawn? | Patrol clock rate players 3 (unverified) |
+| `patrol_clock_rate_players_4` | +0x1FC | f32 | respawn? | Patrol clock rate players 4 (unverified) |
+| `queue_limit_progress_1` | +0x218 | f32 | respawn? | Queue limit progress 1 (unverified) |
+| `queue_limit_progress_2` | +0x21C | f32 | respawn? | Queue limit progress 2 (unverified) |
+| `queue_limit_progress_3` | +0x220 | f32 | respawn? | Queue limit progress 3 (unverified) |
+| `queue_limit_progress_4` | +0x224 | f32 | respawn? | Queue limit progress 4 (unverified) |
+| `queue_limit_progress_5` | +0x228 | f32 | respawn? | Queue limit progress 5 (unverified) |
+| `queue_limit_players_1` | +0x22C | f32 | respawn? | Queue limit players 1 (unverified) |
+| `queue_limit_players_2` | +0x230 | f32 | respawn? | Queue limit players 2 (unverified) |
+| `queue_limit_players_3` | +0x234 | f32 | respawn? | Queue limit players 3 (unverified) |
+| `queue_limit_players_4` | +0x238 | f32 | respawn? | Queue limit players 4 (unverified) |
+| `queue_limit_conditional_state` | +0x23C | f32 | respawn? | Queue limit conditional state (unverified) |
+| `queue_limit_secondary_progress_1` | +0x240 | f32 | respawn? | Queue limit secondary progress 1 (unverified) |
+| `queue_limit_secondary_progress_2` | +0x244 | f32 | respawn? | Queue limit secondary progress 2 (unverified) |
+| `queue_limit_secondary_progress_3` | +0x248 | f32 | respawn? | Queue limit secondary progress 3 (unverified) |
+| `queue_limit_secondary_progress_4` | +0x24C | f32 | respawn? | Queue limit secondary progress 4 (unverified) |
+| `queue_limit_secondary_progress_5` | +0x250 | f32 | respawn? | Queue limit secondary progress 5 (unverified) |
+| `refill_clock_rate_progress_1` | +0x254 | f32 | respawn? | Refill clock rate progress 1 (unverified) |
+| `refill_clock_rate_progress_2` | +0x258 | f32 | respawn? | Refill clock rate progress 2 (unverified) |
+| `refill_clock_rate_progress_3` | +0x25C | f32 | respawn? | Refill clock rate progress 3 (unverified) |
+| `refill_clock_rate_progress_4` | +0x260 | f32 | respawn? | Refill clock rate progress 4 (unverified) |
+| `refill_clock_rate_progress_5` | +0x264 | f32 | respawn? | Refill clock rate progress 5 (unverified) |
+| `refill_clock_rate_players_1` | +0x268 | f32 | respawn? | Refill clock rate players 1 (unverified) |
+| `refill_clock_rate_players_2` | +0x26C | f32 | respawn? | Refill clock rate players 2 (unverified) |
+| `refill_clock_rate_players_3` | +0x270 | f32 | respawn? | Refill clock rate players 3 (unverified) |
+| `refill_clock_rate_players_4` | +0x274 | f32 | respawn? | Refill clock rate players 4 (unverified) |
+| `refill_clock_rate_conditional_state` | +0x278 | f32 | respawn? | Refill clock rate conditional state (unverified) |
+| `refill_clock_rate_secondary_progress_1` | +0x27C | f32 | respawn? | Refill clock rate secondary progress 1 (unverified) |
+| `refill_clock_rate_secondary_progress_2` | +0x280 | f32 | respawn? | Refill clock rate secondary progress 2 (unverified) |
+| `refill_clock_rate_secondary_progress_3` | +0x284 | f32 | respawn? | Refill clock rate secondary progress 3 (unverified) |
+| `refill_clock_rate_secondary_progress_4` | +0x288 | f32 | respawn? | Refill clock rate secondary progress 4 (unverified) |
+| `refill_clock_rate_secondary_progress_5` | +0x28C | f32 | respawn? | Refill clock rate secondary progress 5 (unverified) |
+| `batch_size_progress_1` | +0x290 | f32 | respawn? | Batch size progress 1 (unverified) |
+| `batch_size_progress_2` | +0x294 | f32 | respawn? | Batch size progress 2 (unverified) |
+| `batch_size_progress_3` | +0x298 | f32 | respawn? | Batch size progress 3 (unverified) |
+| `batch_size_progress_4` | +0x29C | f32 | respawn? | Batch size progress 4 (unverified) |
+| `batch_size_progress_5` | +0x2A0 | f32 | respawn? | Batch size progress 5 (unverified) |
+| `batch_size_players_1` | +0x2A4 | f32 | respawn? | Batch size players 1 (unverified) |
+| `batch_size_players_2` | +0x2A8 | f32 | respawn? | Batch size players 2 (unverified) |
+| `batch_size_players_3` | +0x2AC | f32 | respawn? | Batch size players 3 (unverified) |
+| `batch_size_players_4` | +0x2B0 | f32 | respawn? | Batch size players 4 (unverified) |
+| `batch_size_conditional_state` | +0x2B4 | f32 | respawn? | Batch size conditional state (unverified) |
+| `batch_size_secondary_progress_1` | +0x2B8 | f32 | respawn? | Batch size secondary progress 1 (unverified) |
+| `batch_size_secondary_progress_2` | +0x2BC | f32 | respawn? | Batch size secondary progress 2 (unverified) |
+| `batch_size_secondary_progress_3` | +0x2C0 | f32 | respawn? | Batch size secondary progress 3 (unverified) |
+| `batch_size_secondary_progress_4` | +0x2C4 | f32 | respawn? | Batch size secondary progress 4 (unverified) |
+| `batch_size_secondary_progress_5` | +0x2C8 | f32 | respawn? | Batch size secondary progress 5 (unverified) |
+| `minimum_batch_size_progress_1` | +0x2CC | f32 | respawn? | Minimum batch size progress 1 (unverified) |
+| `minimum_batch_size_progress_2` | +0x2D0 | f32 | respawn? | Minimum batch size progress 2 (unverified) |
+| `minimum_batch_size_progress_3` | +0x2D4 | f32 | respawn? | Minimum batch size progress 3 (unverified) |
+| `minimum_batch_size_progress_4` | +0x2D8 | f32 | respawn? | Minimum batch size progress 4 (unverified) |
+| `minimum_batch_size_progress_5` | +0x2DC | f32 | respawn? | Minimum batch size progress 5 (unverified) |
+| `minimum_batch_size_players_1` | +0x2E0 | f32 | respawn? | Minimum batch size players 1 (unverified) |
+| `minimum_batch_size_players_2` | +0x2E4 | f32 | respawn? | Minimum batch size players 2 (unverified) |
+| `minimum_batch_size_players_3` | +0x2E8 | f32 | respawn? | Minimum batch size players 3 (unverified) |
+| `minimum_batch_size_players_4` | +0x2EC | f32 | respawn? | Minimum batch size players 4 (unverified) |
+| `minimum_batch_size_conditional_state` | +0x2F0 | f32 | respawn? | Minimum batch size conditional state (unverified) |
+| `minimum_batch_size_secondary_progress_1` | +0x2F4 | f32 | respawn? | Minimum batch size secondary progress 1 (unverified) |
+| `minimum_batch_size_secondary_progress_2` | +0x2F8 | f32 | respawn? | Minimum batch size secondary progress 2 (unverified) |
+| `minimum_batch_size_secondary_progress_3` | +0x2FC | f32 | respawn? | Minimum batch size secondary progress 3 (unverified) |
+| `minimum_batch_size_secondary_progress_4` | +0x300 | f32 | respawn? | Minimum batch size secondary progress 4 (unverified) |
+| `minimum_batch_size_secondary_progress_5` | +0x304 | f32 | respawn? | Minimum batch size secondary progress 5 (unverified) |
+| `release_clock_rate_progress_1` | +0x308 | f32 | respawn? | Release clock rate progress 1 (unverified) |
+| `release_clock_rate_progress_2` | +0x30C | f32 | respawn? | Release clock rate progress 2 (unverified) |
+| `release_clock_rate_progress_3` | +0x310 | f32 | respawn? | Release clock rate progress 3 (unverified) |
+| `release_clock_rate_progress_4` | +0x314 | f32 | respawn? | Release clock rate progress 4 (unverified) |
+| `release_clock_rate_progress_5` | +0x318 | f32 | respawn? | Release clock rate progress 5 (unverified) |
+| `release_clock_rate_players_1` | +0x31C | f32 | respawn? | Release clock rate players 1 (unverified) |
+| `release_clock_rate_players_2` | +0x320 | f32 | respawn? | Release clock rate players 2 (unverified) |
+| `release_clock_rate_players_3` | +0x324 | f32 | respawn? | Release clock rate players 3 (unverified) |
+| `release_clock_rate_players_4` | +0x328 | f32 | respawn? | Release clock rate players 4 (unverified) |
+| `release_clock_rate_conditional_state` | +0x32C | f32 | respawn? | Release clock rate conditional state (unverified) |
+| `release_clock_rate_secondary_progress_1` | +0x330 | f32 | respawn? | Release clock rate secondary progress 1 (unverified) |
+| `release_clock_rate_secondary_progress_2` | +0x334 | f32 | respawn? | Release clock rate secondary progress 2 (unverified) |
+| `release_clock_rate_secondary_progress_3` | +0x338 | f32 | respawn? | Release clock rate secondary progress 3 (unverified) |
+| `release_clock_rate_secondary_progress_4` | +0x33C | f32 | respawn? | Release clock rate secondary progress 4 (unverified) |
+| `release_clock_rate_secondary_progress_5` | +0x340 | f32 | respawn? | Release clock rate secondary progress 5 (unverified) |
+| `shared_cooldown_duration_progress_1` | +0x380 | f32 | respawn? | Shared cooldown duration progress 1 (unverified) |
+| `shared_cooldown_duration_progress_2` | +0x384 | f32 | respawn? | Shared cooldown duration progress 2 (unverified) |
+| `shared_cooldown_duration_progress_3` | +0x388 | f32 | respawn? | Shared cooldown duration progress 3 (unverified) |
+| `shared_cooldown_duration_progress_4` | +0x38C | f32 | respawn? | Shared cooldown duration progress 4 (unverified) |
+| `shared_cooldown_duration_progress_5` | +0x390 | f32 | respawn? | Shared cooldown duration progress 5 (unverified) |
+| `shared_cooldown_duration_players_1` | +0x394 | f32 | respawn? | Shared cooldown duration players 1 (unverified) |
+| `shared_cooldown_duration_players_2` | +0x398 | f32 | respawn? | Shared cooldown duration players 2 (unverified) |
+| `shared_cooldown_duration_players_3` | +0x39C | f32 | respawn? | Shared cooldown duration players 3 (unverified) |
+| `shared_cooldown_duration_players_4` | +0x3A0 | f32 | respawn? | Shared cooldown duration players 4 (unverified) |
+| `shared_cooldown_duration_conditional_state` | +0x3A4 | f32 | respawn? | Shared cooldown duration conditional state (unverified) |
+| `shared_cooldown_duration_secondary_progress_1` | +0x3A8 | f32 | respawn? | Shared cooldown duration secondary progress 1 (unverified) |
+| `shared_cooldown_duration_secondary_progress_2` | +0x3AC | f32 | respawn? | Shared cooldown duration secondary progress 2 (unverified) |
+| `shared_cooldown_duration_secondary_progress_3` | +0x3B0 | f32 | respawn? | Shared cooldown duration secondary progress 3 (unverified) |
+| `shared_cooldown_duration_secondary_progress_4` | +0x3B4 | f32 | respawn? | Shared cooldown duration secondary progress 4 (unverified) |
+| `shared_cooldown_duration_secondary_progress_5` | +0x3B8 | f32 | respawn? | Shared cooldown duration secondary progress 5 (unverified) |
 
 ### HfOrbitalAbility
 

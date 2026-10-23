@@ -147,7 +147,7 @@ static class EditorTests
                 "An attachment's field is read through get_stat: kind, component, resource, record.");
             var targets = StatsSchema.Current.Targets;
             var helldiver = targets["helldiver"]["Helldiver"].Fields;
-            check(helldiver.Count == 55 && helldiver["entity.health"] is { Component: "HealthComponentData", Record: 76, Offset: 0 } &&
+            check(helldiver.Count == 64 && helldiver["entity.health"] is { Component: "HealthComponentData", Record: 76, Offset: 0 } &&
                 helldiver["helldiver.stamina.cost_jump"] is { Component: "AvatarComponentData", Offset: 76 } &&
                 helldiver["arm_left:zone.health"] is { Component: "HealthComponentData", Record: 76, Offset: 1856, Storage: "i32", Section: "Left arm" } &&
                 helldiver["head:zone.damage_multiplier"].Choices.Any(c => c.Label == "Critical") &&
