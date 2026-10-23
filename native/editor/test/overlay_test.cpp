@@ -7,7 +7,9 @@
  * its own on the same device and runs a list on it before and after the game's every frame (as RivaTuner, Steam, OBS or
  * Overwolf can): the editor must draw on the swap chain's queue, not that one. And after the first frames, an "overlay"
  * hooks Present's and Present1's code over the editor's as RivaTuner does (issue #5), calling past the editor: the editor
- * must get in front of it again and still draw, the overlay still called, and the shared method table left alone.
+ * must get in front of it again and still draw, the overlay still called, and the shared method table left alone (with
+ * a real RivaTuner in the process, RivaTuner is that overlay). Then the overlay takes its hook off, the code put back as
+ * it was before the editor: the editor must put its own hook back.
  * Usage: overlay_test.exe <hellforge_editor.dll> [<screenshot.bmp> [<editor folder: editor-catalog.json, game-icons.bin>]]
  * HELLFORGE_EDITOR_TEST_D3D11=1: the window presents with Direct3D 11 instead, as the game does with --use-d3d11.
  * HELLFORGE_EDITOR_TEST_NO_OVERLAY_QUEUE=1: no overlay queue (a real overlay, RivaTuner say, tried on its own). */
@@ -29,6 +31,7 @@ static HfEventCallback g_ready;
 static int g_drawing, g_hooked, g_lives, g_presetImports;
 static void* g_drawnQueue; /* the queue the editor says it draws on (D3D12) */
 static int g_again; /* times the editor got in front of an overlay that hooked over it */
+static int g_putBack; /* times the editor put its own hook back after an overlay put the code back as it was */
 static int g_modPage, g_modApplied; /* a mod's stratagem: its page made, its saved value sent to its own row */
 static char g_modDir[MAX_PATH] = "";
 static HfSession g_sessionNow; /* the co-op role the stand-in loader reports */
@@ -86,6 +89,7 @@ static void Log(HfMod*, const char* format, ...)
     if (const char* at = strstr(line, "drawing on the game's queue ")) sscanf(at + strlen("drawing on the game's queue "), "%p", &g_drawnQueue);
     if (strstr(line, "hooked the swap chain")) g_hooked = 1;
     if (strstr(line, "the editor runs first again")) g_again++;
+    if (strstr(line, "the editor's hook is back in place")) g_putBack++;
     if (strstr(line, "staged (APPLY writes them)")) g_presetImports++;
     if (strstr(line, "A/MG-101 Heavy MG Sentry gets a page")) g_modPage = 1;
     if (strstr(line, "editor: mod sync") && strstr(line, "the dialog opens")) g_syncOpens++;
@@ -350,6 +354,8 @@ int main(int argc, char** argv)
     /* the code of Present and Present1, as the swap chain's method table gives it before the editor is in */
     void* presentCode = (*(void***)chain)[8];
     void* present1Code = (*(void***)chain)[22];
+    uint8_t presentBefore[8]; /* Present's first bytes as they are before the editor */
+    memcpy(presentBefore, presentCode, 8);
     HMODULE editor = LoadLibraryA(argv[1]);
     typedef int (*Init)(const HfApi*, HfMod*);
     Init init = editor ? (Init)(void*)GetProcAddress(editor, "hellforge_mod_init") : NULL;
@@ -384,13 +390,32 @@ int main(int argc, char** argv)
     int failures = 0;
     UINT width = 1280, height = 720;
     ULONGLONG noticeAt = 0;
+    const bool rivaTuner = GetModuleHandleW(L"RTSSHooks64.dll") != NULL; /* a real RivaTuner hooks this process too */
     for (int frame = 0; frame < 420; frame++)
     {
         MSG message;
         while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
         /* an overlay hooks Present's and Present1's code over the editor's after it has started, and never calls the
-         * editor's detour (RivaTuner coming in late, issue #5); the editor must get in front of it again */
-        if (frame == 10)
+         * editor's detour (RivaTuner coming in late, issue #5); the editor must get in front of it again. Where a real
+         * RivaTuner is in the process it is that overlay (it hooks over the editor on the first frames), and the test's
+         * own is left out: two overlays writing over each other's jump (RivaTuner takes its hook off around each call and
+         * puts it back after) is a fight the test would make, not what it checks */
+        if (frame == 10 && rivaTuner) printf("  overlay: RivaTuner is in the process; it is the overlay that hooks over the editor\n");
+        /* later the overlay takes its hook off as RivaTuner does: Present's code put back as it was before the editor
+         * (eight bytes at once); the editor must put its own hook back */
+        if (frame == 120 && !rivaTuner)
+        {
+            LONG64 before, now;
+            memcpy(&before, presentBefore, 8);
+            memcpy(&now, presentCode, 8);
+            DWORD protect;
+            VirtualProtect(presentCode, 8, PAGE_EXECUTE_READWRITE, &protect);
+            InterlockedCompareExchange64((volatile LONG64*)presentCode, before, now);
+            VirtualProtect(presentCode, 8, protect, &protect);
+            FlushInstructionCache(GetCurrentProcess(), presentCode, 8);
+            printf("  overlay: Present's code put back as it was before the editor, as RivaTuner does when it takes its hook off\n");
+        }
+        if (frame == 10 && !rivaTuner)
         {
             g_overlayPresentNext = (PresentCall)OriginalOf(presentCode);
             g_overlayPresent1Next = (Present1Call)OriginalOf(present1Code);
@@ -778,9 +803,12 @@ int main(int argc, char** argv)
     /* in front of the overlay again, and the overlay still called (after the editor); the method table every swap chain
      * shares never patched (Steam's overlay hooks whatever it holds, and a table pointing at the editor made it recurse) */
     printf("  overlay: the editor got in front of it %d time(s); its detour ran %d time(s)\n", g_again, g_overlayPresents);
-    /* (a real RivaTuner in the process may take its place back from the test's overlay: then only the first counts) */
-    bool rivaTuner = GetModuleHandleW(L"RTSSHooks64.dll") != NULL;
-    if (g_again < 1 || (!rivaTuner && g_overlayPresents < 100)) { puts("FAIL the editor did not get in front of the overlay that hooked over it, or cut it out"); failures++; }
+    /* (with a real RivaTuner the test's overlay is left out: RivaTuner's own hooks over the editor's are the ones; should
+     * it have hooked before the editor this time, there was nothing to get in front of, and the screenshots still tell) */
+    if (rivaTuner && g_again < 1) puts("  overlay: NOTE RivaTuner did not hook over the editor this time");
+    if (!rivaTuner && (g_again < 1 || g_overlayPresents < 50)) { puts("FAIL the editor did not get in front of the overlay that hooked over it, or cut it out"); failures++; }
+    printf("  overlay: the editor put its own hook back %d time(s)\n", g_putBack);
+    if (!rivaTuner && g_putBack < 1) { puts("FAIL the editor did not put its hook back when the code was put back as it was"); failures++; }
     if ((*(void***)chain)[8] != presentCode || (*(void***)chain)[22] != present1Code) { puts("FAIL the swap chains' shared method table was patched"); failures++; }
     if (!d3d11)
     {
