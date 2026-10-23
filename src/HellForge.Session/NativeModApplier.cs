@@ -22,7 +22,7 @@ public static class NativeModApplier
     public static int Run(InstallLayout install, IReadOnlyList<string>? folders, int pid, string expectedExe, string logPath, string statusPath)
     {
         using var log = new StreamWriter(logPath, append: true) { AutoFlush = true };
-        void Log(string text) => log.WriteLine($"{DateTime.UtcNow:HH\\:mm\\:ss.fff} {text}");
+        void Log(string text) => log.WriteLine($"{DateTime.UtcNow:HH\\:mm\\:ss.fff} {Privacy.Scrub(text)}");
         var native = new List<ModManifest>();
         if (folders == null)
         {
