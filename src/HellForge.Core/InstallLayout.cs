@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace HellForge.Core;
@@ -32,6 +34,15 @@ public sealed class InstallLayout(string root)
     public string OriginalSettings => Path.Combine(Game, "data", "settings.ini" + GameSettings.OriginalSuffix);
 
     public bool Exists => File.Exists(Marker) || File.Exists(Path.Combine(Root, LegacyMarkerFile));
+
+    public int BackendPort
+    {
+        get
+        {
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(Root.ToLowerInvariant()));
+            return 49152 + (BitConverter.ToUInt16(hash, 16) % 16384);
+        }
+    }
 
     // The installation containing a folder, such as the launcher's own. An installation from before the rename gets
     // the new marker name.

@@ -50,7 +50,7 @@ try{
         foreach($path in $programs){No-Links $path}
         $programsFile=Join-Path $HellForgeBlockRoot 'wfp-programs.txt'
         [IO.File]::WriteAllLines($programsFile,$programs)
-        $r=Invoke-Wfp @('install',$HellForgeWfpProvider,'HellForge network block',$programsFile)
+        $r=Invoke-Wfp @('install',$HellForgeWfpProvider,'HellForge network block',$programsFile,$HellForgeBackendPort)
         if($r.status -ne 'installed'){throw ('The WFP block was not installed: '+$r.failure)}
         # Prove the block enforces: the probe (one of the blocked programs) must be refused reaching the outside
         # (WSAEACCES, 10013). The loopback backend is not up here, so only the outside result matters.
@@ -60,7 +60,7 @@ try{
         if(-not $egress -or $egress.externalIpv4TcpError -ne 10013){
             throw 'The network block is not stopping outside connections (another firewall, a VPN or a security suite may be letting traffic past the WFP filters).'
         }
-        $marker=[ordered]@{block='wfp';provider=$HellForgeWfpProvider;filters=$r.filters;programs=$programs.Count;installedUtc=[DateTime]::UtcNow.ToString('o')}
+        $marker=[ordered]@{block='wfp';provider=$HellForgeWfpProvider;port=$HellForgeBackendPort;filters=$r.filters;programs=$programs.Count;installedUtc=[DateTime]::UtcNow.ToString('o')}
         [IO.File]::WriteAllText($HellForgeWfpMarker,($marker|ConvertTo-Json))
         $state.programs=$programs.Count;$state.filters=$r.filters;$state.egressBlocked=$true;$state.status='installed'
     }

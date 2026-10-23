@@ -688,7 +688,7 @@ sealed class PlaySession(PlayOptions options)
         var backend = Path.Combine(app, "backend", "HellForge.LocalBackend.exe");
         if (!File.Exists(backend)) throw new SessionFailure("The local backend is missing; reinstall HellForge.");
         var start = new ProcessStartInfo(backend) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var argument in new[] { "--port", "0", "--startup-fixtures", "true", "--lifetime-seconds", "0", "--evidence", evidence,
+        foreach (var argument in new[] { "--port", install.BackendPort.ToString(), "--startup-fixtures", "true", "--lifetime-seconds", "0", "--evidence", evidence,
                      "--profile-dir", profileDirectoryUsed, "--capture-mission-bodies", "true" }) start.ArgumentList.Add(argument);
         if (options.Template != null) { start.ArgumentList.Add("--profile-template"); start.ArgumentList.Add(options.Template); }
         // Follows the live galactic war read-only through the community mirror; fetched before the backend is ready.
