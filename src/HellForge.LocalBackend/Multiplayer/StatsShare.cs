@@ -197,8 +197,9 @@ public sealed class StatsShare : IAsyncDisposable
                 // by System.Text.Json, reaches it.
                 if (text is { Length: > 0 })
                 {
-                    text = Canonical(text);
+                    text = Canonical(text, out var dropped);
                     if (text == null) log($"Stats: the host's {what} is not a file the editor reads; it is left out.");
+                    else if (dropped > 0) log($"Stats: {dropped} value(s) of the host's {what} are beyond the limits and left out.");
                 }
                 if (text == null) { if (File.Exists(path)) File.Delete(path); return; }
                 if (!Directory.Exists(Path.GetDirectoryName(path))) return;
@@ -210,9 +211,10 @@ public sealed class StatsShare : IAsyncDisposable
         }
     }
 
-    static string? Canonical(string text)
+    static string? Canonical(string text, out int dropped)
     {
-        try { return System.Text.Json.Nodes.JsonNode.Parse(text) is System.Text.Json.Nodes.JsonObject root && RecordGuard.Bounded(root, RecordGuard.HostFileLimits) is { } kept ? kept.ToJsonString() : null; }
+        dropped = 0;
+        try { return System.Text.Json.Nodes.JsonNode.Parse(text) is System.Text.Json.Nodes.JsonObject root && RecordGuard.Bounded(root, RecordGuard.HostFileLimits, out dropped) is { } kept ? kept.ToJsonString() : null; }
         catch (System.Text.Json.JsonException) { return null; }
     }
 

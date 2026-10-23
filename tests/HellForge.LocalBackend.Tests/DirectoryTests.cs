@@ -25,7 +25,7 @@ static class DirectoryTests
         public readonly DirectoryService Directory;
         public readonly string Mods;
         public readonly List<string> Log = [];
-        public bool Edited;
+        public bool Edited, Strangers = true;
 
         public Node(InMemoryNetwork network, MemoryLobbyDirectory listings, ulong id, string folder, ModSet own)
         {
@@ -35,7 +35,7 @@ static class DirectoryTests
             void Note(string line) { lock (Log) Log.Add(line); }
             Lobby = new LobbyService(transport, Inbox.Add, Note, own.Digest);
             Sync = new ModSync(transport, Mods, own, Path.GetDirectoryName(run)!, run, ModSyncSession.PathIn(new InstallLayout(folder)), _ => "Player", Note, (_, _) => false);
-            Directory = new DirectoryService(listings.For(id), Lobby, Presence, id, Inbox.Add, Note, Sync, () => Edited, autoPublish: false);
+            Directory = new DirectoryService(listings.For(id), Lobby, Presence, id, Inbox.Add, Note, Sync, () => Edited, () => Strangers, autoPublish: false);
             transport.Received += (peer, bytes) =>
             {
                 var frame = Frame.Decode(bytes);
@@ -149,6 +149,33 @@ static class DirectoryTests
         ModSettings.SetBlocked(guest.Mods, "test.ammo", true);
         check((await guest.Directory.SearchAsync("b1", MapFilter, 50)).Int(2) == 0, "A lobby running a blocked mod is hidden.");
         ModSettings.SetBlocked(guest.Mods, "test.ammo", false);
+
+        // Play with strangers off: this machine's lobby is not listed; a search shows friends' listings only; a join to a
+        // stranger's lobby is refused at once, with why.
+        host.Strangers = false;
+        host.Directory.Publish(now + TimeSpan.FromSeconds(20));
+        check(listings.All.Count == 0 && !host.Directory.Listing && host.Log.Any(l => l.Contains("Play with strangers is off")),
+            "Strangers off: the host's lobby is not listed.");
+        host.Strangers = true;
+        host.Directory.Publish(now + TimeSpan.FromSeconds(21));
+        check(listings.All.Count == 1 && host.Directory.Listing, "On again: listed at once.");
+        await Task.Delay(SameSearchPause);
+        guest.Strangers = false;
+        check((await guest.Directory.SearchAsync("x1", MapFilter, 50)).Int(2) == 0 && guest.Log.Any(l => l.Contains("Play with strangers is off")),
+            "Strangers off: a stranger's listing is not shown.");
+        guest.Presence.SetFriends([new FriendPresence.Friend(HostId, "Host")]);
+        await Task.Delay(SameSearchPause);
+        check((await guest.Directory.SearchAsync("x2", MapFilter, 50)).Int(2) == 1, "A friend's listing still is.");
+        guest.Presence.SetFriends([]);
+        guest.Strangers = true;
+        IReadOnlyList<string>? told = null;
+        guest.Lobby.Refused += (_, lines) => told = lines;
+        guest.Lobby.JoinRefusal = peer => peer == HostId ? ["Not a friend, and Play with strangers is off."] : null;
+        guest.Lobby.FromLocal(MultiplayerTests.Join("x3", GuestId, connection));
+        check(guest.Next("lobby.result", check).Text(2) == LobbyService.LobbyNotJoinable.ToString() && told?.Single().Contains("Play with strangers") == true &&
+            !host.Lobby.InHostedLobby(GuestId), "A join to a stranger's lobby is refused here, with why, and never sent.");
+        guest.Lobby.JoinRefusal = null;
+        await Task.Delay(SameSearchPause);
 
         // Listings that cannot be joined, or are malformed, are left out.
         var code = new ModSet("0123456789abcdef0123456789abcdef", [new ModSetEntry("test.code", "Code", "1", new string('c', 64), 10, ModClass.Code, 0)]);

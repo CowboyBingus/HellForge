@@ -148,6 +148,12 @@ static class StatsShareTests
         check(Eventually(() => !File.Exists(guestHostValues)), "A host's file that is not JSON reaches no file.");
         File.WriteAllText(hostModValues, silo.Replace(":2}", ":3}"));
         check(Eventually(() => Read(guestHostValues) == silo.Replace(":2}", ":3}")), "The host's values come back.");
+        // Keys as long as a "mod:" category with a 64-character mod id, and a content name, are kept.
+        var longKeys = "{\"format\":1,\"mod:" + new string('a', 64) + "/silo\":{\"" + new string('a', 64) + "/silo/" + new string('b', 60) + "\":{\"stratagem.cooldown\":60}}}";
+        File.WriteAllText(hostModValues, longKeys);
+        check(Eventually(() => Read(guestHostValues) == longKeys), "Long mod keys are kept: " + Read(guestHostValues));
+        File.WriteAllText(hostModValues, silo.Replace(":2}", ":3}"));
+        check(Eventually(() => Read(guestHostValues) == silo.Replace(":2}", ":3}")), "The host's values come back after the long keys.");
 
         // The host applies a change: it reaches the joiner's game.
         File.WriteAllText(hostFile, Stats("\"AR-23 Liberator\":{\"weapon.fire_rate\":1000}"));

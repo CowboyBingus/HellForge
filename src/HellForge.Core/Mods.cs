@@ -644,8 +644,8 @@ public static class ModSettings
         public bool Share { get; set; } = true;
         public bool ShowEditedStats { get; set; }
         // Off by default: a stranger's traffic only reaches this machine when the player turns this on. Friends are
-        // always accepted. The lobby directory still searches (the player can browse public lobbies), but strangers
-        // cannot join this machine's lobby or send it anything through the directory until this is on.
+        // always accepted. Off, this machine's lobby is not listed in the lobby directory, a search shows friends'
+        // listings only, and a join to a stranger's lobby is refused with the reason (docs/multiplayer.md).
         public bool PlayWithStrangers { get; set; }
     }
 
