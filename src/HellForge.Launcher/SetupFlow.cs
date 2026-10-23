@@ -483,7 +483,7 @@ public partial class MainWindow
     {
         var check = await RunPowerShell("-Command \"if((Get-Service BFE).Status -ne 'Running'){exit 3}; exit 0\"", install);
         if (check.ExitCode == 3)
-            throw new SetupStopped("The Windows Base Filtering Engine (BFE) service is off. HellForge needs it to keep its copy of the game offline. " +
+            throw new SetupStopped("The Windows Base Filtering Engine (BFE) service is off. HellForge needs it to keep its copy of the game off the internet. " +
                 "Turn it back on (Services > Base Filtering Engine, or run 'net start BFE' as administrator), then start setup again.");
     }
 

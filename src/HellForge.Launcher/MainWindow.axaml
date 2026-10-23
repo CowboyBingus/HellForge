@@ -23,7 +23,7 @@
                 <TextBlock FontSize="21" FontWeight="Black" LetterSpacing="1.5">
                   <Run Text="HELL" /><Run Text="FORGE" Foreground="{StaticResource AccentBrush}" />
                 </TextBlock>
-                <TextBlock Text="Offline HELLDIVERS 2" Classes="muted" FontSize="11" Margin="0,2,0,0" />
+                <TextBlock Text="Local HELLDIVERS 2 · Steam co-op" Classes="muted" FontSize="11" Margin="0,2,0,0" />
               </StackPanel>
             </StackPanel>
             <Border Height="2" Background="{StaticResource AccentBrush}" Margin="0,20,0,0" Opacity="0.85" />
@@ -338,10 +338,10 @@
                            Text="Before the game starts and every 5 minutes while you play, the backend reads the current war (planets, campaigns, liberation) from the community API mirror api.helldivers2.dev, read-only. Neither HellForge nor the game ever contacts Arrowhead's servers. Without a connection the last fetched war is used." />
                 <RadioButton x:Name="WarFrozenRadio" GroupName="war" Content="HellForge's frozen war" />
                 <TextBlock Classes="muted" TextWrapping="Wrap" Margin="28,0,0,0"
-                           Text="A snapshot of the real war from 14 October 2026, built into HellForge: the same planets and campaigns every session, offline." />
+                           Text="A snapshot of the real war from 14 October 2026, built into HellForge: the same planets and campaigns every session, with no internet needed." />
                 <RadioButton x:Name="WarOpenRadio" GroupName="war" Content="All planets open" />
                 <TextBlock Classes="muted" TextWrapping="Wrap" Margin="28,0,0,0"
-                           Text="Every planet but Super Earth is a liberation campaign you can drop on. Planets Super Earth holds in the frozen war go to the enemy whose front lies that way from Super Earth, so each faction holds about a third of the galaxy. Built from the frozen war, so it is the same on every PC and offline. Applies to the next session." />
+                           Text="Every planet but Super Earth is a liberation campaign you can drop on. Planets Super Earth holds in the frozen war go to the enemy whose front lies that way from Super Earth, so each faction holds about a third of the galaxy. Built from the frozen war, so it is the same on every PC and needs no internet. Applies to the next session." />
               </StackPanel>
             </Border>
 
@@ -388,7 +388,7 @@
                 <TextBlock TextWrapping="Wrap" Classes="muted"
                            Text="A Steam ownership check runs before every launch, so Steam must be running and signed in to an account that owns the game or has it through Steam Family Sharing." />
                 <TextBlock TextWrapping="Wrap" Classes="muted"
-                           Text="A personal, offline research project. Not affiliated with or endorsed by Arrowhead Game Studios or Sony Interactive Entertainment." />
+                           Text="A personal research project, run locally. Not affiliated with or endorsed by Arrowhead Game Studios or Sony Interactive Entertainment." />
                 <TextBlock x:Name="PlatformText" Classes="muted" FontSize="12" Margin="0,6,0,0" />
               </StackPanel>
             </Border>

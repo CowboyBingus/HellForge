@@ -1,7 +1,7 @@
 # HellForge on Linux (Proton)
 
-For players on Linux: how to set up and start HellForge under Proton, how it keeps the game offline there, and what is
-still untested. Linux support is experimental.
+For players on Linux: how to set up and start HellForge under Proton, how it keeps the game off the internet there, and
+what is still untested. Linux support is experimental.
 
 Linux support is the work of DreamyBranch and joshua-software-dev, who worked it out and shared it in
 [issue 1](https://github.com/SkyeShade/HellForge/issues/1). Thank you both. The setup steps below, and the dependency
@@ -153,7 +153,7 @@ HellForge's Uninstall button does not work on Linux; remove it by hand:
 3. If Steam's download of the supported build is still in Steam's folder (it was never moved), delete its `app_553850`
    folder there.
 
-## How it keeps the game offline
+## How it keeps the game off the internet
 
 On Windows the copied game is kept off the internet by a network block in the Windows Filtering Platform. Wine has
 none, so on Linux HellForge runs inside a network namespace: a private network with no route out.

@@ -11,7 +11,7 @@
  * pointer: it is valid for the whole session. Register for events to act once the game's code and data exist; load
  * events are delivered on the loader's watch thread, in the order mods registered, never two at once.
  *
- * Everything runs inside the offline HellForge copy only; the normal game is never touched. The loader does not catch a mod's crashes; the session log names the mod that was running. */
+ * Everything runs inside HellForge's own local copy only; the normal game is never touched. The loader does not catch a mod's crashes; the session log names the mod that was running. */
 #ifndef HELLFORGE_MOD_H
 #define HELLFORGE_MOD_H
 

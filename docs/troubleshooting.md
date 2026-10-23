@@ -111,7 +111,7 @@ Windows Firewall does not need to be on.
 | Message | What to do |
 |---|---|
 | "Windows permission was declined. The network block is required; start setup again and allow it." | Start setup again and answer Yes to the Windows administrator prompt. Setup does not finish without the block. |
-| "The Windows Base Filtering Engine (BFE) service is off. HellForge needs it to keep its copy of the game offline." | Turn it back on (Services > Base Filtering Engine, or run `net start BFE` as administrator), then start setup again. |
+| "The Windows Base Filtering Engine (BFE) service is off. HellForge needs it to keep its copy of the game off the internet." | Turn it back on (Services > Base Filtering Engine, or run `net start BFE` as administrator), then start setup again. |
 | "The network block was not installed: ..." | The reason follows the colon. Setup also writes `logs\setup-network-block.json`; include it when you ask for help. |
 
 ## Antivirus

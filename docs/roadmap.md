@@ -7,7 +7,7 @@ Nothing here has a date, and stability comes first.
 
 | Area | Status | Where it stands |
 |---|---|---|
-| Offline game copy | Done | Shipped in 0.2.0 |
+| Local game copy | Done | Shipped in 0.2.0 |
 | Co-op with friends | Done | Shipped in 0.2.0 |
 | [Mod SDK](sdk-roadmap.md) | Done | SDK 14; some events and registries left |
 | Build patches for newer Steam builds | Done | Each new Steam build needs a new patch |
@@ -42,7 +42,7 @@ Versions: HellForge 0.3.0-dev.1, engine 0.1.29, mod SDK 14.
 
 ## Done in 0.2.0-beta
 
-- The offline game copy, the local backend, and the WFP network block, which setup installs for you.
+- The local game copy, the local backend, and the WFP network block, which setup installs for you.
 - The first step of the network census: the game logs every connection it tries to make.
 - Mod content syncs in co-op. Added stratagems, entities, behaviours and abilities get the same numbers on every PC,
   and new behaviours and abilities sync the way the game's own versions do.

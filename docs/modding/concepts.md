@@ -203,7 +203,7 @@ would pass a limit returns 0 (`hook` returns non-zero), and the mod's log says w
 
 A code mod runs inside the game with the player's permissions, and the loader does not catch its crashes: a crash in
 your code ends the game, and `modloader.log` names where it happened ([debugging](debugging.md#crashes)). Players should
-only enable code mods from people they trust. Everything runs in HellForge's offline copy; the normal game is never
-touched.
+only enable code mods from people they trust. Everything runs in HellForge's own local copy; the normal game is
+never touched.
 
 Next: [Stats mods](stats-mods.md), number changes without code.

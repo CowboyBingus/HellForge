@@ -1,8 +1,8 @@
 # HellForge
 
-HellForge runs your own copy of HELLDIVERS 2 offline, against a local backend on your PC, and loads mods into it: new
-stratagems, weapons, stats and difficulties. You can play solo or with other players who run HellForge too. It comes with
-an in-game editor (F8) and a C mod SDK with guides and examples.
+HellForge runs your own copy of HELLDIVERS 2 locally, against a backend on your PC in place of the official servers, and
+loads mods into it: new stratagems, weapons, stats and difficulties. You can play solo, or co-op over Steam with other
+players who run HellForge. It comes with an in-game editor (F8) and a C mod SDK with guides and examples.
 
 > [!WARNING]
 > **This is the `dev` branch: work in progress for the next release (0.3.0), experimental and possibly broken.** Players:
@@ -22,9 +22,10 @@ your own Steam files. Your normal Steam game is never changed.
 The Steam ownership check stays. A genuine check runs at setup and before every launch, so Steam must be running and
 signed in to an account that owns the game or has it through Steam Family Sharing.
 
-The copy is offline. It talks to a local backend on your PC in place of Arrowhead's online services, and a network block
-in the Windows Filtering Platform stops it reaching anything but this PC. It never connects to official servers, so it
-cannot be used to play online with a modified game.
+The copy runs locally. It talks to a local backend on your PC in place of Arrowhead's online services, and a network
+block in the Windows Filtering Platform stops the game itself reaching anything but this PC; co-op goes through
+HellForge's backend over Steam. It never connects to official servers, so it cannot be used to play on them with a
+modified game.
 
 Multiplayer is co-op with other HellForge players only. You host or join Steam friends who run HellForge, and public
 lobbies of other HellForge players show on the Galactic Map: HellForge lists them on Steam's lobby service, never on

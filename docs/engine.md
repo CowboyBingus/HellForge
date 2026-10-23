@@ -4,7 +4,7 @@ This page is the starting point for contributors to HellForge's engine: what it 
 this repository, how to build it and how to run its tests. Mod authors start at [modding/README.md](modding/README.md)
 instead.
 
-The engine is what runs the copied game offline and loads mods into it. Its full source is in this repository, next to
+The engine is what runs the copied game locally, against the local backend, and loads mods into it. Its full source is in this repository, next to
 the launcher, setup program, command-line tool and mod SDK. `scripts/Build-Engine.ps1` builds it from here into the
 engine package, `artifacts/engine-package/hellforge-engine-<version>.zip`, and `scripts/Publish-HellForge.ps1` puts
 that package into every installation's `app` folder.
