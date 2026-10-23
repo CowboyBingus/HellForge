@@ -1067,8 +1067,15 @@ Built 2026-10-22 and tested on one PC only.
 - **Not yet known:**
   - whether the Galactic Map shows a marker and hover card from these records (which string keys the map lists);
   - whether the hover card works with the other members' account ids at 0;
-  - Steam's search rate limits;
   - the map's exact filter string (now logged).
+- **Steam's search rate (soak, 2026-10-23, one PC, live Steam):** a search shaped like the directory's (the protocol
+  key, a slot free, worldwide, at most 50) for one Invisible lobby of the soak's own. Steam failed none and always
+  found that lobby:
+  - 60 searches at the map's rate (every 10 s, 10 minutes), half of them in 175 ms or less, the slowest 231 ms;
+  - 60 at one a second;
+  - 359 back to back in a minute (358 a minute, 60 times the map's rate), the slowest 192 ms.
+
+  No limit was reached. A new lobby was found 0.84 s after it was made.
 
 **To test on two PCs that are not Steam friends** (or two friends' PCs with `HELLFORGE_TEST_STRANGERS=1` on both):
 1. Both turn on multiplayer, Local PlayFab and Play with strangers (Settings > MULTIPLAYER). The host opens a Public
