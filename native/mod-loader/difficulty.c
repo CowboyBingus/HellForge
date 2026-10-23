@@ -52,16 +52,17 @@ typedef struct DifficultyBound { uint32_t rva; uint8_t immAt, width; } Difficult
 #define DIF_DISTANCE 0x2143170u
 static const uint32_t kDistanceSites[7][2] = {{0xF417C8u, 5}, {0x7BDEE8u, 4}, {0xF62EDBu, 4}, {0xF7D9B6u, 6}, {0xF7E506u, 6},
     {0xF82CF6u, 6}, {0xF84BA6u, 6}};
-/* Enemy rosters: five descriptors of {rows, count} and eight composition
- * families. A roster row (0x80) holds a spawn weight per tech level 1..10 at +0x30; +0x28..+0x2F are unused (zero), so
+/* Enemy rosters: six descriptors of {rows, count} and eight composition
+ * families (the sixth, one row, is the third of 0x90E2A5's choices with the fourth and fifth, read by the same readers). A roster row (0x80) holds a spawn weight per tech level 1..10 at +0x30; +0x28..+0x2F are unused (zero), so
  * the weights move to +0x2C and level 11's goes to +0x54 (the six readers' displacements follow). Compositions (0x118)
  * allow tech levels +0xEC..+0xF0: those up to 10 allow 11. The director clamps the tech level to 10 at 0x94CA13. */
-static const struct { uint32_t descriptor, rows; } kRosters[5] = {{0x21CBD60u, 45}, {0x21CE910u, 46}, {0x21CBCB0u, 61},
-    {0x21CB3C0u, 12}, {0x21CB890u, 27}};
+static const struct { uint32_t descriptor, rows; } kRosters[6] = {{0x21CBD60u, 45}, {0x21CE910u, 46}, {0x21CBCB0u, 61},
+    {0x21CB3C0u, 12}, {0x21CB890u, 27}, {0x21CB470u, 1}};
+#define DIF_ROSTERS (sizeof kRosters / sizeof kRosters[0])
 static const uint32_t kWeightReaders[6][2] = {{0x94C1E9u, 5}, {0x94C26Fu, 6}, {0x94C2E3u, 6}, {0x95321Bu, 5}, {0x9532BDu, 5},
     {0xABD6ACu, 4}};
 #define DIF_TECH_CLAMP 0x94CA13u      /* mov eax, 0xa */
-#define DIF_COMPOSITIONS_UP_TO_TEN 318u
+#define DIF_COMPOSITIONS_UP_TO_TEN 319u
 /* Larger maps. The route-cell generator (0xFD03E0) fills fixed arrays without checking them: vertices 975 (850 at
  * level 10), edges 1621, cells 1024. Its sites are a Poisson disc of the generation settings' spacing (+4, 40 m) in a
  * disk of +0xC (680 m) around the world's centre (the world is 2048 m), so a larger playable radius alone overflows
@@ -2300,7 +2301,7 @@ static const char* DifficultySitesFailed(uintptr_t game, int* waiting)
     uint8_t clamp[5];
     if (SafeRead(game + DIF_TECH_CLAMP, clamp, 5) || memcmp(clamp, kKeepTen, 5) != 0) return "the enemy tech level clamp is not the reviewed one";
     uint32_t compositionsToTen = 0;
-    for (size_t r = 0; r < 5; r++)
+    for (size_t r = 0; r < DIF_ROSTERS; r++)
     {
         uint64_t rows = 0, count = 0;
         if (SafeRead(game + kRosters[r].descriptor, &rows, 8) || SafeRead(game + kRosters[r].descriptor + 8, &count, 8) ||
@@ -2906,7 +2907,7 @@ static int InstallDifficulty(uintptr_t game, int pinsReady)
     /* Enemies: every roster row's weights move up 4 bytes with level 11's (level 10's to begin with) after them, the
      * readers follow, compositions up to tech 10 allow 11, and the director's tech level clamp becomes 11. The readers
      * change right after the rows: the director only reads them while a mission is set up, not aboard the ship. */
-    for (size_t r = 0; r < 5; r++)
+    for (size_t r = 0; r < DIF_ROSTERS; r++)
     {
         uint64_t rows = 0;
         SafeRead(game + kRosters[r].descriptor, &rows, 8);
@@ -2923,7 +2924,7 @@ static int InstallDifficulty(uintptr_t game, int pinsReady)
         uint8_t disp = 0x2C;
         if (ApiWrite(game + kWeightReaders[i][0] + kWeightReaders[i][1], &disp, 1)) return RefuseDifficulty("an enemy weight read could not be moved");
     }
-    for (size_t r = 0; r < 5; r++)
+    for (size_t r = 0; r < DIF_ROSTERS; r++)
         for (uint32_t k = 0; k < 8; k++)
         {
             uint64_t family = 0, families = 0;

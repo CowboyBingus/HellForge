@@ -420,7 +420,7 @@ static void DifficultyFixture(void)
     for (size_t i = 0; i < 6; i++) game[kWeightReaders[i][0] + kWeightReaders[i][1]] = 0x30;
     memcpy(game + DIF_TECH_CLAMP, kKeepTen, 5);
     uint8_t* rosterRows = game + 0x3400000, *compositions = game + 0x3500000;
-    for (size_t r = 0, at = 0; r < 5; r++)
+    for (size_t r = 0, at = 0; r < DIF_ROSTERS; r++)
     {
         uint64_t rows = (uint64_t)(uintptr_t)(rosterRows + at * 0x80), count = kRosters[r].rows;
         memcpy(game + kRosters[r].descriptor, &rows, 8); memcpy(game + kRosters[r].descriptor + 8, &count, 8);
@@ -478,6 +478,7 @@ static void DifficultyFixture(void)
     for (size_t i = 0; i < 6; i++) assert(game[kWeightReaders[i][0] + kWeightReaders[i][1]] == 0x2C);
     assert(*(float*)(rosterRows + 0x2C) == 0.0f && *(float*)(rosterRows + 0x2C + 4 * 9) == 9.0f && *(float*)(rosterRows + 0x54) == 9.0f);
     assert(*(float*)(rosterRows + 50 * 0x80 + 0x2C) == 105.0f && *(float*)(rosterRows + 50 * 0x80 + 0x54) == 114.0f);
+    assert(*(float*)(rosterRows + 191 * 0x80 + 0x2C) == 500.0f && *(float*)(rosterRows + 191 * 0x80 + 0x54) == 509.0f); /* the sixth roster's row */
     assert(*(uint32_t*)(compositions + 0xF0) == 11 && *(uint32_t*)(compositions + (DIF_COMPOSITIONS_UP_TO_TEN + 1) * 0x118 + 0xF0) == 5);
     assert(*(uint32_t*)(game + DIF_TECH_CLAMP + 1) == 11 && row[0xEC] == 11);
     assert(*(uint32_t*)(row + 0x28) == 8 && *(uint32_t*)(row + 0x2C) == 2 && *(float*)(row + 0xF0) == 2.0f && *(float*)(row + 0xF8) == 1.7f);

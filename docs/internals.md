@@ -339,7 +339,9 @@ square texture. The title is shown in capitals, as the game's names are.
 
 Level 11 has its own enemy tech level, 11. Each roster row (0x80) holds a spawn weight per tech level at +0x30, with 8
 unused bytes before them, so the weights move 4 bytes down and level 11's (level 10's to begin with) goes after them; the
-six readers' displacements follow. Compositions allowing up to tech 10 allow 11 (318 rows), and the director's clamp of
+six readers' displacements follow. That is every row of all six rosters: the sixth (0x21CB470, one row) is read by the
+same readers, and left in place it read level 1 as 0 and had no composition at 11. Compositions allowing up to tech 10
+allow 11 (319 rows), and the director's clamp of
 the tech level becomes 11. The level gets its own budgets. A single enemy group still holds at most 32 enemies (more
 crashes the game), so bigger budgets mean more groups more often.
 
