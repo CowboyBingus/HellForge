@@ -122,6 +122,7 @@ public partial class MainWindow
                 throw new SetupStopped("On Linux, setup runs inside HellForge's network namespace. Close HellForge and start it with " +
                     "app/linux/hellforge-linux.sh (docs/linux.md), then start setup there.");
             if (!LinuxNetworkBlock.Requested) await CheckFilteringEngine(install);
+            if (VisualCppRuntimes.Problem("start setup again.") is { } runtimes) throw new SetupStopped(runtimes);
             var build = SupportedBuild.Current;
             var steamRoot = SteamLocator.SteamRoot() ?? throw new SetupStopped("Steam is not installed on this PC. Install Steam and HELLDIVERS 2, then start setup again.");
             // The build patches published since this release (a game update gets one there, not a new HellForge).

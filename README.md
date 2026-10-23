@@ -46,6 +46,8 @@ HellForge's frozen war, or open every planet to liberation (Settings > Galactic 
 
 - Windows 10 or 11 (64-bit). Linux under Proton is experimental: see [docs/linux.md](docs/linux.md).
 - Steam running and signed in to an account that owns HELLDIVERS 2 or has it through Steam Family Sharing.
+- The Microsoft Visual C++ 2012 and 2015-2022 Redistributables (x64), which the game needs. Setup checks for both and
+  links Microsoft's downloads when one is missing ([troubleshooting](docs/troubleshooting.md#microsoft-visual-c-runtimes)).
 - About 25 GB free on the drive you install to. Add about 2 GB while a patch pack is applied, or plan on about 50 GB in
   total if Steam has to download the supported build.
 - Permission to approve one Windows administrator prompt, for the network block. Windows Firewall does not need to be on:

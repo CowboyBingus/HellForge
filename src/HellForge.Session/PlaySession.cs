@@ -122,6 +122,8 @@ sealed class PlaySession(PlayOptions options)
     void Prepare(string profileDirectory)
     {
         if (!Environment.Is64BitProcess) throw new SessionFailure("The session runner must run as a 64-bit process.");
+        // installations set up before setup checked for them, or a runtime uninstalled since
+        if (VisualCppRuntimes.Problem("press Play again.") is { } runtimes) throw new SessionFailure(runtimes);
         foreach (var name in new[] { "helldivers2", "GameGuard", "GameMon", "GameMon64" })
             if (Process.GetProcessesByName(name).Length > 0) throw new SessionFailure("Existing game or GameGuard process.");
         if (Process.GetProcessesByName("HD2RuntimeModBuilder").Length > 0) throw new SessionFailure("External mod builder is running.");

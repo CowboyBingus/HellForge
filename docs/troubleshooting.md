@@ -85,6 +85,19 @@ already patched are kept, so the copy only needs the rest. Restarting the launch
 Pause copying stops the copy with "Paused. Start setup again to continue where it stopped." An interrupted copy also
 continues where it stopped the next time you run setup.
 
+### Microsoft Visual C++ runtimes
+
+The game needs two Microsoft runtimes that do not come with it: the Visual C++ 2012 Redistributable (x64) and the
+Visual C++ 2015-2022 Redistributable (x64). Steam's own install of the game no longer adds the 2012 one, so a fresh PC
+often lacks it. Setup checks for both before it copies the game, and every session checks again before it starts the
+game. When one is missing, the message names it and gives Microsoft's download link:
+
+- 2012: <https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe>
+- 2015-2022: <https://aka.ms/vc14/vc_redist.x64.exe>
+
+Install the one named, then start setup (or press PLAY) again. Both install side by side with any other versions you
+have.
+
 ### The network block
 
 Setup places a network block so the copied game can only reach this PC. It lives in the Windows Filtering Platform;
@@ -132,6 +145,7 @@ the cryo pod." Press STOP, then PLAY again: the next launch goes through.
 | "Existing game or GameGuard process." | HELLDIVERS 2 (or its GameGuard) is already running. Close it, then press PLAY. |
 | "Another HellForge session is still running for this installation..." | Wait for it to end, or close `HellForge.Session.exe` in Task Manager (or restart the PC), then press PLAY again. |
 | "The game copy is not the supported build (...); repair it from the launcher." | Run Settings > Installation > Check and repair. |
+| "The game needs a Microsoft runtime this PC does not have..." | Install the runtime it names from the link it gives, then press PLAY again ([Visual C++ runtimes](#microsoft-visual-c-runtimes)). |
 | A message ending in "reinstall HellForge" (stand-ins, mod loader or local backend missing or changed) | Run `HellForge-Setup.exe` and pick the installation; Update keeps the game copy, profiles and settings. If it comes back, check your antivirus ([above](#antivirus)). |
 | "Windows administrator consent was not given for the network block." | Press PLAY again and answer Yes to the Windows prompt. |
 | "The launch options cannot be used." | Fix or clear Settings > Launch options; the reason shows under the box. |
@@ -165,7 +179,8 @@ means:
 | `0xC0000428` | Windows blocked an unsigned DLL (Smart App Control or a code-integrity policy) |
 | `0xC0000361` | a Windows policy blocked a file the game loads |
 
-For a damaged or missing DLL, run Settings > Installation > Check and repair. For the security codes, see
+For a damaged or missing DLL, check the [Visual C++ runtimes](#microsoft-visual-c-runtimes) first, then run Settings >
+Installation > Check and repair. For the security codes, see
 [antivirus](#antivirus).
 
 ### Other network block messages
