@@ -52,7 +52,12 @@ public sealed class MultiplayerHost : IAsyncDisposable
         // A refused join, in both games (the in-game editor shows it over the game): the joiner's says why, the host's who.
         Lobby.Refused += (peer, lines) => Stats?.Notice("error", "Couldn't join " + FriendName(peer), lines);
         Lobby.RefusedFriend += (peer, lines) => Stats?.Notice("info", FriendName(peer) + " couldn't join", lines);
-        Party = new PartyService(transport, pipes.SendParty, Log, Lobby.InHostedLobby);
+        Party = new PartyService(transport, pipes.SendParty, Log, Lobby.InHostedLobby) { Kick = Lobby.Kick };
+        // A kick (the game's PFLobbyForceRemoveMember, or its Party kick): the kicked machine's game traffic stops here, and
+        // its player is told in game.
+        Lobby.Kicked += Party.Expel;
+        Lobby.KickedByHost += peer => Stats?.Notice("error", "Removed from " + FriendName(peer) + "'s lobby",
+            ["The host removed you from their lobby.", "You can't join that lobby again while it lasts."]);
         pipes.Lobby = Lobby;
         pipes.Party = Party;
         if (transport != null && accountKeys != null) accountKeys.Log = Log;
@@ -136,8 +141,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
         if (transport == null) return;
         if (directory != null && presence != null)
             Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.Edited == true);
-        gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, Log);
-        if (transport is SteamPeerTransport steam) steam.AcceptStranger = peer => Directory?.Listing == true || Related(peer);
+        gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, Log, Lobby.Welcome);
+        if (transport is SteamPeerTransport steam) steam.AcceptStranger = peer => Directory?.Listing == true || Related(peer) || Lobby.Welcome(peer);
         Log(Directory != null ? "Directory: public lobbies are listed and searched." : "Directory: off (no lobby directory for this link).");
     }
 

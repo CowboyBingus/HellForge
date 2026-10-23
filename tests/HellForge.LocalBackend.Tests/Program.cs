@@ -522,6 +522,9 @@ try
     await DirectoryTests.Run(root, Check);
     results.Add(new { mode = "directory", outcome = "passed" });
     Console.WriteLine("PASS lobby directory: the map's filter, listing values, publishing rules, search and records, edited stats, blocked and unjoinable mods, strangers");
+    await PrivacyTests.Run(Check);
+    results.Add(new { mode = "lobby-privacy", outcome = "passed" });
+    Console.WriteLine("PASS lobby privacy: Public, Friends only and Invite only against friends, strangers and invited players; kicks and no rejoin; invitations; frame limits; the stranger gate's limits and memory");
     await ModSyncTests.Run(root, Check);
     results.Add(new { mode = "mod-sync", outcome = "passed" });
     Console.WriteLine("PASS mod sync: a refusal's offer, download, checks and restart; blocked, unshared and unverified mods; the host's limits; a lying host; the live pipe");
