@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "net_gate.h"
+#include "steam_census.h"
 #include "../common/hf_privacy.h"
 
 #define HELLFORGE_API
@@ -202,16 +203,9 @@ static struct { const void *const *vtable; } g_storage = { g_vtable };
 
 typedef void *(*FindOrCreateUserInterfaceFn)(int32_t user, const char *version);
 
-// The accessor behind the game's SteamRemoteStorage(); every other interface comes from the real DLL.
-HELLFORGE_API void *SteamInternal_FindOrCreateUserInterface(int32_t user, const char *version)
+// The real DLL, which sits next to this one; loaded by full path, so no search order is involved.
+static HMODULE Real(void)
 {
-    if (version && strcmp(version, STORAGE_VERSION) == 0)
-    {
-        EnsureInitialized();
-        Log("FindOrCreateUserInterface %s -> HellForge storage", version);
-        return &g_storage;
-    }
-    // The real DLL sits next to this one; loaded by full path, so no search order is involved.
     static HMODULE real;
     if (!real)
     {
@@ -224,8 +218,48 @@ HELLFORGE_API void *SteamInternal_FindOrCreateUserInterface(int32_t user, const 
             real = LoadLibraryW(path);
         }
     }
+    return real;
+}
+
+HMODULE SteamRealModule(void) { return Real(); }
+
+// The accessor behind the game's SteamRemoteStorage(); every other interface comes from the real DLL (in the census build,
+// behind a counting proxy).
+HELLFORGE_API void *SteamInternal_FindOrCreateUserInterface(int32_t user, const char *version)
+{
+    if (version) SteamCensusInterface(version, user);
+    if (version && strcmp(version, STORAGE_VERSION) == 0)
+    {
+        EnsureInitialized();
+        Log("FindOrCreateUserInterface %s -> HellForge storage", version);
+        return &g_storage;
+    }
+    HMODULE real = Real();
     FindOrCreateUserInterfaceFn forward = real ? (FindOrCreateUserInterfaceFn)(void *)GetProcAddress(real, "SteamInternal_FindOrCreateUserInterface") : NULL;
-    return forward ? forward(user, version) : NULL;
+    return forward ? SteamCensusWrap(forward(user, version), version) : NULL;
+}
+
+// Callback registrations, passed on to the real DLL; the census notes each callback id and its struct's size once (a
+// CCallbackBase: its vtable, a flags byte, then the id at +12; Steamworks' steam_api_common.h).
+typedef void (*RegisterCallbackFn)(void *callback, int id);
+typedef void (*RegisterCallResultFn)(void *callback, uint64_t call);
+
+HELLFORGE_API void SteamAPI_RegisterCallback(void *callback, int id)
+{
+    SteamCensusCallback("callback", id, callback);
+    HMODULE real = Real();
+    RegisterCallbackFn forward = real ? (RegisterCallbackFn)(void *)GetProcAddress(real, "SteamAPI_RegisterCallback") : NULL;
+    if (forward) forward(callback, id);
+}
+
+HELLFORGE_API void SteamAPI_RegisterCallResult(void *callback, uint64_t call)
+{
+    int id = 0;
+    if (callback) memcpy(&id, (const uint8_t *)callback + 12, 4);
+    SteamCensusCallback("callresult", id, callback);
+    HMODULE real = Real();
+    RegisterCallResultFn forward = real ? (RegisterCallResultFn)(void *)GetProcAddress(real, "SteamAPI_RegisterCallResult") : NULL;
+    if (forward) forward(callback, call);
 }
 
 // The flat-API accessor for the same interface.
@@ -260,6 +294,8 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
         InitializeCriticalSection(&g_lock);
         // the network gate first: hooked before the game's own code can reach the network (net_gate.c)
         NetGateStart();
+        // the Steam census, when asked for (steam_census.c): what the game asks of Steam
+        SteamCensusStart(instance);
         if (GetEnvironmentVariableW(L"HELLFORGE_MODLOADER", NULL, 0) > 0)
         {
             HANDLE thread = CreateThread(NULL, 0, StartModLoader, NULL, 0, NULL);

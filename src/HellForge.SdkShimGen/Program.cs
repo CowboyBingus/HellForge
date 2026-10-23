@@ -12,6 +12,7 @@ const string Usage = """
     HellForge.SdkShimGen verify <original.dll> <stand-in.dll>
     HellForge.SdkShimGen smoke <directory with both stand-ins>
     HellForge.SdkShimGen forward <original.dll> <real module> <handwritten.c> <output.def>
+    HellForge.SdkShimGen census-thunks <original.dll> <real module> <handwritten.c> <output.def> <output.c>   (the Steam census's stand-in)
     HellForge.SdkShimGen verify-forward <original.dll> <real module> <handwritten.c> <stand-in.dll>
     HellForge.SdkShimGen smoke-cloud <steam_api64 stand-in> <original steam_api64.dll>
     HellForge.SdkShimGen smoke-lobby-link <directory with the stand-ins> <HellForge.LocalBackend.dll>
@@ -27,6 +28,8 @@ try
         ["verify", var original, var standIn] => Verify(original, standIn),
         ["smoke", var directory] => Smoke.Run(directory),
         ["forward", var original, var module, var handwritten, var output] => Forward(original, module, handwritten, output),
+        ["census-thunks", var original, var module, var handwritten, var definition, var code] =>
+            CensusThunks.Write(original, module, handwritten, definition, code, OwnFunctions),
         ["verify-forward", var original, var module, var handwritten, var standIn] => VerifyForward(original, module, handwritten, standIn),
         ["smoke-cloud", var standIn, var original] => CloudSmoke.Run(standIn, original),
         ["smoke-lobby-link", var directory, var backend] => LobbyLinkSmoke.Run(directory, backend),
