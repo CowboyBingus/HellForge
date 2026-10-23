@@ -532,7 +532,13 @@ sealed class PlaySession(PlayOptions options)
         if (linuxNamespace)
             result["networkBlock"] = "linux-netns";
         else if (wfpOnly)
+        {
             result["networkBlock"] = "wfp";
+            // A block placed before it was narrowed to the backend's port still permits every loopback port.
+            var narrowed = !File.Exists(marker) || install.BlockedBackendPort() != null;
+            result["networkBlockNarrowed"] = narrowed;
+            if (!narrowed) Say("The network block still lets the game reach every program on this PC: run Settings > Installation to narrow it to HellForge's backend.");
+        }
         else
         {
             result["networkBlock"] = "persistent";
@@ -568,11 +574,14 @@ sealed class PlaySession(PlayOptions options)
         var origin = new Uri((string)result["backendOrigin"]!);
         // Linux: the same probe in this process (NetworkProbe.exe is a .NET Framework program, which a Wine prefix runs
         // only with Wine Mono installed).
+        // A narrowed block is proved narrow too: the probe checks another loopback port is refused.
+        var otherPort = wfpOnly && install.BlockedBackendPort() != null ? (origin.Port + 1).ToString() : null;
         var (probeExit, _, _) = linuxNamespace ? (NetworkProbeInProcess(origin.Port, networkReport), "", "")
-            : Tools.Run(probe, [origin.Port.ToString(), networkReport], timeoutMs: 10000);
+            : Tools.Run(probe, otherPort == null ? [origin.Port.ToString(), networkReport] : [origin.Port.ToString(), networkReport, otherPort], timeoutMs: 10000);
         var network = Tools.ReadJson(networkReport);
         result["networkControl"] = network?.DeepClone();
-        if (probeExit != 0 || network == null || (bool?)network["loopbackHttpPassed"] != true || (int?)network["externalIpv4TcpError"] != 10013)
+        if (probeExit != 0 || network == null || (bool?)network["loopbackHttpPassed"] != true || (int?)network["externalIpv4TcpError"] != 10013 ||
+            (otherPort != null && (int?)network["otherLoopbackTcpError"] != 10013))
             throw new SessionFailure("Required loopback/egress controls failed.");
         // Confirm genuine Steam sign-in and ownership with the game's rules active.
         Ownership(realTarget, Path.Combine(run, "ownership-with-firewall.json"));
@@ -746,6 +755,9 @@ sealed class PlaySession(PlayOptions options)
             Environment.SetEnvironmentVariable("HELLFORGE_PIPE", pipe);
             result["multiplayer"] = new JsonObject { ["pipe"] = pipe, ["link"] = "steam" };
         }
+        // The block permits only this port, so the backend has no other: say so when another program holds it.
+        if (System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(l => l.Port == install.BackendPort))
+            throw new SessionFailure($"Port {install.BackendPort}, HellForge's backend port, is used by another program on this PC. Close it and start again.");
         server = Process.Start(start) ?? throw new SessionFailure("The local backend did not start.");
         var stdout = new StreamWriter(Path.Combine(run, "backend-stdout.txt")) { AutoFlush = true };
         var stderr = new StreamWriter(Path.Combine(run, "backend-stderr.txt")) { AutoFlush = true };

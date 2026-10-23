@@ -1,6 +1,6 @@
 // HellForge's network block, placed straight into the Windows Filtering Platform (WFP) instead of as Windows
 // Firewall rules. It does the same job as scripts/Install-NetworkBlock.ps1's firewall rules did: the copied game's
-// programs reach loopback (the local backend) and nothing else. Putting the block in WFP directly means it holds
+// programs reach the local backend's loopback port and nothing else. Putting the block in WFP directly means it holds
 // even when Windows Firewall is switched off, and a high-weight sublayer makes our BLOCK win the platform's
 // arbitration over a security suite's or VPN's own permit sublayer (the beta's Kaspersky/VPN problem).
 //
@@ -55,7 +55,7 @@ DEFINE_GUID(HF_SUBLAYER, 0x4e6f2b1a,0x9d3c,0x4f7a,0xb2,0x10,0x8c,0x55,0xd1,0x3e,
 
 static const UINT8 WEIGHT_PERMIT = 0x0f; // loopback is permitted over the block beneath it
 static const UINT8 WEIGHT_BLOCK  = 0x08;
-static UINT16 gPort = 0; // >0 narrows the outbound permit to one loopback port (the backend's)
+static UINT16 gPort = 0; // install: the one loopback port the outbound permit allows (the backend's)
 
 // The four ALE layers the block covers: outbound (connect) and inbound (recv/accept), v4 and v6. ALE_AUTH_CONNECT is
 // classified for TCP connects and the first outbound UDP packet both, so UDP is covered without a separate layer.
@@ -258,13 +258,16 @@ int wmain(int argc, wchar_t **argv){
 
     const wchar_t *programsFile = NULL, *reportFile = NULL;
     if(isInstall){
-        if(argc < 7) return Report(NULL, "failed", action, -1, -1, "install needs <providerGuid> <displayName> <programsFile> <port> [reportFile].");
+        if(argc < 6) return Report(NULL, "failed", action, -1, -1, "install needs <providerGuid> <displayName> <programsFile> <port> [reportFile].");
         gDisplayName = argv[3];
         programsFile = argv[4];
-        long portVal = _wtol(argv[5]);
-        if(portVal < 0 || portVal > 65535) return Report(NULL, "failed", action, -1, -1, "Port must be 0-65535.");
+        reportFile = argc >= 7 ? argv[6] : NULL;
+        // Digits only, 1-65535: a port that does not parse must never turn into 0, which would permit every port.
+        wchar_t *end = NULL;
+        unsigned long portVal = (argv[5][0] >= L'0' && argv[5][0] <= L'9') ? wcstoul(argv[5], &end, 10) : 0;
+        if(!end || *end != L'\0' || portVal < 1 || portVal > 65535)
+            return Report(reportFile, "failed", action, -1, -1, "The port must be a number from 1 to 65535.");
         gPort = (UINT16)portVal;
-        reportFile = argc >= 8 ? argv[7] : (argc >= 7 ? argv[6] : NULL);
     } else if(isUninstall){
         reportFile = argc >= 4 ? argv[3] : NULL;
     } else { // status

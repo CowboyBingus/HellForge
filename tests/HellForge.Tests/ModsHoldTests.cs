@@ -116,14 +116,5 @@ static class ModsHoldTests
                 if (!snapshot.Contains(Path.GetFullPath(file))) planted.Add(file);
             check(planted.Count == 0, "No planted files in an unchanged folder.");
         });
-
-        test("Backend port: deterministic, in the dynamic range, and different paths get different ports", () =>
-        {
-            var a = new InstallLayout(Path.Combine(root, "port-a"));
-            var b = new InstallLayout(Path.Combine(root, "port-b"));
-            check(a.BackendPort >= 49152 && a.BackendPort <= 65535, $"Port {a.BackendPort} is in the dynamic range.");
-            check(a.BackendPort == new InstallLayout(a.Root).BackendPort, "Same path gives the same port.");
-            check(a.BackendPort != b.BackendPort, $"Different paths give different ports ({a.BackendPort} vs {b.BackendPort}).");
-        });
     }
 }

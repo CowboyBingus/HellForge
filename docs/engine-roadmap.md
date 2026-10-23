@@ -129,9 +129,15 @@ over a security suite's or VPN's permit sublayer, which was the beta's Kaspersky
 The tool is `native/network-block/hellforge_wfp.c`, a Zig-built console tool (`hellforge_wfp install|uninstall|status`).
 For each of the copy's programs it adds, over the four ALE layers (connect v4/v6, recv/accept v4/v6), a permit-loopback
 filter above a block filter, keyed to the program's app id and tagged with a per-install provider GUID, so installations
-never touch each other's blocks. A round trip installs 8 filters per program, reads them back and removes them cleanly.
-An enforcement test showed that a blocked program gets WSAEACCES (10013) to 192.0.2.1:443 and 10061 (not blocked) to
-loopback, the exact outcome the session's probe (OfflineControlNetworkProbe) already checks, so the probe is unchanged.
+never touch each other's blocks. On the connect layers the permit also names one remote port, the local backend's
+(lockdown item 6): the copy reaches that loopback port and no other. Setup picks the port
+(`InstallLayout.ComputedBackendPort`, 40000-46999 from the installation's path: below Windows' dynamic range, where
+Hyper-V, WSL and Docker reserve blocks) and passes it to `Install-WfpBlock.ps1 -BackendPort`, which records it in the
+marker (`network-block/wfp-block.json`, `"port"`); sessions start the backend on the marker's port. A marker without the
+port is a block from before the narrowing, which setup places again. A round trip installs 8 filters per program, reads
+them back and removes them cleanly. An enforcement test showed that a blocked program gets WSAEACCES (10013) to
+192.0.2.1:443 and 10061 (not blocked) to loopback, the outcome the session's probe (OfflineControlNetworkProbe) checks.
+Setup's probe also connects to the next loopback port and requires 10013 there, which proves the narrowing.
 `scripts/Build-Engine.ps1` compiles, smoke-checks and packages it (its hash is `networkBlock` in `build.json`).
 
 Proven over real boots (2026-10-19). `PlaySession.cs` takes an opt-in `HELLFORGE_WFP_ONLY`: the WFP filters (installed
