@@ -1417,8 +1417,21 @@ static void LiveFixture(void)
     strcpy(line, "session\t15\tjoiner\tFriend One");
     LiveRequest(line, reply, sizeof reply); assert(!strcmp(reply, "15\tok\tnow"));
     ApiSession(NULL, &session); assert(session.role == HF_SESSION_JOINER && !strcmp(session.host, "Friend One") && session.version == before + 1);
-    strcpy(line, "session\t16\tsolo");
-    LiveRequest(line, reply, sizeof reply); ApiSession(NULL, &session); assert(session.role == HF_SESSION_SOLO && session.host[0] == 0);
+    assert(ApiStatsSource(NULL) == HF_STATS_HOST); /* a joiner without stats= plays with the host's, as before SDK 15 */
+    strcpy(line, "session\t15\tjoiner\tstats=own\tFriend One");
+    LiveRequest(line, reply, sizeof reply); ApiSession(NULL, &session);
+    assert(!strcmp(reply, "15\tok\tnow") && session.role == HF_SESSION_JOINER && !strcmp(session.host, "Friend One") &&
+        session.version == before + 2 && ApiStatsSource(NULL) == HF_STATS_OWN);
+    strcpy(line, "session\t15\tjoiner\tstats=host\tFriend One");
+    LiveRequest(line, reply, sizeof reply); assert(ApiStatsSource(NULL) == HF_STATS_HOST);
+    strcpy(line, "session\t15\thost\tstats=host"); /* hosting, friends play with this machine's */
+    LiveRequest(line, reply, sizeof reply); ApiSession(NULL, &session);
+    assert(session.role == HF_SESSION_HOST && session.host[0] == 0 && ApiStatsSource(NULL) == HF_STATS_HOST);
+    strcpy(line, "session\t15\thost\tstats=own");
+    LiveRequest(line, reply, sizeof reply); assert(ApiStatsSource(NULL) == HF_STATS_OWN);
+    strcpy(line, "session\t16\tsolo\tstats=host"); /* solo: always this machine's own */
+    LiveRequest(line, reply, sizeof reply); ApiSession(NULL, &session);
+    assert(session.role == HF_SESSION_SOLO && session.host[0] == 0 && ApiStatsSource(NULL) == HF_STATS_OWN);
     /* notice (SDK 12): the backend's message for the player, a title and its lines, numbered */
     HfNotice notice;
     ApiNotice(NULL, &notice); assert(notice.version == 0);
@@ -1873,6 +1886,38 @@ static void RefsFixture(void)
     /* load_package: catalogue packages only */
     assert(ApiLoadPackage(mod, 0x1234) == 0);
     assert(ApiLoadPackage(mod, packageId) == HF_PACKAGE_RESIDENT);
+
+    /* Co-op assets: this machine's own packages go to the session's backend ("packages"); the lobby's come back
+     * ("preload") and are asked for as friends', which neither count as this machine's own nor take its last 16. */
+    char list[PKG_MAX_HELD * 17 + 2], expect[64], line[4096], reply[512];
+    snprintf(expect, sizeof expect, "%016llx", (unsigned long long)packageId);
+    PackagesOwnList(list, sizeof list); assert(!strcmp(list, expect));
+    uint64_t friendId = 0;
+    for (size_t i = 0; i < sizeof kRefPackages / sizeof kRefPackages[0] && !friendId; i++) if (kRefPackages[i].id != packageId) friendId = kRefPackages[i].id;
+    InterlockedExchange(&g_packagesDirty, 0);
+    int held = g_heldCount;
+    snprintf(line, sizeof line, "preload\t21\t%016llx,%016llx", (unsigned long long)friendId, (unsigned long long)packageId);
+    LiveRequest(line, reply, sizeof reply);
+    assert(!strcmp(reply, "21\tok\tnow") && g_heldCount == held + 1 && !g_held[held].own && g_held[held].id == friendId && !g_packagesDirty);
+    PackagesOwnList(list, sizeof list); assert(!strcmp(list, expect)); /* a friend's is not sent on */
+    PackagesRequest(); assert(g_held[held].requested); /* requested on the game thread as this machine's own are */
+    assert(ApiLoadPackage(mod, friendId) == HF_PACKAGE_LOADING && g_held[held].own && g_packagesDirty); /* now this machine's too */
+    PackagesOwnList(list, sizeof list); assert(strstr(list, expect) && strchr(list, ','));
+    strcpy(line, "preload\t22\t-"); LiveRequest(line, reply, sizeof reply); assert(!strcmp(reply, "22\tok\tnow"));
+    strcpy(line, "preload\t23\tnot-hex-at-all!!"); LiveRequest(line, reply, sizeof reply); assert(!strncmp(reply, "23\trefused\t", 11));
+    snprintf(line, sizeof line, "preload\t24\t+%015llx", (unsigned long long)friendId); LiveRequest(line, reply, sizeof reply);
+    assert(!strncmp(reply, "24\trefused\t", 11));
+    /* friends' packages stop 16 short of the 64; this machine's own still get them */
+    size_t next = 0;
+    for (int n = 0; n < PKG_MAX_HELD; n++)
+    {
+        while (next < sizeof kRefPackages / sizeof kRefPackages[0] && (kRefPackages[next].id == packageId || kRefPackages[next].id == friendId)) next++;
+        snprintf(line, sizeof line, "preload\t25\t%016llx", (unsigned long long)kRefPackages[next++].id);
+        LiveRequest(line, reply, sizeof reply);
+    }
+    assert(g_heldCount == PKG_MAX_HELD - PKG_OWN_RESERVE);
+    while (kRefPackages[next].id == packageId || kRefPackages[next].id == friendId) next++;
+    assert(ApiLoadPackage(mod, kRefPackages[next].id) == HF_PACKAGE_LOADING && g_heldCount == PKG_MAX_HELD - PKG_OWN_RESERVE + 1);
 
     g_statCount = 0;
     for (int i = 0; i < g_fakeRecordCount; i++) free(g_fakeRecords[i].bytes);

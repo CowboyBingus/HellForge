@@ -234,24 +234,32 @@ bool LiveStat(const Row* row)
 }
 HfStat StatOf(const Row* row) { return HfStat{row->statKind.c_str(), row->statComponent.c_str(), row->statResource, row->statRecord, row->offset, row->type}; }
 
-/* Co-op (docs/multiplayer.md step 5): joined to a friend's lobby, this game plays with the host's stats, which the
- * session's backend applies; the editor shows them read-only. Hosting, friends play with this machine's. */
+/* Co-op (docs/multiplayer.md "Stats in co-op"): every player keeps their own stats, and HellForge loads the packages
+ * friends' changes need. A host may share its stats instead (the Mods page): then a joiner plays with the host's, which
+ * the session's backend applies, and the editor shows them read-only. A loader from before SDK 15 (no stats_source)
+ * always shared the host's. */
 HfSession g_session;
+bool g_lobbyStats; /* the lobby plays with the host's stats (hosting: this machine's; joined: the host's) */
+bool g_hostStats;  /* joined, playing with the host's stats */
 void ReadSession()
 {
     HfSession now{};
     if (g_host.api->size >= offsetof(HfApi, session) + sizeof(void*) && g_host.api->session != nullptr) g_host.api->session(g_host.mod, &now);
     if (now.version != g_session.version || now.role != g_session.role)
     {
-        bool was = g_session.role == HF_SESSION_JOINER;
+        bool was = g_hostStats, joined = g_session.role == HF_SESSION_JOINER;
+        bool sourced = g_host.api->size >= offsetof(HfApi, stats_source) + sizeof(void*) && g_host.api->stats_source != nullptr;
         g_session = now;
+        g_lobbyStats = now.role != HF_SESSION_SOLO && (!sourced || g_host.api->stats_source(g_host.mod) == HF_STATS_HOST);
+        g_hostStats = now.role == HF_SESSION_JOINER && g_lobbyStats;
         g_markVersion++;
         g_live.clear(); /* the host's values: read again */
-        if (!was && now.role == HF_SESSION_JOINER) Toast(std::string("Joined ") + now.host + ": you play with the host's stats; the editor is read-only", PENDING);
-        if (was && now.role != HF_SESSION_JOINER) Toast("Back to your own stats: the editor can change them again", OK);
+        if (!was && g_hostStats) Toast(std::string("Joined ") + now.host + ": you play with the host's stats; the editor is read-only", PENDING);
+        else if (was && !g_hostStats) Toast("Back to your own stats: the editor can change them again", OK);
+        else if (!joined && now.role == HF_SESSION_JOINER) Toast(std::string("Joined ") + now.host + ": everyone keeps their own changes", OK);
     }
 }
-bool Locked() { return g_session.role == HF_SESSION_JOINER; }
+bool Locked() { return g_hostStats; }
 
 /* HellForge's messages for the player (SDK 12, HfApi notice; docs/mods.md "Playing with friends"): why a friend's lobby
  * refused this game's join, or why a friend could not join this one. Each new one shows over the game for a while, the
@@ -3148,7 +3156,8 @@ void DrawHeader(int errors, int active)
         return clicked;
     };
     if (Locked()) status(std::string("READ-ONLY \xC2\xB7 HOST: ") + (g_session.host[0] ? g_session.host : "A FRIEND"), PENDING, PENDING_SOFT, 0);
-    else if (g_session.role == HF_SESSION_HOST) status("HOSTING \xC2\xB7 FRIENDS PLAY WITH YOUR STATS", MOD, MOD_SOFT, 0);
+    else if (g_session.role == HF_SESSION_HOST) status(g_lobbyStats ? "HOSTING \xC2\xB7 FRIENDS PLAY WITH YOUR STATS" : "HOSTING \xC2\xB7 EVERYONE KEEPS THEIR OWN", MOD, MOD_SOFT, 0);
+    else if (g_session.role == HF_SESSION_JOINER) status(std::string("JOINED \xC2\xB7 ") + (g_session.host[0] ? g_session.host : "A FRIEND") + " \xC2\xB7 YOUR OWN STATS", MOD, MOD_SOFT, 0);
     if (errors > 0 && status(std::to_string(errors) + (errors == 1 ? " ERROR" : " ERRORS"), ERROR_, ERROR_SOFT, ui::Id("errors"))) OpenErrors();
     if (active > 0) status(std::to_string(active) + (Locked() ? " ACTIVE (HOST)" : " ACTIVE"), GOLD, GOLD_WASH, 0);
     if (PendingCount() > 0 && !Locked()) status(std::to_string(PendingCount()) + " PENDING", PENDING, PENDING_SOFT, 0);
@@ -3930,10 +3939,11 @@ void DrawErrors()
 
 /* ---- co-op: the host's saved changes ----
  * The values of content mods added are this editor's own live edits (mod-stats.json), not Local Stats, so the session's
- * backend, which plays the host's Local Stats, does not reach them. Joined, the editor takes its own off and applies the
- * host's, which the backend writes beside them (host-mod-stats.json); back on its own, the host's go and its own come back.
- * Joined, the editor also shows the host's saved changes as its own (marks, ACTIVE, the Changes list), read-only: the
- * host's Local Stats file (host-stats.json, which the backend has applied) and mod content values. */
+ * backend, which plays the host's Local Stats, does not reach them. Joined to a host who shares its stats (Locked), the
+ * editor takes its own off and applies the host's, which the backend writes beside them (host-mod-stats.json); back on
+ * its own, the host's go and its own come back. It also shows the host's saved changes as its own (marks, ACTIVE, the
+ * Changes list), read-only: the host's Local Stats file (host-stats.json, which the backend has applied) and mod content
+ * values. Joined to a host who lets every player keep their own, nothing here changes. */
 std::map<const Row*, double> g_modLive; /* what the editor's live edits of mod content hold now */
 int g_modRole = -1;                     /* HF_SESSION_JOINER: they are the host's; else this machine's (-1: none yet) */
 std::string g_hostModText, g_hostStatsText, g_hostMountsText; /* the host's files as last applied and shown */
@@ -3993,14 +4003,15 @@ int ApplyModValues(const std::vector<localstats::Entry>& entries, const char* wh
     return applied;
 }
 
-/* Joined: the host's values, read again each second (the backend rewrites the files when the host changes them). */
+/* Joined to a host who shares its stats: the host's values, read again each second (the backend rewrites the files when
+ * the host changes them). */
 void SyncModValues()
 {
-    if (g_session.role != HF_SESSION_JOINER)
+    if (!Locked())
     {
         if (g_modRole == HF_SESSION_JOINER)
         {
-            g_modRole = (int)g_session.role;
+            g_modRole = HF_SESSION_SOLO; /* this machine's own again */
             g_hostModText.clear();
             g_hostStatsText.clear();
             g_hostMountsText.clear();

@@ -688,8 +688,11 @@ one. Stats files take the same references, with the same waits.
 
 `load_package(mod, package)` loads a catalogue package through the game's own RefcountedPackageSystem (its request
 checked byte for byte), on the game thread, once per session, and holds it for the session: at most 64, and never when
-the game's reference map is 3/4 full. Residency is read from the engine's package list. Loading is per client; nothing
-is advertised to other players.
+the game's reference map is 3/4 full. Residency is read from the engine's package list. A mod's `load_package` is per
+client, and nothing it loads is advertised to other players. In co-op the loader also tells the session's backend which
+packages it holds for this machine's own edits, mods and actions (the live pipe's `packages` line), and loads the
+lobby's other packages when the backend asks (`preload`); a friend's may not take the last 16 of the 64
+([multiplayer.md](multiplayer.md#assets-in-co-op)).
 
 ### The game thread
 
@@ -737,9 +740,9 @@ booster's fields, and two Advanced categories (Projectiles, Damage Types) reach 
 ### The live pipe
 
 The live pipe is `native/mod-loader/live.c` on the game's side and `src/HellForge.Core/LiveEdit.cs` on the backend's.
-The local backend serves `\\.\pipe\hellforge-live-<run id>` (current user only) for co-op stats sharing (its
-`StatsShare`, with `src/HellForge.Core/StatsSync.cs`: a joiner plays with the host's Local Stats), and the loader
-connects once the entity data has loaded.
+The local backend serves `\\.\pipe\hellforge-live-<run id>` (current user only) for co-op (its `StatsShare`, with
+`src/HellForge.Core/StatsSync.cs`: a joiner of a host who shares its stats plays with them; and its `AssetShare`: the
+lobby's packages, `packages` up and `preload` down), and the loader connects once the entity data has loaded.
 
 Requests name a field as the stats schema does (kind, component, resource, record, offset, storage), with `set`,
 `reset` and `get`. Each becomes a `set_live` edit of the Local Stats mod (`zz.local.stats`), so conflicts with other
@@ -786,9 +789,11 @@ armory shows; the weapon's damage decides its real armor penetration.
 
 ### Co-op
 
-Over the live pipe, a joiner plays with the host's Local Stats, including attachments, the in-game editor's mod content
-values, its arm swaps (Mounted Weapons) and hellpod payloads, and its editor shows the host's changes read-only. Armor
-perks stay solo only. [multiplayer.md](multiplayer.md#stats-in-co-op) has the backend's side.
+Every player keeps their own Local Stats, and the editor stays editable when joined; every machine loads the packages
+the others' changes need. A host may share its stats instead: then, over the live pipe, a joiner plays with the host's
+Local Stats, including attachments, the in-game editor's mod content values, its arm swaps (Mounted Weapons) and hellpod
+payloads, and its editor shows the host's changes read-only (`HfApi.stats_source`, SDK 15, says which). Armor perks
+stay solo only. [multiplayer.md](multiplayer.md#stats-in-co-op) has the backend's side.
 
 ## Event sources
 

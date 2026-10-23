@@ -4,16 +4,16 @@ For contributors: what is left in the mod SDK. [modding/README.md](modding/READM
 [sdk-reference.md](sdk-reference.md) document what exists, [engine-roadmap.md](engine-roadmap.md) is the engine's side,
 and [roadmap.md](roadmap.md) is the overview.
 
-Mod SDK 14, engine 0.1.29, HellForge 0.3.0-dev.1 (2026-10-23).
+Mod SDK 15, engine 0.1.30, HellForge 0.3.0-dev.2 (2026-10-23).
 
 | Phase | Status |
 |---|---|
 | 1. Named fields and deferred edits | done (SDK 6) |
 | 2. Identity and lookup | done (SDK 6) |
-| 3. Live editing | done (SDK 6), with the host's values in co-op; field timings to check in game |
+| 3. Live editing | done (SDK 6); in co-op each player keeps their own (SDK 15) or plays with a sharing host's; field timings to check in game |
 | 4. MDK | done; a New mod button and a helper kit left |
 | 5a. The in-game editor | mostly built; full HD2R Editor parity left |
-| 5b. Events, hooks and registries | built in SDK 7 to 14; some events, registries and launcher views left |
+| 5b. Events, hooks and registries | built in SDK 7 to 15; some events, registries and launcher views left |
 | 6. Co-op sync for mod content | numbering and sync built; `is_authority` and the message channel left |
 
 ## Goal

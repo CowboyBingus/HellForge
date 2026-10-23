@@ -1,0 +1,183 @@
+using HellForge.Core;
+
+namespace HellForge.LocalBackend.Multiplayer;
+
+// Assets in co-op (docs/multiplayer.md "Assets in co-op"). Every player keeps their own edits, and what a friend's edit
+// puts in the game (a vehicle's swapped weapon, a pod's pickup, a swapped round's effects) is made on every machine, which
+// needs its package loaded or shows a missing asset. Each game's mod loader says which packages it holds for its own
+// edits, mods and actions (the live pipe's "packages" line, native/mod-loader/packages.c); this gathers the lobby's and
+// has every game load the others'.
+//   joiner: its game's packages go to the host of the lobby it joined, numbered, whenever they change:
+//           "assets.mine" [version, ids].
+//   host:   keeps each friend's, and sends the lobby's (its own and every friend's) to every friend, numbered, whenever
+//           they change: "assets.lobby" [version, ids, the version of that friend's own it holds (-1 none): a joiner whose
+//           own the host lacks, or has an older one of, sends them again].
+//   every game is sent the lobby's packages less its own ("preload"), again whenever they change; the loader asks for
+//   each as it does for its own edits' (catalogue packages only, at most 48 of a friend's: 16 of its 64 stay its own).
+// Ids are package ids, 16 hex digits each, comma separated ("-" none): at most 64 a player and 256 a lobby. Packages are
+// never released (packages.c), so a player's change taken back leaves its package loaded for the session.
+public sealed class AssetShare : IAsyncDisposable
+{
+    public const int MaxPerPlayer = 64, MaxLobby = 256;
+    readonly IPeerTransport transport;
+    readonly LobbyService lobby;
+    readonly LiveEditServer live;
+    readonly Action<string> log;
+    readonly object gate = new();
+    readonly Timer timer;
+    readonly SemaphoreSlim preloading = new(1, 1);
+    // this game's own packages and their version
+    SortedSet<ulong> mine = [];
+    long mineVersion;
+    // joiner: the host this game's were last sent to, and their version then
+    ulong sentHost;
+    long sentVersion = -1;
+    // host: each friend's own and their version; the lobby's and its version; the version each friend has
+    readonly Dictionary<ulong, (long Version, SortedSet<ulong> Ids)> friends = [];
+    SortedSet<ulong> lobbyIds = [];
+    long lobbyVersion;
+    readonly Dictionary<ulong, long> lobbySent = [];
+    // joiner: the lobby's packages from its host, and their version
+    ulong lobbyHost;
+    long lobbyHostVersion = -1;
+    SortedSet<ulong> hostLobbyIds = [];
+    // the friends' packages this game was last asked to load ("" none yet)
+    string preloaded = "";
+    readonly Action stateChanged;
+
+    public AssetShare(IPeerTransport transport, LobbyService lobby, LiveEditServer live, Action<string> log)
+    {
+        this.transport = transport;
+        this.lobby = lobby;
+        this.live = live;
+        this.log = log;
+        live.Received += FromGame;
+        stateChanged = () => { lock (gate) preloaded = ""; Tick(); }; /* a game that connects again is asked again */
+        live.StateChanged += stateChanged;
+        timer = new Timer(_ => Tick(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    static string List(IEnumerable<ulong> ids)
+    {
+        var text = string.Join(',', ids.Select(id => id.ToString("x16", System.Globalization.CultureInfo.InvariantCulture)));
+        return text.Length == 0 ? "-" : text;
+    }
+
+    // This game's "packages" line: its own packages, which friends' games load.
+    void FromGame(string[] parts)
+    {
+        if (parts[0] != "packages") return;
+        var ids = parts.Length == 2 ? LiveEditServer.Packages(parts[1], MaxPerPlayer) : null;
+        if (ids == null) { log("Assets: the game sent a malformed list of its packages."); return; }
+        lock (gate)
+        {
+            if (ids.SetEquals(mine)) return;
+            (mine, mineVersion) = (ids, mineVersion + 1);
+        }
+        log($"Assets: this game holds {ids.Count} package(s) for its own changes, mods and actions.");
+        Tick();
+    }
+
+    // A friend's backend: a joiner's own packages (to the host of its lobby), or the lobby's (from the host of the lobby
+    // this machine joined).
+    public void FromPeer(ulong peer, Frame frame)
+    {
+        if (frame.Count < 2 || !long.TryParse(frame.Text(0), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var version)) return;
+        if (frame.Type == "assets.mine" && lobby.InHostedLobby(peer))
+        {
+            var ids = LiveEditServer.Packages(frame.Text(1), MaxPerPlayer);
+            if (ids == null) { log($"Assets: {LobbyService.EntityId(peer)} sent a malformed list of its packages."); return; }
+            lock (gate)
+            {
+                if (friends.TryGetValue(peer, out var had) && version <= had.Version) return;
+                friends[peer] = (version, ids);
+            }
+            log($"Assets: {LobbyService.EntityId(peer)}'s game holds {ids.Count} package(s) for its own changes (version {version}).");
+            Tick();
+        }
+        else if (frame.Type == "assets.lobby" && lobby.HostsJoinedLobby(peer))
+        {
+            var ids = LiveEditServer.Packages(frame.Text(1), MaxLobby);
+            if (ids == null) { log($"Assets: the host {LobbyService.EntityId(peer)} sent a malformed list of the lobby's packages."); return; }
+            var held = frame.Count > 2 && long.TryParse(frame.Text(2), System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var h) ? h : -1;
+            bool resend, fresh;
+            lock (gate)
+            {
+                resend = peer == sentHost && held != sentVersion; /* the host lacks this game's latest: sent again */
+                if (resend) sentVersion = -1;
+                fresh = peer != lobbyHost || version > lobbyHostVersion;
+                if (fresh) (lobbyHost, lobbyHostVersion, hostLobbyIds) = (peer, version, ids);
+            }
+            if (fresh) log($"Assets: the lobby's packages from the host {LobbyService.EntityId(peer)}: {ids.Count} (version {version}).");
+            if (fresh || resend) Tick();
+        }
+    }
+
+    // Every second and on every change: this game's packages to its host, the lobby's to friends, and the friends' to this
+    // game.
+    void Tick()
+    {
+        try
+        {
+            var hosts = lobby.JoinedHosts();
+            var hosted = lobby.HostedFriends();
+            var sends = new List<(ulong To, Frame Frame, string What)>();
+            SortedSet<ulong> want;
+            lock (gate)
+            {
+                // joined: this game's own to the host (again to a new host)
+                var host = hosts.Count > 0 ? hosts.Min() : 0;
+                if (host != 0 && (host != sentHost || sentVersion != mineVersion))
+                {
+                    sends.Add((host, new Frame("assets.mine").Add(mineVersion).Add(List(mine)), $"this game's {mine.Count} package(s) (version {mineVersion})"));
+                    (sentHost, sentVersion) = (host, mineVersion);
+                }
+                if (host == 0) (sentHost, sentVersion) = (0, -1);
+                if (lobbyHost != 0 && !hosts.Contains(lobbyHost)) (lobbyHost, lobbyHostVersion, hostLobbyIds) = (0, -1, []);
+                // hosting: the lobby's, again whenever a friend's or this game's change
+                foreach (var gone in friends.Keys.Where(f => !hosted.Contains(f)).ToList()) friends.Remove(gone);
+                foreach (var gone in lobbySent.Keys.Where(f => !hosted.Contains(f)).ToList()) lobbySent.Remove(gone);
+                var lobbyNow = new SortedSet<ulong>(mine.Concat(friends.Values.SelectMany(f => f.Ids)).Take(MaxLobby));
+                if (!lobbyNow.SetEquals(lobbyIds)) (lobbyIds, lobbyVersion) = (lobbyNow, lobbyVersion + 1);
+                foreach (var friend in hosted)
+                    if (!lobbySent.TryGetValue(friend, out var had) || had != lobbyVersion)
+                    {
+                        sends.Add((friend, new Frame("assets.lobby").Add(lobbyVersion).Add(List(lobbyIds)).Add(friends.TryGetValue(friend, out var own) ? own.Version : -1), $"the lobby's {lobbyIds.Count} package(s) (version {lobbyVersion})"));
+                        lobbySent[friend] = lobbyVersion;
+                    }
+                // this game loads what the lobby's other players hold
+                want = new SortedSet<ulong>((hosted.Count > 0 ? lobbyIds : []).Concat(hostLobbyIds).Where(id => !mine.Contains(id)));
+            }
+            foreach (var (to, frame, what) in sends)
+            {
+                transport.Send(to, frame.Encode(), reliable: true);
+                log($"Assets: sent {what} to {LobbyService.EntityId(to)}.");
+            }
+            _ = PreloadAsync(want);
+        }
+        catch (Exception error) { log("Assets: sharing failed: " + error.Message); }
+    }
+
+    // Asks this game to load friends' packages, once per change (a refusal is tried again next second).
+    async Task PreloadAsync(SortedSet<ulong> want)
+    {
+        var text = List(want);
+        lock (gate) if (text == preloaded || preloaded == "" && want.Count == 0) return;
+        if (!live.Connected || live.Mismatched || !await preloading.WaitAsync(0)) return;
+        try
+        {
+            var result = await live.PreloadAsync(want);
+            if (result.Ok) lock (gate) preloaded = text;
+            log(result.Ok ? $"Assets: this game loads {want.Count} package(s) for friends' changes." : "Assets: the game refused friends' packages: " + result.Detail);
+        }
+        finally { preloading.Release(); }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        live.Received -= FromGame;
+        live.StateChanged -= stateChanged;
+        await timer.DisposeAsync();
+        preloading.Dispose();
+    }
+}

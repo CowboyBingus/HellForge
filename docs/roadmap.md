@@ -1,6 +1,6 @@
 # HellForge roadmap
 
-What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-23 for HellForge 0.3.0-dev.1.
+What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-23 for HellForge 0.3.0-dev.2.
 Nothing here has a date, and stability comes first.
 
 ## At a glance
@@ -9,7 +9,7 @@ Nothing here has a date, and stability comes first.
 |---|---|---|
 | Offline game copy | Done | Shipped in 0.2.0 |
 | Co-op with friends | Done | Shipped in 0.2.0 |
-| [Mod SDK](sdk-roadmap.md) | Done | SDK 14; some events and registries left |
+| [Mod SDK](sdk-roadmap.md) | Done | SDK 15; some events and registries left |
 | Build patches for newer Steam builds | Done | Each new Steam build needs a new patch |
 | Open source | Done | GPL-3 |
 | In-game editor | Mostly done | Player's kit mostly ported; enemies, structures and missions left |
@@ -38,7 +38,7 @@ subfactions, custom missions, and mod content in progression. The [SDK roadmap](
 The rest of this page goes through each item. Contributors will find more detail in [engine-roadmap.md](engine-roadmap.md)
 (session runner, local backend, mod loader, stand-ins) and [sdk-roadmap.md](sdk-roadmap.md) (the mod SDK).
 
-Versions: HellForge 0.3.0-dev.1, engine 0.1.29, mod SDK 14.
+Versions: HellForge 0.3.0-dev.2, engine 0.1.30, mod SDK 15.
 
 ## Done in 0.2.0-beta
 
@@ -83,6 +83,12 @@ mod sync with its restart and rejoin; and a public lobby on the map. The editor'
 RivaTuner closed.
 
 ## Next: stability and co-op
+
+In co-op, every player will keep their own in-game editor changes, and joiners can edit too. HellForge loads what each
+player's changes need on every machine, so a friend's swapped vehicle weapon or hellpod payload shows up instead of a
+purple question mark. A host can still have everyone play with their changes, with a switch on the Mods page. This is
+built on the `lobby-asset-sync` branch and needs a two-PC test
+([multiplayer.md, step 10](multiplayer.md#step-10-every-players-own-stats-and-the-lobbys-assets-2026-10-23)).
 
 When the host goes back to the ship in the middle of a mission, everyone else gets dropped to the main menu. The fix
 will keep the lobby and network alive and hand ownership to another player. If the host quits HellForge entirely, the

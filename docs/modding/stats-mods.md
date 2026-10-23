@@ -77,6 +77,7 @@ The PRESETS view imports and exports HD2R Editor presets (`.hd2rpreset.json`); F
 EXPORT is the quickest way to share a set of changes with other players. To ship changes as a mod, copy Local Stats'
 `hellforge-stats.json` into a mod of your own.
 
-In co-op everyone plays with the host's Local Stats, and a joiner's editor shows the host's changes read-only.
+In co-op every player keeps their own Local Stats. A host may share theirs instead; then a joiner plays with the host's,
+and the joiner's editor shows them read-only ([multiplayer.md](../multiplayer.md#stats-in-co-op)).
 
 Next: [Data mods](data.md), for models, textures, effects, sounds and icons.

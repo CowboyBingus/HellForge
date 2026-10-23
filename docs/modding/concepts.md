@@ -31,7 +31,7 @@ the mod's kind, and one mod can be several kinds at once (code with a data spec,
   "icon": "images/icon.png",
   "url": "https://github.com/yourname/liberator-tweaks",
   "gameplay": true,
-  "code": { "dll": "liberator_tweaks.dll", "sdk": 14 }
+  "code": { "dll": "liberator_tweaks.dll", "sdk": 15 }
 }
 ```
 
@@ -138,7 +138,8 @@ game: use `hf_set` or `edit_entity` instead.
   machine.
 - The host decides some things. Actions marked "host" in the reference (statuses, explosions, projectiles, the mission
   timer, Pelicans) only work on the host. `hf->session(mod, &out)` gives the role: `HF_SESSION_SOLO`, `_HOST` or
-  `_JOINER`. In co-op everyone plays with the host's Local Stats (the in-game editor's saved changes).
+  `_JOINER`. In co-op every player keeps their own Local Stats (the in-game editor's saved changes) unless the host
+  shares theirs; `hf->stats_source(mod)` (SDK 15) says which.
 - What travels between machines. New content travels as ids (stratagem types, projectile types), so a mod's content
   must exist on every machine, which the modlist code makes sure of. A network field type a mod widens is widened on
   every machine for the same reason.
@@ -163,7 +164,7 @@ page.
 ## Compatibility
 
 - SDK versions. The manifest's `code.sdk` is the SDK the mod needs. A HellForge with an older SDK refuses the mod
-  ("needs HellForge mod SDK 15; this HellForge provides SDK 14"), and newer ones load it. Functions are only ever added
+  ("needs HellForge mod SDK 16; this HellForge provides SDK 15"), and newer ones load it. Functions are only ever added
   at the end of `HfApi`, so a mod built for SDK 6 runs on SDK 13. In code, check what you use:
 
   ```c

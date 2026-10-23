@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 14
+#define HF_MOD_SDK_VERSION 15
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -463,6 +463,13 @@ typedef struct HfSession
     uint32_t version;
     char host[64];    /* the host's name (UTF-8), when joined */
 } HfSession;
+
+/* SDK 15, stats_source: whose stats the lobby plays with. HF_STATS_HOST: its host shares its stats with friends (joined,
+ * this game plays with the host's, and the in-game editor shows them read-only; hosting, friends play with this
+ * machine's). HF_STATS_OWN: solo, or every player in the lobby keeps their own (the default: each machine's edits are its
+ * own, and HellForge loads the packages friends' changes need). The session's version changes with it. */
+#define HF_STATS_OWN 0u
+#define HF_STATS_HOST 1u
 
 /* SDK 12: HellForge's latest message for the player (notice), as the session's backend posts it: why a friend's lobby
  * refused this game's join, or why a friend could not join this one. A title and up to 8 lines (UTF-8, '\n' between
@@ -1182,6 +1189,10 @@ typedef struct HfApi
      * HF_SYNC_BLOCK, HF_SYNC_TRUST and HF_SYNC_OPEN (NULL otherwise). 1 sent; 0 not (another offer came since, or no
      * backend connected). */
     int (*sync_answer)(HfMod* mod, uint32_t version, uint32_t answer, const char* mod_id);
+
+    /* ---- SDK 15 --------------------------------------------------------------------------------------------------- */
+    /* Whose stats the lobby plays with: HF_STATS_HOST or HF_STATS_OWN (see HF_STATS_OWN). Check hf->size. */
+    uint32_t (*stats_source)(HfMod* mod);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

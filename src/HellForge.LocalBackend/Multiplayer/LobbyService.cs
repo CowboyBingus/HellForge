@@ -68,7 +68,7 @@ public sealed class LobbyService
     // The HellForge multiplayer protocol a joiner's backend speaks; a host refuses other versions, since mixed builds fail in
     // confusing ways (second two-PC test: an outdated friend got no missions and could not rejoin). Raise it whenever
     // backends or stand-ins change behaviour the other side relies on.
-    public const string Protocol = "hellforge-mp-7"; // 7: a refusal for different gameplay mods carries the host's mod set, and joiners download it (ModSync); 6: mods set up in id order and added entities numbered by resource id (engine 0.1.4: content numbered alike whatever the load order), the editor's mod content values in stats.set; 5: the host's stats, Local Stats left the mod digest
+    public const string Protocol = "hellforge-mp-8"; // 8: every player keeps their own stats unless the host shares its ("stats.set" says which), and the lobby's packages are loaded on every machine (AssetShare); 7: a refusal for different gameplay mods carries the host's mod set, and joiners download it (ModSync); 6: mods set up in id order and added entities numbered by resource id (engine 0.1.4: content numbered alike whatever the load order), the editor's mod content values in stats.set; 5: the host's stats, Local Stats left the mod digest
     const int MemberRemovedForcibly = 1, MemberRemovedRemoteLeft = 2, DisconnectingNoLocalMembers = 0, DisconnectingLobbyDeleted = 1;
     static readonly HashSet<string> Requests = ["lobby.create", "lobby.join", "lobby.update", "lobby.leave", "lobby.kick", "lobby.invite"];
     // PlayFab's limits (PFLobby.h: PFLobbyMaxLobbyPropertyCount, ...MemberPropertyCount, ...SearchPropertyCount, 30 each),
@@ -307,6 +307,12 @@ public sealed class LobbyService
     public bool HostsJoinedLobby(ulong node)
     {
         lock (gate) return remote.ContainsValue(node);
+    }
+
+    // The friends' machines hosting the lobbies this machine is in.
+    public IReadOnlyCollection<ulong> JoinedHosts()
+    {
+        lock (gate) return remote.Values.Where(n => n != LocalNode).ToHashSet();
     }
 
     // Friends' machines in lobbies hosted here (they play with this machine's stats: StatsShare).

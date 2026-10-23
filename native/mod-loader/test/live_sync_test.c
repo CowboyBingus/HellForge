@@ -49,6 +49,10 @@ static void LiveSyncPipeFixture(void)
     assert(ConnectNamedPipe(server, NULL) || GetLastError() == ERROR_PIPE_CONNECTED);
     char line[512];
     assert(SyncServerLine(server, line, sizeof line) && !strncmp(line, "hello\t", 6));
+    /* this machine's own packages follow the hello (none held here), and again whenever they change */
+    assert(SyncServerLine(server, line, sizeof line) && !strcmp(line, "packages\t-"));
+    LivePackagesChanged();
+    assert(SyncServerLine(server, line, sizeof line) && !strcmp(line, "packages\t-"));
     SyncServerSend(server, "syncmod\t1\t21\t0\tdownload\tcontent\t5000\tfriend.tanks\tTanks\t2.0\t-\n"
         "syncstate\t2\t21\toffer\tFriend Two\t5000\t0\t1\tthe host runs other mods\n");
     assert(SyncServerLine(server, line, sizeof line) && !strcmp(line, "1\tok\tnow"));

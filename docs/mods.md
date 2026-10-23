@@ -78,8 +78,8 @@ each session's folder, the first lines of the list.
 
 When the host lets joiners download their mods, the joiner also gets the MOD SYNC prompt (below).
 
-In co-op everyone plays with the host's Local Stats (the in-game editor's saved changes), so yours is not part of the
-modlist code.
+In co-op every player keeps their own Local Stats (the in-game editor's saved changes) unless the host shares theirs
+([multiplayer.md](multiplayer.md#stats-in-co-op)), so yours is not part of the modlist code.
 
 ## Playing with other mods
 

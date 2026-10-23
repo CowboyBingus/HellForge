@@ -73,7 +73,7 @@ public static partial class ModCatalog
         File.Exists(Path.Combine(folder, ManifestName)) ? Path.Combine(folder, ManifestName)
         : File.Exists(Path.Combine(folder, LegacyManifestName)) ? Path.Combine(folder, LegacyManifestName) : null;
     // The mod SDK version this HellForge provides (native/mod-sdk/hellforge_mod.h).
-    public const int SdkVersion = 14;
+    public const int SdkVersion = 15;
 
     [GeneratedRegex("^[A-Za-z0-9_.-]{1,64}\\.dll$")]
     private static partial Regex DllName();
@@ -679,7 +679,7 @@ public static class ModLoaderPlan
 }
 
 // The Mods page's settings: <installation>/mods/hellforge-mods.json {"format":1,"disabled":[ids],"order":[ids],"packs":{...},
-// "blocked":[ids],"trusted":[TrustedMod],"share":true,"showEditedStats":false,"listPublic":true}. Mods are on by default, so a mod
+// "blocked":[ids],"trusted":[TrustedMod],"share":true,"showEditedStats":false,"listPublic":true,"hostStats":false}. Mods are on by default, so a mod
 // dropped into the folder loads without any setup.
 public static class ModSettings
 {
@@ -696,6 +696,8 @@ public static class ModSettings
     // The Galactic Map's public lobbies: whether lobbies whose host plays with edited stats (which joiners take) are shown,
     // and whether this player's own lobby is listed for other HellForge players while it is Public (ListPublic, on by
     // default; off, a Public lobby still admits whoever reaches it, but no stranger can find it).
+    // HostStats: hosting, whether friends play with this player's editor changes (the in-game editor's Local Stats, mod
+    // content values and arm swaps) instead of their own (off by default: everyone keeps their own; StatsShare).
     // Trusted: mods the player trusted on mod sync's prompt (TRUST), each by its exact content (id and content hash), with
     // its name and version, the Steam friend who hosted it and when: they download as the verified list's do (ModSyncPlan).
     public sealed record State(HashSet<string> Disabled, List<string> Order, Dictionary<string, CosmeticPacks.Choice> Choices)
@@ -706,6 +708,7 @@ public static class ModSettings
         public bool Share { get; set; } = true;
         public bool ShowEditedStats { get; set; }
         public bool ListPublic { get; set; } = true;
+        public bool HostStats { get; set; }
     }
 
     public static State Read(string modsFolder)
@@ -728,6 +731,7 @@ public static class ModSettings
             if (root.TryGetProperty("share", out var share) && share.ValueKind == JsonValueKind.False) state.Share = false;
             if (root.TryGetProperty("showEditedStats", out var edited) && edited.ValueKind == JsonValueKind.True) state.ShowEditedStats = true;
             if (root.TryGetProperty("listPublic", out var listed) && listed.ValueKind == JsonValueKind.False) state.ListPublic = false;
+            if (root.TryGetProperty("hostStats", out var hostStats) && hostStats.ValueKind == JsonValueKind.True) state.HostStats = true;
             if (root.TryGetProperty("order", out var order) && order.ValueKind == JsonValueKind.Array)
                 foreach (var e in order.EnumerateArray()) if (e.ValueKind == JsonValueKind.String && !state.Order.Contains(e.GetString()!)) state.Order.Add(e.GetString()!);
             if (root.TryGetProperty("packs", out var packs) && packs.ValueKind == JsonValueKind.Object)
@@ -788,6 +792,9 @@ public static class ModSettings
     // Hosting: whether this player's Public lobbies are listed on other HellForge players' Galactic Map.
     public static void SetListPublic(string modsFolder, bool list) => Change(modsFolder, state => state.ListPublic = list);
 
+    // Hosting: whether friends play with this player's editor changes instead of their own.
+    public static void SetHostStats(string modsFolder, bool host) => Change(modsFolder, state => state.HostStats = host);
+
     static void Change(string modsFolder, Action<State> change)
     {
         var state = Read(modsFolder);
@@ -808,7 +815,8 @@ public static class ModSettings
             ["trusted"] = new JsonArray([.. state.Trusted.Select(t => (JsonNode?)t.ToJson())]),
             ["share"] = state.Share,
             ["showEditedStats"] = state.ShowEditedStats,
-            ["listPublic"] = state.ListPublic
+            ["listPublic"] = state.ListPublic,
+            ["hostStats"] = state.HostStats
         };
         var text = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n";
         File.WriteAllText(path + ".tmp", text);

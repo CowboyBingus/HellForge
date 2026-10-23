@@ -36,6 +36,8 @@ static int g_modPage, g_modApplied; /* a mod's stratagem: its page made, its sav
 static char g_modDir[MAX_PATH] = "";
 static HfSession g_sessionNow; /* the co-op role the stand-in loader reports */
 static void Session(HfMod*, HfSession* out) { *out = g_sessionNow; }
+static uint32_t g_statsNow = HF_STATS_HOST; /* whose stats a joined game plays with (SDK 15) */
+static uint32_t StatsSource(HfMod*) { return g_statsNow; }
 static HfNotice g_noticeNow; /* HellForge's message for the player, as the stand-in loader reports it */
 static void Notice(HfMod*, HfNotice* out) { *out = g_noticeNow; }
 /* SDK 14, mod sync: the offer the stand-in loader reports, how often the editor read it, and the answers it sent */
@@ -267,7 +269,7 @@ int main(int argc, char** argv)
     g_api.version = HF_MOD_SDK_VERSION; g_api.size = sizeof g_api;
     g_api.log = Log; g_api.build_id = Build; g_api.on = On; g_api.hook = Hook; g_api.set_live = SetLive; g_api.record = Record; g_api.mod_folder = ModFolder;
     g_api.get_live = GetLive;
-    g_api.last_log = LastLog; g_api.logs_folder = LogsFolder; g_api.get_stat = GetStat; g_api.session = Session;
+    g_api.last_log = LastLog; g_api.logs_folder = LogsFolder; g_api.get_stat = GetStat; g_api.session = Session; g_api.stats_source = StatsSource;
     g_api.content = Content;
     g_api.mods = Mods;
     g_api.notice = Notice;
@@ -755,6 +757,26 @@ int main(int argc, char** argv)
                 frames(30);
                 printf("  co-op mod values: the mod stratagem's cooldown %.0f while joined (the host's 90), %.0f after (its own 150)\n", joined, g_modCooldown);
                 if (joined != 90 || g_modCooldown != 150) { puts("FAIL the mod content values did not follow the co-op role"); failures++; }
+                /* joined to a host who lets every player keep their own stats (SDK 15 stats_source, the default): the editor
+                 * stays editable (a preset import stages), and a host's file left beside it is not applied */
+                if (FILE* file = fopen(hostMods, "wb"))
+                {
+                    fputs("{\"format\":1,\"mod:test/mod/hmg\":{\"test/mod/hmg\":{\"stratagem.cooldown\":90}}}", file);
+                    fclose(file);
+                }
+                g_statsNow = HF_STATS_OWN;
+                g_sessionNow.role = HF_SESSION_JOINER; g_sessionNow.version = 3; snprintf(g_sessionNow.host, sizeof g_sessionNow.host, "Friend Host");
+                frames(30);
+                imports = g_presetImports;
+                Key(window, VK_HOME); frames(2); Key(window, VK_RETURN); frames(6);
+                printf("  own stats while joined: %d import(s), the mod stratagem's cooldown %.0f (its own 150)\n", g_presetImports - imports, g_modCooldown);
+                if (g_presetImports == imports) { puts("FAIL a joined editor keeping its own stats refused an import"); failures++; }
+                if (g_modCooldown != 150) { puts("FAIL a joined editor keeping its own stats took the host's values"); failures++; }
+                Key(window, VK_ESCAPE); frames(2);
+                g_statsNow = HF_STATS_HOST;
+                g_sessionNow.role = HF_SESSION_SOLO; g_sessionNow.version = 4; g_sessionNow.host[0] = 0;
+                DeleteFileA(hostMods);
+                frames(10);
             }
         }
         /* mod sync (SDK 14): the offer is read at most once every 30 frames; one shows its dialog alone over the game, the

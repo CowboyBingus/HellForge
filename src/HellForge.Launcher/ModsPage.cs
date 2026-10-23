@@ -191,7 +191,7 @@ public partial class MainWindow
         shareRow.Children.Add(new TextBlock { Text = "Let players who join me download my gameplay mods (those with code or unchecked data: Steam friends only)",
             VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(shareRow);
-        // Joiners play with the host's stats: public lobbies whose host edited them are hidden on the Galactic Map unless shown.
+        // Joiners of a host who shares edited stats play with them: such public lobbies are hidden on the Galactic Map unless shown.
         var edited = new ToggleSwitch { IsChecked = settings.ShowEditedStats, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
         edited.IsCheckedChanged += (_, _) =>
         {
@@ -212,9 +212,22 @@ public partial class MainWindow
         panel.Children.Add(listedRow);
         var editedRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         editedRow.Children.Add(edited);
-        editedRow.Children.Add(new TextBlock { Text = "Show public lobbies whose host plays with edited stats (you would play with theirs)", VerticalAlignment = VerticalAlignment.Center,
+        editedRow.Children.Add(new TextBlock { Text = "Show public lobbies whose host shares edited stats (you would play with theirs)", VerticalAlignment = VerticalAlignment.Center,
             TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(editedRow);
+        // Hosting: friends keep their own in-game editor changes unless this is on (StatsShare); either way every game loads
+        // the packages the others' changes need (AssetShare).
+        var hostStats = new ToggleSwitch { IsChecked = settings.HostStats, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
+        hostStats.IsCheckedChanged += (_, _) =>
+        {
+            try { ModSettings.SetHostStats(modsFolder, hostStats.IsChecked == true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the shared stats setting: " + error.Message, Red); }
+        };
+        var hostStatsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        hostStatsRow.Children.Add(hostStats);
+        hostStatsRow.Children.Add(new TextBlock { Text = "When I host, everyone plays with my editor changes (off: each player keeps their own)",
+            VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(hostStatsRow);
 
         panel.Children.Add(new TextBlock { Text = settings.Blocked.Count == 0
             ? "No blocked mods. BLOCK on the in-game MOD SYNC prompt hides lobbies that run a mod."

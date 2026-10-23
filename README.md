@@ -9,7 +9,7 @@ an in-game editor (F8) and a C mod SDK with guides and examples.
 > install the latest release from the [Releases page](https://github.com/SkyeShade/HellForge/releases) instead. A build of
 > this branch shows `-dev.<n>` in its version.
 
-Status: development build (0.3.0-dev.1), made for modders first, so expect rough edges. The launcher shows its version
+Status: development build (0.3.0-dev.2), made for modders first, so expect rough edges. The launcher shows its version
 and the game build it targets in its bottom-left corner.
 
 ## What HellForge is and is not
