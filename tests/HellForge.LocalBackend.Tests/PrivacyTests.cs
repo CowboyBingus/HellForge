@@ -63,7 +63,7 @@ static class PrivacyTests
     static Frame Join(string op, ulong member, string connection, IReadOnlyDictionary<string, string>? props = null) => new Frame("lobby.join").Add(op)
         .Add(LobbyService.EntityId(member)).Add("title_player_account").Add(connection).Add(props ?? new Dictionary<string, string> { ["platform_lobby"] = "2:1::" });
 
-    static Frame Privacy(string op, string lobby, ulong owner, string value) =>
+    internal static Frame Privacy(string op, string lobby, ulong owner, string value) =>
         new Frame("lobby.update").Add(op).Add(lobby).Add(LobbyService.EntityId(owner)).Add(0).Add("").Add(0).Add(0).Add(0).Add(0).Add(0).Add(0)
             .Add(new List<PropertyChange> { new("19", value) }).Add(new List<PropertyChange> { new("number_key6", value) }).Add(0).Add(Array.Empty<PropertyChange>());
 

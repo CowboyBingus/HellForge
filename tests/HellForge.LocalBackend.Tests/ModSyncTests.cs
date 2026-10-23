@@ -355,7 +355,11 @@ static class ModSyncTests
         host.Sync.GrantFor = ModSync.GrantTime;
         timed.Dispose();
 
-        // Not a Steam friend: content is served, a code or raw mod's files are not.
+        // Not a Steam friend: content is served, a code or raw mod's files are not. A stranger reaches mod sync only through a
+        // Public lobby: Friends only (a lobby with no privacy value) refuses them before any offer.
+        host.Lobby.FromLocal(PrivacyTests.Privacy("public", host.Lobby.HostedLobbies().Single(l => l.ConnectionString == lobby).Id, HostId, "0"));
+        // (the update's result, after whatever the game was told meanwhile: members' joins, the lobby's own update)
+        while (host.Inbox.TryTake(out var told, TimeSpan.FromSeconds(5)) && !(told.Type == "lobby.result" && told.Text(0) == "public")) { }
         const ulong NotFriend = 0x110000100000027;
         lock (network.Strangers) network.Strangers.Add(NotFriend);
         var (other, otherReplies) = Refusee(network, NotFriend, lobby, "stranger-join");
@@ -369,6 +373,8 @@ static class ModSyncTests
         check(Ask(other, otherReplies, new Frame("mods.files").Add("s").Add(stats.Id).Add(stats.Hash).Add(0), check).Text(1) == "ok", "Content is served to a stranger.");
         lock (network.Strangers) network.Strangers.Remove(NotFriend);
         other.Dispose();
+        // what the host's game was told of that lobby since (its update, the stranger's refused join): not the next test's
+        while (host.Inbox.TryTake(out _, TimeSpan.FromMilliseconds(300))) { }
     }
 
     // A host whose set this test makes up: the mods given, each served from its folder as listed.
