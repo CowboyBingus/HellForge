@@ -101,8 +101,10 @@ Its buttons, **Enter** and **B** wait a second after it appears, so a key or cli
 answer it. **DOWNLOAD AND RESTART** downloads what it can, when the drive has room for it and 256 MB to spare;
 **Esc** hides the prompt while the download goes on, and it comes back when the mods are ready. **CANCEL** or **Esc**
 before that answers no. **RESTART TO JOIN** then ends the session and the launcher starts a new one with the host's
-mods, in the host's load order, plus your own cosmetic mods and Local Stats. Join the lobby again from the social tab
-or the map. Only that one session plays the host's mods: your Mods page and its switches never change, and the next
+mods, in the host's load order, plus your own cosmetic mods and Local Stats. Once the game is on the ship, the
+host's invitation to their lobby waits in game ("Rejoining <host>"): accept it to join. If the lobby has closed, is
+full or locked, or the host does not answer, the game says so ("Couldn't rejoin <host>"); join from the social tab or
+the map then. Only that one session plays the host's mods: your Mods page and its switches never change, and the next
 session you start yourself runs your own mods again.
 
 **What may download (the trust rule).** Only what HellForge checks itself downloads by itself. Your backend decides
