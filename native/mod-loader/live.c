@@ -90,7 +90,8 @@ static void SetNotice(char** f, int n)
  * first and wait in g_syncNext (the pipe's thread alone touches it); its syncstate line publishes them with the state. A
  * syncstate of the version already published is progress (state, done, message): its mods stay. Answers are queued
  * for LiveWatch, the pipe's only writer, so an answer never waits on the pipe's pending read. */
-#define SYNC_MAX_MODS 64
+/* As many as the backend lists (LiveSyncDisplay.MaxMods): a host's set (at most 256) and this machine's own mods. */
+#define SYNC_MAX_MODS 512
 static const char* const kSyncStates[] = {"none", "offer", "blocked", "downloading", "ready", "failed"};
 static const char* const kSyncActions[] = {"have", "download", "manual", "blocked", "update", "off"};
 static const char* const kSyncClasses[] = {"content", "code", "bundled", "raw"};
@@ -99,7 +100,7 @@ static HfSyncState g_sync;
 static HfSyncMod g_syncMods[SYNC_MAX_MODS];
 static HfSyncMod g_syncNext[SYNC_MAX_MODS];
 static uint32_t g_syncNextVersion;
-static uint64_t g_syncNextSeen; /* the indices of g_syncNext that arrived */
+static uint64_t g_syncNextSeen[SYNC_MAX_MODS / 64]; /* the indices of g_syncNext that arrived, a bit each */
 /* Lines for LiveWatch to write (the answers), and whether a backend is connected to take them. */
 static SRWLOCK g_liveOutLock = SRWLOCK_INIT;
 static char g_liveOut[1024];
@@ -164,7 +165,7 @@ static void SyncModLine(char* line, char* reply, size_t size)
     {
         memset(g_syncNext, 0, sizeof g_syncNext);
         g_syncNextVersion = (uint32_t)version;
-        g_syncNextSeen = 0;
+        memset(g_syncNextSeen, 0, sizeof g_syncNextSeen);
     }
     HfSyncMod* m = &g_syncNext[index];
     memset(m, 0, sizeof *m);
@@ -175,7 +176,7 @@ static void SyncModLine(char* line, char* reply, size_t size)
     SyncCopy(m->id, sizeof m->id, f[7]);
     SyncCopy(m->name, sizeof m->name, f[8]);
     SyncCopy(m->version, sizeof m->version, f[9]);
-    g_syncNextSeen |= 1ull << index;
+    g_syncNextSeen[index / 64] |= 1ull << (index % 64);
     snprintf(reply, size, "%s\tok\tnow", f[1]);
 }
 
@@ -189,11 +190,12 @@ static void SyncStateLine(char* line, char* reply, size_t size)
         !SyncNumber(f[7], &mods))
     { snprintf(reply, size, "%s\trefused\tmalformed syncstate", n >= 2 ? f[1] : "-"); return; }
     if (mods > SYNC_MAX_MODS) { snprintf(reply, size, "%s\trefused\tan offer lists at most %d mods", f[1], SYNC_MAX_MODS); return; }
-    uint64_t all = mods == 64 ? ~0ull : (1ull << mods) - 1;
+    int seen = 1; /* every one of the first `mods` indices arrived */
+    for (uint64_t i = 0; i < mods && seen; i++) seen = (g_syncNextSeen[i / 64] >> (i % 64)) & 1;
     AcquireSRWLockExclusive(&g_syncLock);
     int fresh = (uint32_t)version != g_sync.version;
     const char* why = !fresh && (uint32_t)mods != g_sync.mods ? "its mod count changed without its mods" :
-        fresh && mods > 0 && (g_syncNextVersion != (uint32_t)version || (g_syncNextSeen & all) != all) ? "its syncmod lines are missing" : NULL;
+        fresh && mods > 0 && (g_syncNextVersion != (uint32_t)version || !seen) ? "its syncmod lines are missing" : NULL;
     if (why != NULL)
     {
         ReleaseSRWLockExclusive(&g_syncLock);
