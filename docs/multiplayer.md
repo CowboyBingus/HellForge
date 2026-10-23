@@ -511,6 +511,36 @@ other machine in the lobby load them too.
   is applied (and on joining), which is normally long before anyone calls in what it changed; a vehicle called in at
   once may still show a missing asset on a friend's screen until its package is resident.
 
+### Shots in co-op
+
+Every machine simulates every player's shots from its own data, and nothing about a shot's projectile type travels over
+the network (a remote shot is the local fire function run from the shooter's replicated trigger, or an explicit fire
+message that carries no type). So without more, a player's projectile swap fired as the stock round on the others'
+screens, and on the swapping player's screen the others' guns fired the swap too. Research:
+`HD2Mods\research\projectile-per-player` (from a decoded snapshot of build 25480438).
+
+- The mod loader (`native/mod-loader/shots.c`) hooks the ProjectileWeapon fire function (game.dll 0x6128B0) after the
+  game has chosen a shot's type (0x614081, before the pellet loop and the projectile pool's constructor), for this
+  machine's own shots and its copies of the others' alike. Both sites' bytes are checked first.
+- It finds the shooter: the weapon's wielder (the Wieldable manager), matched to a player's Helldiver (the player list:
+  peer and avatar). A player's peer is their SteamID64.
+- Each player's swaps come from their Local Stats (a weapon's ProjectileWeapon +0, the editor's Projectile row) and
+  travel with the lobby's assets: `assets.mine` adds `<weapon resource hex>=<type>`, `assets.lobby` adds every player's
+  `<peer hex>:<weapon resource hex>=<type>`, and each backend sends its game `shots <rules>` over the live pipe. Not while
+  the host shares its stats (`shots -`): then every machine already plays with the same.
+- A shot fires: the shooter's swap, if they have one for that weapon and its row and packages are ready here; else, for
+  this machine's player, what the game chose; else, for another player, the weapon's round from before this machine's
+  own swap. Only a weapon's normal round is changed: a mode's, a charge's or an ammunition's type stays. Shots by no
+  player (sentries, enemies) are left alone.
+- Choosing the type before the pellet loop gives the shot the swapped round's whole row: flight, direct damage, impact
+  and expiry explosions, and a shotgun's pellet count. The weapon stays the source's: its ammunition, rate, recoil and
+  sounds.
+- Not covered yet: weapons whose round comes from their ammunition (the AR-23 Liberator, JAR-5 Dominator, P-19 Redeemer,
+  P-2 Peacemaker, R-63 Diligence, SG-225 Breaker) or their rounds feed (five shotguns and rifles); beams; weapons firing
+  entities (rockets, missiles); an underbarrel's own shots (the One-Two's grenade is a weapon of its own). A swap that
+  follows the gun itself (dropped and picked up by another player) needs the weapon's network identity through drops,
+  which the research leaves to in-game tests.
+
 ### When the host leaves
 
 When the lobby's owner leaves, the lobby closes for everyone (`lobby.disconnected`, reason LobbyDeleted). When the
@@ -1052,8 +1082,9 @@ playing with the host's stats). What it does is in [Stats in co-op](#stats-in-co
 3. Start a mission. B calls in the swapped vehicle, and A the swapped pod. Check that each sees the other's swapped
    weapon and pickup, not a purple question mark. Note what each player sees of the other's weapon firing and what it
    hits.
-4. B changes a hand-held weapon's projectile (say to the R-36 Eruptor's) and fires it. Note what A sees, and whether
-   enemies A sees die as B sees them die.
+4. B changes a hand-held weapon's projectile (say the AR/GL-21 One-Two's to the PLAS-1 Scorcher's) and fires it. With
+   the per-player shots (shots.c) A sees B's swapped round too, and A's own One-Two still fires its own. Note whether
+   enemies A sees die as B sees them die. A Liberator's swap (its round comes from its ammunition) is not covered yet.
 5. A turns the switch on: B's editor turns read-only ("READ-ONLY · HOST: <A>") and B plays with A's stats. A turns it
    off: B's own come back.
 6. Collect both sessions' logs (launcher Console > "Save logs to Desktop").

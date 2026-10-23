@@ -790,7 +790,8 @@ armory shows; the weapon's damage decides its real armor penetration.
 ### Co-op
 
 Every player keeps their own Local Stats, and the editor stays editable when joined; every machine loads the packages
-the others' changes need. A host may share its stats instead: then, over the live pipe, a joiner plays with the host's
+the others' changes need, and fires each player's projectile swaps as theirs (`native/mod-loader/shots.c`; see
+[multiplayer.md](multiplayer.md#shots-in-co-op)). A host may share its stats instead: then, over the live pipe, a joiner plays with the host's
 Local Stats, including attachments, the in-game editor's mod content values, its arm swaps (Mounted Weapons) and hellpod
 payloads, and its editor shows the host's changes read-only (`HfApi.stats_source`, SDK 15, says which). Armor perks
 stay solo only. [multiplayer.md](multiplayer.md#stats-in-co-op) has the backend's side.

@@ -272,6 +272,9 @@ public sealed class StatsShare : IAsyncDisposable
     // Whether the lobby plays with its host's stats, as the game is told (HfApi stats_source): joined to a host who shares
     // them, or hosting and sharing them. Called with gate held.
     bool LobbyShared() => role == "joiner" ? hostPeer != 0 && hostShared : role == "host" && sharing;
+    public bool LobbyPlaysHostStats { get { lock (gate) return LobbyShared(); } }
+    // This machine's Local Stats file as last read (AssetShare: this player's projectile swaps).
+    public string? LocalStats { get { lock (gate) return mine; } }
 
     // Takes the game to the host's values (joined to a host who shares them) or its own, one request at a time; a request
     // the game refused is logged and tried again with the next change.

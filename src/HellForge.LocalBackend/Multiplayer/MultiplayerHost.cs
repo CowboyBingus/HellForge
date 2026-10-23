@@ -109,7 +109,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
             {
                 host.Stats = new StatsShare(host.transport, host.Lobby, pipeName["hellforge-".Length..], modsFolder, host.FriendName, host.Log,
                     () => ModSettings.Read(modsFolder).HostStats);
-                host.Assets = new AssetShare(host.transport, host.Lobby, host.Stats.Live, host.Log);
+                var stats = host.Stats;
+                host.Assets = new AssetShare(host.transport, host.Lobby, stats.Live, host.Log, () => stats.LocalStats, () => stats.LobbyPlaysHostStats);
                 host.Log("Stats: every player keeps their own unless the host shares its (the Mods page); the lobby's packages load on every machine; this game's live-edit pipe is served here.");
             }
             catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException) { host.Log("Stats sharing is off: " + error.Message); }

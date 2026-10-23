@@ -558,6 +558,8 @@ static void ApplyEdit(FieldEdit* e)
     uint8_t bytes[1024];
     if (e->field->size > sizeof bytes) { EditFailed(e, "the field is larger than HellForge edits"); return; }
     memcpy(bytes, at, e->field->size);
+    uint32_t was = 0;
+    if (e->field->size == 4) memcpy(&was, at, 4);
     /* under a value Local Stats saved (not written; its original is taken when it does apply) */
     if (e->live && ModRank(e->mod) < RANK_EDITOR && SavedEditorValue((uintptr_t)at, e->field->size)) { e->failed = 0; return; }
     if (e->live && !e->hasOriginal && e->field->size <= sizeof e->original) { memcpy(e->original, at, e->field->size); e->hasOriginal = 1; }
@@ -605,6 +607,13 @@ static void ApplyEdit(FieldEdit* e)
         }
     }
     if (memcmp(bytes, at, e->field->size) != 0 && ApiWrite((uintptr_t)at, bytes, e->field->size)) { EditFailed(e, "its record could not be written"); return; }
+    /* a weapon's projectile changed live (the editor's swap): this machine's own, for co-op's shots (shots.c) */
+    if (!e->table && e->field->offset == 0 && e->field->size == 4 && !strcmp(e->component->component, "ProjectileWeaponComponentData"))
+    {
+        uint32_t now;
+        memcpy(&now, bytes, 4);
+        ShotsNoteLocal(e->entity, was, now);
+    }
     e->failed = 0;
 }
 

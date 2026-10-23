@@ -521,7 +521,7 @@ try
     Console.WriteLine("PASS stats share: a joiner plays with the host's Local Stats when it shares them (joined, changed, not shared, shared again, host gone), its live-edit pipe");
     await AssetShareTests.Run(root, Check);
     results.Add(new { mode = "asset-share", outcome = "passed" });
-    Console.WriteLine("PASS asset share: every game loads the lobby's packages less its own, a joiner's new package reaches the others, malformed lists dropped");
+    Console.WriteLine("PASS asset share: every game loads the lobby's packages less its own, a joiner's new package reaches the others, malformed lists dropped, each player's projectile swaps reach every game");
     await DirectoryTests.Run(root, Check);
     results.Add(new { mode = "directory", outcome = "passed" });
     Console.WriteLine("PASS lobby directory: the map's filter, listing values, publishing rules, search and records, edited stats, blocked and unjoinable mods, hostile listings, the listing switch, strangers");

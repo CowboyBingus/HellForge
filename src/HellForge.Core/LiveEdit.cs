@@ -132,6 +132,10 @@ public sealed class LiveEditServer : IAsyncDisposable
         return SendAsync("preload", ids.Count == 0 ? "-" : string.Join(',', ids));
     }
 
+    // Each player's projectile swaps, which the game's copies of their shots fire (native/mod-loader/shots.c):
+    // "<peer hex>:<weapon resource hex>=<type>" comma separated, "-" none.
+    public Task<LiveResult> ShotsAsync(string rules) => SendAsync("shots", rules);
+
     // A "packages" or "preload" list: package ids, 16 hex digits each, comma separated, "-" none. Null when malformed.
     public static SortedSet<ulong>? Packages(string list, int max)
     {

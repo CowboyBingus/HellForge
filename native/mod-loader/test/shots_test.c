@@ -1,0 +1,56 @@
+/* Per-player projectile swaps (shots.c): the lobby's rules from the pipe, and the type each shot fires by who fires it:
+ * a friend's swap on their gun, this machine's own swap only on its player's, a mode's type left alone, shots by no
+ * player and rules not ready yet untouched. Included by stats_test.c. */
+
+static uint32_t ShotFakeWielder(uint32_t weapon) { return weapon == 11 ? 100 : weapon == 22 ? 200 : weapon == 33 ? 999 : 0; }
+
+static void ShotsFixture(void)
+{
+    char line[512], reply[256];
+    const char* why;
+    g_shotLocalCount = 0; /* earlier fixtures' projectile writes noted this machine's swaps */
+    /* the pipe: rules replace the last, "-" none, malformed refused */
+    strcpy(line, "shots\t1\t110000100000022:968211C0033DCE64=142,110000100000022:A955C4EA6F6D4203=263");
+    LiveRequest(line, reply, sizeof reply);
+    assert(!strcmp(reply, "1\tok\tnow") && g_shotRuleCount == 2 && g_shotsActive && g_shotRules[0].peer == 0x110000100000022ull &&
+        g_shotRules[0].resource == 0x968211C0033DCE64ull && g_shotRules[0].type == 142 && !g_shotRules[0].ready);
+    strcpy(line, "shots\t2\tnot-a-rule"); LiveRequest(line, reply, sizeof reply); assert(!strncmp(reply, "2\trefused\t", 10) && g_shotRuleCount == 2);
+    assert(!ShotsSetRules("1:2=0", &why) && !ShotsSetRules("1:2=x", &why) && g_shotRuleCount == 2);
+    strcpy(line, "shots\t3\t-"); LiveRequest(line, reply, sizeof reply); assert(!strcmp(reply, "3\tok\tnow") && g_shotRuleCount == 0 && !g_shotsActive);
+
+    /* who fires what: this machine's player (avatar 100, peer L) and a friend (avatar 200, peer F) */
+    const uint64_t L = 0x110000100000011ull, F = 0x110000100000022ull, liberator = 0x968211C0033DCE64ull, onetwo = 0xA955C4EA6F6D4203ull;
+    g_shotWielder = ShotFakeWielder;
+    g_shotPlayers[0] = (ShotPlayer){L, 100, 1}; g_shotPlayers[1] = (ShotPlayer){F, 200, 0}; g_shotPlayerCount = 2;
+    uint8_t mine[16] = {0}, theirs[16] = {0}, turret[16] = {0}, theirTwo[16] = {0};
+    uint32_t w;
+    memcpy(mine, &liberator, 8); w = 11; memcpy(mine + 8, &w, 4);
+    memcpy(theirs, &liberator, 8); w = 22; memcpy(theirs + 8, &w, 4);
+    memcpy(turret, &liberator, 8); w = 33; memcpy(turret + 8, &w, 4);
+    memcpy(theirTwo, &onetwo, 8); w = 22; memcpy(theirTwo + 8, &w, 4);
+    assert(ShotType(334, theirs) == 334); /* no rules: nothing changes (solo, or a host sharing its stats) */
+    char rules[128];
+    snprintf(rules, sizeof rules, "%llx:%llx=142,%llx:%llx=263", (unsigned long long)F, (unsigned long long)liberator, (unsigned long long)F,
+        (unsigned long long)onetwo);
+    assert(ShotsSetRules(rules, &why));
+    assert(ShotType(334, theirs) == 334); /* not ready yet: its row and packages unchecked */
+    g_shotRules[0].ready = g_shotRules[1].ready = 1;
+    g_shotRules[0].native = 334; g_shotRules[1].native = 330;
+    assert(ShotType(334, theirs) == 142);   /* the friend's Liberator fires the friend's swap */
+    assert(ShotType(334, mine) == 334);     /* this machine's player's own: the game's choice */
+    assert(ShotType(263, theirs) == 263);   /* not the weapon's normal round (a mode's): left alone */
+    assert(ShotType(334, turret) == 334);   /* no player's: left alone */
+    assert(ShotType(330, theirTwo) == 263);
+    /* this machine swapped the Liberator to 142 itself: a friend without a swap fires the Liberator's own round here */
+    snprintf(rules, sizeof rules, "%llx:%llx=263", (unsigned long long)F, (unsigned long long)onetwo);
+    assert(ShotsSetRules(rules, &why));
+    g_shotRules[0].ready = 1; g_shotRules[0].native = 330;
+    ShotsNoteLocal(liberator, 334, 142);
+    assert(ShotType(142, theirs) == 334 && ShotType(142, mine) == 142);
+    ShotsNoteLocal(liberator, 142, 150); /* changed again: its base stays the first */
+    assert(g_shotLocalCount == 1 && g_shotLocal[0].base == 334 && g_shotLocal[0].now == 150 && ShotType(150, theirs) == 334);
+
+    assert(ShotsSetRules("-", &why));
+    g_shotLocalCount = 0; g_shotPlayerCount = 0;
+    g_shotWielder = ShotWielderOf;
+}

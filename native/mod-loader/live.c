@@ -13,6 +13,8 @@
  *                     the host's stats, as before SDK 15)
  *             notice <seq> <error|info> <title> [<line>...]   (SDK 12: a message the in-game editor shows the player)
  *             preload <seq> <package id hex>,... or -      (the lobby's packages, for friends' changes: packages.c)
+ *             shots <seq> <peer hex>:<weapon resource hex>=<projectile type>,... or -   (each player's projectile
+ *                     swaps, which their shots fire on this machine: shots.c)
  *             syncmod <seq> <version> <index> <have|download|manual|blocked|update|off|trust> <content|code|bundled|raw> <bytes>
  *                     <id> <name> <mod version> <https:// url or ->
  *             syncstate <seq> <version> <none|offer|blocked|downloading|ready|failed> <host name> <bytes> <done> <mods>
@@ -567,6 +569,13 @@ static void LiveRequest(char* line, char* reply, size_t size)
         return;
     }
     if (!strcmp(f[0], "preload") && n == 3) { PreloadLine(seq, f[2], reply, size); return; }
+    if (!strcmp(f[0], "shots") && n == 3)
+    {
+        const char* why = NULL;
+        if (ShotsSetRules(f[2], &why)) snprintf(reply, size, "%s	ok	now", seq);
+        else snprintf(reply, size, "%s	refused	%s", seq, why);
+        return;
+    }
     if (!strcmp(f[0], "notice") && n >= 4)
     {
         SetNotice(f + 2, n - 2);
@@ -743,6 +752,8 @@ static DWORD WINAPI LiveWatch(void* parameter)
         CloseHandle(pipe);
         Note("live editor disconnected");
         SetSession(HF_SESSION_SOLO, HF_STATS_OWN, ""); /* the backend is gone: nothing tells this game it is joined */
+        const char* none;
+        ShotsSetRules("-", &none); /* nor whose swaps friends' shots fire */
         SyncClear();
     }
 }

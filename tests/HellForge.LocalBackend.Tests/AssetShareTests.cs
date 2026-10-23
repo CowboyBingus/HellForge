@@ -6,7 +6,8 @@ using HellForge.LocalBackend.Multiplayer;
 
 // Assets in co-op, end to end: a host and two joiners over the in-memory network, each game a fake mod loader on its
 // live-edit pipe that says which packages it holds ("packages") and records what it is asked to load ("preload"). Every
-// game loads the lobby's packages less its own, again when a player's change; malformed lists are dropped.
+// game loads the lobby's packages less its own, again when a player's change; malformed lists are dropped. Each player's
+// projectile swaps (from their Local Stats) reach every game, by their peer ("shots").
 static class AssetShareTests
 {
     const ulong HostId = 0x110000100000021, FirstId = 0x110000100000022, SecondId = 0x110000100000023;
@@ -14,7 +15,7 @@ static class AssetShareTests
 
     sealed class Game : IAsyncDisposable
     {
-        public readonly BlockingCollection<string> Preloads = new();
+        public readonly BlockingCollection<string> Preloads = new(), Shots = new();
         readonly BlockingCollection<string> outgoing = new();
         readonly CancellationTokenSource stop = new();
         readonly Task running;
@@ -59,6 +60,7 @@ static class AssetShareTests
                     {
                         var parts = line.Split('\t');
                         if (parts[0] == "preload") Preloads.Add(parts[2]);
+                        if (parts[0] == "shots") Shots.Add(parts[2]);
                         await Write(parts[1] + "\tok\tnow");
                     }
                 }
@@ -69,11 +71,13 @@ static class AssetShareTests
         }
 
         // The last list it was asked to load within the time, waiting until it equals `want` (or the time runs out).
-        public string WaitFor(string want)
+        public string WaitFor(string want) => Wait(Preloads, want);
+        public string WaitForShots(string want) => Wait(Shots, want);
+        static string Wait(BlockingCollection<string> lines, string want)
         {
             var last = "";
             for (var until = DateTime.UtcNow.AddSeconds(10); DateTime.UtcNow < until;)
-                if (Preloads.TryTake(out var list, TimeSpan.FromMilliseconds(100)) && (last = list) == want) return last;
+                if (lines.TryTake(out var list, TimeSpan.FromMilliseconds(100)) && (last = list) == want) return last;
             return last;
         }
 
@@ -92,14 +96,17 @@ static class AssetShareTests
         public readonly AssetShare Assets;
         public readonly Game Game;
 
-        public Machine(InMemoryNetwork network, ulong id, string root, string name, string packages, ConcurrentQueue<string> log)
+        public Machine(InMemoryNetwork network, ulong id, string root, string name, string packages, ConcurrentQueue<string> log, string? localStats = null)
         {
             var link = network.Join(id);
             Lobby = new LobbyService(link, Inbox.Add, _ => { }, "mods");
             var mods = Directory.CreateDirectory(Path.Combine(root, "assets-" + name, "mods")).FullName;
+            if (localStats != null)
+                File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(mods, "zz.local.stats")).FullName, StatsShare.FileName), localStats);
             var runId = "assets-" + name + "-" + Guid.NewGuid().ToString("N")[..8];
             Stats = new StatsShare(link, Lobby, runId, mods, _ => "Host", line => log.Enqueue(name + ": " + line));
-            Assets = new AssetShare(link, Lobby, Stats.Live, line => log.Enqueue(name + ": " + line));
+            var stats = Stats;
+            Assets = new AssetShare(link, Lobby, Stats.Live, line => log.Enqueue(name + ": " + line), () => stats.LocalStats, () => stats.LobbyPlaysHostStats);
             link.Received += (peer, bytes) =>
             {
                 var frame = Frame.Decode(bytes);
@@ -123,7 +130,11 @@ static class AssetShareTests
         var network = new InMemoryNetwork();
         var log = new ConcurrentQueue<string>();
         await using var host = new Machine(network, HostId, root, "host", P1, log);
-        await using var first = new Machine(network, FirstId, root, "first", P2, log);
+        // the first joiner swapped the One-Two's round to the Scorcher's (projectile 142) in its editor
+        const string swap = """{"format":1,"weapons":{"AR/GL-21 One-Two":{"attack.primary.projectile":142}}}""";
+        check(AssetShare.Swaps(swap) == "a955c4ea6f6d4203=142" && AssetShare.Swaps(null) == "-",
+            "A player's projectile swaps from their Local Stats: " + AssetShare.Swaps(swap));
+        await using var first = new Machine(network, FirstId, root, "first", P2, log, swap);
         await using var second = new Machine(network, SecondId, root, "second", "-", log);
 
         // Alone, nothing is asked of any game.
@@ -142,6 +153,11 @@ static class AssetShareTests
         check(hostLoads == P2, "Joined: the host's game loads the first joiner's package: " + hostLoads);
         check(firstLoads == P1, "Joined: the first joiner's game loads the host's package, not its own: " + firstLoads);
         check(secondLoads == P1 + "," + P2, "Joined: the second joiner's game loads both: " + secondLoads);
+        // ... and every game is told the first joiner's swap, by its peer: its copies of their shots fire it
+        var rule = FirstId.ToString("x", System.Globalization.CultureInfo.InvariantCulture) + ":a955c4ea6f6d4203=142";
+        var hostShots = host.Game.WaitForShots(rule);
+        var secondShots = second.Game.WaitForShots(rule);
+        check(hostShots == rule && secondShots == rule, "Joined: the first joiner's projectile swap reaches the others' games: " + hostShots + " | " + secondShots);
 
         // The first joiner applies a change that needs another package: it reaches every other game.
         first.Game.Hold(P2 + "," + P3);
