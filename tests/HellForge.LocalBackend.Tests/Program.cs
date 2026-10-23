@@ -18,6 +18,35 @@ var bodies = new[] { "{}", "{\"gmiStr\":null}", "{\"gmiStr\":\"\"}",
 var failed = false;
 try
 {
+    // A web page in the player's browser is refused: another Host (DNS rebinding), or a browser's marks (Origin, Referer,
+    // Sec-Fetch-*). A program on this PC is served, by 127.0.0.1 or localhost.
+    {
+        await using var app = LocalBackend.Create(0, Path.Combine(root, "web-pages"), LoginMode.LocalSession);
+        await app.StartAsync();
+        try
+        {
+            var address = new Uri(app.Urls.Single());
+            using var client = new HttpClient(new HttpClientHandler { UseProxy = false, AllowAutoRedirect = false }) { BaseAddress = address, Timeout = TimeSpan.FromSeconds(10) };
+            foreach (var (header, value) in new[] { ("Host", "attacker.example:80"), ("Origin", "https://attacker.example"),
+                         ("Referer", "https://attacker.example/page"), ("Sec-Fetch-Site", "cross-site") })
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, "/config/locator.json");
+                if (header == "Host") request.Headers.Host = value;
+                else request.Headers.TryAddWithoutValidation(header, value);
+                using var response = await client.SendAsync(request);
+                Check(response.StatusCode == HttpStatusCode.Forbidden && (await response.Content.ReadAsStringAsync()).Contains("HELLFORGE_NOT_FROM_THIS_PC"),
+                    $"A request with {header}: {value} was served.");
+            }
+            foreach (var host in new[] { address.Authority, "localhost:" + address.Port })
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, "/config/locator.json") { Headers = { Host = host } };
+                using var response = await client.SendAsync(request);
+                Check(response.StatusCode == HttpStatusCode.OK, $"A request to {host} was refused.");
+            }
+            Console.WriteLine("PASS web pages: another Host, Origin, Referer and Sec-Fetch-Site refused; 127.0.0.1 and localhost served");
+        }
+        finally { await app.StopAsync(); }
+    }
     foreach (var mode in new[] { LoginMode.RejectGmi, LoginMode.LocalSession })
     {
         var evidence = Path.Combine(root, mode.ToString());
@@ -32,7 +61,7 @@ try
             var backendAddress = address;
             using (var locatorRequest = new HttpRequestMessage(HttpMethod.Get, "/config/locator.json"))
             {
-                locatorRequest.Headers.Host = "untrusted.invalid";
+                locatorRequest.Headers.Host = "localhost:1"; /* a loopback name on another port: the URL still comes from the socket */
                 using var response = await client.SendAsync(locatorRequest);
                 Check(response.StatusCode == HttpStatusCode.OK, "Local locator failed.");
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
