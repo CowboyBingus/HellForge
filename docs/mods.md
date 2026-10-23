@@ -154,6 +154,10 @@ not join:
 
 Lobbies with other mods you can download still show. Joining one shows the MOD SYNC prompt.
 
+Only lobbies whose host set Privacy to Public are listed. To keep your own Public lobbies off other players' maps, turn
+off "List my Public lobbies on other HellForge players' Galactic Map" on the Mods page. Who may join each privacy
+setting is in [multiplayer.md](multiplayer.md#how-co-op-works-for-players).
+
 For mod authors, the prompt is the SDK 14 calls `sync_state`, `sync_mod` and `sync_answer`
 ([sdk-reference.md](sdk-reference.md)).
 

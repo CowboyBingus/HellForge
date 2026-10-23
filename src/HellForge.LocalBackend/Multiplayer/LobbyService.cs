@@ -15,15 +15,33 @@ namespace HellForge.LocalBackend.Multiplayer;
 //   lobby.update [op, lobbyId, memberId, newOwner?, newOwnerId, maxMembers?, maxMembers, access?, access, lock?, lock,
 //                 lobbyChanges, searchChanges, memberUpdate?, memberChanges]
 //   lobby.leave  [op, lobbyId, memberId ("" = every member of the requesting machine)]
+//   lobby.kick   [op, lobbyId, memberId, preventRejoin 0|1]  (PFLobbyForceRemoveMember; the owner's own DLL only)
+//   lobby.invite [op, lobbyId, senderId, inviteeId]          (PFLobbySendInvite; a member's DLL, forwarded to the owner)
 // Backend -> DLL events:
 //   lobby.result        [op, kind, hresult, snapshot (create and join successes)]
 //   lobby.memberAdded   [lobbyId, memberId, memberType, props]
-//   lobby.memberRemoved [lobbyId, memberId, reason]
+//   lobby.memberRemoved [lobbyId, memberId, reason]  (the SDK's PFLobbyMemberRemovedReason: 1 to a kicked machine)
 //   lobby.updated       [lobbyId, ownerId ("" = unchanged), maxMembers ("" = unchanged), access, lock, lobbyChanges,
 //                        searchChanges, memberUpdateCount, (memberId, changes)...]
 //   lobby.disconnected  [lobbyId, reason]
+//   lobby.inviteReceived [lobbyId, connectionString, inviterId]  (a friend's invitation; the DLL tells its listeners)
+// Between backends only: lobby.refused (below), lobby.invited [lobbyId, connectionString, inviterId] from the inviting
+// player's backend to the invitee's, taken from Steam friends only.
 // snapshot = lobbyId, connectionString, ownerId, maxMembers, access, migration, lock, lobbyProps, searchProps,
 //            memberCount, (memberId, memberType, props)...
+//
+// Who may join a lobby hosted here (Admission, before the protocol and mod checks, so a refused stranger is never offered
+// this host's mods) follows the game's own privacy setting as the lobby advertises it: lobby property "19"
+// (PrivacyMode), mirrored in search property number_key6, 0 Public, 1 Friends Only, 2 Invite Only, 3 Friends and Clan
+// (HD2Runtime research "matchmaking safety", build F5FEE03DCFDB: settings privacy_mode, name table 0x21D3F28, the
+// game's own join gate 0x108BC70; an active SOS Beacon advertises 0). Captured in stand-in logs: 0, 1 and 2 at
+// creation, "19" and number_key6 always alike, access policy always 0, so the policy says nothing.
+//   Public       anyone who reaches this machine (a stranger only through the lobby directory: StrangerGate);
+//   Friends Only this machine's Steam friends, and players invited to the lobby; Friends and Clan the same (no clans);
+//   Invite Only  players invited to the lobby (PFLobbySendInvite by any member), friends included only when invited.
+//   Unknown (no "19" nor number_key6): Friends Only.
+// Under every setting a player already in the lobby, or admitted to it before (rejoining after a crash), stays welcome,
+// so a privacy change never throws anyone out; a machine kicked from the lobby (lobby.kick) never comes back while it lasts.
 public sealed class LobbyService
 {
     public const ulong LocalNode = 0;
@@ -42,8 +60,16 @@ public sealed class LobbyService
     // confusing ways (second two-PC test: an outdated friend got no missions and could not rejoin). Raise it whenever
     // backends or stand-ins change behaviour the other side relies on.
     public const string Protocol = "hellforge-mp-7"; // 7: a refusal for different gameplay mods carries the host's mod set, and joiners download it (ModSync); 6: mods set up in id order and added entities numbered by resource id (engine 0.1.4: content numbered alike whatever the load order), the editor's mod content values in stats.set; 5: the host's stats, Local Stats left the mod digest
-    const int MemberRemovedRemoteLeft = 2, DisconnectingLobbyDeleted = 1;
-    static readonly HashSet<string> Requests = ["lobby.create", "lobby.join", "lobby.update", "lobby.leave"];
+    const int MemberRemovedForcibly = 1, MemberRemovedRemoteLeft = 2, DisconnectingNoLocalMembers = 0, DisconnectingLobbyDeleted = 1;
+    static readonly HashSet<string> Requests = ["lobby.create", "lobby.join", "lobby.update", "lobby.leave", "lobby.kick", "lobby.invite"];
+    // PlayFab's limits (PFLobby.h: PFLobbyMaxLobbyPropertyCount, ...MemberPropertyCount, ...SearchPropertyCount, 30 each),
+    // and HellForge's own on a key's and a value's length, far above the game's (keys "0".."26", "descriptor", values up
+    // to 123 characters in the stand-in logs). Frames from other machines are held to them; the local DLL is not.
+    public const int MaxProperties = 30, MaxKeyLength = 64, MaxValueLength = 1024;
+    // Invitations a lobby remembers, and those this machine passes on to its game from one friend in a minute.
+    const int MaxInvited = 64, InvitesPerMinute = 10;
+
+    public enum Privacy { Public = 0, FriendsOnly = 1, InviteOnly = 2, FriendsAndClan = 3 }
     static readonly HashSet<string> Events = ["lobby.result", "lobby.memberAdded", "lobby.memberRemoved", "lobby.updated", "lobby.disconnected"];
 
     readonly object gate = new();
@@ -63,6 +89,12 @@ public sealed class LobbyService
     // after the failed join's answer, so it is taken from them for a while either way.
     readonly Dictionary<ulong, DateTime> joining = [];
     static readonly TimeSpan RefusalWindow = TimeSpan.FromSeconds(30);
+    // Invitations this machine's game sent for a friend's lobby, passed on once its owner took them: op -> invitee, lobby.
+    readonly Dictionary<string, (ulong Invitee, string LobbyId, string Inviter)> invitesSent = new(StringComparer.Ordinal);
+    // Invitations friends sent this machine in the last minute, by friend.
+    readonly Dictionary<ulong, Queue<DateTime>> invitesHeard = [];
+    // Work for other services that must not run under this service's lock (PartyService calls into it under its own).
+    readonly List<Action> afterLock = [];
 
     // Mod sync (ModSync). Host: a joiner with other gameplay mods is refused; ModsRefused (joiner, lobby id) offers them this
     // host's mods first and says whether they may download them (the joiner's game is then told so). Called under this
@@ -79,7 +111,7 @@ public sealed class LobbyService
     public event Action? HostedChanged;
     public Action<Frame>? Find { get; set; }
     public sealed record Hosted(string Id, string ConnectionString, uint MaxMembers, int Members, int Access, bool Locked, bool LocalOwner,
-        IReadOnlyDictionary<string, string> SearchProperties);
+        IReadOnlyDictionary<string, string> SearchProperties, Privacy Privacy = Privacy.FriendsOnly);
 
     public LobbyService(IPeerTransport? transport, Action<Frame> toLocal, Action<string> log, string modDigest, WarClock? warClock = null,
         string? modList = null)
@@ -97,6 +129,36 @@ public sealed class LobbyService
     // the service's lock: a handler must not call back into it.
     public event Action<ulong, IReadOnlyList<string>>? Refused;
     public event Action<ulong, IReadOnlyList<string>>? RefusedFriend;
+    // This host kicked a machine from a lobby hosted here (its Party traffic is dropped: PartyService.Expel), and a host
+    // kicked this machine from its lobby (the game is told). Raised after the service's lock is released.
+    public event Action<ulong>? Kicked;
+    public event Action<ulong>? KickedByHost;
+
+    // The privacy a lobby advertises (see the top of this file): search property number_key6, else lobby property "19";
+    // Friends Only when neither holds a known value.
+    public static Privacy PrivacyOf(IReadOnlyDictionary<string, string> searchProperties, IReadOnlyDictionary<string, string> lobbyProperties)
+    {
+        var text = searchProperties.GetValueOrDefault("number_key6") ?? lobbyProperties.GetValueOrDefault("19");
+        return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value is >= 0 and <= 3 ? (Privacy)value : Privacy.FriendsOnly;
+    }
+
+    public static string Describe(Privacy privacy) => privacy switch
+    {
+        Privacy.Public => "Public", Privacy.InviteOnly => "Invite only", Privacy.FriendsAndClan => "Friends and clan", _ => "Friends only"
+    };
+
+    // Runs deferred work once the lock is released.
+    void Drain()
+    {
+        List<Action> work;
+        lock (gate)
+        {
+            if (afterLock.Count == 0) return;
+            work = [.. afterLock];
+            afterLock.Clear();
+        }
+        foreach (var action in work) action();
+    }
 
     ulong LocalId => transport?.LocalId ?? 0;
     public static string EntityId(ulong node) => node.ToString("X", CultureInfo.InvariantCulture);
@@ -113,6 +175,7 @@ public sealed class LobbyService
             try { Route(frame); }
             catch (InvalidDataException error) { log($"Bad {frame.Type} from the DLL: {error.Message}"); }
         }
+        Drain();
     }
 
     // A frame from a friend's backend.
@@ -132,9 +195,34 @@ public sealed class LobbyService
                     log($"{EntityId(peer)} refused this player's join: {frame.Text(0)}" + (frame.Count > 1 ? " | " + string.Join(" | ", lines) : ""));
                     Refused?.Invoke(peer, lines);
                 }
+                else if (frame.Type == "lobby.invited") Invited(peer, frame);
             }
             catch (InvalidDataException error) { log($"Bad {frame.Type} from a peer: {error.Message}"); }
         }
+        Drain();
+    }
+
+    // A friend invited this machine's player to a lobby (theirs, or one they are in): the game's invite listeners are told
+    // (the lobby stand-in's InviteReceived), at most InvitesPerMinute from one friend. Strangers never invite.
+    void Invited(ulong peer, Frame frame)
+    {
+        if (transport?.IsFriend(peer) != true) { log($"Dropped an invitation from {EntityId(peer)}, who is not a Steam friend."); return; }
+        var (lobbyId, connection, inviter) = (frame.Text(0), frame.Text(1), frame.Text(2));
+        var parts = connection.Split(';');
+        if (!connection.StartsWith(ConnectionPrefix, StringComparison.Ordinal) || parts.Length != 3 || parts[1] != lobbyId || lobbyId.Length is 0 or > 100 ||
+            !TryNode(parts[2], out _) || !TryNode(inviter, out var inviterNode) || inviterNode != peer)
+        {
+            log($"Dropped a malformed invitation from {EntityId(peer)}.");
+            return;
+        }
+        var now = DateTime.UtcNow;
+        if (!invitesHeard.TryGetValue(peer, out var times)) invitesHeard[peer] = times = new Queue<DateTime>();
+        while (times.Count > 0 && now - times.Peek() > TimeSpan.FromMinutes(1)) times.Dequeue();
+        foreach (var quiet in invitesHeard.Where(i => i.Value.Count == 0 && i.Key != peer).Select(i => i.Key).ToList()) invitesHeard.Remove(quiet);
+        if (times.Count >= InvitesPerMinute) return;
+        times.Enqueue(now);
+        log($"{EntityId(peer)} invited this player to lobby {lobbyId}.");
+        toLocal(new Frame("lobby.inviteReceived").Add(lobbyId).Add(connection).Add(inviter));
     }
 
     // This machine's DLL went away (the game closed): its members leave every lobby, and lobbies it owned close.
@@ -152,6 +240,7 @@ public sealed class LobbyService
             remote.Clear();
             forwarded.Clear();
             joining.Clear();
+            invitesSent.Clear();
         }
     }
 
@@ -160,7 +249,8 @@ public sealed class LobbyService
     {
         lock (gate)
             return [.. hosted.Values.Select(l => new Hosted(l.Id, l.ConnectionString, l.MaxMembers, l.Members.Count, l.Access, l.Lock == 1,
-                l.Members.Any(m => m.Node == LocalNode && SameEntity(m.Id, l.OwnerId)), new Dictionary<string, string>(l.SearchProperties, StringComparer.Ordinal)))];
+                l.Members.Any(m => m.Node == LocalNode && SameEntity(m.Id, l.OwnerId)), new Dictionary<string, string>(l.SearchProperties, StringComparer.Ordinal),
+                PrivacyOf(l.SearchProperties, l.LobbyProperties)))];
     }
 
     // Whether this machine asked the peer for a join in the last minute (its answers may come from a stranger).
@@ -196,6 +286,13 @@ public sealed class LobbyService
     public IReadOnlyCollection<ulong> HostedFriends()
     {
         lock (gate) return hosted.Values.SelectMany(l => l.Nodes()).Where(n => n != LocalNode).ToHashSet();
+    }
+
+    // Whether a lobby hosted here expects this machine (back): admitted before or invited, and not kicked. A stranger it
+    // expects may open a Steam session and send a join although no lobby is listed (StrangerGate).
+    public bool Welcome(ulong node)
+    {
+        lock (gate) return hosted.Values.Any(l => !l.Kicked.Contains(node) && (l.Admitted.Contains(node) || l.Invited.Contains(node)));
     }
 
     // Whether a friend's machine is a member of a lobby hosted here (the Party network admits only them).
@@ -257,12 +354,16 @@ public sealed class LobbyService
             {
                 lobbyId = frame.Text(1);
                 if (hosted.ContainsKey(lobbyId)) { Handle(LocalNode, frame); return; }
-                if (!remote.TryGetValue(lobbyId, out owner))
+                // only the owner kicks, and only from its own machine
+                if (frame.Type == "lobby.kick" || !remote.TryGetValue(lobbyId, out owner))
                 {
-                    Answer(LocalNode, op, frame.Type == "lobby.update" ? "update" : "leave", LobbyNotFound);
+                    Answer(LocalNode, op, Kind(frame.Type), frame.Type == "lobby.kick" && remote.ContainsKey(lobbyId) ? AccessDenied : LobbyNotFound);
                     return;
                 }
                 if (frame.Type == "lobby.leave") remote.Remove(lobbyId);
+                // an invitation to a friend's lobby: its owner records it, then this machine passes it on (RelayEvent)
+                if (frame.Type == "lobby.invite" && TryNode(frame.Text(3), out var invitee))
+                    invitesSent[op] = (invitee, lobbyId, frame.Text(2));
                 break;
             }
         }
@@ -276,21 +377,43 @@ public sealed class LobbyService
         lock (gate) return joins.TryGetValue(lobbyId, out var join) && join.Owner == owner && DateTime.UtcNow - join.At <= JoinMemory;
     }
 
+    static string Kind(string type) => type switch
+    {
+        "lobby.update" => "update", "lobby.kick" => "kick", "lobby.invite" => "invite", "lobby.join" => "join", "lobby.create" => "create", _ => "leave"
+    };
+
     // An event from a friend's backend reaches this machine's DLL only if that friend owns the lobby it is about.
     void RelayEvent(ulong peer, Frame frame)
     {
         if (frame.Type == "lobby.result")
         {
-            if (!forwarded.Remove(frame.Text(0), out var request) || request.Owner != peer) return;
+            var op = frame.Text(0);
+            if (!forwarded.Remove(op, out var request) || request.Owner != peer) return;
             if (frame.Text(1) == "join" && frame.Text(2) != "0") remote.Remove(request.LobbyId);
             if (frame.Text(1) == "join" && frame.Text(2) == "0") joining.Remove(peer); /* in: no refusal to wait for */
+            if (invitesSent.Remove(op, out var invite) && frame.Text(1) == "invite" && frame.Text(2) == "0" && ConnectionStringFor(invite.LobbyId) is { } connection)
+                Deliver(invite.Invitee, invite.LobbyId, connection, invite.Inviter);
         }
         else
         {
             if (!remote.TryGetValue(frame.Text(0), out var owner) || owner != peer) return;
             if (frame.Type == "lobby.disconnected") remote.Remove(frame.Text(0));
+            // the owner removed this machine's player (its own copy goes to this machine only with this reason)
+            if (frame.Type == "lobby.memberRemoved" && frame.Text(2) == MemberRemovedForcibly.ToString(CultureInfo.InvariantCulture))
+            {
+                log($"The host {EntityId(peer)} removed this player from lobby {frame.Text(0)}.");
+                afterLock.Add(() => KickedByHost?.Invoke(peer));
+            }
         }
         toLocal(frame);
+    }
+
+    // An invitation goes from the inviting player's backend to the invitee's (lobby.invited); its game shows it.
+    void Deliver(ulong invitee, string lobbyId, string connection, string inviter)
+    {
+        if (invitee == LocalId || transport == null) return;
+        log($"Invited {EntityId(invitee)} to lobby {lobbyId}.");
+        transport.Send(invitee, new Frame("lobby.invited").Add(lobbyId).Add(connection).Add(inviter).Encode(), reliable: true);
     }
 
     // Requests for a lobby this backend owns (or creates), from the local DLL or a friend's backend.
@@ -332,6 +455,13 @@ public sealed class LobbyService
                 if (connection.Length != 3 || !hosted.TryGetValue(connection[1], out var lobby)) { Answer(node, op, "join", LobbyNotFound, connection.ElementAtOrDefault(1)); return; }
                 // A friend joins as themselves: the member id must be the requesting machine's own SteamID.
                 if (node != LocalNode && (!TryNode(memberId, out var claimed) || claimed != node)) { Answer(node, op, "join", AccessDenied, lobby.Id); return; }
+                if (node != LocalNode && (!WithinLimits(memberProperties) || frame.Text(2).Length > MaxKeyLength)) { Answer(node, op, "join", InvalidArgument, lobby.Id); return; }
+                // The lobby's privacy and kicked players first: someone refused here is never offered this host's mods.
+                if (node != LocalNode && Admission(lobby, node) is { } refusal)
+                {
+                    Refuse(node, op, lobby.Id, refusal.Reason, refusal.JoinerLines, refusal.HostLines);
+                    return;
+                }
                 if (protocol != Protocol)
                 {
                     Refuse(node, op, lobby.Id, $"different HellForge versions ({protocol} joining, {Protocol} hosting); both players need the same installer.",
@@ -368,6 +498,7 @@ public sealed class LobbyService
                 if (lobby.Members.Any(m => SameEntity(m.Id, memberId))) { Answer(node, op, "join", InvalidArgument, lobby.Id); return; }
                 var member = new LobbyMember(memberId, frame.Text(2), node) { Properties = memberProperties };
                 lobby.Members.Add(member);
+                if (node != LocalNode) lobby.Admitted.Add(node);
                 log($"{(node == LocalNode ? "A local player" : "A friend")} joined lobby {lobby.Id} ({lobby.Members.Count} members).");
                 Send(node, Snapshot(new Frame("lobby.result").Add(op).Add("join").Add(0), lobby));
                 // A friend's backend adopts this war time, so both games see the same war.
@@ -391,7 +522,10 @@ public sealed class LobbyService
                     lobbyChanges.Count > 0 || searchChanges.Count > 0;
                 uint result = member == null ? LobbyNotFound
                     : changesLobby && !SameEntity(lobby.OwnerId, member.Id) ? AccessDenied
-                    : frame.Text(3) == "1" && newOwner == null ? InvalidArgument : 0;
+                    : frame.Text(3) == "1" && newOwner == null ? InvalidArgument
+                    // another machine's update keeps to PlayFab's limits (the SDK fails a whole update that breaks them)
+                    : node != LocalNode && (!Fits(lobby.LobbyProperties, lobbyChanges) || !Fits(lobby.SearchProperties, searchChanges, search: true) ||
+                        !Fits(member.Properties, memberChanges) || frame.Text(5) == "1" && frame.UInt(6) is < 2 or > 128) ? InvalidArgument : 0;
                 Answer(node, op, "update", result);
                 if (result != 0) return;
                 var updated = new Frame("lobby.updated").Add(lobby.Id);
@@ -425,7 +559,111 @@ public sealed class LobbyService
                 if (leaving.Count > 0) Leave(lobby, leaving);
                 return;
             }
+            case "lobby.kick":
+            {
+                // The owner's game removes a member (PFLobbyForceRemoveMember): only from this machine, as the owner, never
+                // itself. The kicked machine leaves, its Party traffic with it, and never rejoins this lobby.
+                if (!hosted.TryGetValue(frame.Text(1), out var lobby)) { Answer(node, op, "kick", LobbyNotFound); return; }
+                if (node != LocalNode || !lobby.Members.Any(m => m.Node == LocalNode && SameEntity(m.Id, lobby.OwnerId))) { Answer(node, op, "kick", AccessDenied); return; }
+                var target = lobby.Members.FirstOrDefault(m => SameEntity(m.Id, frame.Text(2)));
+                if (target == null || target.Node == LocalNode) { Answer(node, op, "kick", InvalidArgument); return; }
+                Kick(lobby, target.Node, frame.Count > 3 && frame.Text(3) == "1");
+                Answer(node, op, "kick", 0);
+                return;
+            }
+            case "lobby.invite":
+            {
+                // A member invites someone (PFLobbySendInvite): the lobby admits them whatever its privacy (Admission), and the
+                // inviting machine passes the invitation on (Deliver; RelayEvent for a friend's lobby).
+                if (!hosted.TryGetValue(frame.Text(1), out var lobby)) { Answer(node, op, "invite", LobbyNotFound); return; }
+                if (!lobby.Members.Any(m => m.Node == node && SameEntity(m.Id, frame.Text(2)))) { Answer(node, op, "invite", AccessDenied); return; }
+                if (!TryNode(frame.Text(3), out var invitee) || invitee == (node == LocalNode ? LocalId : node)) { Answer(node, op, "invite", InvalidArgument); return; }
+                if (lobby.Kicked.Contains(invitee)) { Answer(node, op, "invite", AccessDenied); return; }
+                if (lobby.Invited.Count >= MaxInvited && !lobby.Invited.Contains(invitee)) lobby.Invited.Remove(lobby.Invited.First());
+                lobby.Invited.Add(invitee);
+                log($"{(node == LocalNode ? "This player" : EntityId(node))} invited {EntityId(invitee)} to lobby {lobby.Id}.");
+                Answer(node, op, "invite", 0);
+                if (node == LocalNode) Deliver(invitee, lobby.Id, lobby.ConnectionString, frame.Text(2));
+                return;
+            }
         }
+    }
+
+    // Whether a machine may join (null) or why not: kicked, then the lobby's privacy (see the top of this file).
+    (string Reason, string[] JoinerLines, string[]? HostLines)? Admission(HostedLobby lobby, ulong node)
+    {
+        if (lobby.Kicked.Contains(node))
+            return ("the host removed this player from the lobby.", ["The host removed you from this lobby.", "You can't join it again while it lasts."], null);
+        if (lobby.Admitted.Contains(node) || lobby.Members.Any(m => m.Node == node) || lobby.Invited.Contains(node)) return null;
+        var privacy = PrivacyOf(lobby.SearchProperties, lobby.LobbyProperties);
+        var friend = transport?.IsFriend(node) == true;
+        if (privacy == Privacy.Public || privacy is Privacy.FriendsOnly or Privacy.FriendsAndClan && friend) return null;
+        // a friend refused is told how to get in, and the host who; a stranger's refusal is only logged here (no notice spam)
+        return privacy == Privacy.InviteOnly
+            ? ("the lobby is Invite only and this player was not invited.", ["The host's lobby is Invite only.", "Ask the host to invite you from the game's social menu."],
+                friend ? ["Your lobby is Invite only: invite them from the game's social menu."] : null)
+            : ("the lobby is Friends only and this player is not the host's Steam friend.", ["The host's lobby is Friends only.", "Only the host's Steam friends, or players they invite, can join."], null);
+    }
+
+    // The host kicks a machine from one of its lobbies: the kicked machine's game hears that its member was removed by the
+    // owner (LocalUserForciblyRemoved) and the lobby is gone for it (NoLocalMembers), as the SDK reports a force removal;
+    // the others hear that a member left (RemoteUserLeftLobby). The machine stays refused for the lobby's lifetime
+    // (preventRejoin or not: decided 2026-10-23), and its Party traffic is dropped (Kicked: PartyService.Expel).
+    void Kick(HostedLobby lobby, ulong node, bool preventRejoin)
+    {
+        var leaving = lobby.Members.Where(m => m.Node == node).ToList();
+        foreach (var member in leaving) lobby.Members.Remove(member);
+        lobby.Kicked.Add(node);
+        lobby.Admitted.Remove(node);
+        lobby.Invited.Remove(node);
+        log($"Kicked {EntityId(node)} from lobby {lobby.Id} (the game asked {(preventRejoin ? "to" : "not to")} prevent a rejoin; it is prevented either way).");
+        foreach (var member in leaving) Send(node, new Frame("lobby.memberRemoved").Add(lobby.Id).Add(member.Id).Add(MemberRemovedForcibly));
+        Send(node, new Frame("lobby.disconnected").Add(lobby.Id).Add(DisconnectingNoLocalMembers));
+        foreach (var member in leaving)
+        {
+            var removed = new Frame("lobby.memberRemoved").Add(lobby.Id).Add(member.Id).Add(MemberRemovedRemoteLeft);
+            foreach (var other in lobby.Nodes()) Send(other, removed);
+        }
+        HostedChanged?.Invoke();
+        afterLock.Add(() => Kicked?.Invoke(node));
+    }
+
+    // Kicks a machine from every lobby hosted here (the Party stand-in's KickDevice and KickUser go here); false when it was in none.
+    public bool Kick(ulong node)
+    {
+        bool any;
+        lock (gate)
+        {
+            var lobbies = hosted.Values.Where(l => l.Members.Any(m => m.Node == node) && node != LocalNode).ToList();
+            foreach (var lobby in lobbies) Kick(lobby, node, preventRejoin: true);
+            any = lobbies.Count > 0;
+        }
+        Drain();
+        return any;
+    }
+
+    // Another machine's properties within PlayFab's limits.
+    static bool WithinLimits(IReadOnlyDictionary<string, string> properties) =>
+        properties.Count <= MaxProperties && properties.All(p => p.Key.Length is > 0 and <= MaxKeyLength && p.Value.Length <= MaxValueLength);
+
+    // Changes from another machine: at most twice the limit in one update (half of them removals, as the SDK allows), and
+    // the result within the limits; search keys only string_key1..30 and number_key1..30, number_keys numbers.
+    static bool Fits(Dictionary<string, string> properties, List<PropertyChange> changes, bool search = false)
+    {
+        if (changes.Count > 2 * MaxProperties) return false;
+        var after = new Dictionary<string, string>(properties, StringComparer.Ordinal);
+        Apply(after, changes);
+        return WithinLimits(after) && (!search || after.All(p => SearchValue(p.Key, p.Value)));
+    }
+
+    // A search property as PlayFab takes it: string_keyN or number_keyN, N 1..30; a number_key's value a finite number.
+    public static bool SearchValue(string key, string value)
+    {
+        var number = key.StartsWith("number_key", StringComparison.Ordinal);
+        var digits = number ? key["number_key".Length..] : key.StartsWith("string_key", StringComparison.Ordinal) ? key["string_key".Length..] : "";
+        if (!int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var n) || n is < 1 or > MaxProperties || digits[0] == '0') return false;
+        if (!number) return value.Length <= 256;
+        return value.Length <= 32 && double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) && double.IsFinite(parsed);
     }
 
     // Members leave. When the owner leaves, the lobby closes for everyone else (HD2's host ends the session).
@@ -516,6 +754,9 @@ public sealed class LobbyService
         public Dictionary<string, string> LobbyProperties = new(StringComparer.Ordinal);
         public Dictionary<string, string> SearchProperties = new(StringComparer.Ordinal);
         public List<LobbyMember> Members = [];
+        // Machines admitted before (welcome back whatever the privacy), invited by a member, and kicked (never back): for
+        // the lobby's lifetime, not stored anywhere.
+        public HashSet<ulong> Admitted = [], Invited = [], Kicked = [];
         public IEnumerable<ulong> Nodes() => Members.Select(m => m.Node).Distinct();
     }
 

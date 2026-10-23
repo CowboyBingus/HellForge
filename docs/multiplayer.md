@@ -25,9 +25,24 @@ reaches PlayFab, Arrowhead's services or vanilla players' sessions.
    in-game editor turns grey and read-only, with "READ-ONLY · HOST: <name>" in its header. The host's shows "HOSTING ·
    FRIENDS PLAY WITH YOUR STATS".
 5. When the host leaves, the lobby closes for everyone, as HD2's host ends the session. Your own stats come back.
-6. A Public lobby is listed for other HellForge players, who see it on the Galactic Map and can join it from there. It
-   shows its players' names and the host's Steam account id. Lobbies a player could not join (a blocked mod, mods to
-   install by hand, or a host who plays with edited stats unless shown) are left off their map.
+6. The game's own Privacy setting (Options) decides who may join a lobby you host:
+   - **Public:** any HellForge player. The lobby is listed for other HellForge players, who see it on the Galactic Map
+     and can join it from there. It shows its players' names and the host's Steam account id. Lobbies a player could
+     not join (a blocked mod, mods to install by hand, or a host who plays with edited stats unless shown) are left off
+     their map.
+   - **Friends only:** your Steam friends, and players you invite. It is not listed.
+   - **Invite only:** players you invite from the game's social menu. Friends you have not invited are refused too. It
+     is not listed.
+
+   Changing the setting during a session never removes anyone: players already in the lobby stay, and a player who was
+   in it (whose game crashed, say) may come back. A refused player's game says why ("The host's lobby is Friends only").
+7. To keep your Public lobbies off other players' Galactic Map, turn off "List my Public lobbies on other HellForge
+   players' Galactic Map" on the launcher's Mods page (MOD SYNC card). It is on by default. Your Public lobby then still
+   takes anyone who joins it, but players who are not your friends cannot find it.
+8. Invitations from the game's social menu reach Steam friends running HellForge, and the invited player may join even
+   an Invite only lobby.
+9. When the host kicks a player, that player's game leaves the lobby and says "Removed from <host>'s lobby", their game
+   traffic is cut off at once, and they cannot join that lobby again while it lasts.
 
 Each session's logs hold `backend/multiplayer.log` (the backend's side of co-op) and `coop-diagnostics.log` (what this
 machine's game saw of mod content). Collect both players' logs (launcher Console > "Save logs to Desktop") for a bug
@@ -76,8 +91,13 @@ the lobby and Party state. Without the pipe the stand-ins work for this machine 
 - Lobby connection strings are `hellforge1-lobby;<lobby id>;<owner SteamID64 hex>`. Lobby ids are GUIDs.
 - Party descriptors are `hellforge1;<network id>;<region>;<connection information hex>`. The connection information is
   `hellforge-host:<entity id>` and the region is `HellForgeLocal`.
-- PlayFab lobby invites are not implemented (`PFLobbySendInvite` completes with `E_NOTIMPL`), and lobby searches find
-  nothing.
+- `PFLobbySendInvite` goes to the backend as `lobby.invite`, and a friend's invitation reaches the game as
+  `InviteReceived` (see [Lobby privacy, invitations and kicks](#lobby-privacy-invitations-and-kicks)). Without the
+  backend an invitation completes with `E_NOTIMPL`.
+- `PFLobbyForceRemoveMember` (the owner's kick) goes to the backend as `lobby.kick`, and the Party stand-in's
+  `PartyNetworkKickDevice` and `PartyNetworkKickUser` as `party.kick`.
+- `PFMultiplayerFindLobbies` (the Galactic Map's search) goes to the backend as `lobby.find`; without the backend a
+  search finds nothing.
 
 The stand-ins cannot talk to PlayFab at all, so a vanilla client given a HellForge connection string fails, and a
 HellForge client given a vanilla one refuses it.
@@ -105,21 +125,24 @@ values in `stats.set`. A backend with another protocol is refused.
 | Frames | Names |
 |---|---|
 | Pipe (stand-in to backend) | `hello` |
-| Lobby | `lobby.create`, `lobby.join`, `lobby.update`, `lobby.leave`, `lobby.result`, `lobby.memberAdded`, `lobby.memberRemoved`, `lobby.updated`, `lobby.disconnected`, `lobby.refused` |
-| Party | `party.host`, `party.connect`, `party.endpoint`, `party.endpointGone`, `party.leave`, `party.message`, `party.connected`, `party.endpointCreated`, `party.endpointDestroyed`, `party.deviceJoined`, `party.deviceLeft`, `party.networkGone` |
-| Between backends only | `peer.ping`, `account.key`, `presence`, `presence.hello`, `stats.set`, `war.clock` |
+| Lobby | `lobby.create`, `lobby.join`, `lobby.update`, `lobby.leave`, `lobby.kick`, `lobby.invite`, `lobby.find`, `lobby.result`, `lobby.memberAdded`, `lobby.memberRemoved`, `lobby.updated`, `lobby.disconnected`, `lobby.found`, `lobby.inviteReceived`, `lobby.refused` |
+| Party | `party.host`, `party.connect`, `party.endpoint`, `party.endpointGone`, `party.leave`, `party.message`, `party.kick`, `party.connected`, `party.endpointCreated`, `party.endpointDestroyed`, `party.deviceJoined`, `party.deviceLeft`, `party.networkGone` |
+| Between backends only | `peer.ping`, `account.key`, `presence`, `presence.hello`, `stats.set`, `war.clock`, `lobby.invited` |
 | Live-edit pipe (backend to game) | `session`, `notice`, `set`, `reset`, `base`, `get` |
 
 ### Joining and the modlist gate
 
-A joiner must join as themselves: the member id must equal the SteamID that Steam networking names as the sender. The
-host's backend checks a join in this order:
+A joiner must join as themselves: the member id must equal the SteamID that Steam networking names as the sender. Its
+member properties must keep to PlayFab's limits (below). The host's backend checks a join in this order:
 
-1. the protocol;
-2. the modlist digest, so a mismatch is refused before the game sees a member join;
-3. whether the lobby is locked or full.
+1. whether the joiner may join at all: not kicked from this lobby, and allowed by its privacy
+   ([Lobby privacy, invitations and kicks](#lobby-privacy-invitations-and-kicks)). This comes first, so a refused
+   stranger is never offered the host's mods;
+2. the protocol;
+3. the modlist digest, so a mismatch is refused before the game sees a member join;
+4. whether the lobby is locked or full.
 
-A refused join is answered with HRESULT `0x89236227` ("lobby not joinable").
+A refused join is answered with HRESULT `0x89236227` ("lobby not joinable"), after `lobby.refused` with the reason.
 
 The digest is a SHA-256 over the gameplay mods sorted by id (id, version and file hashes), so load order does not
 count. It leaves out the Local Stats mod (`zz.local.stats`), cosmetic mods, mods made only of Lua patches, and files a
@@ -130,7 +153,75 @@ session's `modlist.txt`, HellForge.Core's `ModlistDiff`), so the refusal can nam
 (`notice`), and the in-game editor draws them over the game. Backends from before the list send only the reason; they
 still interoperate.
 
-Once a join is accepted, the host sends `war.clock`, and the joiner's backend adopts the host's war time.
+Once a join is accepted, the host sends `war.clock`, and the joiner's backend adopts the host's war time. A time below
+0 or above 20 years is ignored, whoever sends it.
+
+Lobby frames from other machines keep to PlayFab's limits (`PFLobby.h`): at most 30 lobby, member and search
+properties each, at most 60 changes in one update, and the result within the limits. HellForge also caps a key at 64
+characters and a value at 1,024; the game's longest value seen is 123 characters, its Party descriptor. Search keys
+must be `string_key1`..`string_key30` or `number_key1`..`number_key30`, and a `number_key`'s value must be a number. A
+frame that breaks them fails with `E_INVALIDARG`.
+
+### Lobby privacy, invitations and kicks
+
+**Privacy.** The game advertises its Privacy setting in its own lobby, so the host's backend reads it there
+(`LobbyService.PrivacyOf`). Lobby property `"19"` (PrivacyMode) and search property `number_key6` carry the same value:
+
+| Value | Setting | Who the host's backend admits | Listed |
+|---|---|---|---|
+| 0 | Public | anyone who reaches it (a stranger only through the lobby directory) | yes, unless the listing switch is off |
+| 1 | Friends only | the host's Steam friends, and invited players | no |
+| 2 | Invite only | invited players only; friends who were not invited are refused | no |
+| 3 | Friends and clan | as Friends only (HellForge has no clans) | no |
+| missing | | as Friends only | no |
+
+The evidence:
+- The values come from HD2Runtime's research on build F5FEE03DCFDB: the settings value `privacy_mode`, name table
+  0x21D3F28 (Open, FriendsOnly, InviteOnly, FriendsAndClan), lobby key 19 `PrivacyMode` (search attribute 6), and the
+  host's join gate 0x108BC70, which refuses a non-friend under 1 and anyone not invited under 2. An active SOS Beacon
+  advertises 0.
+- The stand-in logs captured 0, 1 and 2 at lobby creation. `"19"` and `number_key6` were always alike, and the access
+  policy was always 0 whatever the setting, so the access policy says nothing about privacy.
+
+The game's own join gate still applies the same rules once a member is in. The backend refuses first, before the
+modlist check and before the game sees a member join.
+
+**Who is always let back.** Under every setting, a machine already in the lobby, or one that was admitted to it before
+(its game crashed, say), may join again. So changing the privacy never removes anyone. A lobby that turns Friends only
+or Invite only stops being listed within a second, and its members stay.
+
+**Invitations.** The game calls `PFLobbySendInvite` from its social menu (seen in the stand-in logs).
+- The stand-in sends `lobby.invite [op, lobbyId, sender, invitee]`. A member's backend forwards it to the lobby's owner,
+  which records the invitee for the lobby's lifetime (at most 64) and answers.
+- The inviting player's backend then sends `lobby.invited [lobbyId, connection string, inviter]` to the invitee's
+  backend. That backend takes it only from a Steam friend, at most 10 a minute, and its stand-in hands every listening
+  entity `InviteReceived`.
+- A stranger can be invited (the lobby admits them), but no invitation reaches a stranger's game: the stranger joins
+  from the Galactic Map or a link.
+- A stranger the lobby expects (admitted before, or invited) may open a Steam session and send a join even when nothing
+  is listed (`LobbyService.Welcome`).
+
+**Kicks.** The owner's `PFLobbyForceRemoveMember` becomes `lobby.kick [op, lobbyId, memberId, preventRejoin]`, which only
+the owner's own machine may send. The backend then:
+1. removes the machine's members;
+2. sends the kicked machine `lobby.memberRemoved` with reason 1 (LocalUserForciblyRemoved), then `lobby.disconnected`
+   with reason 0 (NoLocalMembers), as the SDK reports a force removal. The kicked machine's backend shows the game
+   "Removed from <host>'s lobby";
+3. sends every other member `lobby.memberRemoved` with reason 2;
+4. answers its own game with the completion, after that game's own MemberRemoved, as the SDK documents.
+
+What follows:
+- The machine is refused for the lobby's lifetime, whatever `preventRejoin` says (decided 2026-10-23), and it cannot be
+  invited back. Nothing is stored.
+- `PartyService.Expel` takes the machine out of every Party network the host has and tells it the networks are gone.
+  It has no endpoints left, so whatever it sends is dropped, and it cannot connect again because it is in no lobby.
+- The Party stand-in's `PartyNetworkKickDevice` and `PartyNetworkKickUser` on a hosted network send
+  `party.kick [networkId, node]`, which kicks that machine from the host's lobbies the same way.
+
+Which of the two kick calls HD2 makes is not known, so both are covered:
+- No session log shows either call, and the exe's list of 22 `PFLobby*`/`PFMultiplayer*` imports was not kept.
+- 20 functions have been seen called in session logs, and the Galactic Map's search (`PFMultiplayerFindLobbies`) is a
+  21st. That makes `PFLobbyForceRemoveMember` a likely 22nd, but this is an inference.
 
 ### Mod sync
 
@@ -155,10 +246,30 @@ own (`Multiplayer/SteamLobbyDirectory.cs`, `LobbyDirectory.cs`, `DirectoryServic
 PlayFab search properties, its record with every account id but the host's at 0, its mod set and whether the host plays
 with edited stats. The lobby stand-in sends the game's `PFMultiplayerFindLobbies` to the backend (`lobby.find`), which
 searches the directory and evaluates the game's filter, drops lobbies the player could not join, and answers
-`lobby.found`. The map's records come from the listings (`POST /lobby/accounts`). The Steam link accepts someone who is
-not a Steam friend only while it deals with them (`StrangerGate.cs`): while a lobby is listed, a member or host of a
-lobby here, or a mod download. `HELLFORGE_TEST_STRANGERS=1` makes a backend treat friends as strangers, for testing
-with two friends' PCs. Details and open questions: [Step 7](#step-7-public-lobbies-on-the-galactic-map-2026-10-22).
+`lobby.found`. The map's records come from the listings (`POST /lobby/accounts`).
+
+The Steam link accepts someone who is not a Steam friend only while it deals with them (`StrangerGate.cs`):
+- while a lobby is listed (and Steam holds the listing);
+- a member or host of a lobby here;
+- a machine a lobby here expects back;
+- a mod download.
+
+A lobby is listed only while it is Public and the player's `"listPublic"` switch is on (the Mods page; on by default).
+
+A stranger's listing is checked before anything of it reaches the game (`DirectoryService.Valid`, `LobbyRecords.cs`).
+One that breaks any of the following is left out whole:
+- a GUID lobby id, and a connection string naming the listing's host;
+- 1 to 4 members, with a limit of 2 to 8 (the game makes its lobbies for 8);
+- a lock of 0 or 1;
+- only PlayFab search keys, at most 30, within the limits above;
+- a record rebuilt from the schema of the game's own record builder (game.dll 0x12CB190). Known fields must be of the
+  right kind and in range: at most 4 players, names of at most 32 characters, account ids that are numbers, at most one
+  host, who must be the listing's. Unknown fields are dropped.
+
+The published record is rebuilt from the same schema, with every account id but the host's at 0.
+
+`HELLFORGE_TEST_STRANGERS=1` makes a backend treat friends as strangers, for testing with two friends' PCs. Details and
+open questions: [Step 7](#step-7-public-lobbies-on-the-galactic-map-2026-10-22).
 
 ### The join gate
 
@@ -537,7 +648,10 @@ Built 2026-10-22 and tested on one PC only.
   - Every backend lists the public lobby its game hosts on Steam matchmaking (app 553850), as an Invisible Steam lobby
     the backend holds beside the game's own (`SteamLobbyDirectory`, on the peer link's Steam thread).
   - Listed means: privacy `number_key6` 0, not locked, not full. A listing appears and goes at once; changes are
-    written at most every 5 s (`DirectoryService`).
+    written at most every 5 s (`DirectoryService`). Since 2026-10-23 the player's `"listPublic"` switch must be on as
+    well, and `Listing` holds only while Steam holds the listing lobby: a failed `CreateLobby` is retried after 5 s,
+    doubling up to a minute, and a lobby Steam no longer has this machine own is made again (its owner is read every
+    10 s).
   - A listing's data:
     - `hellforge` (the protocol);
     - `hf.connection`, `hf.lobbyId`, `hf.host` (SteamID64 in decimal);
@@ -570,9 +684,15 @@ Built 2026-10-22 and tested on one PC only.
   - The Steam link accepts a session from someone who is not a Steam friend only while this machine lists a lobby, or
     when it deals with them: a member of a lobby hosted here, the host of a lobby joined or being joined from here, or
     a mod download.
-  - From a stranger, a backend takes `lobby.join` (at most 6 a minute from one machine, 60 in all, and only with a
-    lobby listed), pings, and then what follows once it deals with them. Presence (the social tab) stays between
-    friends. A stranger host's name comes from the record its listing carried.
+  - From a stranger, a backend takes:
+    - `lobby.join`: only with a lobby listed, from a machine it deals with, or from one a lobby here expects back. The
+      limits are at most 6 a minute from one machine and 60 in all, and since 2026-10-23 they hold for a stranger it
+      already deals with too;
+    - pings;
+    - then what follows once it deals with them.
+  - Presence (the social tab) and invitations stay between friends. A stranger host's name comes from the record its
+    listing carried.
+  - The gate's tables forget a machine after a minute of silence.
 - **Multiplayer needs Local PlayFab.** The session runner and the launcher refuse `--multiplayer` without it: the
   platform matchmaking selector that sessions clear without Local PlayFab sends the game's own search to Steam's
   lobbies, where vanilla games list theirs under the same build string.
@@ -611,9 +731,32 @@ Built 2026-10-22 and tested on one PC only.
    - the join is admitted (the host's log has no "Dropped ... not a Steam friend");
    - the mission plays.
    Then with different mods: the MOD SYNC prompt shows.
-4. The host turns Invite Only, or the lobby fills: within a scan or two the marker goes.
+4. The host turns Invite Only, or the lobby fills: within a scan or two the marker goes. The other player, already in
+   the lobby, stays; a new one is refused ("The host's lobby is Invite only").
 5. The host edits a stat (F8, APPLY): the lobby disappears from the other player's map until "Show public lobbies
    whose host plays with edited stats" is on.
+
+### Step 8: privacy, invitations and kicks (2026-10-23)
+
+Built 2026-10-23 and tested on one PC only (`HellForge.LocalBackend.Tests`: privacy against friends, strangers and
+invited players, kicks, invitations, hostile listings, the listing switch; `smoke-lobby-link` with an invitation and a
+kick through both stand-ins). What it does is in [Lobby privacy, invitations and kicks](#lobby-privacy-invitations-and-kicks).
+
+**To test on two PCs** (A hosts, B joins; for the stranger cases set `HELLFORGE_TEST_STRANGERS=1` on both):
+1. A sets Privacy to Friends only. B (a Steam friend) joins from the social tab: admitted. With the test variable set on
+   both, B is refused with "The host's lobby is Friends only".
+2. A sets Invite only. B joins from the social tab: refused, and A's game shows "<B> couldn't join". A invites B from the
+   social menu: B's game shows the invitation, and B joins.
+3. A sets Public with B in the lobby, then Friends only: B stays, and the map marker goes on a third player's map.
+4. A kicks B from the social menu. Check that:
+   - B's game leaves the lobby and shows "Removed from <A>'s lobby";
+   - A's `multiplayer.log` has "Kicked ..." and "Removed a kicked machine from Party network ...";
+   - B's join back is refused with "The host removed you from this lobby".
+   Note which call the game made: `PFLobbyForceRemoveMember` in A's `PlayFabMultiplayerWin.dll` log, or
+   `PartyNetworkKick*` in A's `PartyWin.dll` log.
+5. A turns off "List my Public lobbies ..." and hosts a Public lobby: it is not on B's map (as a stranger), and A's log
+   says "Directory: this player's public lobbies are not listed".
+6. Collect both sessions' logs (launcher Console > "Save logs to Desktop").
 
 ### Co-op diagnostics (engine 0.1.19, the 0.1.11 diagnostics beta)
 

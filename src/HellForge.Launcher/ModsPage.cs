@@ -198,6 +198,18 @@ public partial class MainWindow
             try { ModSettings.SetShowEditedStats(modsFolder, edited.IsChecked == true); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the mod sync setting: " + error.Message, Red); }
         };
+        // Hosting: a Public lobby is listed on other HellForge players' Galactic Map unless this is off (DirectoryService).
+        var listed = new ToggleSwitch { IsChecked = settings.ListPublic, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
+        listed.IsCheckedChanged += (_, _) =>
+        {
+            try { ModSettings.SetListPublic(modsFolder, listed.IsChecked == true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the public lobby setting: " + error.Message, Red); }
+        };
+        var listedRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        listedRow.Children.Add(listed);
+        listedRow.Children.Add(new TextBlock { Text = "List my Public lobbies on other HellForge players' Galactic Map", VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(listedRow);
         var editedRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         editedRow.Children.Add(edited);
         editedRow.Children.Add(new TextBlock { Text = "Show public lobbies whose host plays with edited stats (you would play with theirs)", VerticalAlignment = VerticalAlignment.Center,

@@ -10,7 +10,8 @@ namespace HellForge.SdkShimGen;
 // copies of each stand-in, each connected to one backend. The "host" copies create a lobby and a Party network through
 // the PlayFab C APIs; the "friend" copies join the lobby with its connection string, update their member data, connect
 // to the network with its descriptor, create an endpoint, and exchange messages with the host, exactly as two games on
-// two machines would, except that Steam networking is replaced by loopback UDP.
+// two machines would, except that Steam networking is replaced by loopback UDP. Then the host invites the friend (who
+// listens for invitations) and kicks it: the kicked game is removed and disconnected, and its join back is refused.
 public static unsafe class LobbyLinkSmoke
 {
     const string HostId = "110000100000001", FriendId = "110000100000002";
@@ -45,7 +46,7 @@ public static unsafe class LobbyLinkSmoke
                 for (var i = 0; i < count; i++)
                 {
                     var change = (uint*)((nint*)changes)[i];
-                    Seen.Add(change[0] is 0 or 1 or 8 or 12 or 15 ? $"{change[0]}:{change[1]:x}" : $"{change[0]}");
+                    Seen.Add(change[0] is 0 or 1 or 5 or 8 or 12 or 15 ? $"{change[0]}:{change[1]:x}" : $"{change[0]}");
                 }
                 Finish(Handle, count, changes);
                 var at = Seen.IndexOf(wanted);
@@ -94,6 +95,9 @@ public static unsafe class LobbyLinkSmoke
             var friendOwner = (delegate* unmanaged<nint, EntityKey**, int>)NativeLibrary.GetExport(friendLibrary, "PFLobbyGetOwner");
             var friendUpdate = (delegate* unmanaged<nint, EntityKey*, nint, JoinConfiguration*, nint, int>)NativeLibrary.GetExport(friendLibrary, "PFLobbyPostUpdate");
             var friendLeave = (delegate* unmanaged<nint, EntityKey*, nint, int>)NativeLibrary.GetExport(friendLibrary, "PFLobbyLeave");
+            var invite = (delegate* unmanaged<nint, EntityKey*, EntityKey*, nint, int>)NativeLibrary.GetExport(hostLibrary, "PFLobbySendInvite");
+            var kick = (delegate* unmanaged<nint, EntityKey*, byte, nint, int>)NativeLibrary.GetExport(hostLibrary, "PFLobbyForceRemoveMember");
+            var listen = (delegate* unmanaged<nint, EntityKey*, int>)NativeLibrary.GetExport(friendLibrary, "PFMultiplayerStartListeningForLobbyInvites");
 
             fixed (byte* hostId = Encoding.ASCII.GetBytes(HostId + "\0"), friendId = Encoding.ASCII.GetBytes(FriendId + "\0"),
                 type = "title_player_account\0"u8, k1 = "1\0"u8, v1 = "f8c9037f96047f7a\0"u8, platform = "platform_lobby\0"u8,
@@ -138,8 +142,23 @@ public static unsafe class LobbyLinkSmoke
                 KeyFlow(root, Expect);
                 PresenceFlow(root, connectionString, Expect);
 
-                Expect(friendLeave(friendLobby, &friendKey, 0x44) == 0 && friend.Player.WaitFor("10"), "The friend leaves and is disconnected");
-                Expect(host.Player.WaitFor("4") && hostMembers(hostLobby, &count, &list) == 0 && count == 1, "The host sees the friend leave");
+                // An invitation: the host's game invites the friend, whose listening game hears it through both backends.
+                Expect(listen(friend.Player.Handle, &friendKey) == 0 && friend.Player.WaitFor("14"), "The friend listens for invitations");
+                Expect(invite(hostLobby, &hostKey, &friendKey, 0x66) == 0 && host.Player.WaitFor("15:0"), "The host's invitation is taken");
+                Expect(friend.Player.WaitFor("13"), "The friend's game receives the invitation");
+
+                // The kick (PFLobbyForceRemoveMember): MemberRemoved then the completion for the host; for the kicked game
+                // its member removed, then Disconnecting and Disconnected; a join back is refused as not joinable.
+                Expect(kick(hostLobby, &friendKey, 1, 0x77) == 0, "The host kicks the friend");
+                Expect(host.Player.WaitFor("4") && host.Player.WaitFor("5:0") && hostMembers(hostLobby, &count, &list) == 0 && count == 1,
+                    "The host sees the friend removed, then the kick complete");
+                Expect(friend.Player.WaitFor("4") && friend.Player.WaitFor("9") && friend.Player.WaitFor("10"), "The kicked friend is removed and disconnected");
+                nint rejoined = 0;
+                fixed (byte* connectionBytes = Encoding.UTF8.GetBytes(connectionString + "\0"))
+                    Expect(join(friend.Player.Handle, &friendKey, connectionBytes, &friendJoin, 0x88, &rejoined) == 0 && friend.Player.WaitFor("1:89236227"),
+                        "The kicked friend cannot join again");
+                Expect(hostMembers(hostLobby, &count, &list) == 0 && count == 1, "The host's lobby keeps one member");
+                _ = friendLeave;
                 Expect(hostLeave(hostLobby, &hostKey, 0x55) == 0 && host.Player.WaitFor("10"), "The host leaves its lobby");
             }
             return Report(problems, root);

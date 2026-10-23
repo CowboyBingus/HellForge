@@ -23,8 +23,9 @@ cannot be used to play online with a modified game.
 
 Multiplayer is co-op with other HellForge players only. You host or join Steam friends who run HellForge, and public
 lobbies of other HellForge players show on the Galactic Map: HellForge lists them on Steam's lobby service, never on
-Arrowhead's. A public lobby shows its players' names and its host's Steam account id to anyone who looks. You cannot
-play with the normal game's players.
+Arrowhead's. A public lobby shows its players' names and its host's Steam account id to anyone who looks. The game's
+Privacy setting (Friends only, Invite only) keeps strangers out, and a switch on the Mods page keeps your Public lobbies
+off the map. You cannot play with the normal game's players.
 
 Joining a lobby whose host runs other gameplay mods offers to download them and restart with the host's mods. Only
 what HellForge checks itself downloads by itself: mods that run code (a DLL, sources or Lua) or carry data it cannot

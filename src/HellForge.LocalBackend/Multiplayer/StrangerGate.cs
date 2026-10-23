@@ -2,48 +2,75 @@ namespace HellForge.LocalBackend.Multiplayer;
 
 // What a backend takes from someone who is not a Steam friend (docs/multiplayer.md step 7). Strangers only come through
 // the lobby directory:
-//   - a join to the public lobby listed here (lobby.join), at most JoinsPerPeer a minute from one machine and JoinsInAll
-//     from everyone;
-//   - everything that follows once this machine deals with them (Related: a member of a lobby hosted here, the host of a
-//     lobby joined or being joined from here, a machine downloading this one's mods or this one theirs);
+//   - a join (lobby.join) while a public lobby is listed here, from a machine this one deals with already (below), or
+//     from one a lobby here expects back (welcome: admitted before or invited, LobbyService.Welcome),
+//     at most JoinsPerPeer a minute from one machine and JoinsInAll from everyone, whoever they are: a member rejoining
+//     counts too. Whether the join is taken is the lobby's own rule (LobbyService: privacy, kicked players);
+//   - everything else that follows once this machine deals with them (Related: a member of a lobby hosted here, the host
+//     of a lobby joined or being joined from here, a machine downloading this one's mods or this one theirs);
 //   - pings.
-// Presence (the social tab) stays between friends.
-public sealed class StrangerGate(IPeerTransport transport, Func<bool> listing, Func<ulong, bool> related, Action<string> log)
+// Presence (the social tab) and invitations stay between friends. The tables of strangers forget a machine after
+// Window of silence, and are pruned at most every PruneInterval.
+public sealed class StrangerGate(IPeerTransport transport, Func<bool> listing, Func<ulong, bool> related, Action<string> log, Func<ulong, bool>? welcome = null)
 {
     public const int JoinsPerPeer = 6, JoinsInAll = 60;
-    static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
+    static readonly TimeSpan Window = TimeSpan.FromMinutes(1), PruneInterval = TimeSpan.FromSeconds(10);
 
     readonly Dictionary<ulong, Queue<DateTime>> joins = [];
     readonly Queue<DateTime> allJoins = new();
     readonly Dictionary<ulong, DateTime> logged = [];
+    DateTime pruned = DateTime.MinValue;
 
-    public bool Admit(ulong peer, Frame frame)
+    // How many strangers the tables remember now (tests).
+    public int Remembered { get { lock (joins) return joins.Count + logged.Count; } }
+
+    public bool Admit(ulong peer, Frame frame) => Admit(peer, frame, DateTime.UtcNow);
+
+    public bool Admit(ulong peer, Frame frame, DateTime now)
     {
         if (transport.IsFriend(peer)) return true;
-        if (frame.Type is "presence" or "presence.hello") return Refuse(peer, frame.Type);
-        if (frame.Type == "peer.ping" || related(peer)) return true;
-        if (frame.Type != "lobby.join") return Refuse(peer, frame.Type);
-        if (!listing()) return Refuse(peer, "a join with no public lobby listed here");
+        Prune(now);
+        if (frame.Type is "presence" or "presence.hello" or "lobby.invite" or "lobby.invited") return Refuse(peer, frame.Type, now);
+        if (frame.Type == "peer.ping") return true;
+        if (frame.Type == "lobby.join")
+        {
+            if (!listing() && !related(peer) && welcome?.Invoke(peer) != true) return Refuse(peer, "a join with no public lobby listed here", now);
+            lock (joins)
+            {
+                if (!joins.TryGetValue(peer, out var times)) joins[peer] = times = new Queue<DateTime>();
+                while (times.Count > 0 && now - times.Peek() > Window) times.Dequeue();
+                while (allJoins.Count > 0 && now - allJoins.Peek() > Window) allJoins.Dequeue();
+                if (times.Count >= JoinsPerPeer || allJoins.Count >= JoinsInAll) return Refuse(peer, "too many joins", now);
+                times.Enqueue(now);
+                allJoins.Enqueue(now);
+                return true;
+            }
+        }
+        return related(peer) || Refuse(peer, frame.Type, now);
+    }
+
+    // Machines silent for Window leave both tables.
+    void Prune(DateTime now)
+    {
         lock (joins)
         {
-            var now = DateTime.UtcNow;
-            if (!joins.TryGetValue(peer, out var times)) joins[peer] = times = new Queue<DateTime>();
-            while (times.Count > 0 && now - times.Peek() > Window) times.Dequeue();
-            while (allJoins.Count > 0 && now - allJoins.Peek() > Window) allJoins.Dequeue();
-            if (times.Count >= JoinsPerPeer || allJoins.Count >= JoinsInAll) return Refuse(peer, "too many joins");
-            times.Enqueue(now);
-            allJoins.Enqueue(now);
-            foreach (var idle in joins.Where(j => j.Value.Count == 0).Select(j => j.Key).ToList()) joins.Remove(idle);
-            return true;
+            if (now - pruned < PruneInterval) return;
+            pruned = now;
+            foreach (var (peer, times) in joins.ToList())
+            {
+                while (times.Count > 0 && now - times.Peek() > Window) times.Dequeue();
+                if (times.Count == 0) joins.Remove(peer);
+            }
         }
+        lock (logged)
+            foreach (var peer in logged.Where(l => now - l.Value > Window).Select(l => l.Key).ToList()) logged.Remove(peer);
     }
 
     // Logged once a minute per machine.
-    bool Refuse(ulong peer, string what)
+    bool Refuse(ulong peer, string what, DateTime now)
     {
         lock (logged)
         {
-            var now = DateTime.UtcNow;
             if (logged.TryGetValue(peer, out var last) && now - last < Window) return false;
             logged[peer] = now;
         }

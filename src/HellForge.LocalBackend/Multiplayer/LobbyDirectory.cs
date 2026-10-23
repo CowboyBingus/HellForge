@@ -25,6 +25,9 @@ public interface ILobbyDirectory
     // This machine's listing (null: none). The directory keeps one and replaces it as it changes.
     void Publish(DirectoryListing? listing);
     Task<IReadOnlyList<DirectoryListing>> SearchAsync(DirectoryQuery query, CancellationToken cancellation);
+    // Whether the directory holds this machine's last listing now (Steam's lobby may still be being made, or was lost);
+    // the in-process and folder directories hold it at once.
+    bool Holds => true;
 }
 
 public static class DirectoryKeys

@@ -26,6 +26,7 @@ static class DirectoryTests
         public readonly string Mods;
         public readonly List<string> Log = [];
         public bool Edited;
+        public bool ListPublic = true;
 
         public Node(InMemoryNetwork network, MemoryLobbyDirectory listings, ulong id, string folder, ModSet own)
         {
@@ -35,7 +36,7 @@ static class DirectoryTests
             void Note(string line) { lock (Log) Log.Add(line); }
             Lobby = new LobbyService(transport, Inbox.Add, Note, own.Digest);
             Sync = new ModSync(transport, Mods, own, Path.GetDirectoryName(run)!, run, ModSyncSession.PathIn(new InstallLayout(folder)), _ => "Player", Note, (_, _) => false);
-            Directory = new DirectoryService(listings.For(id), Lobby, Presence, id, Inbox.Add, Note, Sync, () => Edited, autoPublish: false);
+            Directory = new DirectoryService(listings.For(id), Lobby, Presence, id, Inbox.Add, Note, Sync, () => Edited, autoPublish: false, listPublic: () => ListPublic);
             transport.Received += (peer, bytes) =>
             {
                 var frame = Frame.Decode(bytes);
@@ -67,7 +68,7 @@ static class DirectoryTests
 
     static string Record(ulong host) => $$"""
         {"players":[{"playerName":"Host Diver","memberAccountId":"{{host}}","isHost":true},{"playerName":"Second","memberAccountId":"76561198000000099","isHost":false}],
-         "memberAccountIds":["{{host}}", 76561198000000099],"difficulty":5,"planetId":261,"connectionString":"from the game"}
+         "memberAccountIds":["{{host}}", 76561198000000099],"difficulty":5,"planetId":261,"connectionString":"from the game","lobbyId":"x","notInTheSchema":"leak"}
         """;
 
     public static async Task Run(string root, Action<bool, string> check)
@@ -108,7 +109,8 @@ static class DirectoryTests
         check(record["players"]![0]!["playerName"]!.GetValue<string>() == "Host Diver" && record["players"]![1]!["playerName"]!.GetValue<string>() == "Second" &&
             record["players"]![0]!["memberAccountId"]!.GetValue<string>() == HostId.ToString(CultureInfo.InvariantCulture) &&
             record["players"]![1]!["memberAccountId"]!.GetValue<string>() == "0" && record["memberAccountIds"]![1]!.GetValue<int>() == 0 &&
-            record["memberAccountIds"]![0]!.GetValue<string>() == HostId.ToString(CultureInfo.InvariantCulture) && !record.ContainsKey("connectionString"),
+            record["memberAccountIds"]![0]!.GetValue<string>() == HostId.ToString(CultureInfo.InvariantCulture) && !record.ContainsKey("connectionString") &&
+            !record.ContainsKey("lobbyId") && !record.ContainsKey("notInTheSchema") && record["difficulty"]!.GetValue<int>() == 5,
             "The published record keeps names and only the host's account id: " + record.ToJsonString());
 
         // The guest's Galactic Map search finds it through the game's whole filter; the map's records follow for its host.
@@ -169,6 +171,16 @@ static class DirectoryTests
         check((await guest.Directory.SearchAsync("u2", MapFilter, 50)).Int(2) == 1, "A listing whose connection string names another host is left out.");
         listings.For(OtherId).Publish(null);
 
+        await Hostile(listings, host, guest, check);
+
+        // The player's switch: off, the Public lobby is not listed; on again, it is.
+        host.ListPublic = false;
+        host.Directory.Publish(now + TimeSpan.FromSeconds(18.5));
+        check(listings.All.Count == 0 && !host.Directory.Listing, "With the switch off a Public lobby is not listed.");
+        host.ListPublic = true;
+        host.Directory.Publish(now + TimeSpan.FromSeconds(18.7));
+        check(listings.All.Count == 1 && host.Directory.Listing, "Switched on again, it is listed.");
+
         // A lobby that turns private, locks or fills is no longer listed, at once.
         host.Lobby.FromLocal(SearchChange("u", lobbyId, HostId, "number_key6", "1"));
         host.Next("lobby.result", check);
@@ -181,6 +193,77 @@ static class DirectoryTests
         await guest.Directory.DisposeAsync();
         await host.Sync.DisposeAsync();
         await guest.Sync.DisposeAsync();
+    }
+
+    // Strangers' listings: anything off the schema leaves the listing out whole (or, for the live record, just that).
+    static async Task Hostile(MemoryLobbyDirectory listings, Node host, Node guest, Action<bool, string> check)
+    {
+        var good = new Dictionary<string, string>(listings.All.Single(l => l.Host == HostId).Data);
+        var lobbyId = Guid.NewGuid().ToString();
+        good[DirectoryKeys.LobbyId] = lobbyId;
+        good[DirectoryKeys.Connection] = LobbyService.ConnectionPrefix + lobbyId + ";" + LobbyService.EntityId(OtherId);
+        good[DirectoryKeys.Host] = OtherId.ToString(CultureInfo.InvariantCulture);
+        var record = JsonNode.Parse(DirectoryData.Unpack(DirectoryData.Get(good, DirectoryKeys.Record))!)!.AsObject();
+        record["players"]![0]!["memberAccountId"] = OtherId.ToString(CultureInfo.InvariantCulture);
+        Dictionary<string, string> With(Action<Dictionary<string, string>> change)
+        {
+            var copy = new Dictionary<string, string>(good);
+            DirectoryData.Put(copy, DirectoryKeys.Record, DirectoryData.Pack(record.ToJsonString()));
+            change(copy);
+            return copy;
+        }
+        Dictionary<string, string> Record(Action<JsonObject> change)
+        {
+            var copy = record.DeepClone().AsObject();
+            change(copy);
+            return With(d => DirectoryData.Put(d, DirectoryKeys.Record, DirectoryData.Pack(copy.ToJsonString())));
+        }
+        bool Valid(Dictionary<string, string> data) => DirectoryService.Valid(new DirectoryListing(OtherId, data), out _, out _, out _, out _, out _);
+        check(Valid(With(_ => { })), "A stranger's well-formed listing is valid.");
+        var bad = new Dictionary<string, Dictionary<string, string>>
+        {
+            ["a forged hf.host"] = With(d => d[DirectoryKeys.Host] = HostId.ToString(CultureInfo.InvariantCulture)),
+            ["a lobby id that is no GUID"] = With(d => { d[DirectoryKeys.LobbyId] = "../x"; d[DirectoryKeys.Connection] = LobbyService.ConnectionPrefix + "../x;" + LobbyService.EntityId(OtherId); }),
+            ["5 members"] = With(d => d[DirectoryKeys.Members] = "5"),
+            ["0 members"] = With(d => d[DirectoryKeys.Members] = "0"),
+            ["9 at most"] = With(d => d[DirectoryKeys.MaxMembers] = "9"),
+            ["a lock of 2"] = With(d => d[DirectoryKeys.Lock] = "2"),
+            ["31 search properties"] = With(d => { for (var i = 1; i <= 30; i++) d["string_key" + i] = "x"; d["number_key1"] = "1"; }),
+            ["a text number_key"] = With(d => d["number_key6"] = "zero"),
+            ["string_key31"] = With(d => d["string_key31"] = "x"),
+            ["a 300-character search value"] = With(d => d["string_key9"] = new string('x', 300)),
+            ["a record that is no JSON"] = With(d => d[DirectoryKeys.Record] = DirectoryData.Pack("[1,2")),
+            ["5 players"] = Record(r => r["players"] = new JsonArray([.. Enumerable.Range(0, 5).Select(i => (JsonNode?)new JsonObject { ["playerName"] = "P" + i })])),
+            ["a 33-character name"] = Record(r => r["players"]![1]!["playerName"] = new string('n', 33)),
+            ["a control character in a name"] = Record(r => r["players"]![1]!["playerName"] = "ab"),
+            ["difficulty as text"] = Record(r => r["difficulty"] = "5"),
+            ["a privacy of 9"] = Record(r => r["privacyMode"] = 9),
+            ["an object for a number"] = Record(r => r["planetId"] = new JsonObject { ["x"] = 1 }),
+            ["an account id that is no number"] = Record(r => r["memberAccountIds"]![1] = "../../x"),
+            ["someone else as host"] = Record(r => r["players"]![0]!["memberAccountId"] = HostId.ToString(CultureInfo.InvariantCulture)),
+            ["two hosts"] = Record(r => r["players"]![1]!["isHost"] = true),
+        };
+        foreach (var (what, data) in bad) check(!Valid(data), "A stranger's listing with " + what + " was taken.");
+
+        // Searched: the hostile listing is left out (and said why), a good one is shown with its record rebuilt.
+        listings.For(OtherId).Publish(new DirectoryListing(OtherId, bad["5 players"]));
+        await Task.Delay(SameSearchPause);
+        var found = await guest.Directory.SearchAsync("h1", MapFilter, 50);
+        check(found.Int(2) == 1 && found.Text(3) != lobbyId, "A hostile listing is left out of the search.");
+        lock (guest.Log) check(guest.Log.Any(l => l.Contains("malformed (lobby record)")), "The search says why a listing was left out.");
+        var extra = Record(r => { r["injected"] = new JsonObject { ["script"] = "x" }; r["players"]![1]!["extraField"] = "x"; });
+        DirectoryData.Put(extra, DirectoryKeys.Live, DirectoryData.Pack("""{"missionTime":12,"state":2,"playerPositions":[{"x":1,"y":2}],"bad":{"deep":{"x":1}}}"""));
+        listings.For(OtherId).Publish(new DirectoryListing(OtherId, extra));
+        await Task.Delay(SameSearchPause);
+        found = await guest.Directory.SearchAsync("h2", MapFilter, 50);
+        check(found.Int(2) == 2, "A listing with unknown fields is shown.");
+        var shown = guest.Presence.LobbyRecord(lobbyId);
+        check(shown != null && !shown.ContainsKey("injected") && shown["players"]![1]!.AsObject() is { } second && !second.ContainsKey("extraField") &&
+            second["playerName"]!.GetValue<string>() == "Second", "Its record reaches the game rebuilt from the schema: " + shown?.ToJsonString());
+        check(guest.Presence.LiveRecord(lobbyId) == null, "A live record off the schema is left out.");
+        listings.For(OtherId).Publish(null);
+        await Task.Delay(SameSearchPause);
+        _ = host;
     }
 
     // Searches within DirectoryService.SameSearch share one directory search; tests that change listings wait it out.

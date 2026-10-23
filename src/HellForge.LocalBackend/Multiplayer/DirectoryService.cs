@@ -6,22 +6,32 @@ using System.Text.RegularExpressions;
 namespace HellForge.LocalBackend.Multiplayer;
 
 // The Galactic Map's public lobbies through the lobby directory (LobbyDirectory.cs; docs/multiplayer.md step 7).
-//   publish: the public lobby this machine's game hosts is listed while it can be joined (privacy number_key6 0, not
-//            locked, not full), with its search properties, the game's lobby record (PUT /lobby; only the host's account
-//            id kept, player names kept), its live record, its mod set and whether its host plays with edited stats. A
-//            change is written at most every PublishInterval; a listing appears and goes at once.
+//   publish: the public lobby this machine's game hosts is listed while it can be joined (privacy Public: lobby
+//            property "19" / number_key6 0, LobbyService.PrivacyOf; not locked, not full) and the player lists it (the
+//            Mods page's "listPublic", on by default), with its search properties, the game's lobby record (PUT /lobby,
+//            rebuilt from LobbyRecords' schema: only the host's account id kept, player names kept), its live record, its
+//            mod set and whether its host plays with edited stats. A change is written at most every PublishInterval; a
+//            listing appears and goes at once (a lobby turned Friends only or Invite only goes; its members stay).
 //   search:  the game's lobby search (lobby.find [op, entity id, entity type, filter, sort, count]) is answered from the
 //            directory with lobby.found [op, hresult, count, (lobby id, connection string, owner entity id, max members,
 //            members, locked 0|1, search properties)...]: the directory's coarse filters, then the game's whole filter
 //            (LobbyFilter), then mod sync's and the player's rules (ModSync.Joinable). What it found stays for
 //            FoundFor, so the /lobby/accounts that follows is answered for those hosts (FriendPresence).
+//   strangers' listings: nothing of one reaches the game unchecked (Valid): its HellForge keys of the right form (a GUID
+//            lobby id, the connection string naming the listing's host, 1 to 4 members of at most 2 to 8), only search
+//            keys string_key1..30 / number_key1..30 within PlayFab's limits (LobbyService.SearchValue), at most 30, and its
+//            records rebuilt from the schema (LobbyRecords): a listing breaking any of it is left out whole.
 public sealed partial class DirectoryService : IAsyncDisposable
 {
     public static readonly TimeSpan PublishInterval = TimeSpan.FromSeconds(5), FoundFor = TimeSpan.FromMinutes(2), SameSearch = TimeSpan.FromMilliseconds(500);
     const uint SearchFailed = 0x80004005; // E_FAIL
-    // The game's search properties keep their PlayFab names in a listing; nothing else of theirs is copied.
-    [GeneratedRegex("^(string|number)_key[0-9]{1,2}$")]
+    // The game's search properties keep their PlayFab names in a listing; nothing else of theirs is copied. Every key that
+    // looks like one is checked (LobbyService.SearchValue).
+    [GeneratedRegex("^(string|number)_key")]
     private static partial Regex SearchKey();
+    // The member counts a listing may claim: HD2's lobbies are made for 8 PlayFab members (max 8 members in every captured
+    // PFMultiplayerCreateAndJoinLobby), a squad is at most 4.
+    public const int MaxListedMembers = 4, MaxListedLimit = 8;
 
     readonly ILobbyDirectory directory;
     readonly LobbyService lobby;
@@ -31,6 +41,8 @@ public sealed partial class DirectoryService : IAsyncDisposable
     readonly Action<string> log;
     readonly ModSync? sync;
     readonly Func<bool> editedStats;
+    readonly Func<bool>? listPublic;
+    bool unlistedLogged;
     readonly object gate = new();
     readonly Timer timer;
     readonly CancellationTokenSource stop = new();
@@ -43,8 +55,9 @@ public sealed partial class DirectoryService : IAsyncDisposable
 
     // autoPublish: the listing follows the lobby by itself (every second, and soon after a change); tests call Publish.
     public DirectoryService(ILobbyDirectory directory, LobbyService lobby, FriendPresence presence, ulong localId, Action<Frame> toLocal, Action<string> log,
-        ModSync? sync, Func<bool> editedStats, bool autoPublish = true)
+        ModSync? sync, Func<bool> editedStats, bool autoPublish = true, Func<bool>? listPublic = null)
     {
+        this.listPublic = listPublic;
         this.directory = directory;
         this.lobby = lobby;
         this.presence = presence;
@@ -60,8 +73,9 @@ public sealed partial class DirectoryService : IAsyncDisposable
         timer = autoPublish ? new Timer(_ => Tick(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)) : new Timer(_ => { });
     }
 
-    // Whether this machine lists a lobby now (a stranger's join may then come in: SteamPeerTransport.AcceptStranger).
-    public bool Listing { get { lock (gate) return published != null; } }
+    // Whether this machine lists a lobby now, and the directory holds it (a stranger's join may then come in:
+    // SteamPeerTransport.AcceptStranger).
+    public bool Listing { get { lock (gate) return published != null && directory.Holds; } }
 
     // ---- Publish ----------------------------------------------------------------------------------------------------
 
@@ -94,7 +108,15 @@ public sealed partial class DirectoryService : IAsyncDisposable
     Dictionary<string, string>? Desired()
     {
         var hosted = lobby.HostedLobbies().FirstOrDefault(l => l.LocalOwner);
-        if (hosted == null || hosted.Locked || hosted.Members >= hosted.MaxMembers || hosted.SearchProperties.GetValueOrDefault("number_key6") != "0") return null;
+        if (hosted == null || hosted.Locked || hosted.Members >= hosted.MaxMembers || hosted.Privacy != LobbyService.Privacy.Public) return null;
+        // the player's switch (read as the listing is looked at, so a change applies within a second)
+        var allowed = listPublic?.Invoke() != false;
+        if (allowed == unlistedLogged)
+        {
+            unlistedLogged = !allowed;
+            if (!allowed) log("Directory: this player's public lobbies are not listed (Mods page: \"List my Public lobbies\" is off).");
+        }
+        if (!allowed) return null;
         var data = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [DirectoryKeys.Protocol] = LobbyService.Protocol,
@@ -109,8 +131,8 @@ public sealed partial class DirectoryService : IAsyncDisposable
             [DirectoryKeys.Digest] = sync?.OwnDigest ?? "none",
             [DirectoryKeys.Share] = sync?.Sharing == true ? "1" : "0"
         };
-        foreach (var (key, value) in hosted.SearchProperties)
-            if (SearchKey().IsMatch(key) && value.Length <= 256) data[key] = value;
+        foreach (var (key, value) in hosted.SearchProperties.Take(LobbyService.MaxProperties))
+            if (LobbyService.SearchValue(key, value)) data[key] = value;
         var (_, body, _, _) = presence.Local;
         if (body != null) DirectoryData.Put(data, DirectoryKeys.Record, DirectoryData.Pack(Public(body, localId).ToJsonString()));
         if (presence.LocalLive is { } live) DirectoryData.Put(data, DirectoryKeys.Live, DirectoryData.Pack(live.ToJsonString()));
@@ -118,22 +140,10 @@ public sealed partial class DirectoryService : IAsyncDisposable
         return data;
     }
 
-    // The game's lobby record as the directory publishes it (decided 2026-10-22): the players' names stay (the hover card
-    // shows them); every account id but the host's becomes 0, the same kind (text or number) as the game wrote.
-    public static JsonObject Public(JsonObject record, ulong host)
-    {
-        var copy = record.DeepClone().AsObject();
-        var hostId = host.ToString(CultureInfo.InvariantCulture);
-        JsonNode? Keep(JsonNode? id) => id is JsonValue value && value.ToString() == hostId ? id.DeepClone()
-            : id is JsonValue text && text.TryGetValue<string>(out _) ? JsonValue.Create("0") : JsonValue.Create(0);
-        if (copy["players"] is JsonArray players)
-            foreach (var player in players.OfType<JsonObject>())
-                if (player.ContainsKey("memberAccountId")) player["memberAccountId"] = Keep(player["memberAccountId"]);
-        if (copy["memberAccountIds"] is JsonArray ids)
-            for (var i = 0; i < ids.Count; i++) ids[i] = Keep(ids[i]);
-        copy.Remove("connectionString"); /* the directory's own is used */
-        return copy;
-    }
+    // The game's lobby record as the directory publishes it (decided 2026-10-22): rebuilt from the schema's fields alone
+    // (LobbyRecords), the players' names kept (the hover card shows them), every account id but the host's 0, the same
+    // kind (text or number) as the game wrote. The lobby id and connection string are the listing's own.
+    public static JsonObject Public(JsonObject record, ulong host) => LobbyRecords.Clean(record, strict: false, host)!;
 
     // ---- Search -----------------------------------------------------------------------------------------------------
 
@@ -172,7 +182,8 @@ public sealed partial class DirectoryService : IAsyncDisposable
         var refused = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var listing in listings)
         {
-            if (listing.Host == localId || !Valid(listing, out var props, out var members, out var max, out var locked)) continue;
+            if (listing.Host == localId) continue;
+            if (!Valid(listing, out var props, out var members, out var max, out var locked, out var malformed)) { Count(refused, "malformed (" + malformed + ")"); continue; }
             if (!filter.Matches(props, members, max, locked)) { Count(refused, "the game's filter"); continue; }
             if (sync != null && !sync.Joinable(listing, out var why)) { Count(refused, why); continue; }
             kept.Add(listing);
@@ -181,7 +192,7 @@ public sealed partial class DirectoryService : IAsyncDisposable
         answer.Add(kept.Count);
         foreach (var listing in kept)
         {
-            Valid(listing, out var props, out var members, out var max, out var locked);
+            Valid(listing, out var props, out var members, out var max, out var locked, out _);
             answer.Add(listing.Data[DirectoryKeys.LobbyId]).Add(listing.Data[DirectoryKeys.Connection]).Add(LobbyService.EntityId(listing.Host))
                 .Add(max).Add(members).Add(locked ? 1 : 0).Add(props);
             Remember(listing);
@@ -210,31 +221,59 @@ public sealed partial class DirectoryService : IAsyncDisposable
     static bool Same(DirectoryQuery a, DirectoryQuery b) =>
         a.Protocol == b.Protocol && a.Count == b.Count && a.Equal.Count == b.Equal.Count && a.Equal.All(e => b.Equal.TryGetValue(e.Key, out var v) && v == e.Value);
 
-    // A listing a search can show: the HellForge keys it needs, and its search properties.
-    static bool Valid(DirectoryListing listing, out Dictionary<string, string> props, out int members, out int max, out bool locked)
+    // A listing a search can show (see the top of this file): its HellForge keys, its search properties and its records,
+    // all checked; why: what was wrong, for the log.
+    public static bool Valid(DirectoryListing listing, out Dictionary<string, string> props, out int members, out int max, out bool locked, out string why) =>
+        Valid(listing, out props, out members, out max, out locked, out why, out _, out _);
+
+    static bool Valid(DirectoryListing listing, out Dictionary<string, string> props, out int members, out int max, out bool locked, out string why,
+        out JsonObject? record, out JsonObject? live)
     {
         var data = listing.Data;
         props = data.Where(d => SearchKey().IsMatch(d.Key)).ToDictionary(d => d.Key, d => d.Value, StringComparer.Ordinal);
         locked = data.GetValueOrDefault(DirectoryKeys.Lock) == "1";
         max = members = 0;
-        return data.TryGetValue(DirectoryKeys.LobbyId, out var id) && id.Length is > 0 and <= 100 &&
-            data.TryGetValue(DirectoryKeys.Connection, out var connection) && connection == LobbyService.ConnectionPrefix + id + ";" + LobbyService.EntityId(listing.Host) &&
-            data.GetValueOrDefault(DirectoryKeys.Host) == listing.Host.ToString(CultureInfo.InvariantCulture) &&
-            int.TryParse(data.GetValueOrDefault(DirectoryKeys.Members), NumberStyles.None, CultureInfo.InvariantCulture, out members) &&
-            int.TryParse(data.GetValueOrDefault(DirectoryKeys.MaxMembers), NumberStyles.None, CultureInfo.InvariantCulture, out max) && members < max && max <= 64;
+        record = live = null;
+        why = "";
+        var (recordJson, recordOk) = Json(data, DirectoryKeys.Record);
+        if (!data.TryGetValue(DirectoryKeys.LobbyId, out var id) || !Guid.TryParseExact(id, "D", out _)) why = "lobby id";
+        else if (data.GetValueOrDefault(DirectoryKeys.Host) != listing.Host.ToString(CultureInfo.InvariantCulture) ||
+            data.GetValueOrDefault(DirectoryKeys.Connection) != LobbyService.ConnectionPrefix + id + ";" + LobbyService.EntityId(listing.Host)) why = "host";
+        else if (!int.TryParse(data.GetValueOrDefault(DirectoryKeys.Members), NumberStyles.None, CultureInfo.InvariantCulture, out members) ||
+            !int.TryParse(data.GetValueOrDefault(DirectoryKeys.MaxMembers), NumberStyles.None, CultureInfo.InvariantCulture, out max) ||
+            members is < 1 or > MaxListedMembers || max is < 2 or > MaxListedLimit || members >= max) why = "member counts";
+        else if (data.GetValueOrDefault(DirectoryKeys.Lock) is not ("0" or "1")) why = "lock";
+        else if (props.Count > LobbyService.MaxProperties || props.Any(p => !LobbyService.SearchValue(p.Key, p.Value))) why = "search properties";
+        else if (!recordOk || recordJson != null && ((record = LobbyRecords.Clean(recordJson, strict: true)) == null || !HostRecord(record, listing.Host)))
+        {
+            record = null;
+            why = "lobby record";
+        }
+        else if (Json(data, DirectoryKeys.Live).Value is { } liveJson) live = LobbyRecords.CleanLive(liveJson);
+        return why.Length == 0;
     }
 
-    // What /lobby/accounts and GET /lobby/<id> answer for this listing's host.
+    // A packed JSON object, or (null, true) when the listing has none; (null, false) when it is not one.
+    static (JsonObject? Value, bool Ok) Json(IReadOnlyDictionary<string, string> data, string key)
+    {
+        if (!data.ContainsKey(key)) return (null, true);
+        try { return DirectoryData.Unpack(DirectoryData.Get(data, key)) is { } text && JsonNode.Parse(text) is JsonObject value ? (value, true) : (null, false); }
+        catch (JsonException) { return (null, false); }
+    }
+
+    // The record's players include no more than one host, and that one is the listing's.
+    static bool HostRecord(JsonObject record, ulong host)
+    {
+        var hosts = (record["players"] as JsonArray)?.OfType<JsonObject>().Where(p => p["isHost"]?.GetValueKind() == JsonValueKind.True).ToList() ?? [];
+        return hosts.Count <= 1 && hosts.All(p => p["memberAccountId"] is not { } id || id.ToString() == host.ToString(CultureInfo.InvariantCulture));
+    }
+
+    // What /lobby/accounts and GET /lobby/<id> answer for this listing's host: its records as the schema rebuilt them.
     void Remember(DirectoryListing listing)
     {
-        JsonObject? Json(string key)
-        {
-            try { return DirectoryData.Unpack(DirectoryData.Get(listing.Data, key)) is { } text ? JsonNode.Parse(text) as JsonObject : null; }
-            catch (JsonException) { return null; }
-        }
         // Without the host's record (its game has not uploaded one yet) the map gets none: no marker for it.
-        if (Json(DirectoryKeys.Record) is not { } record) return;
-        var found = new FriendPresence.DirectoryLobby(listing.Data[DirectoryKeys.LobbyId], listing.Data[DirectoryKeys.Connection], record, Json(DirectoryKeys.Live));
+        if (!Valid(listing, out _, out _, out _, out _, out _, out var record, out var live) || record == null) return;
+        var found = new FriendPresence.DirectoryLobby(listing.Data[DirectoryKeys.LobbyId], listing.Data[DirectoryKeys.Connection], record, live);
         lock (gate)
         {
             var now = DateTime.UtcNow;

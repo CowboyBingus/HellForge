@@ -11,11 +11,15 @@ namespace HellForge.LocalBackend.Multiplayer;
 // (2026-10-22): both lobbies coexist, a new lobby is searchable after
 // about 0.9 s, a search takes about 200 ms, NotEqual and two numerical filters on one key combine, a 4,000-character
 // value is kept. Every Steam call runs on the peer link's thread (SteamPeerTransport pumps this); others queue work.
+// A failed CreateLobby is tried again (after 5 s, doubling to a minute), and a listing lobby Steam no longer has this
+// machine own (Steam's connection dropped, the lobby was lost) is made again: every CheckInterval its owner is read.
+// Holds says whether Steam holds the listing now (DirectoryService.Listing).
 public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirectory
 {
     const int LobbyMatchList = 510, LobbyCreated = 513;
     const int LobbyTypeInvisible = 3, DistanceWorldwide = 3, Equal = 0, GreaterOrEqual = 2;
     static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(20), SearchTimeout = TimeSpan.FromSeconds(30);
+    static readonly TimeSpan FirstRetry = TimeSpan.FromSeconds(5), LastRetry = TimeSpan.FromMinutes(1), CheckInterval = TimeSpan.FromSeconds(10);
 
     readonly ConcurrentQueue<Action> work = new();
     // Steam calls waiting for their results: call handle -> expected callback, result size, deadline, completion (null: failed).
@@ -24,14 +28,19 @@ public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirec
     bool searching, bound;
     int pipe;
     nint matchmaking;
-    ulong lobby;
+    ulong lobby, self;
     bool creating;
+    // A failed CreateLobby: when to try again, and the wait after that one; when the lobby's owner was last read.
+    DateTime retryAt = DateTime.MaxValue, checkedAt = DateTime.MinValue;
+    TimeSpan retryWait = FirstRetry;
+    volatile bool holds;
     DirectoryListing? desired;
     readonly Dictionary<string, string> written = new(StringComparer.Ordinal);
 
     delegate* unmanaged[Cdecl]<int, ulong, void*, int, int, byte*, byte> callResult;
     delegate* unmanaged[Cdecl]<nint, int, int, ulong> createLobby;
     delegate* unmanaged[Cdecl]<nint, ulong, void> leaveLobby;
+    delegate* unmanaged[Cdecl]<nint, ulong, ulong> getLobbyOwner;
     delegate* unmanaged[Cdecl]<nint, ulong, byte*, byte*, byte> setLobbyData;
     delegate* unmanaged[Cdecl]<nint, ulong, byte*, byte> deleteLobbyData;
     delegate* unmanaged[Cdecl]<nint, ulong, int> getLobbyDataCount;
@@ -45,6 +54,9 @@ public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirec
 
     public void Publish(DirectoryListing? listing) => work.Enqueue(() => Apply(listing));
 
+    // Whether Steam holds this machine's listing now: its lobby made, owned by this machine, and the data written.
+    public bool Holds => holds;
+
     public Task<IReadOnlyList<DirectoryListing>> SearchAsync(DirectoryQuery query, CancellationToken cancellation)
     {
         var done = new TaskCompletionSource<IReadOnlyList<DirectoryListing>>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -54,14 +66,16 @@ public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirec
 
     // ---- On the Steam thread ----------------------------------------------------------------------------------------
 
-    internal void Bind(Func<string, nint> e, int steamPipe)
+    internal void Bind(Func<string, nint> e, int steamPipe, ulong localId)
     {
         pipe = steamPipe;
+        self = localId;
         matchmaking = ((delegate* unmanaged[Cdecl]<nint>)e("SteamAPI_SteamMatchmaking_v009"))();
         if (matchmaking == 0) throw new IOException("ISteamMatchmaking009 is unavailable.");
         callResult = (delegate* unmanaged[Cdecl]<int, ulong, void*, int, int, byte*, byte>)e("SteamAPI_ManualDispatch_GetAPICallResult");
         createLobby = (delegate* unmanaged[Cdecl]<nint, int, int, ulong>)e("SteamAPI_ISteamMatchmaking_CreateLobby");
         leaveLobby = (delegate* unmanaged[Cdecl]<nint, ulong, void>)e("SteamAPI_ISteamMatchmaking_LeaveLobby");
+        getLobbyOwner = (delegate* unmanaged[Cdecl]<nint, ulong, ulong>)e("SteamAPI_ISteamMatchmaking_GetLobbyOwner");
         setLobbyData = (delegate* unmanaged[Cdecl]<nint, ulong, byte*, byte*, byte>)e("SteamAPI_ISteamMatchmaking_SetLobbyData");
         deleteLobbyData = (delegate* unmanaged[Cdecl]<nint, ulong, byte*, byte>)e("SteamAPI_ISteamMatchmaking_DeleteLobbyData");
         getLobbyDataCount = (delegate* unmanaged[Cdecl]<nint, ulong, int>)e("SteamAPI_ISteamMatchmaking_GetLobbyDataCount");
@@ -88,6 +102,19 @@ public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirec
             calls.Remove(call);
             waiting.Done(null);
         }
+        if (desired != null && lobby == 0 && !creating && now >= retryAt) { retryAt = DateTime.MaxValue; Apply(desired); }
+        if (lobby != 0 && now - checkedAt >= CheckInterval)
+        {
+            checkedAt = now;
+            if (getLobbyOwner(matchmaking, lobby) != self)
+            {
+                log("Directory (Steam): this machine's listing lobby was lost; listing again.");
+                lobby = 0;
+                holds = false;
+                written.Clear();
+                if (desired != null) Apply(desired);
+            }
+        }
     }
 
     // SteamAPICallCompleted_t (callback 703): a call of this directory's has its result. Called before the callback is freed.
@@ -107,6 +134,7 @@ public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirec
     {
         if (bound && lobby != 0) leaveLobby(matchmaking, lobby);
         lobby = 0;
+        holds = false;
         foreach (var (_, done) in searches) done.TrySetException(new IOException("The Steam peer link stopped."));
         searches.Clear();
     }
@@ -124,6 +152,9 @@ public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirec
         {
             if (lobby != 0) { leaveLobby(matchmaking, lobby); log("Directory (Steam): left this machine's listing lobby."); }
             lobby = 0;
+            holds = false;
+            retryAt = DateTime.MaxValue;
+            retryWait = FirstRetry;
             written.Clear();
             return;
         }
@@ -135,7 +166,16 @@ public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirec
             creating = false;
             // LobbyCreated_t: EResult m_eResult, uint64 m_ulSteamIDLobby (at 8)
             var created = result != null && BitConverter.ToInt32(result, 0) == 1 ? BitConverter.ToUInt64(result, 8) : 0;
-            if (created == 0) { log($"Directory (Steam): CreateLobby failed (EResult {(result != null ? BitConverter.ToInt32(result, 0) : -1)})."); return; }
+            if (created == 0)
+            {
+                // tried again from Pump, sooner at first; a listing withdrawn meanwhile stops the retries (Apply(null))
+                log($"Directory (Steam): CreateLobby failed (EResult {(result != null ? BitConverter.ToInt32(result, 0) : -1)}); trying again in {retryWait.TotalSeconds:0} s.");
+                retryAt = DateTime.UtcNow + retryWait;
+                retryWait = TimeSpan.FromTicks(Math.Min(retryWait.Ticks * 2, LastRetry.Ticks));
+                return;
+            }
+            retryWait = FirstRetry;
+            checkedAt = DateTime.UtcNow;
             lobby = created;
             written.Clear();
             log("Directory (Steam): this machine's listing lobby is " + created.ToString(CultureInfo.InvariantCulture) + ".");
@@ -163,6 +203,7 @@ public sealed unsafe class SteamLobbyDirectory(Action<string> log) : ILobbyDirec
             written.Remove(key);
         }
         if (set > 0) log($"Directory (Steam): {set} listing value(s) written.");
+        holds = desired.Data.All(d => written.TryGetValue(d.Key, out var value) && value == d.Value);
     }
 
     // One RequestLobbyList at a time: Steam's filters are global until the request is made.
