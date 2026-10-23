@@ -279,8 +279,10 @@ static class ModSyncTests
             {
                 reject(() => SyncedStore.Install(install.Mods, mod with { Class = ModClass.Content }, Fresh(mod), verified: (_, _) => false));
                 check(SyncedStore.Find(install.Mods, mod.Id, mod.Hash) == null, mod.Id + " is refused unverified.");
-                check(SyncedStore.Install(install.Mods, mod, Fresh(mod), verified: (id, hash) => id == mod.Id && hash == mod.Hash) == SyncedStore.Find(install.Mods, mod.Id, mod.Hash),
+                bool Verified(string id, string hash) => id == mod.Id && hash == mod.Hash;
+                check(SyncedStore.Install(install.Mods, mod, Fresh(mod), Verified) == SyncedStore.Find(install.Mods, mod.Id, mod.Hash, Verified),
                     mod.Id + " is stored verified.");
+                check(SyncedStore.Find(install.Mods, mod.Id, mod.Hash) == null, mod.Id + " is not found once the verified list no longer has it.");
             }
         });
 
@@ -365,8 +367,18 @@ static class ModSyncTests
             check(!Directory.Exists(partial) && SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == null, "A raw data patch is refused unverified, whatever the host calls it.");
             CopyFiles(texture, partial);
             var installed = SyncedStore.Install(install.Mods, texture, partial, TextureVerified);
-            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == installed && !Directory.Exists(partial), "Installed and found by hash.");
-            check(new ModLocator(install.Mods).Find(texture.Id, texture.Hash) == installed, "The locator finds the store's copy.");
+            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash, TextureVerified) == installed && !Directory.Exists(partial), "Installed and found by hash.");
+            check(new ModLocator(install.Mods, null, TextureVerified).Find(texture.Id, texture.Hash) == installed, "The locator finds the store's copy.");
+            // The store stays writable during sessions: a stored mod is checked again whenever it is looked up.
+            var planted = Path.Combine(installed, "planted.dll");
+            File.WriteAllText(planted, "code");
+            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash, TextureVerified) == null, "A stored mod with a file added is not found.");
+            File.Delete(planted);
+            var stored = Directory.EnumerateFiles(installed, "*.patch_0", SearchOption.AllDirectories).First();
+            var bytes = File.ReadAllBytes(stored);
+            File.WriteAllBytes(stored, [.. bytes, 0]);
+            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash, TextureVerified) == null, "A stored mod with a changed file is not found.");
+            File.WriteAllBytes(stored, bytes);
             check(ModCatalog.Load(install.Mods).Mods.Count == 0, "Normal sessions never load the store.");
             check(ModSets.ContentHash(ModCatalog.Parse(installed, EntityProfile.Current)) == texture.Hash, "The stored mod rehashes to the host's.");
 
@@ -389,7 +401,8 @@ static class ModSyncTests
                 check(!Directory.Exists(refused), "A refused download is deleted.");
                 reject(() => SyncedStore.Install(install.Mods, code, Fresh(code), verified: (i, h) => i == id && h != code.Hash));
                 check(SyncedStore.Find(install.Mods, id, code.Hash) == null, "A refused download is not in the store.");
-                check(SyncedStore.Install(install.Mods, code, Fresh(code), verified: (i, h) => i == id && h == code.Hash) == SyncedStore.Find(install.Mods, id, code.Hash),
+                bool Verified(string i, string h) => i == id && h == code.Hash;
+                check(SyncedStore.Install(install.Mods, code, Fresh(code), Verified) == SyncedStore.Find(install.Mods, id, code.Hash, Verified),
                     id + ": verified code is taken.");
             }
         });
@@ -424,19 +437,20 @@ static class ModSyncTests
             var read = ModSyncSession.Read(file);
             check(read.Digest == host.Digest && read.Mods.Count == 2 && read.HostName == "Host", "The session file round-trips.");
             var (catalog, _) = ModCatalog.Load(install.Mods);
-            var (order, problem) = read.Resolve(install.Mods, catalog);
+            bool TextureVerified(string id, string hash) => id == texture.Id && hash == texture.Hash;
+            var (order, problem) = read.Resolve(install.Mods, catalog, verified: TextureVerified);
             if (order == null) throw new Exception("Not resolved: " + problem);
             check(order.Select(m => m.Id).SequenceEqual(["test.look", "test.ammo", "test.texture", ModCatalog.LocalStatsId]) && order.All(m => m.Enabled),
                 "Cosmetic first, then the host's in its order (ammo loads before texture there), the player's own gameplay mod left out: " + string.Join(", ", order.Select(m => m.Id)));
             check(ModSet.Of(order).Digest == host.Digest, "The session's digest is the host's.");
 
-            Directory.Delete(SyncedStore.Find(install.Mods, texture.Id, texture.Hash)!, recursive: true);
-            var (missing, why) = read.Resolve(install.Mods, ModCatalog.Load(install.Mods).Mods);
+            Directory.Delete(SyncedStore.Find(install.Mods, texture.Id, texture.Hash, TextureVerified)!, recursive: true);
+            var (missing, why) = read.Resolve(install.Mods, ModCatalog.Load(install.Mods).Mods, verified: TextureVerified);
             check(missing == null && why!.Contains("test.texture"), "A missing mod falls back: " + why);
             var wrong = read with { Digest = new string('0', 32) };
             CopyFiles(texture, partial = SyncedStore.Partial(install.Mods, texture.Id, texture.Hash));
             SyncedStore.Install(install.Mods, texture, partial, verified: (id, hash) => id == texture.Id && hash == texture.Hash);
-            check(wrong.Resolve(install.Mods, ModCatalog.Load(install.Mods).Mods).Problem != null, "Another digest falls back.");
+            check(wrong.Resolve(install.Mods, ModCatalog.Load(install.Mods).Mods, verified: TextureVerified).Problem != null, "Another digest falls back.");
             File.WriteAllText(file, File.ReadAllText(file).Replace(texture.Hash, "nothex"));
             reject(() => ModSyncSession.Read(file));
         });

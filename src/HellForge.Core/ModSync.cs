@@ -244,14 +244,16 @@ public static class VerifiedMods
 // Where the joiner finds a mod it may already have, by id and content hash: an installed mod (on or off, a folder or a
 // zip) or one the synced store holds. The installed ones are the catalogue's (ModCatalog.Load, as the Mods page reads it
 // while a session runs), so a zipped mod is hashed by its zip as the host's is; each is hashed only when asked about, once.
-public sealed class ModLocator(string modsFolder, EntityProfile? profile = null)
+public sealed class ModLocator(string modsFolder, EntityProfile? profile = null, Func<string, string, bool>? verified = null)
 {
     readonly Dictionary<string, List<(string Folder, string Hash)>> byId = new(StringComparer.Ordinal);
+    readonly Dictionary<(string, string), string> synced = [];
     List<ModManifest>? installed;
 
     public string? Find(string id, string hash)
     {
-        if (SyncedStore.Find(modsFolder, id, hash) is { } synced) return synced;
+        if (synced.TryGetValue((id, hash), out var stored)) return stored;
+        if (SyncedStore.Find(modsFolder, id, hash, verified, profile) is { } fromStore) return synced[(id, hash)] = fromStore;
         if (!byId.TryGetValue(id, out var found))
         {
             found = [];
@@ -325,17 +327,21 @@ public static class SyncedStore
     public static string Root(string modsFolder) => Path.Combine(modsFolder, FolderName);
     static string Name(string id, string hash) => id + "@" + hash[..16];
 
-    // The store's folder of a mod, when it holds that exact one.
-    public static string? Find(string modsFolder, string id, string hash)
+    // The store's folder of a mod, when it holds that exact one. The store stays writable while a session runs (the
+    // backend downloads into it), so a folder is checked again as Install checked it, never trusted for its record alone.
+    public static string? Find(string modsFolder, string id, string hash, Func<string, string, bool>? verified = null, EntityProfile? profile = null)
     {
         if (!ModCatalog.IsModId(id) || !ModSets.Hex(hash, 64)) return null;
         var folder = Path.Combine(Root(modsFolder), Name(id, hash));
         try
         {
             var record = Path.Combine(folder, RecordName);
-            return File.Exists(record) && (string?)JsonNode.Parse(File.ReadAllText(record))?["hash"] == hash ? folder : null;
+            if (!File.Exists(record) || JsonNode.Parse(File.ReadAllText(record)) is not JsonObject saved || (string?)saved["hash"] != hash ||
+                saved["version"] is not JsonValue version || !version.TryGetValue<string>(out var text)) return null;
+            Verify(id, text, hash, folder, verified ?? VerifiedMods.Contains, profile ?? EntityProfile.Current);
+            return folder;
         }
-        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException) { return null; }
+        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException) { return null; }
     }
 
     // A stored mod a session plays now: its record's "used", which Prune goes by.
@@ -435,7 +441,7 @@ public static class SyncedStore
     public static string Install(string modsFolder, ModSetEntry expected, string partial, Func<string, string, bool>? verified = null,
         EntityProfile? profile = null)
     {
-        try { Verify(expected, partial, verified ?? VerifiedMods.Contains, profile ?? EntityProfile.Current); }
+        try { Verify(expected.Id, expected.Version, expected.Hash, partial, verified ?? VerifiedMods.Contains, profile ?? EntityProfile.Current); }
         catch (InvalidDataException)
         {
             try { Directory.Delete(partial, recursive: true); }
@@ -450,24 +456,25 @@ public static class SyncedStore
         return target;
     }
 
-    static void Verify(ModSetEntry expected, string partial, Func<string, string, bool> verified, EntityProfile profile)
+    static void Verify(string id, string version, string hash, string folder, Func<string, string, bool> verified, EntityProfile profile)
     {
         ModManifest mod;
-        try { mod = ModCatalog.Parse(partial, profile); }
-        catch (JsonException error) { throw new InvalidDataException($"{expected.Id}: its manifest is not valid JSON ({error.Message})."); }
-        if (mod.Id != expected.Id || mod.Version != expected.Version || !mod.Gameplay)
-            throw new InvalidDataException($"{expected.Id}: the files are another mod ({mod.Id} {mod.Version}{(mod.Gameplay ? "" : ", cosmetic")}).");
+        try { mod = ModCatalog.Parse(folder, profile); }
+        catch (JsonException error) { throw new InvalidDataException($"{id}: its manifest is not valid JSON ({error.Message})."); }
+        if (mod.Id != id || mod.Version != version || !mod.Gameplay)
+            throw new InvalidDataException($"{id}: the files are another mod ({mod.Id} {mod.Version}{(mod.Gameplay ? "" : ", cosmetic")}).");
         var files = ModSets.Files(mod);
-        if (files.Count > MaxFiles || ModSets.Hash(ModSets.Block(mod, files)) != expected.Hash)
-            throw new InvalidDataException($"{expected.Id}: the files do not match the host's mod.");
-        // Only the counted files may be there: anything else would load without being compared.
+        if (files.Count > MaxFiles || ModSets.Hash(ModSets.Block(mod, files)) != hash)
+            throw new InvalidDataException($"{id}: the files do not match the host's mod.");
+        // Only the counted files may be there (and a stored mod's record): anything else would load without being compared.
         var counted = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
-        if (Directory.GetFiles(partial, "*", SearchOption.AllDirectories).Any(f => !counted.Contains(Path.GetRelativePath(partial, f).Replace('\\', '/'))))
-            throw new InvalidDataException($"{expected.Id}: it holds files the host did not list.");
+        if (Directory.GetFiles(folder, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(folder, f).Replace('\\', '/'))
+                .Any(f => f != RecordName && !counted.Contains(f)))
+            throw new InvalidDataException($"{id}: it holds files the host did not list.");
         var kind = ModSets.ClassOf(mod);
-        if (kind == ModClass.Bundled) throw new InvalidDataException($"{expected.Id} is a mod HellForge ships; it is never downloaded.");
-        if (ModSets.NeedsVerified(kind) && !verified(mod.Id, expected.Hash))
-            throw new InvalidDataException($"{expected.Id} {ModSets.Unchecked(kind)} and is not on HellForge's verified list.");
+        if (kind == ModClass.Bundled) throw new InvalidDataException($"{id} is a mod HellForge ships; it is never downloaded.");
+        if (ModSets.NeedsVerified(kind) && !verified(mod.Id, hash))
+            throw new InvalidDataException($"{id} {ModSets.Unchecked(kind)} and is not on HellForge's verified list.");
     }
 }
 
@@ -567,9 +574,10 @@ public sealed record ModSyncSession(string Host, string HostName, string Connect
 
     // The session's mods in load order (bottom of the Mods page first), from the player's catalogue (ModCatalog.Load) and
     // the store; null with the reason when a mod is missing or the result's digest is not the host's.
-    public (List<ModManifest>? LoadOrder, string? Problem) Resolve(string modsFolder, IReadOnlyList<ModManifest> catalog, EntityProfile? profile = null)
+    public (List<ModManifest>? LoadOrder, string? Problem) Resolve(string modsFolder, IReadOnlyList<ModManifest> catalog, EntityProfile? profile = null,
+        Func<string, string, bool>? verified = null)
     {
-        var locator = new ModLocator(modsFolder, profile);
+        var locator = new ModLocator(modsFolder, profile, verified);
         var host = new List<ModManifest>();
         foreach (var mod in Mods.OrderBy(m => m.Order))
         {

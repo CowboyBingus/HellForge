@@ -119,6 +119,9 @@ static class ModSyncTests
         var (hostSet, guestSet) = Fixture(root);
         var allowVerified = false;
         bool Verified(string id, string hash) => allowVerified && hostSet.Find(id, hash) is { } mod && ModSets.NeedsVerified(mod.Class);
+        // The store checks a stored mod again when found (SyncedStore.Find): the host's code and raw data count as verified
+        // there whatever allowVerified says now, so a null below means not stored.
+        bool Listed(string id, string hash) => hostSet.Find(id, hash) is { } mod && ModSets.NeedsVerified(mod.Class);
         var network = new InMemoryNetwork();
         var host = new Node(network, HostId, Path.Combine(root, "host"), hostSet, Verified);
         var guest = new Node(network, GuestId, Path.Combine(root, "guest"), guestSet, Verified);
@@ -142,7 +145,7 @@ static class ModSyncTests
         check(ready.State == "ready" && ready.Done == expected, $"Downloaded: {ready.State} {ready.Message} ({ready.Done} of {expected})");
         foreach (var mod in hostSet.Mods.Where(m => m.Id != "test.ammo"))
         {
-            var stored = SyncedStore.Find(guest.Mods, mod.Id, mod.Hash);
+            var stored = SyncedStore.Find(guest.Mods, mod.Id, mod.Hash, Listed);
             check(stored != null && ModSets.ContentHash(ModCatalog.Parse(stored, EntityProfile.Current)) == mod.Hash, mod.Id + " is stored as the host has it.");
         }
         guest.Sync.Answer(["syncanswer", ready.Version.ToString(), "restart"]);
@@ -152,7 +155,7 @@ static class ModSyncTests
         check(File.Exists(signal) && File.ReadAllText(signal) == ModSync.StopReason, "The session is asked to stop for a restart.");
         check(guest.Shown.Next(check, "ready").Message.Contains("Restarting"), "The game is told it restarts.");
         var session = ModSyncSession.Read(guest.SessionFile);
-        var (order, problem) = session.Resolve(guest.Mods, ModCatalog.Load(guest.Mods).Mods);
+        var (order, problem) = session.Resolve(guest.Mods, ModCatalog.Load(guest.Mods).Mods, verified: Listed);
         check(order != null && ModSet.Of(order).Digest == hostSet.Digest && session.Connection.StartsWith(LobbyService.ConnectionPrefix, StringComparison.Ordinal),
             "The next session plays the host's mods: " + problem);
         File.Delete(signal);
@@ -169,7 +172,7 @@ static class ModSyncTests
             "Declined from the launcher: the offer closes and the answer is taken.");
 
         // Blocking a mod from the offer: saved, and the lobby is shown as blocked.
-        foreach (var mod in hostSet.Mods.Where(m => m.Id != "test.ammo")) Directory.Delete(SyncedStore.Find(guest.Mods, mod.Id, mod.Hash)!, recursive: true);
+        foreach (var mod in hostSet.Mods.Where(m => m.Id != "test.ammo")) Directory.Delete(SyncedStore.Find(guest.Mods, mod.Id, mod.Hash, Listed)!, recursive: true);
         var toBlock = Refused(host, guest, check, "d", "offer");
         guest.Sync.Answer(["syncanswer", toBlock.Version.ToString(), "block", "test.texture"]);
         var nowBlocked = guest.Shown.Next(check, "blocked");
@@ -225,14 +228,14 @@ static class ModSyncTests
         var changed = Refused(host, guest, check, "g", "offer");
         guest.Sync.Answer(["syncanswer", changed.Version.ToString(), "accept"]);
         var failed = guest.Shown.Next(check, "failed");
-        check(failed.Message.Contains("not the file the host listed") && SyncedStore.Find(guest.Mods, texture.Id, texture.Hash) == null &&
+        check(failed.Message.Contains("not the file the host listed") && SyncedStore.Find(guest.Mods, texture.Id, texture.Hash, Listed) == null &&
             !Directory.Exists(Path.Combine(SyncedStore.Root(guest.Mods), ".partial", texture.Id + "@" + texture.Hash[..16])), "Tampered: " + failed.Message);
         Patch(patch, 600_000, 7);
 
         // A host that calls its code mod content: the joiner reads the manifest and stops before the DLL.
         allowVerified = false;
         var code = hostSet.Mods.Single(m => m.Id == "test.code");
-        Directory.Delete(SyncedStore.Find(guest.Mods, code.Id, code.Hash)!, recursive: true);
+        Directory.Delete(SyncedStore.Find(guest.Mods, code.Id, code.Hash, Listed)!, recursive: true);
         var liar = new Node(network, 0x110000100000024, Path.Combine(root, "liar"), hostSet with { Mods = [.. hostSet.Mods.Where(m => m.Id is "test.ammo" || m.Id == code.Id).Select(m => m.Id == code.Id ? m with { Class = ModClass.Content } : m)] },
             Verified);
         liar.Lobby.FromLocal(MultiplayerTests.Create("h-create", 0x110000100000024));
@@ -242,7 +245,7 @@ static class ModSyncTests
         check(Action(lied, "test.code") == SyncAction.Download, "The joiner first believes the host's class.");
         guest.Sync.Answer(["syncanswer", lied.Version.ToString(), "accept"]);
         var caught = guest.Shown.Next(check, "failed");
-        check(caught.Message.Contains("runs code") && SyncedStore.Find(guest.Mods, code.Id, code.Hash) == null, "A lying host is caught: " + caught.Message);
+        check(caught.Message.Contains("runs code") && SyncedStore.Find(guest.Mods, code.Id, code.Hash, Listed) == null, "A lying host is caught: " + caught.Message);
         await Liars(network, guest, hostSet, root, check);
 
         await LiveDisplay(root, check);
@@ -258,7 +261,7 @@ static class ModSyncTests
     {
         var folder = Path.Combine(root, "raw-liars", "mods");
         var texture = hostSet.Mods.Single(m => m.Id == "test.texture");
-        if (SyncedStore.Find(guest.Mods, texture.Id, texture.Hash) is { } stored) Directory.Delete(stored, recursive: true);
+        if (SyncedStore.Find(guest.Mods, texture.Id, texture.Hash, (_, _) => true) is { } stored) Directory.Delete(stored, recursive: true);
         Write(Path.Combine(folder, "rawstats"), ModCatalog.ManifestName, """{"format":1,"id":"test.rawstats","name":"Raw stats","version":"1"}""");
         Write(Path.Combine(folder, "rawstats"), StatsData.FileName,
             """{"format":1,"weapons":{"AR-23 Liberator":{"rpm":900}},"raw":[{"component":"DepositComponentData","resource":"0x1","offset":0,"type":"u32","value":10,"expect":5}]}""");
@@ -281,7 +284,7 @@ static class ModSyncTests
             var caught = guest.Shown.Next(check, "failed");
             var partial = Path.Combine(SyncedStore.Root(guest.Mods), ".partial", id + "@" + target.Hash[..16]);
             check(caught.Message.Contains("carries data HellForge cannot check") && caught.Done < target.Files.Single(f => f.Path == file).Size &&
-                SyncedStore.Find(guest.Mods, id, target.Hash) == null && !Directory.Exists(partial), $"{id}, called content, is caught before its bytes: {caught.Message} ({caught.Done} bytes)");
+                SyncedStore.Find(guest.Mods, id, target.Hash, (_, _) => true) == null && !Directory.Exists(partial), $"{id}, called content, is caught before its bytes: {caught.Message} ({caught.Done} bytes)");
             await liar.Sync.DisposeAsync();
         }
     }

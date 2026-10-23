@@ -134,7 +134,7 @@ public sealed class ModSync : IAsyncDisposable
     public bool Sharing => Shares();
 
     ModLocator? locator;
-    ModLocator Locator { get { lock (gate) return locator ??= new ModLocator(modsFolder); } }
+    ModLocator Locator { get { lock (gate) return locator ??= new ModLocator(modsFolder, null, verified); } }
 
     // Whether a listed lobby could be joined: the same mods, or a plan that is not blocked or unjoinable (mods to install
     // by hand, another HellForge), and edited stats only when the player shows such lobbies. A listing without a mod set
@@ -299,7 +299,7 @@ public sealed class ModSync : IAsyncDisposable
     }
 
     ModSyncPlan Plan(ModSet set, bool shares) =>
-        ModSyncPlan.Make(set, shares, own ?? new ModSet("none", []), new ModLocator(modsFolder).Find, ModSettings.Read(modsFolder).Blocked, verified);
+        ModSyncPlan.Make(set, shares, own ?? new ModSet("none", []), new ModLocator(modsFolder, null, verified).Find, ModSettings.Read(modsFolder).Blocked, verified);
 
     static (string State, string Message) Describe(Offer o)
     {
