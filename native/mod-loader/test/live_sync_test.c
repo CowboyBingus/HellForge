@@ -121,12 +121,12 @@ static void LiveSyncFixture(void)
     const char* bad[] = {
         "syncmod\t10\t7\t0\tsteal\tcontent\t1\tx\tX\t1",           /* an unknown action */
         "syncmod\t11\t7\t0\tdownload\tscript\t1\tx\tX\t1",         /* an unknown class */
-        "syncmod\t12\t7\t64\tdownload\tcontent\t1\tx\tX\t1",       /* past the 64th mod */
+        "syncmod\t12\t7\t512\tdownload\tcontent\t1\tx\tX\t1",      /* past the 512th mod */
         "syncmod\t13\t7\t0\tdownload\tcontent\t-1\tx\tX\t1",       /* not a number */
         "syncmod\t14\t7\t0\tdownload\tcontent\t1\t\tX\t1",         /* no id */
         "syncmod\t15\t7\t0\tdownload\tcontent\t1\tx\tX",           /* a field short */
         "syncstate\t16\t7\twaiting\tA\t0\t0\t0\t",                 /* an unknown state */
-        "syncstate\t17\t7\toffer\tA\t0\t0\t65\t",                  /* too many mods */
+        "syncstate\t17\t7\toffer\tA\t0\t0\t513\t",                 /* too many mods */
         "syncstate\t18\t99999999999\toffer\tA\t0\t0\t0\t",         /* a version past 32 bits */
         "syncstate\t19\t7\toffer\tA\t0\t0",                        /* fields short */
     };
@@ -136,6 +136,23 @@ static void LiveSyncFixture(void)
         assert(strstr(reply, "\trefused\t") != NULL);
     }
     assert(ApiSyncState(NULL, &state) && state.version == 6 && state.state == HF_SYNC_READY);
+
+    /* a host's full set and more (the backend lists up to 512): every mod kept; one missing among them refuses the offer */
+    char many[128];
+    for (int i = 0; i < 300; i++)
+    {
+        if (i == 257) continue;
+        snprintf(many, sizeof many, "syncmod\t%d\t30\t%d\tdownload\tcontent\t%d\tfriend.mod%d\tMod %d\t1", 100 + i, i, i, i, i);
+        SyncLine(many, reply, sizeof reply);
+        assert(strstr(reply, "\tok\t") != NULL);
+    }
+    SyncLine("syncstate\t99\t30\toffer\tFriend\t0\t0\t300\t", reply, sizeof reply);
+    assert(strstr(reply, "missing") != NULL && ApiSyncState(NULL, &state) && state.version == 6);
+    SyncLine("syncmod\t98\t30\t257\tdownload\tcontent\t257\tfriend.mod257\tMod 257\t1", reply, sizeof reply);
+    SyncLine("syncstate\t99\t30\toffer\tFriend\t0\t0\t300\t", reply, sizeof reply);
+    assert(!strcmp(reply, "99\tok\tnow") && ApiSyncState(NULL, &state) && state.version == 30 && state.mods == 300);
+    assert(ApiSyncMod(NULL, 299, &mod) && !strcmp(mod.id, "friend.mod299") && mod.bytes == 299 && ApiSyncMod(NULL, 257, &mod) && mod.bytes == 257);
+    assert(!ApiSyncMod(NULL, 300, &mod));
 
     /* long text is cut to its field, on a whole UTF-8 character; the message takes the rest of its line, tabs and all */
     char line[1024], name[200] = "x";

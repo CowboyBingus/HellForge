@@ -42,6 +42,9 @@ public sealed record ModManifest(string Id, string Name, string Version, string 
     public string? Archive { get; init; }
     // The mod has a data spec (hellforge-data.json), whose patches are generated per installation (ModDataCache).
     public bool HasDataSpec { get; init; }
+    // Why HellForge does not check all of the data spec's output (DataSpecs.Unchecked: a "replace", or a type outside the
+    // reviewed ones), or null: mod sync takes such a spec as raw data (ModSets.ClassOf).
+    public string? UncheckedSpec { get; init; }
     // The folder of the spec's generated patches for this session, set by ModDataCache.Prepare.
     public string? GeneratedData { get; init; }
     // A cosmetic pack (CosmeticPacks): its options, the player's choice, and the folders that choice stages.
@@ -181,10 +184,22 @@ public static partial class ModCatalog
 
     public static List<ModManifest> Active(IEnumerable<ModManifest> mods) => mods.Where(m => m.Enabled).ToList();
 
+    // A manifest of the wrong shape (a value of another JSON kind where an object, list or number belongs) is an
+    // InvalidDataException, as any other bad manifest: a downloaded one comes from another machine (mod sync).
     public static ModManifest Parse(string folder, EntityProfile profile)
+    {
+        try { return ParseManifest(folder, profile); }
+        catch (Exception error) when (error is InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
+        {
+            throw new InvalidDataException("the manifest is malformed: " + error.Message);
+        }
+    }
+
+    static ModManifest ParseManifest(string folder, EntityProfile profile)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(ManifestIn(folder) ?? Path.Combine(folder, ManifestName)));
         var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) throw new InvalidDataException("the manifest is not a JSON object.");
         if (Integer(root, "format") != 1) throw new InvalidDataException("format must be 1.");
         var id = Text(root, "id");
         if (!ModId().IsMatch(id)) throw new InvalidDataException("id must be 1-64 lowercase letters, digits, '.', '_' or '-'.");
@@ -198,12 +213,14 @@ public static partial class ModCatalog
         var writes = new List<ComponentWrite>();
         if (root.TryGetProperty("native", out var native))
         {
+            if (native.ValueKind != JsonValueKind.Object) throw new InvalidDataException("native must be an object.");
             if (native.TryGetProperty("networkFieldTypes", out var list))
-                foreach (var item in list.EnumerateArray())
+                foreach (var item in Items(list, "native.networkFieldTypes"))
                 {
                     var typeName = Text(item, "name");
                     if (!FieldTypeName().IsMatch(typeName)) throw new InvalidDataException("A network field type name is malformed.");
-                    var expect = item.GetProperty("expect");
+                    var expect = item.TryGetProperty("expect", out var pinned) && pinned.ValueKind == JsonValueKind.Object ? pinned
+                        : throw new InvalidDataException($"{typeName}: expect is required.");
                     var edit = new NetworkFieldTypeEdit(typeName, Integer(expect, "kind"), Integer(expect, "bits"), Integer(expect, "min"), Integer(item, "bits"));
                     // Only an integer field may be widened, never past 31 bits (32-bit ints are not range checked).
                     if (edit.ExpectKind != 1 || edit.ExpectBits is < 1 or > 31 || edit.Bits <= edit.ExpectBits || edit.Bits > 31)
@@ -211,7 +228,7 @@ public static partial class ModCatalog
                     types.Add(edit);
                 }
             if (native.TryGetProperty("componentWrites", out var components))
-                foreach (var item in components.EnumerateArray())
+                foreach (var item in Items(components, "native.componentWrites"))
                 {
                     var component = Text(item, "component");
                     if (!profile.Components.TryGetValue(component, out var schema))
@@ -221,7 +238,7 @@ public static partial class ModCatalog
                         !ulong.TryParse(resourceText[2..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var resource) || resource == 0)
                         throw new InvalidDataException("A component write needs a resource like 0x056DE1C5E21E723E.");
                     var fields = new List<ComponentFieldEdit>();
-                    foreach (var field in item.GetProperty("fields").EnumerateArray())
+                    foreach (var field in Items(item.TryGetProperty("fields", out var listed) ? listed : default, component + " fields"))
                     {
                         var edit = new ComponentFieldEdit(Text(field, "name"), Integer(field, "offset"), (uint)Integer(field, "expect"), (uint)Integer(field, "value"));
                         if (edit.Offset < 0 || edit.Offset % 4 != 0 || edit.Offset + 4 > schema.Stride)
@@ -267,7 +284,8 @@ public static partial class ModCatalog
                 data.Add(fileName);
             }
         // A data spec is checked here; what it names in the game data when it is built (ModDataCache).
-        var spec = DataSpecs.Load(folder) != null;
+        var dataSpec = DataSpecs.Load(folder);
+        var spec = dataSpec != null;
         var stats = StatsData.Load(folder, profile);
         if (stats.Count > 0 || writes.Count > 0) gameplay = true;
         // A mod of Lua patches alone is the player's own: client-only, outside the modlist code.
@@ -281,7 +299,7 @@ public static partial class ModCatalog
             if (LocalInstall.Within(full, folder) && File.Exists(full)) icon = full;
         }
         return new ModManifest(id, name, version, description, gameplay, Path.GetFullPath(folder), types, writes, data)
-            { CodeDll = code, HasSource = source, HasDataSpec = spec, Stats = stats, Icon = icon, Lua = lua };
+            { CodeDll = code, HasSource = source, HasDataSpec = spec, UncheckedSpec = dataSpec == null ? null : DataSpecs.Unchecked(dataSpec), Stats = stats, Icon = icon, Lua = lua };
     }
 
     // What friends compare before playing together: every gameplay mod's id, version and exact files. "none" without any.
@@ -363,11 +381,17 @@ public static partial class ModCatalog
             relative.EndsWith(".user", StringComparison.OrdinalIgnoreCase) || relative.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase);
     }
 
+    // A list's items, each an object.
+    static IEnumerable<JsonElement> Items(JsonElement list, string name) =>
+        list.ValueKind == JsonValueKind.Array && list.EnumerateArray().All(i => i.ValueKind == JsonValueKind.Object) ? list.EnumerateArray()
+            : throw new InvalidDataException($"{name} must be a list of objects.");
+
     static string Text(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString()! : throw new InvalidDataException($"{name} is required.");
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()! : throw new InvalidDataException($"{name} is required.");
 
     static int Integer(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number) && number is >= int.MinValue and <= uint.MaxValue
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number) && number is >= int.MinValue and <= uint.MaxValue
             ? unchecked((int)number) : throw new InvalidDataException($"{name} must be an integer.");
 }
 

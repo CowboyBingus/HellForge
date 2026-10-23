@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using HellForge.Core;
+using HellForge.Core.GameData;
 
 namespace HellForge.LocalBackend.Multiplayer;
 
@@ -12,9 +13,12 @@ namespace HellForge.LocalBackend.Multiplayer;
 // download them and play with the host's set.
 //   host:   a joiner refused for different gameplay mods (LobbyService.ModsRefused) is sent this session's mod set
 //           (without its folders) just before the refusal, mods.offer [lobby id, set, sharing 0|1], and its machine may
-//           download for GrantTime. The host serves only the set's counted files, from one worker, at most PeerRate per
-//           joiner and TotalRate in all, so its own game keeps its link:
-//             mods.files [req, id, hash]                        -> mods.filelist [req, "ok", count, (path, size, sha256)...]
+//           download for GrantTime from the first such offer (a later refusal does not extend it), at most the grant's
+//           byte budget (GrantBudget). The host serves only the set's counted files, from one worker, at most PeerRate
+//           per joiner and TotalRate in all, so its own game keeps its link; code and raw mods' files only to its Steam
+//           friends (a stranger could not take them unverified anyway, and they may be a modder's unreleased sources):
+//             mods.files [req, id, hash, start]                 -> mods.filelist [req, "ok", total, start, (path, size, sha256)...]
+//                                                                  (at most PageFiles files a page)
 //             mods.get   [req, id, hash, path, offset, length]  -> mods.chunk [req, "ok", offset, bytes]
 //           or [req, "refused", reason]. The player can turn sharing off (ModSettings.Share).
 //   joiner: a mod offer for a join this machine asked for (Expected: LobbyService.JoinedRecently) becomes an offer for
@@ -24,8 +28,12 @@ namespace HellForge.LocalBackend.Multiplayer;
 //           stop-observation.signal), which the launcher starts again with them.
 public sealed class ModSync : IAsyncDisposable
 {
-    public const int ChunkBytes = 128 << 10, Window = 4, QueuedPerPeer = 8;
+    // PageFiles: a file list page's files (3 fields each, paths of at most 240 characters) stay within a frame's 4096
+    // fields and 1 MiB.
+    public const int ChunkBytes = 128 << 10, Window = 4, QueuedPerPeer = 8, PageFiles = 1000;
     public const long PeerRate = 1 << 20, TotalRate = 2 << 20;
+    // Free space a download leaves on the drive besides its own bytes.
+    public const long SpareDisk = 256L << 20;
     public static readonly TimeSpan GrantTime = TimeSpan.FromMinutes(10), RequestTimeout = TimeSpan.FromSeconds(30);
     public const string StopSignal = "stop-observation.signal", StopReason = "mod-sync", OfferFile = "mod-sync.json";
 
@@ -53,12 +61,27 @@ public sealed class ModSync : IAsyncDisposable
         this.nameOf = nameOf;
         this.log = log;
         this.verified = verified ?? VerifiedMods.Contains;
+        // downloads an earlier session left unfinished (it stopped mid-download)
+        SyncedStore.Clean(modsFolder);
         serving = Task.Run(ServeAsync);
     }
 
     // Where the offer is shown: the game (LiveSyncDisplay) or a test.
     public ISyncDisplay? Display { get; set; }
 
+    // How long a grant lasts (GrantTime; a test shortens it).
+    public TimeSpan GrantFor { get; set; } = GrantTime;
+
+    // The free bytes on the drive of a folder, or null when unknown (a test sets its own).
+    public Func<string, long?> FreeSpace { get; set; } = FreeBytes;
+
+    static long? FreeBytes(string folder)
+    {
+        try { return new DriveInfo(Path.GetPathRoot(Path.GetFullPath(folder))!).AvailableFreeSpace; }
+        catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException) { return null; }
+    }
+
+    // Never throws: MultiplayerHost.DisposeAsync goes on to stop the rest.
     public async ValueTask DisposeAsync()
     {
         lock (gate) downloading?.Cancel();
@@ -66,6 +89,7 @@ public sealed class ModSync : IAsyncDisposable
         requests.Writer.TryComplete();
         try { await serving; }
         catch (OperationCanceledException) { }
+        catch (Exception error) { log("Mod sync: the host's worker stopped with an error: " + error); }
         stop.Dispose();
     }
 
@@ -86,22 +110,41 @@ public sealed class ModSync : IAsyncDisposable
 
     // ---- Host ---------------------------------------------------------------------------------------------------------
 
-    readonly Dictionary<ulong, DateTime> grants = [];
+    // A machine's download grant: until when, and how many bytes it may still take.
+    sealed class Grant(DateTime until, long budget)
+    {
+        public DateTime Until { get; } = until;
+        public long Left = budget;
+    }
+
+    readonly Dictionary<ulong, Grant> grants = [];
     readonly Dictionary<ulong, int> queued = [];
     readonly Channel<(ulong Peer, Frame Frame)> requests = Channel.CreateUnbounded<(ulong, Frame)>(new UnboundedChannelOptions { SingleReader = true });
     readonly Dictionary<ulong, long> peerNext = [];
     readonly Task serving;
     long totalNext;
 
+    // What one grant may download: the whole set twice (a retry after a failed check), and a little over.
+    long GrantBudget => 2 * (own?.Mods.Sum(m => m.Bytes) ?? 0) + Window * ChunkBytes;
+
     // A joiner with other gameplay mods is about to be refused (LobbyService.ModsRefused): this session's mod set goes to
     // them first, and they may download it for GrantTime. True when they may (this player shares, and the set is known).
+    // A grant still running stays as it is: joining again does not extend it or refill its budget.
     public bool OfferMods(ulong joiner, string lobbyId)
     {
         if (ownWire == null) return false;
         var share = Shares();
-        if (share) lock (gate) grants[joiner] = DateTime.UtcNow + GrantTime;
+        var now = DateTime.UtcNow;
+        Grant? grant = null;
+        if (share)
+            lock (gate)
+            {
+                foreach (var ended in grants.Where(g => g.Value.Until <= now).Select(g => g.Key).ToList()) grants.Remove(ended);
+                if (!grants.TryGetValue(joiner, out grant)) grants[joiner] = grant = new Grant(now + GrantFor, GrantBudget);
+            }
         Send(joiner, new Frame("mods.offer").Add(lobbyId).Add(ownWire).Add(share ? "1" : "0"));
-        log($"Mod sync: {LobbyService.EntityId(joiner)} lacks this session's mods; {(share ? "they may download them for " + GrantTime.TotalMinutes + " minutes" : "sharing is off")}.");
+        log($"Mod sync: {LobbyService.EntityId(joiner)} lacks this session's mods; " + (grant == null ? "sharing is off."
+            : $"they may download them until {grant.Until:HH:mm:ss} UTC ({Megabytes(grant.Left)} left)."));
         return share;
     }
 
@@ -130,7 +173,8 @@ public sealed class ModSync : IAsyncDisposable
         ModSet set;
         try { set = ModSet.Parse(wire, local: false); }
         catch (InvalidDataException) { why = "its mod list is malformed"; return false; }
-        var plan = ModSyncPlan.Make(set, listing.Data.GetValueOrDefault(DirectoryKeys.Share) == "1", own ?? new ModSet("none", []), Locator.Find, settings.Blocked, verified);
+        var plan = ModSyncPlan.Make(set, listing.Data.GetValueOrDefault(DirectoryKeys.Share) == "1", own ?? new ModSet("none", []), Locator.Find, settings.Blocked, verified,
+            hostIsFriend: transport.IsFriend(listing.Host));
         why = plan.Verdict switch { SyncVerdict.Blocked => "it runs a blocked mod", SyncVerdict.Unjoinable => "it runs mods that cannot be downloaded", _ => "" };
         return plan.Verdict is SyncVerdict.Ready or SyncVerdict.Download;
     }
@@ -138,7 +182,7 @@ public sealed class ModSync : IAsyncDisposable
     // A machine this one downloads from or lets download (a stranger is let through for that: MultiplayerHost's gate).
     public bool Related(ulong peer)
     {
-        lock (gate) return grants.TryGetValue(peer, out var until) && until > DateTime.UtcNow || offer?.Host == peer;
+        lock (gate) return grants.TryGetValue(peer, out var grant) && grant.Until > DateTime.UtcNow || offer?.Host == peer;
     }
 
     void Queue(ulong peer, Frame frame)
@@ -152,21 +196,34 @@ public sealed class ModSync : IAsyncDisposable
         if (!requests.Writer.TryWrite((peer, frame))) lock (gate) queued[peer]--;
     }
 
+    // The one worker: a request that fails in any way is refused (or, when even that cannot be sent, logged), and the next
+    // is served; only stopping ends it.
     async Task ServeAsync()
     {
-        await foreach (var (peer, frame) in requests.Reader.ReadAllAsync(stop.Token))
+        try
         {
-            lock (gate) queued[peer] = Math.Max(0, queued.GetValueOrDefault(peer) - 1);
-            Frame reply;
-            try { reply = Serve(peer, frame); }
-            catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
+            await foreach (var (peer, frame) in requests.Reader.ReadAllAsync(stop.Token))
             {
-                reply = Refused(frame, error is InvalidDataException ? error.Message : "the host could not read the file");
-                log($"Mod sync: a request from {LobbyService.EntityId(peer)} failed: {error.Message}");
+                lock (gate) queued[peer] = Math.Max(0, queued.GetValueOrDefault(peer) - 1);
+                try { await ServeOneAsync(peer, frame); }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested) { throw; }
+                catch (Exception error) { log($"Mod sync: a {frame.Type} from {LobbyService.EntityId(peer)} could not be answered: {error.Message}"); }
             }
-            if (frame.Type == "mods.get" && reply.Text(1) == "ok") await PaceAsync(peer, reply.Bytes(3).Length);
-            Send(peer, reply);
         }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+    }
+
+    async Task ServeOneAsync(ulong peer, Frame frame)
+    {
+        Frame reply;
+        try { reply = Serve(peer, frame); }
+        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            reply = Refused(frame, error is InvalidDataException ? error.Message : "the host could not read the file");
+            log($"Mod sync: a request from {LobbyService.EntityId(peer)} failed: {error.Message}");
+        }
+        if (frame.Type == "mods.get" && reply.Text(1) == "ok") await PaceAsync(peer, reply.Bytes(3).Length);
+        Send(peer, reply);
     }
 
     // Waits until both this joiner's and the total budget allow length more bytes.
@@ -179,23 +236,26 @@ public sealed class ModSync : IAsyncDisposable
         if (start > now) await Task.Delay(TimeSpan.FromSeconds((double)(start - now) / Stopwatch.Frequency), stop.Token);
     }
 
-    // One request, answered from this session's mod set: only a mod in it, only a file it counts, only while granted.
+    // One request, answered from this session's mod set: only a mod in it, only a file it counts, only while granted and
+    // within the grant's bytes; a code or raw mod only to a Steam friend.
     Frame Serve(ulong peer, Frame frame)
     {
-        bool granted;
-        lock (gate)
-        {
-            granted = grants.TryGetValue(peer, out var until) && until > DateTime.UtcNow;
-            if (granted) grants[peer] = until > DateTime.UtcNow + TimeSpan.FromMinutes(2) ? until : DateTime.UtcNow + TimeSpan.FromMinutes(2);
-        }
-        if (!granted) return Refused(frame, "no download was offered to this player");
+        Grant? grant;
+        lock (gate) grant = grants.TryGetValue(peer, out var found) && found.Until > DateTime.UtcNow ? found : null;
+        if (grant == null) return Refused(frame, "no download was offered to this player, or its time is up");
         if (!Shares()) return Refused(frame, "the host does not share their mods");
         var mod = own?.Find(frame.Text(1), frame.Text(2));
         if (mod == null || mod.Class == ModClass.Bundled || mod.Folder == null) return Refused(frame, "not one of the host's mods");
+        if (ModSets.NeedsVerified(mod.Class) && !transport.IsFriend(peer))
+            return Refused(frame, "the host shares mods that run code or carry unchecked data only with Steam friends");
+        if (mod.Files.Count > SyncedStore.MaxFiles) return Refused(frame, $"the mod has more than {SyncedStore.MaxFiles} files");
         if (frame.Type == "mods.files")
         {
-            var list = new Frame("mods.filelist").Add(frame.Text(0)).Add("ok").Add(mod.Files.Count);
-            foreach (var file in mod.Files) list.Add(file.Path).Add(file.Size).Add(file.Sha256);
+            if (!int.TryParse(frame.Text(3), NumberStyles.None, CultureInfo.InvariantCulture, out var start) || start >= mod.Files.Count)
+                return Refused(frame, "not a page of the mod's file list");
+            var page = mod.Files.Skip(start).Take(PageFiles).ToList();
+            var list = new Frame("mods.filelist").Add(frame.Text(0)).Add("ok").Add(mod.Files.Count).Add(start);
+            foreach (var file in page) list.Add(file.Path).Add(file.Size).Add(file.Sha256);
             return list;
         }
         var path = frame.Text(3);
@@ -204,6 +264,11 @@ public sealed class ModSync : IAsyncDisposable
             !int.TryParse(frame.Text(5), NumberStyles.None, CultureInfo.InvariantCulture, out var length) ||
             length is < 1 or > ChunkBytes || offset > listed.Size - length)
             return Refused(frame, "not a part of the mod's files");
+        lock (gate)
+        {
+            if (grant.Left < length) return Refused(frame, "this player has downloaded all this offer allows");
+            grant.Left -= length;
+        }
         var full = Path.GetFullPath(Path.Combine(mod.Folder, path));
         if (!full.StartsWith(Path.GetFullPath(mod.Folder) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             return Refused(frame, "not a part of the mod's files");
@@ -266,7 +331,7 @@ public sealed class ModSync : IAsyncDisposable
 
     void MakeOffer(ulong host, string connection, ModSet set, bool shares)
     {
-        var plan = Plan(set, shares);
+        var plan = Plan(set, shares, host);
         Offer made;
         lock (gate)
         {
@@ -279,10 +344,12 @@ public sealed class ModSync : IAsyncDisposable
         _ = PublishAsync(made, withMods: true);
     }
 
-    ModSyncPlan Plan(ModSet set, bool shares) =>
-        ModSyncPlan.Make(set, shares, own ?? new ModSet("none", []), new ModLocator(modsFolder).Find, ModSettings.Read(modsFolder).Blocked, verified);
+    // A stranger host's code and raw mods are the player's to install: hosts serve them only to Steam friends.
+    ModSyncPlan Plan(ModSet set, bool shares, ulong host) =>
+        ModSyncPlan.Make(set, shares, own ?? new ModSet("none", []), new ModLocator(modsFolder).Find, ModSettings.Read(modsFolder).Blocked, verified,
+            hostIsFriend: transport.IsFriend(host));
 
-    static (string State, string Message) Describe(Offer o)
+    (string State, string Message) Describe(Offer o)
     {
         var plan = o.Plan;
         string Names(params SyncAction[] actions) => string.Join(", ", plan.Items.Where(i => actions.Contains(i.Action)).Select(i => i.Mod.Name));
@@ -292,6 +359,7 @@ public sealed class ModSync : IAsyncDisposable
             SyncVerdict.Unjoinable when plan.Items.Any(i => i.Action == SyncAction.Update) =>
                 ("blocked", $"{o.HostName} runs another HellForge version ({Names(SyncAction.Update)} differs): both players need the same HellForge."),
             SyncVerdict.Unjoinable when !o.Shares => ("blocked", $"{o.HostName} does not share their mods. Install them yourself to join: {Names(SyncAction.Manual)}."),
+            SyncVerdict.Unjoinable when !transport.IsFriend(o.Host) => ("blocked", $"Some of {o.HostName}'s mods run code or carry data that HellForge cannot check: those download only from Steam friends, and only when HellForge has verified them. Install them yourself to join: {Names(SyncAction.Manual)}."),
             SyncVerdict.Unjoinable => ("blocked", $"Some of {o.HostName}'s mods run code or carry data that HellForge cannot check and has not verified. Install them yourself to join: {Names(SyncAction.Manual)}."),
             SyncVerdict.Download => ("offer", $"{o.HostName} plays with {plan.Items.Count(i => i.Action == SyncAction.Download)} mod(s) you don't have ({Megabytes(plan.DownloadBytes)}). Download them and restart with {o.HostName}'s mods to join."),
             _ => ("offer", $"You have all of {o.HostName}'s mods. Restart with them to join.")
@@ -340,6 +408,14 @@ public sealed class ModSync : IAsyncDisposable
     {
         if (current.Plan.Verdict == SyncVerdict.Ready) { _ = Task.Run(() => Restart(current)); return; }
         if (current.Plan.Verdict != SyncVerdict.Download) return;
+        // the prompt showed the total; the drive must hold it, with some to spare
+        if (FreeSpace(modsFolder) is { } free && free < current.Plan.DownloadBytes + SpareDisk)
+        {
+            log($"Mod sync: {Megabytes(current.Plan.DownloadBytes)} to download, {Megabytes(free)} free on the mods folder's drive.");
+            Update(current, "failed", $"Not enough free disk space: the download needs {Megabytes(current.Plan.DownloadBytes)} and {Megabytes(SpareDisk)} to spare, " +
+                $"and the drive of HellForge's mods folder has {Megabytes(free)} free.");
+            return;
+        }
         CancellationTokenSource token;
         lock (gate)
         {
@@ -352,6 +428,8 @@ public sealed class ModSync : IAsyncDisposable
         _ = Task.Run(() => DownloadAsync(current, token.Token));
     }
 
+    // Whatever goes wrong (a host's bytes can make anything throw) ends in "failed" with its message; only a cancelled
+    // download ends without one.
     async Task DownloadAsync(Offer current, CancellationToken token)
     {
         try
@@ -361,58 +439,76 @@ public sealed class ModSync : IAsyncDisposable
             log($"Mod sync: every mod is here ({Megabytes(current.Done)}).");
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { log("Mod sync: the download was cancelled."); }
-        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or TimeoutException or JsonException)
+        catch (Exception error)
         {
-            log("Mod sync: the download failed: " + error.Message);
+            log("Mod sync: the download failed: " + (error is InvalidDataException or IOException or UnauthorizedAccessException or TimeoutException or JsonException
+                ? error.Message : error.ToString()));
             Update(current, "failed", "The download failed: " + error.Message);
         }
     }
 
     async Task DownloadModAsync(Offer current, ModSetEntry mod, CancellationToken token)
     {
-        var files = FileList(await RequestAsync(current.Host, new Frame("mods.files").Add(mod.Id).Add(mod.Hash), token), mod);
+        var files = await FileListAsync(current.Host, mod, token);
         var partial = SyncedStore.Partial(modsFolder, mod.Id, mod.Hash);
         try
         {
-            // The manifest and the stats file first: a mod that shows code or raw data (its file list, its manifest, its
-            // stats file) and is not verified stops before its other bytes. SyncedStore.Install decides from all of them.
-            var manifest = files.First(f => f.Path is ModCatalog.ManifestName or ModCatalog.LegacyManifestName);
+            // The manifest, the stats file and the data spec first: a mod that shows code or raw data (its file list, its
+            // manifest, its stats file, its spec) and is not verified stops before its other bytes. The manifest is the one
+            // the catalogue reads (ModCatalog.ManifestIn: hellforge-mod.json before bts-mod.json). SyncedStore.Install
+            // decides from all of them.
+            var manifest = files.FirstOrDefault(f => f.Path == ModCatalog.ManifestName) ?? files.First(f => f.Path == ModCatalog.LegacyManifestName);
             var stats = files.FirstOrDefault(f => f.Path == StatsData.FileName);
-            var first = stats == null ? [manifest] : new[] { manifest, stats };
+            var spec = files.FirstOrDefault(f => f.Path == DataSpecs.FileName);
+            ModFile[] first = [manifest, .. stats == null ? Array.Empty<ModFile>() : [stats], .. spec == null ? Array.Empty<ModFile>() : [spec]];
             foreach (var file in first) await DownloadFileAsync(current, mod, file, partial, token);
-            var declared = ModSets.Declared(files.Select(f => f.Path), File.ReadAllText(SyncedStore.Target(partial, manifest.Path)),
-                stats == null ? null : File.ReadAllText(SyncedStore.Target(partial, stats.Path)));
+            string? Read(ModFile? file) => file == null ? null : File.ReadAllText(SyncedStore.Target(partial, file.Path));
+            var declared = ModSets.Declared(files.Select(f => f.Path), Read(manifest)!, Read(stats), Read(spec));
             if (declared is { } kind && !verified(mod.Id, mod.Hash))
                 throw new InvalidDataException($"{mod.Name} {ModSets.Unchecked(kind)} and is not on HellForge's verified list.");
             foreach (var file in files.Where(f => !first.Contains(f))) await DownloadFileAsync(current, mod, file, partial, token);
         }
         catch
         {
-            try { Directory.Delete(partial, recursive: true); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            SyncedStore.Discard(partial);
             throw;
         }
-        var folder = await Task.Run(() => SyncedStore.Install(modsFolder, mod, partial, verified), token);
+        // Install deletes the download itself when it refuses it or is cancelled
+        var folder = await Task.Run(() => SyncedStore.Install(modsFolder, mod, partial, verified, cancel: token), CancellationToken.None);
         log($"Mod sync: {mod.Id} {mod.Version} checked and stored in {folder}.");
     }
 
-    // The host's file list for a mod: safe paths, each once, sizes adding up to the mod set's bytes, a manifest.
-    static List<ModFile> FileList(Frame reply, ModSetEntry mod)
+    // The host's file list for a mod, page by page: safe paths, each once, at most SyncedStore.MaxFiles, sizes adding up to
+    // the mod set's bytes (each at most that, so the sum cannot overflow), a manifest.
+    async Task<List<ModFile>> FileListAsync(ulong host, ModSetEntry mod, CancellationToken token)
     {
-        if (reply.Text(1) != "ok") throw new InvalidDataException($"{mod.Name}: the host refused ({(reply.Count > 2 ? reply.Text(2) : "no reason")}).");
-        var count = reply.Int(2);
-        if (count is < 1 or > SyncedStore.MaxFiles || reply.Count != 3 + 3 * count) throw new InvalidDataException($"{mod.Name}: the host's file list is malformed.");
         var files = new List<ModFile>();
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < count; i++)
+        int? total = null;
+        long bytes = 0;
+        while (total == null || files.Count < total)
         {
-            var file = new ModFile(reply.Text(3 + 3 * i), long.TryParse(reply.Text(4 + 3 * i), NumberStyles.None, CultureInfo.InvariantCulture, out var size) ? size : -1,
-                reply.Text(5 + 3 * i));
-            if (!SyncedStore.SafePath(file.Path) || !paths.Add(file.Path) || file.Size < 0 || file.Sha256.Length != 64 || !file.Sha256.All(char.IsAsciiHexDigitUpper))
-                throw new InvalidDataException($"{mod.Name}: the host listed a file that cannot be taken.");
-            files.Add(file);
+            var reply = await RequestAsync(host, new Frame("mods.files").Add(mod.Id).Add(mod.Hash).Add(files.Count), token);
+            if (reply.Text(1) != "ok") throw new InvalidDataException($"{mod.Name}: the host refused ({(reply.Count > 2 ? reply.Text(2) : "no reason")}).");
+            var count = (reply.Count - 4) / 3;
+            if (reply.Count < 7 || (reply.Count - 4) % 3 != 0 || count > PageFiles || reply.Int(3) != files.Count)
+                throw new InvalidDataException($"{mod.Name}: the host's file list is malformed.");
+            total ??= reply.Int(2);
+            if (total is < 1 or > SyncedStore.MaxFiles || reply.Int(2) != total || files.Count + count > total)
+                throw new InvalidDataException($"{mod.Name}: the host's file list is malformed or too long (at most {SyncedStore.MaxFiles} files).");
+            for (var i = 0; i < count; i++)
+            {
+                var at = 4 + 3 * i;
+                var file = new ModFile(reply.Text(at), long.TryParse(reply.Text(at + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var size) ? size : -1,
+                    reply.Text(at + 2));
+                if (!SyncedStore.SafePath(file.Path) || !paths.Add(file.Path) || file.Size < 0 || file.Size > mod.Bytes || file.Sha256.Length != 64 ||
+                    !file.Sha256.All(char.IsAsciiHexDigitUpper))
+                    throw new InvalidDataException($"{mod.Name}: the host listed a file that cannot be taken.");
+                bytes += file.Size;
+                files.Add(file);
+            }
         }
-        if (files.Sum(f => f.Size) != mod.Bytes) throw new InvalidDataException($"{mod.Name}: the host's files are not the size its mod list says.");
+        if (bytes != mod.Bytes) throw new InvalidDataException($"{mod.Name}: the host's files are not the size its mod list says.");
         if (!files.Any(f => f.Path is ModCatalog.ManifestName or ModCatalog.LegacyManifestName)) throw new InvalidDataException($"{mod.Name}: the host listed no manifest.");
         return files;
     }
@@ -505,7 +601,7 @@ public sealed class ModSync : IAsyncDisposable
     void Restart(Offer current)
     {
         try { WriteRestart(current); }
-        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
+        catch (Exception error)
         {
             log("Mod sync: could not restart: " + error.Message);
             Update(current, "failed", "Could not restart with the host's mods: " + error.Message);
@@ -514,7 +610,7 @@ public sealed class ModSync : IAsyncDisposable
 
     void WriteRestart(Offer current)
     {
-        var plan = Plan(current.Set, current.Shares);
+        var plan = Plan(current.Set, current.Shares, current.Host);
         if (plan.Verdict != SyncVerdict.Ready)
         {
             Update(current, "failed", "Some of the host's mods are no longer here: " + string.Join(", ", plan.Items.Where(i => i.Action != SyncAction.Have && i.Action != SyncAction.Off).Select(i => i.Mod.Name)) + ".");
@@ -570,21 +666,33 @@ public interface ISyncDisplay
 // The game, over the session's live-edit pipe (native/mod-loader/live.c: "syncmod" lines, then "syncstate").
 public sealed class LiveSyncDisplay(LiveEditServer live) : ISyncDisplay
 {
+    // The loader's limit (live.c SYNC_MAX_MODS): a host's whole set (ModSet.MaxMods) and this machine's own mods. Past it,
+    // the mods that need nothing (have, off) are left out first, and the message says how many.
+    public const int MaxMods = 512;
+
     readonly SemaphoreSlim order = new(1, 1);
+
+    public static (IReadOnlyList<SyncItem> Items, string Message) Shown(SyncView view)
+    {
+        if (view.Items.Count <= MaxMods) return (view.Items, view.Message);
+        var items = view.Items.OrderBy(i => i.Action is SyncAction.Have or SyncAction.Off).Take(MaxMods).ToList();
+        return (items, $"({view.Items.Count - MaxMods} more mods are not listed.) {view.Message}");
+    }
 
     public async Task<bool> ShowAsync(SyncView view, bool withMods)
     {
+        var (items, message) = Shown(view);
         await order.WaitAsync();
         try
         {
             if (withMods)
-                for (var i = 0; i < view.Items.Count; i++)
+                for (var i = 0; i < items.Count; i++)
                 {
-                    var item = view.Items[i];
+                    var item = items[i];
                     if (!(await live.SyncModAsync(view.Version, i, ModSyncPlan.ActionName(item.Action), ModSets.ClassName(item.Mod.Class), item.Mod.Bytes, item.Mod.Id,
                             item.Mod.Name, item.Mod.Version)).Ok) return false;
                 }
-            return (await live.SyncStateAsync(view.Version, view.State, view.Host, view.Bytes, view.Done, view.Items.Count, view.Message)).Ok;
+            return (await live.SyncStateAsync(view.Version, view.State, view.Host, view.Bytes, view.Done, items.Count, message)).Ok;
         }
         finally { order.Release(); }
     }

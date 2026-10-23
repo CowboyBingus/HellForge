@@ -176,7 +176,10 @@ public partial class MainWindow
         panel.Children.Add(new TextBlock { Text = "MOD SYNC", Classes = { "h2" }, Margin = new(0) });
         panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Classes = { "muted" }, Text =
             "Joining a lobby whose host runs other gameplay mods offers to download them and restart with the host's mods. " +
-            "Mods that run code (a DLL, sources or Lua) download only when HellForge has verified that exact version; others you install yourself." });
+            "Only what HellForge checks itself downloads from any host: stats, network field types, and data specs that don't replace values. " +
+            "Mods that run code (a DLL, sources or Lua) or carry data HellForge cannot check (data patches, raw stats, component writes, " +
+            "data specs that replace values) download only from a Steam friend, and only when HellForge has verified that exact version; " +
+            "others you install yourself." });
         var share = new ToggleSwitch { IsChecked = settings.Share, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
         share.IsCheckedChanged += (_, _) =>
         {
@@ -185,7 +188,8 @@ public partial class MainWindow
         };
         var shareRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         shareRow.Children.Add(share);
-        shareRow.Children.Add(new TextBlock { Text = "Let players who join me download my gameplay mods", VerticalAlignment = VerticalAlignment.Center });
+        shareRow.Children.Add(new TextBlock { Text = "Let players who join me download my gameplay mods (those with code or unchecked data: Steam friends only)",
+            VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(shareRow);
         // Joiners play with the host's stats: public lobbies whose host edited them are hidden on the Galactic Map unless shown.
         var edited = new ToggleSwitch { IsChecked = settings.ShowEditedStats, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };

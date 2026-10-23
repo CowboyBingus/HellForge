@@ -92,45 +92,55 @@ the host's mods and what happens to it:
 |---|---|
 | you have it | an installed mod (on or off) or one downloaded before has the same id and content |
 | downloads | it comes from the host's backend over the Steam peer link |
-| install it yourself | the host does not share their mods, or it runs code or carries data that HellForge cannot check and has not verified |
+| install it yourself | the host does not share their mods, or it runs code or carries data that HellForge cannot check, and HellForge has not verified it or the host is not your Steam friend |
 | blocked | it is on your blocklist, so the lobby cannot be joined |
 | needs another HellForge | a mod HellForge ships differs: both players need the same HellForge |
 | off for this session | one of your own gameplay mods that the host does not run |
 
-**DOWNLOAD AND RESTART** downloads what it can; **Esc** hides the prompt while the download goes on, and it comes back
-when the mods are ready. **CANCEL** or **Esc** before that answers no. **RESTART TO JOIN** then ends the session and
-the launcher starts a new one with the host's mods, in the host's load order, plus your own cosmetic mods and Local
-Stats. Join the lobby again from the social tab or the map. Only that one session plays the host's mods: your Mods page
-and its switches never change, and the next session you start yourself runs your own mods again.
+Its buttons, **Enter** and **B** wait a second after it appears, so a key or click meant for the game does not
+answer it. **DOWNLOAD AND RESTART** downloads what it can, when the drive has room for it and 256 MB to spare;
+**Esc** hides the prompt while the download goes on, and it comes back when the mods are ready. **CANCEL** or **Esc**
+before that answers no. **RESTART TO JOIN** then ends the session and the launcher starts a new one with the host's
+mods, in the host's load order, plus your own cosmetic mods and Local Stats. Join the lobby again from the social tab
+or the map. Only that one session plays the host's mods: your Mods page and its switches never change, and the next
+session you start yourself runs your own mods again.
 
 **What may download (the trust rule).** Only what HellForge checks itself downloads by itself. Your backend decides
 each mod's class from the bytes it received, never from what the host says, and the rule is the same for every host,
-Steam friends included:
-- *Content* downloads from any host: data specs (`hellforge-data.json`, whose patches HellForge builds from your own
-  game files), schema stats (`hellforge-stats.json` fields by name, each within its reviewed range) and network field
-  types (an integer field widened, never past 31 bits).
+Steam friends included (only code and raw data come from friends alone, below):
+- *Content* downloads from any host: data specs HellForge checks all of (`hellforge-data.json`, whose patches HellForge
+  builds from your own game files: icons, and copies and includes of units, materials, textures and particle effects
+  with only HellForge's own edits, each on its own type, and includes of the game's sound banks), schema stats
+  (`hellforge-stats.json` fields by name, each within its reviewed range) and network field types (an integer field
+  widened, never past 31 bits).
 - *Raw data* reaches the game without HellForge being able to check it: binary data patches (a `data/` folder, read by
-  the game's own file parsers), raw stats lines (the stats file's `"raw"` section) and `componentWrites` (any field of
-  a component record). It downloads only as code does, below.
+  the game's own file parsers), data specs that `"replace"` values (8 bytes of the author's choosing written into a
+  copied resource) or copy or include any other resource type (`lua` among them), raw stats lines (the stats file's
+  `"raw"` section) and `componentWrites` (any field of a component record). It downloads only as code does, below.
 - *Code* (a DLL, C or C++ sources HellForge compiles, or a patch holding Lua) and raw data download only when
   HellForge's verified list names that exact content: `data/verified-mods.json`, shipped with each HellForge release,
   entries `{"id","name","version","hash","reviewed"}`. The hash is the mod's content hash: the SHA-256 of the lines the
-  modlist code takes from it (`ModSets.ContentHash`). Any other such mod is one you install yourself; the prompt marks
-  it CODE or RAW DATA.
+  modlist code takes from it (`ModSets.ContentHash`). They download only from a host who is your Steam friend (hosts
+  share them only with friends). Any other such mod is one you install yourself; the prompt marks it CODE or RAW DATA.
 - *Bundled* mods (the in-game editor) never download.
 
-**Checks.** The file list, the manifest and the stats file come first: a mod that shows code or raw data there and is
-not verified stops before its other files. Every file must have a safe path and match the size and SHA-256 the host
-listed. The finished mod must parse, have the expected id and version, rehash to the host's content hash, and be
-content or verified. Only then is it kept, in `mods/.synced/<id>@<hash>/`; a failed download is deleted. Normal
-sessions never load that folder.
+**Checks.** The file list, the manifest (`hellforge-mod.json` before `bts-mod.json`, as HellForge reads them), the
+stats file and the data spec come first: a mod that shows code or raw data there and is not verified stops before its
+other files. Every file must have a safe path and match the size and SHA-256 the host listed. The finished mod must
+parse, have the expected id and version, rehash to the host's content hash, and be content or verified. Only then is it
+kept, in `mods/.synced/<id>@<hash>/`; a failed or cancelled download is deleted, and anything the host sends that does
+not fit ends the download with a message. A kept mod is used again only while its files still hash to the same
+content. Normal sessions never load that folder.
 
 **Blocking.** **BLOCK** on a row of the prompt (or **B**) puts that mod on your blocklist: lobbies running it are not
 offered again. Unblock it on the launcher's Mods page (MOD SYNC card).
 
-**Hosting.** Players who join you may download your gameplay mods' counted files for 10 minutes after their join is
-refused. Your backend serves them at most 1 MB/s per player and 2 MB/s in total, so your own game keeps its link. Turn
-it off with "Let players who join me download my gameplay mods" on the Mods page.
+**Hosting.** Sharing is on by default. Players who join you may download your gameplay mods' counted files for 10
+minutes after their first refused join (joining again does not extend it), and at most your mods' size twice over.
+Mods that run code or carry data HellForge cannot check go only to your Steam friends: a stranger could not take them
+unverified anyway, and they may be your unreleased sources. Your backend serves at most 1 MB/s per player and 2 MB/s
+in total, so your own game keeps its link. Turn it off with "Let players who join me download my gameplay mods" on the
+Mods page.
 
 **Downloaded mods.** The Mods page shows how many there are and how much space they take, with a button that deletes
 them all.
