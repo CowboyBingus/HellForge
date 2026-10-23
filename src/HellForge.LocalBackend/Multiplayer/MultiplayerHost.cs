@@ -254,8 +254,10 @@ public sealed class MultiplayerHost : IAsyncDisposable
 
     // The social tab: friends running HellForge (from the transport) get this player's profile objects and the game's current
     // lobby every 10 s and at once when either changes: "presence" [objects JSON, lobbyId, connectionString, lobby JSON as
-    // the game uploaded it], without the lobby fields when in none. The first one to a friend is "presence.hello", which
-    // is always answered, so two backends know each other at once, also after one restarts.
+    // the game uploaded it, listing digest], without the lobby fields when in none, and without the digest when the
+    // directory lists nothing (FriendPresence.SetLocalListing; older backends send none and ignore it). The first one to a
+    // friend is "presence.hello", which is always answered, so two backends know each other at once, also after one
+    // restarts.
     void SharePresence(DateTime now)
     {
         if (presence == null || transport is not IFriendSource source) return;
@@ -286,10 +288,18 @@ public sealed class MultiplayerHost : IAsyncDisposable
         var (lobbyId, body, objects, _) = presence.Local;
         var connection = lobbyId != null ? Lobby.ConnectionStringFor(lobbyId) : null;
         var frame = new Frame(type).Add(objects.ToJsonString());
-        if (lobbyId != null && connection != null && body != null) frame.Add(lobbyId).Add(connection).Add(body.ToJsonString());
+        if (lobbyId != null && connection != null && body != null)
+        {
+            frame.Add(lobbyId).Add(connection).Add(body.ToJsonString());
+            if (presence.LocalListing is { } listing) frame.Add(listing);
+        }
         var bytes = frame.Encode();
         foreach (var target in targets) transport.Send(target, bytes, reliable: true);
     }
+
+    // A presence frame's listing digest (DirectoryData.Digest: 64 lowercase hex digits), or null when it has none.
+    public static string? ListingOf(Frame frame) =>
+        frame.Count > 4 && frame.Text(4) is { Length: 64 } digest && digest.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f')) ? digest : null;
 
     void FromPeerPresence(ulong peer, Frame frame)
     {
@@ -316,7 +326,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
         try
         {
             if (System.Text.Json.Nodes.JsonNode.Parse(frame.Text(3)) is System.Text.Json.Nodes.JsonObject sent && RecordGuard.Lobby(sent) is { } body)
-                presence.SetFriendLobby(peer, lobbyId, connection, body);
+                presence.SetFriendLobby(peer, lobbyId, connection, body, ListingOf(frame));
             else Log("Dropped a friend's lobby record that is not one.");
         }
         catch (System.Text.Json.JsonException) { Log("Dropped a malformed lobby from a friend."); }

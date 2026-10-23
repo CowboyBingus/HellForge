@@ -18,7 +18,9 @@ namespace HellForge.LocalBackend;
 public sealed class FriendPresence
 {
     public sealed record Friend(ulong SteamId, string Name);
-    sealed record Lobby(string LobbyId, string ConnectionString, JsonObject Body, DateTime Heard);
+    // Listings: the digests (DirectoryData.Digest) of the directory listings the friend's backend says it published, the
+    // newest first (the one before stays good while Steam may still hold it).
+    sealed record Lobby(string LobbyId, string ConnectionString, JsonObject Body, DateTime Heard, string[] Listings);
     // A lobby the directory listed: its id, connection string, the host's lobby record and its live record (or null).
     public sealed record DirectoryLobby(string LobbyId, string ConnectionString, JsonObject Body, JsonObject? Live);
 
@@ -44,7 +46,7 @@ public sealed class FriendPresence
     JsonObject localObjects = [];
     string lastUnknown = "";
     JsonObject? localBody, localLive;
-    string? localLobbyId;
+    string? localLobbyId, localListing;
     long localVersion;
 
     public Action<string>? Log { get; set; }
@@ -127,6 +129,26 @@ public sealed class FriendPresence
     }
 
     public JsonObject? LocalLive { get { lock (gate) return localLive?.DeepClone().AsObject(); } }
+
+    // The digest of the listing this machine's directory publishes (null: none), sent to friends with the lobby so their
+    // searches can tell it from a listing someone else made under this player's id (Multiplayer/DirectoryService.cs).
+    public void SetLocalListing(string? digest)
+    {
+        lock (gate)
+        {
+            if (localListing == digest) return;
+            localListing = digest;
+            localVersion++;
+        }
+    }
+
+    public string? LocalListing { get { lock (gate) return localListing; } }
+
+    // Whether that friend's backend, over its own authenticated link, said it published a listing with this digest.
+    public bool Vouches(ulong friend, string digest)
+    {
+        lock (gate) return friendLobbies.TryGetValue(friend, out var lobby) && DateTime.UtcNow - lobby.Heard <= Fresh && lobby.Listings.Contains(digest);
+    }
 
     // GET /lobby/<id>: the lobby's record from this machine's own, a friend's or the directory's, completed as
     // /lobby/accounts completes it; null when unknown.
@@ -212,9 +234,15 @@ public sealed class FriendPresence
         lock (gate) return friends.FirstOrDefault(f => f.SteamId == friend)?.Name;
     }
 
-    public void SetFriendLobby(ulong friend, string lobbyId, string connectionString, JsonObject body)
+    // listing: the digest of the friend's directory listing, or null when it lists none.
+    public void SetFriendLobby(ulong friend, string lobbyId, string connectionString, JsonObject body, string? listing = null)
     {
-        lock (gate) friendLobbies[friend] = new Lobby(lobbyId, connectionString, body, DateTime.UtcNow);
+        lock (gate)
+        {
+            var before = friendLobbies.TryGetValue(friend, out var old) ? old.Listings : [];
+            string[] listings = listing == null ? [] : before.Length > 0 && before[0] == listing ? before : [listing, .. before.Take(1)];
+            friendLobbies[friend] = new Lobby(lobbyId, connectionString, body, DateTime.UtcNow, listings);
+        }
     }
 
     public void ClearFriendLobby(ulong friend)
@@ -260,7 +288,7 @@ public sealed class FriendPresence
                 if (ulong.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var steamId) && friendLobbies.TryGetValue(steamId, out var friend) &&
                     DateTime.UtcNow - friend.Heard <= Fresh) lobby = friend;
                 // a lobby the Galactic Map's search found in the directory
-                else if (DirectoryByAccount?.Invoke(id) is { } found) lobby = new Lobby(found.LobbyId, found.ConnectionString, found.Body, DateTime.UtcNow);
+                else if (DirectoryByAccount?.Invoke(id) is { } found) lobby = new Lobby(found.LobbyId, found.ConnectionString, found.Body, DateTime.UtcNow, []);
                 if (lobby == null)
                 {
                     unknown.Add(id);

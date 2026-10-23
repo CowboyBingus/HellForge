@@ -480,7 +480,8 @@ Off:
   and the Steam link accepts no session from them;
 - this machine's public lobby is not listed ("Directory: this machine's public lobby is not listed: Play with strangers
   is off" in `multiplayer.log`);
-- a Galactic Map search shows friends' listings only;
+- a Galactic Map search shows friends' listings only, and only the one each friend's backend vouches for (see
+  "Listings' hosts" under [step 7](#step-7-public-lobbies-on-the-galactic-map-2026-10-22));
 - a join to a stranger's lobby is answered at once as not joinable, and the in-game editor shows why ("Couldn't join").
 
 On, strangers' games send this one data nobody checks for them: HellForge is open source, anti-cheat is off and a
@@ -1010,6 +1011,17 @@ Built 2026-10-22 and tested on one PC only.
     searches' results stay valid after their batch.
   - The game's two searches per scan (about 30 ms apart) share one directory search; nothing older than 500 ms is
     reused.
+- **Listings' hosts** (since 2026-10-23). Steam does not say who made a lobby to someone who
+  is not in it, so a listing's host is its own `hf.host`: anyone can list under another player's id, with that
+  player's lobby id too (the game's own Steam lobby shows it). What holds anyway:
+  - a join goes to the host a listing names, over Steam's authenticated link, and that host refuses a lobby it does not
+    hold (`LobbyNotFound`); whoever made the listing hears nothing;
+  - listings that claim one host or one lobby with different data are all left out, except one a friend's backend
+    vouches for against ones it does not; copies of the same data count once (`DirectoryService.Unambiguous`). The
+    cost: anyone can hide a listed lobby from strangers by copying it with other data;
+  - a backend vouches for its listing by sending friends its digest (`DirectoryData.Digest`, SHA-256 of the data) as
+    the fifth field of `presence` (`FriendPresence.Vouches`; the last two digests count). With Play with strangers off,
+    a friend's listing is shown only while that friend vouches for it.
 - **The map's records:** `POST /lobby/accounts` answers, after friends, for the hosts the last searches found (for 2
     minutes), with the listing's record, its lobby id and connection string. `GET /lobby/<id>` and
     `GET /lobby/<id>/live` answer from the local, a friend's or a found lobby. `PUT /lobby/<id>/live` is stored and
