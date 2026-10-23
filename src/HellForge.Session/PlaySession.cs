@@ -22,6 +22,7 @@ sealed class PlaySession(PlayOptions options)
     readonly JsonObject result = new();
     readonly List<FileStream> locks = [];
     readonly List<string> swapped = [];
+    HashSet<string>? modSnapshot;
     readonly Dictionary<string, string> shimPins = new(StringComparer.Ordinal);
     // HELLFORGE_DEBUG=1 writes the full step reports (addresses, before/after bytes) and the per-second diagnostics into
     // the run folder, for development. Normal sessions keep only what happened, not how.
@@ -203,6 +204,11 @@ sealed class PlaySession(PlayOptions options)
         }
         foreach (var problem in plan["problems"] as JsonArray ?? []) Say("Mod not loaded: " + (string?)problem);
 
+        // The player's mods are held read-only so nothing the game runs can change or plant a mod.
+        var (modsHeld, snapshot) = HoldModFiles();
+        modSnapshot = snapshot;
+        result["modsHeld"] = modsHeld;
+
         // Every game file (the build's, and everything in data/: staged mods and the player's own patches) is held
         // read-only for the session, then verified against the supported build while data/settings.ini is pointed at
         // this profile's user data inside the installation. Other files in the copy are the player's (ReShade's settings,
@@ -280,6 +286,81 @@ sealed class PlaySession(PlayOptions options)
             held++;
         }
         return held;
+    }
+
+    // The player's installed mods are held read-only for the session: the game cannot modify a mod that loads as the
+    // player's own next time. At cleanup, any files the game planted in the folder (new entries that bypassed the hold)
+    // are caught and the new mod folders disabled until the player reviews them.
+    (int Held, HashSet<string> Snapshot) HoldModFiles()
+    {
+        var modsRoot = install.Mods;
+        if (!Directory.Exists(modsRoot)) return (0, []);
+        var snapshot = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var held = 0;
+        foreach (var file in Directory.EnumerateFiles(modsRoot, "*", SearchOption.AllDirectories))
+        {
+            var full = Path.GetFullPath(file);
+            snapshot.Add(full);
+            Tools.NoLinks(full);
+            try { locks.Add(new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read)); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                throw new SessionFailure($"Mod file {Path.GetRelativePath(modsRoot, full)} could not be held read-only for the session ({error.Message}). Close what has it open and start again.");
+            }
+            held++;
+        }
+        foreach (var dir in Directory.EnumerateDirectories(modsRoot, "*", SearchOption.AllDirectories))
+            snapshot.Add(Path.GetFullPath(dir));
+        return (held, snapshot);
+    }
+
+    // After the session: any new file or folder in mods/ that was not in the snapshot is a planted mod. New top-level
+    // mod folders are disabled so they will not load until the player reviews them in the Mods page.
+    JsonObject? CheckPlantedMods()
+    {
+        if (modSnapshot == null || !Directory.Exists(install.Mods)) return null;
+        var planted = new List<string>();
+        var disabledIds = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(install.Mods, "*", SearchOption.AllDirectories))
+        {
+            var full = Path.GetFullPath(file);
+            if (!modSnapshot.Contains(full)) planted.Add(Path.GetRelativePath(install.Mods, full));
+        }
+        foreach (var dir in Directory.EnumerateDirectories(install.Mods, "*", SearchOption.AllDirectories))
+        {
+            var full = Path.GetFullPath(dir);
+            if (!modSnapshot.Contains(full)) planted.Add(Path.GetRelativePath(install.Mods, full) + Path.DirectorySeparatorChar);
+        }
+        if (planted.Count == 0) return null;
+        // Disable any new top-level mod folder (a folder directly under mods/ that was not there at session start).
+        foreach (var dir in Directory.GetDirectories(install.Mods))
+        {
+            var full = Path.GetFullPath(dir);
+            if (modSnapshot.Contains(full)) continue;
+            try
+            {
+                var (mods, _) = ModCatalog.Load(install.Mods);
+                var mod = mods.FirstOrDefault(m => string.Equals(Path.GetFullPath(m.Folder).TrimEnd('\\', '/'),
+                    full.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
+                if (mod != null && mod.Enabled)
+                {
+                    ModSettings.SetEnabled(install.Mods, mod.Id, false);
+                    disabledIds.Add(mod.Id);
+                }
+            }
+            catch (Exception error) when (error is IOException or JsonException or InvalidDataException)
+            {
+                Say("Could not disable planted mod folder " + Path.GetFileName(dir) + ": " + error.Message);
+            }
+        }
+        var report = new JsonObject
+        {
+            ["plantedFiles"] = planted.Count,
+            ["files"] = new JsonArray([.. planted.Take(50).Select(f => (JsonNode?)f)]),
+            ["disabledMods"] = new JsonArray([.. disabledIds.Select(id => (JsonNode?)id)])
+        };
+        Say($"WARNING: {planted.Count} file(s) appeared in the mods folder during the session. {disabledIds.Count} new mod(s) disabled until you review them.");
+        return report;
     }
 
     // Network block (the readable scripts in app/scripts): $HellForgeInstallRoot names the installation's rule group.
@@ -889,6 +970,11 @@ sealed class PlaySession(PlayOptions options)
                     result["installedDllUnchanged"] = Tools.Sha256(Path.Combine(normal, "data", "game", "game.dll")) == (string?)result["installedDllSha256"];
                 }
             });
+        Try("plantedModsError", () =>
+        {
+            var planted = CheckPlantedMods();
+            if (planted != null) result["plantedMods"] = planted;
+        });
         lease?.Dispose();
         result["completedUtc"] = DateTime.UtcNow.ToString("o");
         Save();
