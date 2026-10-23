@@ -40,15 +40,46 @@ static void ShotsFixture(void)
     assert(ShotType(334, mine) == 334);     /* this machine's player's own: the game's choice */
     assert(ShotType(263, theirs) == 263);   /* not the weapon's normal round (a mode's): left alone */
     assert(ShotType(334, turret) == 334);   /* no player's: left alone */
+    assert(g_shotUnowned == (LONG64)liberator && g_shotUnownedWielder == 999); /* and noted for the log */
     assert(ShotType(330, theirTwo) == 263);
     /* this machine swapped the Liberator to 142 itself: a friend without a swap fires the Liberator's own round here */
     snprintf(rules, sizeof rules, "%llx:%llx=263", (unsigned long long)F, (unsigned long long)onetwo);
     assert(ShotsSetRules(rules, &why));
     g_shotRules[0].ready = 1; g_shotRules[0].native = 330;
-    ShotsNoteLocal(liberator, 334, 142);
+    ShotsNoteLocal(liberator, SHOT_NORMAL, 334, 142);
     assert(ShotType(142, theirs) == 334 && ShotType(142, mine) == 142);
-    ShotsNoteLocal(liberator, 142, 150); /* changed again: its base stays the first */
+    ShotsNoteLocal(liberator, SHOT_NORMAL, 142, 150); /* changed again: its base stays the first */
     assert(g_shotLocalCount == 1 && g_shotLocal[0].base == 334 && g_shotLocal[0].now == 150 && ShotType(150, theirs) == 334);
+
+    /* a round from the ammunition (stock 276, "/276"): a magazine chambers this machine's type, so a friend's copy fires
+     * this machine's swap unless told; this machine's own swap is its own rule (the loader does not tie the delta to the
+     * weapon) */
+    g_shotLocalCount = 0;
+    snprintf(rules, sizeof rules, "%llx:%llx=142/276,%llx:%llx=150/276", (unsigned long long)F, (unsigned long long)liberator, (unsigned long long)L,
+        (unsigned long long)liberator);
+    assert(ShotsSetRules(rules, &why) && g_shotRules[0].stock == 276 && g_shotRules[0].native == 276 && !g_shotRules[0].rounds);
+    g_shotRules[0].ready = g_shotRules[1].ready = 1;
+    assert(ShotType(150, theirs) == 142 && ShotType(276, theirs) == 142); /* the friend's swap, over this machine's or the stock */
+    assert(ShotType(150, mine) == 150 && ShotType(99, theirs) == 99);    /* mine; another ammunition's type left alone */
+    snprintf(rules, sizeof rules, "%llx:%llx=150/276", (unsigned long long)L, (unsigned long long)liberator);
+    assert(ShotsSetRules(rules, &why));
+    g_shotRules[0].ready = 1;
+    assert(ShotType(150, theirs) == 276 && ShotType(150, mine) == 150);  /* a friend without one: the stock round */
+    /* a rounds feed's ("/r": WeaponRounds +64 is its normal round); malformed suffixes refused */
+    assert(ShotsSetRules("1:2=142/r", &why) && g_shotRules[0].rounds && g_shotRules[0].stock == 0);
+    assert(!ShotsSetRules("1:2=142/", &why) && !ShotsSetRules("1:2=142/0", &why) && !ShotsSetRules("1:2=142/rx", &why));
+    /* a programmable round's ("/f": ProjectileWeapon +0x240, only while its function is on): its own slot, apart from the
+     * normal round's; no programmable round keeps the shot's type */
+    g_shotLocalCount = 0;
+    snprintf(rules, sizeof rules, "%llx:%llx=142/f", (unsigned long long)F, (unsigned long long)liberator);
+    assert(ShotsSetRules(rules, &why) && g_shotRules[0].slot == SHOT_FUNCTION && !g_shotRules[0].rounds && !g_shotRules[0].stock);
+    g_shotRules[0].ready = 1; g_shotRules[0].native = 36;
+    assert(ShotFunctionType(36, theirs) == 142 && ShotFunctionType(36, mine) == 36 && ShotFunctionType(0, theirs) == 0);
+    assert(ShotType(36, theirs) == 36);                                   /* not the normal round's rule */
+    ShotsNoteLocal(liberator, SHOT_FUNCTION, 36, 150);                    /* this machine's own programmable swap */
+    assert(g_shotLocalCount == 1 && ShotFunctionType(150, mine) == 150 && ShotFunctionType(150, theirs) == 142 && ShotType(150, theirs) == 150);
+    assert(ShotsSlotOf("ProjectileWeaponComponentData", 576) == SHOT_FUNCTION && ShotsSlotOf("ProjectileWeaponComponentData", 0) == SHOT_NORMAL &&
+        ShotsSlotOf("WeaponRoundsComponentData", 64) == SHOT_NORMAL && ShotsSlotOf("WeaponRoundsComponentData", 68) < 0);
 
     assert(ShotsSetRules("-", &why));
     g_shotLocalCount = 0; g_shotPlayerCount = 0;

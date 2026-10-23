@@ -130,10 +130,23 @@ static class AssetShareTests
         var network = new InMemoryNetwork();
         var log = new ConcurrentQueue<string>();
         await using var host = new Machine(network, HostId, root, "host", P1, log);
-        // the first joiner swapped the One-Two's round to the Scorcher's (projectile 142) in its editor
-        const string swap = """{"format":1,"weapons":{"AR/GL-21 One-Two":{"attack.primary.projectile":142}}}""";
-        check(AssetShare.Swaps(swap) == "a955c4ea6f6d4203=142" && AssetShare.Swaps(null) == "-",
+        // the first joiner swapped the One-Two's and the Liberator's rounds to the Scorcher's (projectile 142) in its editor;
+        // the Liberator's round comes from its ammunition (an entity delta of its ammunition's: stock 276), and the swap
+        // counts for the weapon (0x968211C0033DCE64), with its stock round
+        const string swap = """{"format":1,"weapons":{"AR/GL-21 One-Two":{"attack.primary.projectile":142},"AR-23 Liberator":{"ammunition.projectile":142}}}""";
+        check(AssetShare.Swaps(swap) == "968211c0033dce64=142/276,a955c4ea6f6d4203=142" && AssetShare.Swaps(null) == "-",
             "A player's projectile swaps from their Local Stats: " + AssetShare.Swaps(swap));
+        // a rounds feed's (the Double Freedom: WeaponRounds +64): the loader reads that weapon's normal round there ("/r")
+        const string feed = """{"format":1,"weapons":{"DBS-2 Double Freedom":{"attack.feed_primary.projectile":142}}}""";
+        check(AssetShare.Swaps(feed) == "72170a55a1f37ff1=142/r", "A rounds feed's projectile swap: " + AssetShare.Swaps(feed));
+        // the One-Two's grenade launcher is a weapon of its own (0x02CD7321CD8445F5), fed by rounds
+        const string grenade = """{"format":1,"weapons":{"AR/GL-21 One-Two / underbarrel":{"attack.feed_primary.projectile":142}}}""";
+        check(AssetShare.Swaps(grenade) == "2cd7321cd8445f5=142/r", "An underbarrel's projectile swap: " + AssetShare.Swaps(grenade));
+        // a programmable round (the W.A.S.P.'s, ProjectileWeapon +0x240) is a swap of its own beside the weapon's normal one
+        const string function = """{"format":1,"weapons":{"StA-X3 W.A.S.P. Launcher":{"attack.primary.projectile":142,"function_ammo.projectile":150}}}""";
+        var functions = AssetShare.Swaps(function);
+        check(functions.Split(',') is [var normal, var programmable] && normal.EndsWith("=142", StringComparison.Ordinal) &&
+            programmable == normal[..normal.IndexOf('=')] + "=150/f", "A programmable round's projectile swap: " + functions);
         await using var first = new Machine(network, FirstId, root, "first", P2, log, swap);
         await using var second = new Machine(network, SecondId, root, "second", "-", log);
 
@@ -154,7 +167,8 @@ static class AssetShareTests
         check(firstLoads == P1, "Joined: the first joiner's game loads the host's package, not its own: " + firstLoads);
         check(secondLoads == P1 + "," + P2, "Joined: the second joiner's game loads both: " + secondLoads);
         // ... and every game is told the first joiner's swap, by its peer: its copies of their shots fire it
-        var rule = FirstId.ToString("x", System.Globalization.CultureInfo.InvariantCulture) + ":a955c4ea6f6d4203=142";
+        var first16 = FirstId.ToString("x", System.Globalization.CultureInfo.InvariantCulture);
+        var rule = first16 + ":968211c0033dce64=142/276," + first16 + ":a955c4ea6f6d4203=142";
         var hostShots = host.Game.WaitForShots(rule);
         var secondShots = second.Game.WaitForShots(rule);
         check(hostShots == rule && secondShots == rule, "Joined: the first joiner's projectile swap reaches the others' games: " + hostShots + " | " + secondShots);

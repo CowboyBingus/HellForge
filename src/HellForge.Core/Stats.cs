@@ -48,6 +48,13 @@ public sealed record StatsTarget(Dictionary<string, StatsField> Fields, Dictiona
 public sealed record StatsSchema(int Format, string Build, string GameDllSha256, Dictionary<string, Dictionary<string, StatsTarget>> Targets)
 {
     public Dictionary<string, Dictionary<string, string>> TargetAliases { get; init; } = [];
+    // Where each weapon's projectile swap is written, by its edit's site (SwapSite): the weapon whose shots it
+    // changes and how the loader finds that weapon's normal round in co-op (native/mod-loader/shots.c): "" its
+    // ProjectileWeapon +0, "/r" its WeaponRounds +64, "/<type>" its ammunition's stock projectile, "/f" its programmable
+    // round (ProjectileWeapon +0x240, while its function is on).
+    [System.Text.Json.Serialization.JsonIgnore] public Dictionary<string, (ulong Weapon, string Native)> ProjectileSwaps { get; } = new(StringComparer.Ordinal);
+    public static string SwapSite(string kind, string component, ulong resource, int offset) =>
+        $"{kind}:{component}:{resource:X16}:{offset.ToString(CultureInfo.InvariantCulture)}";
     // Every field the loader observes for the editor. A snapshot is pinned to this set, not to editor metadata.
     static readonly Lazy<string[]> ObservedKeys = new(() => Current.Targets.Values.SelectMany(t => t.Values).SelectMany(t => t.Fields.Values)
         .Select(f => f.AddressKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray());
@@ -93,29 +100,51 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
                     target.Blocked.Remove(key);
                     if (!fields.ContainsKey(key)) fields[key] = field;
                 }
-                // The projectile it fires.
-                if (category == "weapons" && hosts.TryGetProperty(name, out var host))
+                // The projectile it fires. An underbarrel of rounds (the One-Two's and the Arbitrator's: ProjectileWeapon and
+                // WeaponRounds, no magazine or heat) fires WeaponRounds +64: the type resolver (game.dll 0x7456D0) takes
+                // +0x40 for a weapon whose flags have bit 8, as a live SG-8 Punisher's do (decoded snapshot of this build).
+                var underbarrel = category == "weapons" && target.Slot == "underbarrel" &&
+                    fields.Values.Any(f => f.Component == "WeaponRoundsComponentData") && !fields.Values.Any(f => f.Component is "WeaponMagazineComponentData" or "WeaponHeatComponentData");
+                var mechanism = category != "weapons" ? null : hosts.TryGetProperty(name, out var host) ? host.GetProperty("mechanism").GetString() : underbarrel ? "rounds" : null;
+                if (mechanism != null)
                 {
-                    var mechanism = host.GetProperty("mechanism").GetString();
                     var weapon = fields.Values.Where(f => f.Kind == "component" && f.Component == "ProjectileWeaponComponentData").OrderBy(f => f.Order).FirstOrDefault();
                     var order = fields.Values.Where(f => f.Kind == "ProjectileSettings").Select(f => f.Order).DefaultIfEmpty(0).Min() - 1;
+                    string? swap = null, native = null;
                     if (mechanism == "ammunition" && ammunition.TryGetValue(name, out var a))
-                        Add("ammunition.projectile", new StatsField("Projectile", "EntityDelta", $"{a.GetProperty("component").GetInt32()}:0",
+                    {
+                        Add(swap = "ammunition.projectile", new StatsField("Projectile", "EntityDelta", $"{a.GetProperty("component").GetInt32()}:0",
                             a.GetProperty("resource").GetString()!, a.GetProperty("record").GetInt64(), a.GetProperty("offset").GetInt32(), "u32",
                             null, null, null, true, true) { Order = order });
+                        native = "/" + a.GetProperty("projectile").GetInt32().ToString(CultureInfo.InvariantCulture);
+                    }
                     else if (mechanism == "rounds" && fields.Values.Where(f => f.Kind == "component" && f.Component == "WeaponRoundsComponentData")
                                  .OrderBy(f => f.Order).FirstOrDefault() is { } rounds)
-                        Add("attack.feed_primary.projectile", new StatsField("Projectile", "component", rounds.Component, rounds.Resource, rounds.Record, 64, "u32",
+                    {
+                        Add(swap = "attack.feed_primary.projectile", new StatsField("Projectile", "component", rounds.Component, rounds.Resource, rounds.Record, 64, "u32",
                             null, null, null, rounds.Shared, true) { Order = order });
+                        native = "/r";
+                    }
                     else if (mechanism == "component" && weapon != null)
-                        Add("attack.primary.projectile", new StatsField("Projectile", "component", weapon.Component, weapon.Resource, weapon.Record, 0, "u32",
+                    {
+                        Add(swap = "attack.primary.projectile", new StatsField("Projectile", "component", weapon.Component, weapon.Resource, weapon.Record, 0, "u32",
                             null, null, null, weapon.Shared, true) { Order = order });
+                        native = "";
+                    }
+                    // the weapon firing it, by its own resource (the shot's source); an ammunition's swap counts for the
+                    // weapon it belongs to
+                    if (swap != null && native != null && fields[swap] is var site && (weapon?.Resource ?? (native == "/r" ? site.Resource : null)) is { } fires)
+                        schema.ProjectileSwaps[SwapSite(site.Kind, site.Component, Convert.ToUInt64(site.Resource[2..], 16), site.Offset)] = (Convert.ToUInt64(fires[2..], 16), native);
                 }
                 // The projectile its programmable ammunition fires (ProjectileWeapon +576), where it has one of its own.
                 if (category == "weapons" && programmable.TryGetProperty(name, out _) &&
                     fields.Values.Where(f => f.Kind == "component" && f.Component == "ProjectileWeaponComponentData").OrderBy(f => f.Order).FirstOrDefault() is { } fed)
+                {
                     Add("function_ammo.projectile", new StatsField("Programmable ammo projectile", "component", fed.Component, fed.Resource, fed.Record, 576, "u32",
                         null, null, null, fed.Shared, true) { Order = fields.Values.Where(f => f.Kind == "ProjectileSettings").Select(f => f.Order).DefaultIfEmpty(0).Min() - 1 });
+                    var site = fields["function_ammo.projectile"];
+                    schema.ProjectileSwaps[SwapSite(site.Kind, site.Component, Convert.ToUInt64(site.Resource[2..], 16), site.Offset)] = (Convert.ToUInt64(fed.Resource[2..], 16), "/f");
+                }
                 // Projectiles and damage types by id are their own rows.
                 if (category == "projectiles" && long.TryParse(name, NumberStyles.None, CultureInfo.InvariantCulture, out var type))
                 {

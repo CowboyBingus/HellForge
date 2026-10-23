@@ -80,16 +80,23 @@ public sealed class AssetShare : IAsyncDisposable
         return text.Length == 0 ? "-" : text;
     }
 
-    // A player's projectile swaps from their Local Stats file: "<weapon resource hex>=<type>" comma separated, "-" none.
+    // A player's projectile swaps from their Local Stats file: "<weapon resource hex>=<type>[/r|/f|/<type>]" comma
+    // separated, "-" none. The weapon is the one whose shots it changes (an ammunition's swap: the weapon it belongs to),
+    // and the suffix tells the loader where that weapon's round is (StatsSchema.ProjectileSwaps); a programmable
+    // round ("/f") is a swap of its own beside the weapon's normal one.
     public static string Swaps(string? stats)
     {
         if (string.IsNullOrWhiteSpace(stats)) return "-";
         try
         {
+            var sites = StatsSchema.Current.ProjectileSwaps;
             var swaps = StatsData.Parse(stats, EntityProfile.Current)
-                .Where(e => e is { Kind: "component", Component: "ProjectileWeaponComponentData", Offset: 0, Own: false } && e.Value != 0)
-                .GroupBy(e => e.Resource).Select(g => g.Last()).OrderBy(e => e.Resource)
-                .Select(e => e.Resource.ToString("x", System.Globalization.CultureInfo.InvariantCulture) + "=" + e.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Where(e => !e.Own && e.Value != 0 && e.Value <= 0xFFFF)
+                .Select(e => (Edit: e, Found: sites.TryGetValue(StatsSchema.SwapSite(e.Kind, e.Component, e.Resource, e.Offset), out var site), Site: site))
+                .Where(s => s.Found)
+                .GroupBy(s => (s.Site.Weapon, Function: s.Site.Native == "/f")).Select(g => g.Last()).OrderBy(s => s.Site.Weapon).ThenBy(s => s.Site.Native == "/f")
+                .Select(s => s.Site.Weapon.ToString("x", System.Globalization.CultureInfo.InvariantCulture) + "=" +
+                    s.Edit.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + s.Site.Native)
                 .Take(MaxPerPlayer);
             var text = string.Join(',', swaps);
             return text.Length == 0 ? "-" : text;
@@ -97,9 +104,10 @@ public sealed class AssetShare : IAsyncDisposable
         catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException) { return "-"; }
     }
 
-    // Whether a swaps list is well formed: "-", or "<hex>=<type>" ("<hex>:<hex>=<type>" with peers) comma separated, at most max.
+    // Whether a swaps list is well formed: "-", or "<hex>=<type>[/r|/f|/<type>]" ("<hex>:<hex>=..." with peers) comma
+    // separated, at most max.
     static bool WellFormed(string list, bool peers, int max) => list == "-" || list.Split(',') is var parts && parts.Length <= max &&
-        parts.All(p => System.Text.RegularExpressions.Regex.IsMatch(p, peers ? "^[0-9a-f]{1,16}:[0-9a-f]{1,16}=[0-9]{1,5}$" : "^[0-9a-f]{1,16}=[0-9]{1,5}$"));
+        parts.All(p => System.Text.RegularExpressions.Regex.IsMatch(p, (peers ? "^[0-9a-f]{1,16}:" : "^") + "[0-9a-f]{1,16}=[0-9]{1,5}(/r|/f|/[0-9]{1,5})?$"));
 
     // This game's "packages" line: its own packages, which friends' games load.
     void FromGame(string[] parts)

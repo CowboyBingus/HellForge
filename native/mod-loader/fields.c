@@ -608,11 +608,11 @@ static void ApplyEdit(FieldEdit* e)
     }
     if (memcmp(bytes, at, e->field->size) != 0 && ApiWrite((uintptr_t)at, bytes, e->field->size)) { EditFailed(e, "its record could not be written"); return; }
     /* a weapon's projectile changed live (the editor's swap): this machine's own, for co-op's shots (shots.c) */
-    if (!e->table && e->field->offset == 0 && e->field->size == 4 && !strcmp(e->component->component, "ProjectileWeaponComponentData"))
+    if (!e->table && e->field->size == 4 && ShotsSlotOf(e->component->component, e->field->offset) >= 0)
     {
         uint32_t now;
         memcpy(&now, bytes, 4);
-        ShotsNoteLocal(e->entity, was, now);
+        ShotsNoteLocal(e->entity, ShotsSlotOf(e->component->component, e->field->offset), was, now);
     }
     e->failed = 0;
 }
