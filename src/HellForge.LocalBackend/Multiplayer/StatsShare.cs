@@ -27,6 +27,8 @@ public sealed class StatsShare : IAsyncDisposable
     public const string FileName = "hellforge-stats.json";
     public const string ModValuesName = "mod-stats.json", HostModValuesName = "host-mod-stats.json", HostStatsName = "host-stats.json";
     public const string EditorSettingsName = "editor-settings.json", HostMountsName = "host-mounts.json";
+    // What a host's file may unpack to (RecordGuard.HostFileLimits).
+    const int HostFileBytes = 1 << 20;
     readonly IPeerTransport transport;
     readonly LobbyService lobby;
     readonly string statsFile, modValuesFile, hostModValuesFile, hostStatsFile, editorSettingsFile, hostMountsFile;
@@ -216,6 +218,13 @@ public sealed class StatsShare : IAsyncDisposable
         {
             try
             {
+                // The in-game editor parses these natively: only a JSON object within RecordGuard's limits, written out
+                // by System.Text.Json, reaches it.
+                if (text is { Length: > 0 })
+                {
+                    text = Canonical(text);
+                    if (text == null) log($"Stats: the host's {what} is not a file the editor reads; it is left out.");
+                }
                 if (text == null) { if (File.Exists(path)) File.Delete(path); return; }
                 if (!Directory.Exists(Path.GetDirectoryName(path))) return;
                 var partial = path + ".partial";
@@ -224,6 +233,12 @@ public sealed class StatsShare : IAsyncDisposable
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException) { log($"Stats: the host's {what} could not be written: " + error.Message); }
         }
+    }
+
+    static string? Canonical(string text)
+    {
+        try { return System.Text.Json.Nodes.JsonNode.Parse(text) is System.Text.Json.Nodes.JsonObject root && RecordGuard.Bounded(root, RecordGuard.HostFileLimits) is { } kept ? kept.ToJsonString() : null; }
+        catch (System.Text.Json.JsonException) { return null; }
     }
 
     // A friend's backend: the host's stats, or that every player keeps their own, accepted only from the friend whose lobby
@@ -237,9 +252,9 @@ public sealed class StatsShare : IAsyncDisposable
         {
             if (shared)
             {
-                text = StatsSync.Unpack(frame.Bytes(1));
-                mods = frame.Count > 2 ? StatsSync.Unpack(frame.Bytes(2)) : ""; /* a host from before mod content values: none */
-                mounts = frame.Count > 3 ? StatsSync.Unpack(frame.Bytes(3)) : ""; /* a host from before arm swaps: none */
+                text = StatsSync.Unpack(frame.Bytes(1), HostFileBytes);
+                mods = frame.Count > 2 ? StatsSync.Unpack(frame.Bytes(2), HostFileBytes) : ""; /* a host from before mod content values: none */
+                mounts = frame.Count > 3 ? StatsSync.Unpack(frame.Bytes(3), HostFileBytes) : ""; /* a host from before arm swaps: none */
             }
         }
         catch (Exception error) when (error is InvalidDataException or IOException) { log("Stats: the host's stats could not be read: " + error.Message); return; }

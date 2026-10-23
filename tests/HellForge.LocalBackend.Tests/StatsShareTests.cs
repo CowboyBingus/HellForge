@@ -141,6 +141,15 @@ static class StatsShareTests
         check(Eventually(() => Read(guestHostMounts) == "{\"M-102 Gunner FRV|mount.slot_0\":4}"), "Joined: the host's arm swaps are beside them: " + Read(guestHostMounts));
         File.WriteAllText(hostModValues, silo.Replace(":2}", ":3}"));
         check(Eventually(() => Read(guestHostValues) == silo.Replace(":2}", ":3}")), "The host's change of a mod content value arrives.");
+        // A host's file the editor's native reader should not see: nesting past the limits is left out, text that is not
+        // JSON reaches no file at all; then the real values come back.
+        File.WriteAllText(hostModValues, "{\"format\":1,\"deep\":" + string.Concat(Enumerable.Repeat("{\"n\":", 20)) + "1" + new string('}', 20) + "}");
+        check(Eventually(() => Read(guestHostValues) is { } cut && cut.StartsWith("{\"format\":1,", StringComparison.Ordinal) &&
+            cut.Split("{\"n\"").Length - 1 < 6), "Nesting past the limits is cut: " + Read(guestHostValues));
+        File.WriteAllText(hostModValues, "{\"format\":1,");
+        check(Eventually(() => !File.Exists(guestHostValues)), "A host's file that is not JSON reaches no file.");
+        File.WriteAllText(hostModValues, silo.Replace(":2}", ":3}"));
+        check(Eventually(() => Read(guestHostValues) == silo.Replace(":2}", ":3}")), "The host's values come back.");
 
         // The host applies a change: it reaches the joiner's game.
         File.WriteAllText(hostFile, Stats("\"AR-23 Liberator\":{\"weapon.fire_rate\":1000}"));
