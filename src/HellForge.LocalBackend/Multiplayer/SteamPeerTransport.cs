@@ -103,7 +103,7 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
             var requestPresence = (delegate* unmanaged[Cdecl]<nint, ulong, void>)E("SteamAPI_ISteamFriends_RequestFriendRichPresence");
             var friendPresence = (delegate* unmanaged[Cdecl]<nint, ulong, byte*, byte*>)E("SteamAPI_ISteamFriends_GetFriendRichPresence");
             var personaName = (delegate* unmanaged[Cdecl]<nint, ulong, byte*>)E("SteamAPI_ISteamFriends_GetFriendPersonaName");
-            Directory.Bind(E, pipe);
+            Directory.Bind(E, pipe, LocalId);
             log("Steam peer link started.");
             started.Set();
 

@@ -638,7 +638,7 @@ public static class ModLoaderPlan
 }
 
 // The Mods page's settings: <installation>/mods/hellforge-mods.json {"format":1,"disabled":[ids],"order":[ids],"packs":{...},
-// "blocked":[ids],"share":true,"showEditedStats":false}. Mods are on by default, so a mod dropped into the folder loads
+// "blocked":[ids],"share":true,"showEditedStats":false,"listPublic":true}. Mods are on by default, so a mod dropped into the folder loads
 // without any setup.
 public static class ModSettings
 {
@@ -652,12 +652,15 @@ public static class ModSettings
     // What the Mods page keeps: mods switched off, the order (top first; the bottom mod loads first, as in the
     // community's managers), and each cosmetic pack's choice. Mod sync (ModSyncPlan): mods whose lobbies the player never
     // wants to see or join (Blocked, by id), and whether joiners may download this player's mods when hosting (Share).
-    // The Galactic Map's public lobbies: whether lobbies whose host plays with edited stats (which joiners take) are shown.
+    // The Galactic Map's public lobbies: whether lobbies whose host plays with edited stats (which joiners take) are shown,
+    // and whether this player's own lobby is listed for other HellForge players while it is Public (ListPublic, on by
+    // default; off, a Public lobby still admits whoever reaches it, but no stranger can find it).
     public sealed record State(HashSet<string> Disabled, List<string> Order, Dictionary<string, CosmeticPacks.Choice> Choices)
     {
         public HashSet<string> Blocked { get; } = new(StringComparer.Ordinal);
         public bool Share { get; set; } = true;
         public bool ShowEditedStats { get; set; }
+        public bool ListPublic { get; set; } = true;
     }
 
     public static State Read(string modsFolder)
@@ -676,6 +679,7 @@ public static class ModSettings
                 foreach (var e in blocked.EnumerateArray()) if (e.ValueKind == JsonValueKind.String) state.Blocked.Add(e.GetString()!);
             if (root.TryGetProperty("share", out var share) && share.ValueKind == JsonValueKind.False) state.Share = false;
             if (root.TryGetProperty("showEditedStats", out var edited) && edited.ValueKind == JsonValueKind.True) state.ShowEditedStats = true;
+            if (root.TryGetProperty("listPublic", out var listed) && listed.ValueKind == JsonValueKind.False) state.ListPublic = false;
             if (root.TryGetProperty("order", out var order) && order.ValueKind == JsonValueKind.Array)
                 foreach (var e in order.EnumerateArray()) if (e.ValueKind == JsonValueKind.String && !state.Order.Contains(e.GetString()!)) state.Order.Add(e.GetString()!);
             if (root.TryGetProperty("packs", out var packs) && packs.ValueKind == JsonValueKind.Object)
@@ -723,6 +727,9 @@ public static class ModSettings
     // The Galactic Map: whether public lobbies whose host plays with edited stats are shown.
     public static void SetShowEditedStats(string modsFolder, bool show) => Change(modsFolder, state => state.ShowEditedStats = show);
 
+    // Hosting: whether this player's Public lobbies are listed on other HellForge players' Galactic Map.
+    public static void SetListPublic(string modsFolder, bool list) => Change(modsFolder, state => state.ListPublic = list);
+
     static void Change(string modsFolder, Action<State> change)
     {
         var state = Read(modsFolder);
@@ -741,7 +748,8 @@ public static class ModSettings
             }))),
             ["blocked"] = new JsonArray([.. state.Blocked.Order(StringComparer.Ordinal).Select(id => (JsonNode?)id)]),
             ["share"] = state.Share,
-            ["showEditedStats"] = state.ShowEditedStats
+            ["showEditedStats"] = state.ShowEditedStats,
+            ["listPublic"] = state.ListPublic
         };
         var text = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n";
         File.WriteAllText(path + ".tmp", text);

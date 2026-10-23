@@ -521,7 +521,7 @@ try
     Console.WriteLine("PASS stats share: a joiner plays with the host's Local Stats (joined, changed, host gone), its live-edit pipe");
     await DirectoryTests.Run(root, Check);
     results.Add(new { mode = "directory", outcome = "passed" });
-    Console.WriteLine("PASS lobby directory: the map's filter, listing values, publishing rules, search and records, edited stats, blocked and unjoinable mods, strangers");
+    Console.WriteLine("PASS lobby directory: the map's filter, listing values, publishing rules, search and records, edited stats, blocked and unjoinable mods, hostile listings, the listing switch, strangers");
     await PrivacyTests.Run(Check);
     results.Add(new { mode = "lobby-privacy", outcome = "passed" });
     Console.WriteLine("PASS lobby privacy: Public, Friends only and Invite only against friends, strangers and invited players; kicks and no rejoin; invitations; frame limits; the stranger gate's limits and memory");

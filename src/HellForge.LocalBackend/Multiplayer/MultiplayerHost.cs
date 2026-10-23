@@ -18,6 +18,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
     readonly Dictionary<ulong, DateTime> lastHeard = [];
     Timer? heartbeat;
     static readonly TimeSpan PeerTimeout = TimeSpan.FromSeconds(15);
+    // The war's time a host may set (war.clock): war 801 began in February 2024, so 20 years is far beyond any real one.
+    public const long MaxWarSeconds = 20L * 365 * 24 * 3600;
 
     public LobbyService Lobby { get; }
     public PartyService Party { get; }
@@ -79,6 +81,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
                 else if (frame.Type.StartsWith("mods.", StringComparison.Ordinal)) Sync?.FromPeer(peer, frame);
                 else if (frame.Type == "war.clock" && warClock != null && Lobby.HostsJoinedLobby(peer) && long.TryParse(frame.Text(0), out var seconds))
                 {
+                    // Any host, a stranger's too, only within a war's possible time: from its start to MaxWarSeconds.
+                    if (seconds is < 0 or > MaxWarSeconds) { Log($"Ignored the host's war time ({seconds} s): out of range."); return; }
                     warClock.Set(seconds);
                     Log($"War time set to the host's ({seconds} s).");
                 }
@@ -105,7 +109,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
         }
         if (host.transport != null && modsFolder != null) host.StartSync(modsFolder, modSetFile, evidenceDirectory);
         directory ??= host.transport != null && directoryFolder != null ? new FolderLobbyDirectory(directoryFolder, host.transport.LocalId) : null;
-        host.StartDirectory(directory ?? (host.transport as SteamPeerTransport)?.Directory);
+        host.StartDirectory(directory ?? (host.transport as SteamPeerTransport)?.Directory, modsFolder);
         // The transport knows this machine's SteamID only once started.
         if (host.transport != null && accountKeys != null) host.keyExchange = new AccountKeyExchange(host.transport, accountKeys, host.Log);
         host.pipes.Start();
@@ -136,11 +140,14 @@ public sealed class MultiplayerHost : IAsyncDisposable
     }
 
     // The lobby directory and the gate for strangers, who reach this machine through it only.
-    void StartDirectory(ILobbyDirectory? directory)
+    // modsFolder: where the Mods page keeps the switch that lists this player's public lobbies (ModSettings.ListPublic; on
+    // without one).
+    void StartDirectory(ILobbyDirectory? directory, string? modsFolder)
     {
         if (transport == null) return;
         if (directory != null && presence != null)
-            Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.Edited == true);
+            Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.Edited == true,
+                listPublic: modsFolder != null ? () => ModSettings.Read(modsFolder).ListPublic : null);
         gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, Log, Lobby.Welcome);
         if (transport is SteamPeerTransport steam) steam.AcceptStranger = peer => Directory?.Listing == true || Related(peer) || Lobby.Welcome(peer);
         Log(Directory != null ? "Directory: public lobbies are listed and searched." : "Directory: off (no lobby directory for this link).");

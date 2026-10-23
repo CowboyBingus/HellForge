@@ -740,13 +740,21 @@ void Found(const Operation& operation, hellforge::FrameReader& reader)
         std::string lobbyId = reader.Text(), connection = reader.Text(), owner = reader.Text();
         long long maxMembers = reader.Int(), members = reader.Int(), locked = reader.Int();
         std::map<std::string, std::string> properties = reader.Properties();
-        if (!reader.ok || properties.size() > PFLobbyMaxSearchPropertyCount) break;
+        if (!reader.ok) break;
+        // A listing the backend should never pass on (more search properties than PlayFab allows, an impossible member
+        // count) is skipped alone: the frame is still read past it, so the listings after it stay.
+        if (properties.size() > PFLobbyMaxSearchPropertyCount || maxMembers < (long long)PFLobbyMaxMemberCountLowerLimit ||
+            maxMembers > (long long)PFLobbyMaxMemberCountUpperLimit || members < 0 || members > maxMembers || lobbyId.empty() || connection.empty())
+        {
+            hellforge::Note("lobby link: skipped a search result with %zu search properties, %lld of %lld members", properties.size(), members, maxMembers);
+            continue;
+        }
         PFLobbySearchResult entry{};
         entry.lobbyId = search->Keep(lobbyId);
         entry.connectionString = search->Keep(connection);
         search->owners.push_back(PFEntityKey{search->Keep(owner), search->Keep("title_player_account")});
         entry.ownerEntity = &search->owners.back();
-        entry.maxMemberCount = (uint32_t)maxMembers;
+        entry.maxMemberCount = (uint32_t)maxMembers; /* both in range: checked above */
         entry.currentMemberCount = (uint32_t)members;
         entry.membershipLock = locked != 0 ? PFLobbyMembershipLock::Locked : PFLobbyMembershipLock::Unlocked;
         search->keys.emplace_back();
