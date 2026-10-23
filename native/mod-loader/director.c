@@ -1,7 +1,7 @@
 /* The enemy spawn director's tables for edits (the HD2R Editor's Spawn Rosters and Spawn Compositions; HD2Runtime 0.40.1
  * domains/enemy_director.lua and enemy_director_writes.lua, docs/enemy-spawns.md). Included by hellforge_modloader.c after
- * difficulty.c, whose kRosters names the five roster descriptors in game.dll's data: {rows, count} at +0, and eight
- * composition families {rows, count} at +0x20 + 0x10 * family.
+ * difficulty.c, whose kRosters names the six roster descriptors in game.dll's data (the editor offers the five the HD2R
+ * Editor does): {rows, count} at +0, and eight composition families {rows, count} at +0x20 + 0x10 * family.
  *
  * Rows by id, as set_live, stats files and the editor name them:
  *   EnemyRoster         (roster << 16) | row: a roster row's ten spawn weights, tech levels 1 to 10 (f32, 40 bytes). The
