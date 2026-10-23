@@ -80,6 +80,11 @@ A failed download says "Could not download the build patch: ... Something on thi
 When a patch fails for any reason, setup shows Steam's own download of the build instead (the steps above). Files it
 already patched are kept, so the copy only needs the rest. Restarting the launcher tries the failed patch again.
 
+Except when the drive is full: setup checks for room before it downloads the patch and again before it patches, and
+says "Not enough free space on D:\: ... more is needed" (or "D:\ ran out of space while patching ...", which older
+versions showed as "hpatchz exit code 24" with advice to validate the game). Free that much on the drive HellForge is
+installed on and press Check again; the files already patched are kept. Steam's download would need the same room.
+
 ### Pausing and interrupted copies
 
 Pause copying stops the copy with "Paused. Start setup again to continue where it stopped." An interrupted copy also

@@ -49,10 +49,7 @@ public static class GameCopier
         var missing = build.Files.Where(file => !File.Exists(locate(file))).Select(file => file.Path).ToList();
         if (missing.Count > 0) throw new InvalidDataException($"{char.ToUpperInvariant(where[0])}{where[1..]} lacks {missing.Count} game files, starting with {missing[0]}; {fix}.");
         Directory.CreateDirectory(destination);
-        long needed = build.Files.Where(file => !Present(Path.Combine(destination, file.Path), file)).Sum(file => file.Size);
-        var drive = new DriveInfo(Path.GetPathRoot(destination)!);
-        if (drive.AvailableFreeSpace < needed + (256L << 20))
-            throw new IOException($"Not enough free space on {drive.Name}: {needed >> 30} GB more are needed.");
+        DiskSpace.Require((destination, build.Files.Where(file => !Present(Path.Combine(destination, file.Path), file)).Sum(file => file.Size)));
 
         long done = 0, total = build.TotalBytes;
         var buffer = new byte[BufferSize];
@@ -97,7 +94,7 @@ public static class GameCopier
     static bool Matches(string path, SupportedFile file) => SupportedBuild.Accepts(path, file);
 
     // The cheap test used to estimate free space: present with the right size.
-    static bool Present(string path, SupportedFile file)
+    internal static bool Present(string path, SupportedFile file)
     {
         var info = new FileInfo(path);
         return info.Exists && (info.Length == file.Size || SupportedBuild.IsReplaceable(file.Path));

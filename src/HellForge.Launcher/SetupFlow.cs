@@ -179,6 +179,12 @@ public partial class MainWindow
                 step = SetupStep.Copy;
                 SetRow(step, null, "Downloading and applying the build patch...", running: true);
                 try { await DownpatchGame(downpatchSource!, install, downpatchPack); }
+                // a full drive: the patch is fine and Steam's download would need the same room, so ask for space; the
+                // files already patched are kept
+                catch (NotEnoughSpaceException error)
+                {
+                    throw new SetupWaiting($"{error.Message} Free some space on that drive, then click Check again: the files already patched are kept.");
+                }
                 // the patch failed (its download, Steam's copy, the pack itself): Steam's own download of the build still
                 // works, and the files already patched are kept (each one has the build's hash), so it copies only the rest
                 catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or HttpRequestException
