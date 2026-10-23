@@ -560,6 +560,9 @@ int main(int argc, char** argv)
                 chain->Present(1, 0);
             }
         };
+        /* the MOD SYNC prompt takes answers a second after it appears or changes state: frames for that long, whatever the
+         * display's rate */
+        auto armed = [&]() { ULONGLONG from = GetTickCount64(); while (GetTickCount64() - from < 1200) frames(1); };
         Key(window, VK_DELETE);
         frames(10);
         int staged = g_resets;
@@ -768,20 +771,20 @@ int main(int argc, char** argv)
         Key(window, VK_ESCAPE); frames(4);
         bool declined = g_syncAnswers[HF_SYNC_DECLINE] == 1;
         g_syncNow.state = HF_SYNC_NONE; frames(40);
-        SyncOffer(HF_SYNC_OFFER, 2, 3u << 20, 0); frames(40);
+        SyncOffer(HF_SYNC_OFFER, 2, 3u << 20, 0); armed();
         Key(window, VK_RETURN); frames(4);
         bool accepted = g_syncAnswers[HF_SYNC_ACCEPT] == 1;
         SyncOffer(HF_SYNC_DOWNLOADING, 2, 3u << 20, 1u << 20); frames(40);
         if (argc > 2 && dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-sync-progress.bmp"); Screenshot(shot, width, height); }
         Key(window, VK_ESCAPE); frames(4); /* hides the window: the download goes on */
         bool kept = g_syncAnswers[HF_SYNC_DECLINE] == 1;
-        SyncOffer(HF_SYNC_READY, 2, 3u << 20, 3u << 20); frames(40);
+        SyncOffer(HF_SYNC_READY, 2, 3u << 20, 3u << 20); armed();
         Key(window, VK_RETURN); frames(4);
         bool restarted = g_syncAnswers[HF_SYNC_RESTART] == 1;
-        SyncOffer(HF_SYNC_OFFER, 3, 3u << 20, 0); frames(40);
+        SyncOffer(HF_SYNC_OFFER, 3, 3u << 20, 0); armed();
         Key(window, 'B'); frames(4);
         bool blocked = g_syncAnswers[HF_SYNC_BLOCK] == 1 && !strcmp(g_syncBlocked, "friend.tanks");
-        SyncOffer(HF_SYNC_BLOCKED, 4, 0, 0); frames(40);
+        SyncOffer(HF_SYNC_BLOCKED, 4, 0, 0); armed();
         Key(window, VK_RETURN); frames(4);
         bool acknowledged = g_syncAnswers[HF_SYNC_DECLINE] == 2;
         g_syncNow.state = HF_SYNC_NONE; frames(40);
