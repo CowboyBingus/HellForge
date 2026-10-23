@@ -1,11 +1,12 @@
-# Friends-only co-op
+# Co-op and public lobbies
 
-This page explains how HellForge's co-op with Steam friends works: first for players, then for contributors working on
-it. The second half is the research and build log from October 2026, kept as history.
+This page explains how HellForge's co-op works: first for players, then for contributors working on it. The second half
+is the research and build log from October 2026, kept as history.
 
-Friends, each running HellForge with their own local backend, play together through the game's own social menu and
-join flow. There is no port forwarding and no central HellForge server. The copied game never reaches PlayFab,
-Arrowhead's services or vanilla players' sessions.
+Players, each running HellForge with their own local backend, play together through the game's own social menu, join
+flow and Galactic Map. Friends find each other through Steam presence; public lobbies are listed on Steam's lobby
+service, never on Arrowhead's. There is no port forwarding and no central HellForge server. The copied game never
+reaches PlayFab, Arrowhead's services or vanilla players' sessions.
 
 ## How co-op works for players
 
@@ -14,7 +15,9 @@ Arrowhead's services or vanilla players' sessions.
    console still calls them experimental.)
 2. Compare modlist codes. Friends need the same gameplay mods, in the same versions with the same files; the order is
    up to each player, and cosmetic mods, packs and Lua mods are each player's own. The Mods page shows the code.
-   [mods.md](mods.md#playing-with-friends) describes what each player sees when a join is refused.
+   [mods.md](mods.md#playing-with-friends) describes what each player sees when a join is refused. When the host shares
+   their mods, the joiner can download them and restart with them instead
+   ([mods.md](mods.md#playing-with-other-mods)).
 3. Start a session. In the game's social menu, the friends list shows Steam friends who are playing HELLDIVERS 2 with
    HellForge running, and you join their game from there. Steam sign-in, Steam friends and Steam lobbies are the real
    ones.
@@ -22,6 +25,9 @@ Arrowhead's services or vanilla players' sessions.
    in-game editor turns grey and read-only, with "READ-ONLY · HOST: <name>" in its header. The host's shows "HOSTING ·
    FRIENDS PLAY WITH YOUR STATS".
 5. When the host leaves, the lobby closes for everyone, as HD2's host ends the session. Your own stats come back.
+6. A Public lobby is listed for other HellForge players, who see it on the Galactic Map and can join it from there. It
+   shows its players' names and the host's Steam account id. Lobbies a player could not join (a blocked mod, mods to
+   install by hand, or a host who plays with edited stats unless shown) are left off their map.
 
 Each session's logs hold `backend/multiplayer.log` (the backend's side of co-op) and `coop-diagnostics.log` (what this
 machine's game saw of mod content). Collect both players' logs (launcher Console > "Save logs to Desktop") for a bug
@@ -126,6 +132,30 @@ still interoperate.
 
 Once a join is accepted, the host sends `war.clock`, and the joiner's backend adopts the host's war time.
 
+### Mod sync
+
+A joiner refused for different gameplay mods can take the host's (protocol `hellforge-mp-7`). Before the refusal the
+host sends its mod set (`mods.offer`); the joiner's backend plans the difference (`ModSyncPlan` in HellForge.Core) and
+the in-game editor shows the MOD SYNC prompt (SDK 14 `sync_state`, `sync_mod`, `sync_answer`). On accept the joiner
+downloads each mod's counted files from the host over the Steam link (`mods.files`, `mods.get`, paced to 1 MiB/s per
+machine), checks every file and the whole mod (`SyncedStore.Install`), keeps it in `mods/.synced/<id>@<hash>/`, and the
+launcher restarts the session with the host's mods (`--mod-sync`). Each mod's class comes from the bytes received:
+content downloads from any host, code only when `data/verified-mods.json` names its exact content hash, bundled mods
+never. The host side is `src/HellForge.LocalBackend/Multiplayer/ModSync.cs`; the protocol and limits are in
+[Step 6](#step-6-mod-sync-a-joiner-takes-the-hosts-mods-2026-10-22) below.
+
+### Public lobbies (the lobby directory)
+
+Each backend lists the public lobby its game hosts as an Invisible Steam lobby of the game's app, held beside the game's
+own (`Multiplayer/SteamLobbyDirectory.cs`, `LobbyDirectory.cs`, `DirectoryService.cs`). Its data carries the lobby's
+PlayFab search properties, its record with every account id but the host's at 0, its mod set and whether the host plays
+with edited stats. The lobby stand-in sends the game's `PFMultiplayerFindLobbies` to the backend (`lobby.find`), which
+searches the directory and evaluates the game's filter, drops lobbies the player could not join, and answers
+`lobby.found`. The map's records come from the listings (`POST /lobby/accounts`). The Steam link accepts someone who is
+not a Steam friend only while it deals with them (`StrangerGate.cs`): while a lobby is listed, a member or host of a
+lobby here, or a mod download. `HELLFORGE_TEST_STRANGERS=1` makes a backend treat friends as strangers, for testing
+with two friends' PCs. Details and open questions: [Step 7](#step-7-public-lobbies-on-the-galactic-map-2026-10-22).
+
 ### The join gate
 
 The host's join gate in the game (game.dll 0x108BC70) still applies its privacy rules and compares the game and
@@ -174,7 +204,8 @@ Everyone in a session plays with the host's Local Stats. The design is in [sdk-r
   values come back (`set`, or `reset` where it had none).
 - Not synced: a stats mod's own records (`"own"`), and armor perks, which are solo only (with more than one player,
   everyone gets the armor's own).
-- Trust: joiners take the host's values. That is fine for friends-only co-op.
+- Trust: joiners take the host's values. Between friends that is fine; a public lobby whose host plays with edited
+  stats is hidden from other players' maps unless they choose to show such lobbies.
 
 ### When the host leaves
 
@@ -211,12 +242,15 @@ one HellForge runs (25480438) use Easy Anti-Cheat instead.
 
 ### Tests
 
-`tests/HellForge.LocalBackend.Tests` holds the multiplayer and stats sharing checks (`MultiplayerTests.cs`,
-`StatsShareTests.cs`). `HellForge.SdkShimGen smoke-lobby-link` runs two backend processes over loopback UDP and two
-copies of each stand-in through the PlayFab C APIs: create, join, member data, Party connect, endpoints, a 1,200-byte
-message and a broadcast, and leaving.
+`tests/HellForge.LocalBackend.Tests` holds the multiplayer, stats sharing, mod sync and directory checks
+(`MultiplayerTests.cs`, `StatsShareTests.cs`, `ModSyncTests.cs`, `DirectoryTests.cs`); `tests/HellForge.Tests` has
+Core's mod sync checks (`ModSyncTests.cs`). `HellForge.SdkShimGen smoke-lobby-link` runs two backend processes over
+loopback UDP and two copies of each stand-in through the PlayFab C APIs: create, join, member data, Party connect,
+endpoints, a 1,200-byte message and a broadcast, and leaving. `HellForge.SdkShimGen smoke-lobby-search` runs two
+backends sharing a folder directory and two lobby stand-ins, as friends and again as strangers: the friend's search
+finds the host's lobby, joins it, and stops finding it after the host leaves.
 
-## History: research and build log (2026-10-14 to 2026-10-21)
+## History: research and build log (2026-10-14 to 2026-10-22)
 
 This section is the record of how co-op was researched and built. It describes the game and HellForge as they were at
 each date, and some of it is out of date: where it differs from the sections above, the sections above describe the
