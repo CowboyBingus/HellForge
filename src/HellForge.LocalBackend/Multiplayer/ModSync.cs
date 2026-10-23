@@ -32,8 +32,16 @@ public sealed class ModSync : IAsyncDisposable
 {
     // PageFiles: a file list page's files (3 fields each, paths of at most 240 characters) stay within a frame's 4096
     // fields and 1 MiB.
-    public const int ChunkBytes = 128 << 10, Window = 4, QueuedPerPeer = 8, PageFiles = 1000;
-    public const long PeerRate = 1 << 20, TotalRate = 2 << 20;
+    // Speed (docs/multiplayer.md "Mod sync speed"): a joiner keeps Window chunks asked for at first, then as many as come
+    // back without queueing (DownloadWindow: MinWindow to MaxWindow, TargetDelay), across files. A host queues at most
+    // QueuedPerPeer requests a machine (MaxWindow and room for a file list; 0.3.0-beta hosts queued 8) and paces its
+    // upload to PeerRate a machine and TotalRate in all: caps against abuse, at the Steam link's own send rate
+    // (SteamPeerTransport.SendRate).
+    public const int ChunkBytes = 128 << 10, Window = 4, MinWindow = 2, MaxWindow = 16, QueuedPerPeer = MaxWindow + 8, PageFiles = 1000;
+    public const long PeerRate = 8L << 20, TotalRate = 16L << 20;
+    public static readonly TimeSpan TargetDelay = TimeSpan.FromMilliseconds(100), PaceBurst = TimeSpan.FromMilliseconds(40);
+    // A host's refusal for more requests than it queues (the joiner then asks for fewer).
+    const string TooMany = "too many requests at once";
     // Free space a download leaves on the drive besides its own bytes.
     public const long SpareDisk = 256L << 20;
     public static readonly TimeSpan GrantTime = TimeSpan.FromMinutes(10), RequestTimeout = TimeSpan.FromSeconds(30);
@@ -127,7 +135,7 @@ public sealed class ModSync : IAsyncDisposable
     long totalNext;
 
     // What one grant may download: the whole set twice (a retry after a failed check), and a little over.
-    long GrantBudget => 2 * (own?.Mods.Sum(m => m.Bytes) ?? 0) + Window * ChunkBytes;
+    long GrantBudget => 2 * (own?.Mods.Sum(m => m.Bytes) ?? 0) + MaxWindow * ChunkBytes;
 
     // A joiner with other gameplay mods is about to be refused (LobbyService.ModsRefused): this session's mod set goes to
     // them first, and they may download it for GrantTime. True when they may (this player shares, and the set is known).
@@ -193,7 +201,7 @@ public sealed class ModSync : IAsyncDisposable
         lock (gate)
         {
             var count = queued.GetValueOrDefault(peer);
-            if (count >= QueuedPerPeer) { Send(peer, Refused(frame, "too many requests at once")); return; }
+            if (count >= QueuedPerPeer) { Send(peer, Refused(frame, TooMany)); return; }
             queued[peer] = count + 1;
         }
         if (!requests.Writer.TryWrite((peer, frame))) lock (gate) queued[peer]--;
@@ -229,13 +237,17 @@ public sealed class ModSync : IAsyncDisposable
         Send(peer, reply);
     }
 
-    // Waits until both this joiner's and the total budget allow length more bytes.
+    // Waits until both this joiner's and the total budget allow length more bytes. Each budget is a clock of when its
+    // bytes so far are spent, which may lag the time by up to PaceBurst: a wait that overshoots (a timer's tick, 15.6 ms
+    // on Windows, longer than a 128 KiB chunk takes at 8 MiB/s) is made up by the next chunks, so the rate holds.
     async Task PaceAsync(ulong peer, int length)
     {
         var now = Stopwatch.GetTimestamp();
-        var start = Math.Max(now, Math.Max(peerNext.GetValueOrDefault(peer), totalNext));
-        peerNext[peer] = start + length * Stopwatch.Frequency / PeerRate;
-        totalNext = Math.Max(now, totalNext) + length * Stopwatch.Frequency / TotalRate;
+        var burst = (long)(PaceBurst.TotalSeconds * Stopwatch.Frequency);
+        var peerAt = Math.Max(peerNext.GetValueOrDefault(peer, now), now - burst) + length * Stopwatch.Frequency / PeerRate;
+        totalNext = Math.Max(totalNext, now - burst) + length * Stopwatch.Frequency / TotalRate;
+        peerNext[peer] = peerAt;
+        var start = Math.Max(peerAt, totalNext) - burst;
         if (start > now) await Task.Delay(TimeSpan.FromSeconds((double)(start - now) / Stopwatch.Frequency), stop.Token);
     }
 
@@ -483,7 +495,8 @@ public sealed class ModSync : IAsyncDisposable
     {
         try
         {
-            foreach (var item in current.Plan.Items.Where(i => i.Action == SyncAction.Download)) await DownloadModAsync(current, item.Mod, token);
+            var window = new DownloadWindow();
+            foreach (var item in current.Plan.Items.Where(i => i.Action == SyncAction.Download)) await DownloadModAsync(current, item.Mod, window, token);
             Update(current, "ready", $"Everything is here. Restart with {current.HostName}'s mods to join.");
             log($"Mod sync: every mod is here ({Megabytes(current.Done)}).");
         }
@@ -496,7 +509,7 @@ public sealed class ModSync : IAsyncDisposable
         }
     }
 
-    async Task DownloadModAsync(Offer current, ModSetEntry mod, CancellationToken token)
+    async Task DownloadModAsync(Offer current, ModSetEntry mod, DownloadWindow window, CancellationToken token)
     {
         var files = await FileListAsync(current.Host, mod, token);
         var partial = SyncedStore.Partial(modsFolder, mod.Id, mod.Hash);
@@ -510,12 +523,12 @@ public sealed class ModSync : IAsyncDisposable
             var stats = files.FirstOrDefault(f => f.Path == StatsData.FileName);
             var spec = files.FirstOrDefault(f => f.Path == DataSpecs.FileName);
             ModFile[] first = [manifest, .. stats == null ? Array.Empty<ModFile>() : [stats], .. spec == null ? Array.Empty<ModFile>() : [spec]];
-            foreach (var file in first) await DownloadFileAsync(current, mod, file, partial, token);
+            await DownloadFilesAsync(current, mod, first, partial, window, token);
             string? Read(ModFile? file) => file == null ? null : File.ReadAllText(SyncedStore.Target(partial, file.Path));
             var declared = ModSets.Declared(files.Select(f => f.Path), Read(manifest)!, Read(stats), Read(spec));
             if (declared is { } kind && !Allowed(mod.Id, mod.Hash))
                 throw new InvalidDataException($"{mod.Name} {ModSets.Unchecked(kind)} and is neither on HellForge's verified list nor trusted.");
-            foreach (var file in files.Where(f => !first.Contains(f))) await DownloadFileAsync(current, mod, file, partial, token);
+            await DownloadFilesAsync(current, mod, [.. files.Where(f => !first.Contains(f))], partial, window, token);
         }
         catch
         {
@@ -562,36 +575,79 @@ public sealed class ModSync : IAsyncDisposable
         return files;
     }
 
-    // One file, Window chunks in flight, written and hashed in order.
-    async Task DownloadFileAsync(Offer current, ModSetEntry mod, ModFile file, string partial, CancellationToken token)
+    // Files in order, each written and hashed in order: their chunks are asked for on across the files (a mod of many small
+    // files waits a round trip a file no more), window.Size chunks' bytes at a time in at most window.Ceiling requests,
+    // and each whole chunk that comes back tells the window how long it took.
+    async Task DownloadFilesAsync(Offer current, ModSetEntry mod, IReadOnlyList<ModFile> files, string partial, DownloadWindow window, CancellationToken token)
     {
-        var target = SyncedStore.Target(partial, file.Path);
-        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        var asked = new Queue<(int File, long Offset, int Length, long Sent, Task<Frame> Reply)>();
+        var (asking, next) = (0, 0L); // the next chunk to ask for: its file, its offset
+        long askedBytes = 0;
+        var open = -1; // the file being written
+        FileStream? output = null;
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        await using (var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        Task<Frame> Get(int file, long offset, int length) =>
+            RequestAsync(current.Host, new Frame("mods.get").Add(mod.Id).Add(mod.Hash).Add(files[file].Path).Add(offset).Add(length), token);
+        // Every file before index written and checked (an empty one too), index's begun.
+        async Task MoveTo(int index)
         {
-            var chunks = new Queue<(long Offset, int Length, Task<Frame> Reply)>();
-            long next = 0;
-            while (next < file.Size || chunks.Count > 0)
+            while (open < index)
             {
-                while (chunks.Count < Window && next < file.Size)
+                if (output != null)
                 {
-                    var length = (int)Math.Min(ChunkBytes, file.Size - next);
-                    chunks.Enqueue((next, length, RequestAsync(current.Host, new Frame("mods.get").Add(mod.Id).Add(mod.Hash).Add(file.Path).Add(next).Add(length), token)));
-                    next += length;
+                    await output.DisposeAsync();
+                    output = null;
+                    if (Convert.ToHexString(hash.GetHashAndReset()) != files[open].Sha256)
+                        throw new InvalidDataException($"{mod.Name}: {files[open].Path} is not the file the host listed.");
                 }
-                var (offset, expected, pending) = chunks.Dequeue();
-                var reply = await pending;
+                if (++open == files.Count) return;
+                var target = SyncedStore.Target(partial, files[open].Path);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            }
+        }
+        try
+        {
+            while (true)
+            {
+                while (asked.Count < window.Ceiling && asking < files.Count)
+                    if (next >= files[asking].Size) (asking, next) = (asking + 1, 0);
+                    else
+                    {
+                        var length = (int)Math.Min(ChunkBytes, files[asking].Size - next);
+                        if (asked.Count > 0 && askedBytes + length > (long)window.Size * ChunkBytes) break;
+                        asked.Enqueue((asking, next, length, Stopwatch.GetTimestamp(), Get(asking, next, length)));
+                        (next, askedBytes) = (next + length, askedBytes + length);
+                    }
+                if (!asked.TryDequeue(out var chunk)) break;
+                askedBytes -= chunk.Length;
+                var reply = await chunk.Reply;
+                var crowded = false;
+                // A host that queues fewer requests than this window (an older one queued 8): fewer, and this one again.
+                for (var tries = 0; tries < 3 && reply.Count > 2 && reply.Text(1) == "refused" && reply.Text(2) == TooMany; tries++)
+                {
+                    crowded = true;
+                    window.Crowded();
+                    await Task.Delay(TimeSpan.FromMilliseconds(250 * (tries + 1)), token);
+                    reply = await Get(chunk.File, chunk.Offset, chunk.Length);
+                }
                 if (reply.Text(1) != "ok") throw new InvalidDataException($"{mod.Name}: the host refused ({(reply.Count > 2 ? reply.Text(2) : "no reason")}).");
                 var bytes = reply.Bytes(3);
-                if (reply.Text(2) != offset.ToString(CultureInfo.InvariantCulture) || bytes.Length != expected)
-                    throw new InvalidDataException($"{mod.Name}: the host sent the wrong part of {file.Path}.");
-                await output.WriteAsync(bytes, token);
+                if (reply.Text(2) != chunk.Offset.ToString(CultureInfo.InvariantCulture) || bytes.Length != chunk.Length)
+                    throw new InvalidDataException($"{mod.Name}: the host sent the wrong part of {files[chunk.File].Path}.");
+                // only whole chunks are timed: a short one is quicker on the wire and would look like an emptier queue
+                if (!crowded && chunk.Length == ChunkBytes) window.Answered(Stopwatch.GetElapsedTime(chunk.Sent));
+                await MoveTo(chunk.File);
+                await output!.WriteAsync(bytes, token);
                 hash.AppendData(bytes);
                 Progress(current, bytes.Length);
             }
+            await MoveTo(files.Count);
         }
-        if (Convert.ToHexString(hash.GetHashAndReset()) != file.Sha256) throw new InvalidDataException($"{mod.Name}: {file.Path} is not the file the host listed.");
+        finally
+        {
+            if (output != null) await output.DisposeAsync();
+        }
     }
 
     async Task<Frame> RequestAsync(ulong host, Frame request, CancellationToken token)
@@ -700,6 +756,49 @@ public sealed class ModSync : IAsyncDisposable
         Offer? current;
         lock (gate) current = offer;
         if (current != null) _ = PublishAsync(current, withMods: true);
+    }
+}
+
+// How many chunks a download keeps asked for (docs/multiplayer.md "Mod sync speed"). Steam networking does no congestion
+// control (it sends at a fixed rate, SteamPeerTransport.SendRate), so the joiner keeps the queue its download makes on
+// the way short, the queue the host's game traffic waits in too: a whole chunk that came back within TargetDelay of the
+// quickest one so far adds one (about doubling each round trip; once it was ever cut, one a round trip), and one that
+// came back later than that takes a quarter off (at most once a round trip: the chunks behind it waited in the same
+// queue), never below MinWindow. A host that refuses requests for being too many caps it at half.
+public sealed class DownloadWindow
+{
+    double size = ModSync.Window;
+    int ceiling = ModSync.MaxWindow, sinceCut, sinceCrowded = int.MaxValue;
+    bool cut;
+
+    // Chunks' bytes in flight (whole chunks: ModSync.ChunkBytes each), and requests in flight (small files' too).
+    public int Size => (int)size;
+    public int Ceiling => ceiling;
+    public TimeSpan Quickest { get; private set; } = TimeSpan.MaxValue;
+
+    // A whole chunk came back, took after it was asked for.
+    public void Answered(TimeSpan took)
+    {
+        if (took < Quickest) Quickest = took;
+        sinceCut++;
+        if (sinceCrowded < int.MaxValue) sinceCrowded++;
+        if (took > Quickest + ModSync.TargetDelay)
+        {
+            if (sinceCut < Size) return;
+            size = Math.Max(ModSync.MinWindow, Math.Floor(size * 3 / 4));
+            (cut, sinceCut) = (true, 0);
+        }
+        else size = Math.Min(ceiling, size + (cut ? 1 / size : 1));
+    }
+
+    // The host refused a request for being one too many (the others asked for with it may be refused too: one cut for them).
+    public void Crowded()
+    {
+        if (sinceCrowded < ceiling) return;
+        sinceCrowded = 0;
+        ceiling = Math.Max(ModSync.MinWindow, Size / 2);
+        size = Math.Min(size, ceiling);
+        (cut, sinceCut) = (true, 0);
     }
 }
 

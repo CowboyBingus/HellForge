@@ -109,7 +109,7 @@ Friends' backends talk to each other; the copied game itself keeps talking to lo
 
 | Piece | Source | What it does |
 |---|---|---|
-| Steam link | `Multiplayer/SteamPeerTransport.cs` | `ISteamNetworkingMessages` in the backend process (which is not firewalled), channel 0, reliable or unreliable sends with AutoRestartBrokenSession. Accepts sessions from Steam friends only. |
+| Steam link | `Multiplayer/SteamPeerTransport.cs` | `ISteamNetworkingMessages` in the backend process (which is not firewalled), channel 0, reliable or unreliable sends with AutoRestartBrokenSession. Accepts sessions from Steam friends only. Send rate 8 MiB/s and 8 MiB buffers, set at start ([Mod sync speed](#mod-sync-speed)); a message Steam does not take is logged. |
 | Presence | `SteamPeerTransport.cs`, `FriendPresence.cs` | Sets the Steam rich presence key `hellforge` (to the protocol string) and clears it on exit; every 5 s, lists Steam friends playing HD2 (app 553850) who have the key. |
 | Lobbies | `Multiplayer/LobbyService.cs` | The creator's backend owns each lobby, and the lobby stand-in mirrors it from events. |
 | Party | `Multiplayer/PartyService.cs` | The host's backend owns each Party network, admits only its lobby members, assigns endpoint ids and routes the game's messages (guaranteed delivery is a reliable Steam message). |
@@ -231,8 +231,8 @@ Which of the two kick calls HD2 makes is not known, so both are covered:
 A joiner refused for different gameplay mods can take the host's (protocol `hellforge-mp-7`). Before the refusal the
 host sends its mod set (`mods.offer`); the joiner's backend plans the difference (`ModSyncPlan` in HellForge.Core) and
 the in-game editor shows the MOD SYNC prompt (SDK 14 `sync_state`, `sync_mod`, `sync_answer`). On accept the joiner
-downloads each mod's counted files from the host over the Steam link (`mods.files`, `mods.get`, paced to 1 MiB/s per
-machine), checks every file and the whole mod (`SyncedStore.Install`), keeps it in `mods/.synced/<id>@<hash>/`, and the
+downloads each mod's counted files from the host over the Steam link (`mods.files`, `mods.get`; speeds in
+[Mod sync speed](#mod-sync-speed)), checks every file and the whole mod (`SyncedStore.Install`), keeps it in `mods/.synced/<id>@<hash>/`, and the
 launcher restarts the session with the host's mods (`--mod-sync`). Each mod's class comes from the bytes received,
 with one rule for every host, Steam friends included (`ModSets.ClassOf`). Content (data specs HellForge checks all of,
 `DataSpecs.Unchecked`; schema stats; network field types) downloads from any host. Code and raw data (binary data
@@ -275,6 +275,89 @@ through the game's own invitation path, the one a friend's invitation takes. Hel
   the expectation.
 - **Older hosts.** A host from before `lobby.rejoin` does not answer, and the joiner's game says the host did not
   answer. The protocol stays `hellforge-mp-7`.
+
+### Mod sync speed
+
+**What held the first two-PC test back (2026-10-23).** The joiner downloaded 38 MB (two of a Steam friend's mods, 44
+files) in 163 s, about 0.24 MB/s. The 39.48 MB mod took 161 s of it, which is 245 KB/s.
+
+That is Steam networking's own send rate:
+- A connection sends at a fixed rate between `k_ESteamNetworkingConfig_SendRateMin` and `SendRateMax`. Both are
+  256 KiB/s (262,144 B/s) by default.
+- It estimates no bandwidth. The header says the two "should always be set to the same value".
+- With Min below Max, a connection starts at about four packets per round trip (RFC 3390) and is clamped to Min..Max.
+  At a 136 ms round trip that is Min. Raising only Max changes nothing.
+- 256 KiB/s less the packet and message framing is the 245 KB/s measured.
+
+Sources: GameNetworkingSockets
+[csteamnetworkingsockets.cpp](https://github.com/ValveSoftware/GameNetworkingSockets/blob/master/src/steamnetworkingsockets/clientlib/csteamnetworkingsockets.cpp)
+(`DEFINE_CONNECTON_DEFAULT_CONFIGVAL( int32, SendRateMin, 256*1024, ...)`, the same for `SendRateMax`; `SendBufferSize`
+512 KiB; `RecvBufferSize` 1 MiB),
+[steamnetworkingsockets_snp.cpp](https://github.com/ValveSoftware/GameNetworkingSockets/blob/master/src/steamnetworkingsockets/clientlib/steamnetworkingsockets_snp.cpp)
+(`SNP_ClampSendRate`; `SNP_SendMessage` refuses a message past `SendBufferSize` with `k_EResultLimitExceeded`) and
+[steamnetworkingtypes.h](https://github.com/ValveSoftware/GameNetworkingSockets/blob/master/include/steam/steamnetworkingtypes.h)
+("The default value is 256K"). The Steamworks page
+[steamnetworkingtypes](https://partner.steamgames.com/doc/api/steamnetworkingtypes) still says "Default is 0
+(no-limit)", which is out of date.
+
+The other limits were looser:
+- **Round trip.** The rejoin's ask and answer took 136 ms (11:35:12.783 to .919, which includes both links' polling).
+- **Window.** 4 × 128 KiB per round trip comes to about 3.8 MB/s.
+- **Host pacing.** 1 MiB/s.
+- **Files.** Each file waited at least one round trip, about 6 s for 44 files. This is why the 65 KB mod of 13 files
+  took 2.3 s.
+- **Polling.** The Steam link's thread slept a timer tick (15.6 ms) between turns, which added up to 4 ticks to each
+  round trip.
+
+**Now.**
+
+| What | Before | Now | Where |
+|---|---|---|---|
+| Steam send rate (Min = Max) | 256 KiB/s | 8 MiB/s | `SteamPeerTransport.SendRate` |
+| Steam send buffer, receive buffer | 512 KiB, 1 MiB | 8 MiB each (a download's whole window and room to spare) | `SendBuffer`, `ReceiveBuffer` |
+| Joiner's requests in flight | 4 chunks, one file at a time | 2 to 16 chunks' bytes (adaptive), on across files, at most 16 requests | `ModSync.MinWindow`/`MaxWindow`, `DownloadWindow` |
+| Host's queue per machine | 8 | 24 | `ModSync.QueuedPerPeer` |
+| Host's pacing | 1 MiB/s a machine, 2 MiB/s in all | 8 MiB/s a machine, 16 MiB/s in all (caps against abuse; a 40 ms burst makes up a timer's overshoot) | `PeerRate`, `TotalRate`, `PaceBurst` |
+| Grant budget | the set twice and 4 chunks | the set twice and 16 chunks | `GrantBudget` |
+| Steam link turn | a sleep of a timer tick | sends at once (`Send` wakes the thread); a turn with traffic is followed by the next at once | `SteamPeerTransport.Run` |
+
+**Game traffic.** A Steam connection without congestion control sends whatever it is given at that rate, and a peer's
+game frames share it with mod sync. `ISteamNetworkingMessages` channels share one connection and its one lane, so a
+channel of its own would not let game frames pass the chunks. The joiner's window keeps the queue short instead (TCP
+Vegas and LEDBAT do the same):
+- It times each whole chunk from asking to arrival.
+- A chunk within 100 ms (`TargetDelay`) of the quickest so far adds one chunk: a doubling each round trip at first,
+  then one chunk per round trip once it has been cut.
+- A later chunk takes a quarter off, at most once per round trip and never below 2.
+
+So whatever the slowest stretch is (the host's upload, a relay, the joiner's link), its queue stays near 100 ms, and
+the window fills it.
+
+**Older hosts.** A host from before this change (Steam's 256 KiB/s, a queue of 8) still works with a new joiner:
+- Its chunks queue at once, so the window stays near 2.
+- A request it refuses as "too many requests at once" halves the window's ceiling, and that chunk is asked again.
+
+The speed comes from the host's end: an updated joiner downloads from a 0.3.0-beta host at its old speed.
+
+**Expected.**
+- On a good connection, 8 MiB/s: about 5 s for the test's 38 MB.
+- In practice the host's upload sets the speed (20 to 50 Mbit/s is 2.5 to 6 MB/s, so 7 to 15 s), along with what
+  Valve's relays carry, which is not measured yet.
+- A sync from a stranger goes through the same link.
+
+**Tests** (`tests/HellForge.LocalBackend.Tests/ModSyncSpeedTests.cs`, over a simulated path without Steam), for a 6 MB
+mod of 63 files:
+
+| Path | Download time | Notes |
+|---|---|---|
+| Next door, no bottleneck | 0.76 s | `PeerRate` allows 0.72 s and is never exceeded |
+| 120 ms round trip | 1.55 s | The old design: about 13 s |
+| 2 MiB/s link, 80 ms round trip | 3.65 s | The link alone takes 3.03 s |
+
+On the 2 MiB/s link, a small frame the host sends every 50 ms down the same link waits a median of 160 ms and at
+most 360 ms (40 ms of that is the one-way delay). A fixed window of 16 chunks would queue 2 MiB there, a second.
+
+`DownloadWindow`'s growth, cuts, floor and ceiling are checked on their own as well.
 
 ### Public lobbies (the lobby directory)
 
@@ -395,7 +478,7 @@ one HellForge runs (25480438) use Easy Anti-Cheat instead.
 ### Tests
 
 `tests/HellForge.LocalBackend.Tests` holds the multiplayer, stats sharing, mod sync, rejoin and directory checks
-(`MultiplayerTests.cs`, `StatsShareTests.cs`, `ModSyncTests.cs`, `RejoinTests.cs`, `DirectoryTests.cs`);
+(`MultiplayerTests.cs`, `StatsShareTests.cs`, `ModSyncTests.cs`, `ModSyncSpeedTests.cs`, `RejoinTests.cs`, `DirectoryTests.cs`);
 `tests/HellForge.Tests` has Core's mod sync checks (`ModSyncTests.cs`). `HellForge.SdkShimGen smoke-lobby-link` runs
 two backend processes over loopback UDP and two copies of each stand-in through the PlayFab C APIs: create, join,
 member data, Party connect, endpoints, a 1,200-byte message and a broadcast, an invitation, a kick, and leaving. Last,
@@ -633,15 +716,15 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
     offers the download. A backend from before ignores the offer.
   - A joiner takes an offer only for a join it asked for in the last minute.
   - The joiner's machine (a stranger too: step 7's gate lets a download through) may then download for 10 minutes from
-    its first refused join (a later one extends nothing), at most the set's bytes twice over and four chunks:
+    its first refused join (a later one extends nothing), at most the set's bytes twice over and 16 chunks:
     - `mods.files [req, id, hash, start]` → `mods.filelist [req, ok, total, start, (path, size, sha256)...]`, pages
       of at most 1000 files (a frame holds 4096 fields), at most 10000 files a mod on both sides;
     - `mods.get [req, id, hash, path, offset, length ≤ 128 KiB]` → `mods.chunk [req, ok, offset, bytes]`;
     - or `[req, refused, reason]`.
   - It serves only a mod in its set (not a bundled one), only a file that mod counts, and only within the file's size;
     a code or raw mod only to a Steam friend.
-  - One worker reads the files, at most 8 queued requests per machine, paced to 1 MiB/s per machine and 2 MiB/s in
-    total. A request that fails in any way is refused or logged; the worker serves the next one.
+  - One worker reads the files, at most 24 queued requests per machine (8 before 2026-10-23), paced to 8 MiB/s per
+    machine and 16 MiB/s in total (1 and 2 MiB/s before; [Mod sync speed](#mod-sync-speed)). A request that fails in any way is refused or logged; the worker serves the next one.
   - `"share": false` in `hellforge-mods.json` stops it. Sharing is on by default (a maintainer's call still open).
 - **Joiner:**
   - The offer becomes the game's (`ModSyncPlan` in HellForge.Core). The loader's live pipe gets
@@ -656,7 +739,8 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
   - `open <mod id>` opens the mod's `url` from the host's set in the default browser (at most once a second), after
     `ModCatalog.WebAddress` checks it again; nothing else is ever started.
   - The offer is also written to `<run>/backend/mod-sync.json`.
-  - On accept it checks the drive has room (the download and 256 MB), then downloads, four requests in flight. The
+  - On accept it checks the drive has room (the download and 256 MB), then downloads, the chunks asked for on across files, 2 to 16 in flight
+    ([Mod sync speed](#mod-sync-speed); before 2026-10-23 four, one file at a time). The
     file list, the manifest (`hellforge-mod.json` before `bts-mod.json`), the stats file and the data spec come
     first: a mod they show to be code or raw data (`ModSets.Declared`) that is not on the verified list stops there.
   - Each file is checked against its listed size and SHA-256, and the whole mod by `SyncedStore.Install`, before it
@@ -686,7 +770,8 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
    - check that the restarted game is invited back into the host's lobby by itself (step 9's test);
    - check that the launcher's Mods page (MOD SYNC card) lists the code mod as trusted from the host, and that
      Untrust removes it and its `mods/.synced` copy.
-5. Time how long a large download takes, and whether the host notices it in game (it is paced to 1 MiB/s).
+5. Time how long a large download takes (`multiplayer.log`: "downloading N MB" to "every mod is here"; both backends
+   log "Steam link: send rate 8 MiB/s" at start), and whether the host notices it in game.
 6. BLOCK a mod from the dialog: the next join to that lobby shows it blocked; unblock it on the Mods page.
 7. With `HELLFORGE_TEST_STRANGERS=1` on the friend's PC (the host then counts as a stranger, in a Public lobby): the
    code mod is "install it yourself", with GET IT and no TRUST, even after it was trusted.
