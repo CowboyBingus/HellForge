@@ -106,7 +106,8 @@ If you write `mods\hellforge-mods.json` yourself, it looks like this:
   "packs": { "pack.<guid>": { "off": ["Option name"], "sub": { "Option name": "Variant name" } } },
   "blocked": ["owner.mod-id"],
   "share": true,
-  "showEditedStats": false
+  "showEditedStats": false,
+  "listPublic": true
 }
 ```
 
@@ -114,8 +115,9 @@ Mods are on unless `disabled` lists them. `order` is top first, and mods missing
 A pack's `off` lists the options switched off, and `sub` the variant picked for an option that has variants (otherwise
 the first one is used). `blocked` lists the mods mod sync never offers (see [mods.md](mods.md#playing-with-other-mods)),
 `share` (default true) lets players who join you download your gameplay mods, and
-`showEditedStats` (default false) shows public lobbies whose host plays with edited stats. Write the whole file at
-once, to a temporary file and then a rename, as HellForge does.
+`showEditedStats` (default false) shows public lobbies whose host plays with edited stats, and `listPublic` (default
+true) lists the player's own Public lobbies on other HellForge players' Galactic Map. Write the whole file at once, to a
+temporary file and then a rename, as HellForge does.
 
 ## Profiles and settings
 
