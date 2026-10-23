@@ -22,6 +22,8 @@ public sealed record StatsField(string Name, string Kind, string Component, stri
         ? Options.EnumerateArray().Select(o => (o[0].GetDouble(), o[1].GetString() ?? "")) : [];
     // What the editor says about it under the page (when it applies, what a sentinel value means), or null.
     public string? Note { get; init; }
+    // The HD2R Editor's preset key for it, where the mapping names one itself (the Spawning pages: "ed|composition/...").
+    [System.Text.Json.Serialization.JsonIgnore] public string? Hd2rKey { get; init; }
     // The bytes as HD2R Editor's preset keys name them (mappings/hd2r-keys.json, scripts/ExportHd2rKeys.py).
     public string Hd2rAddress => Kind switch
     {
@@ -70,8 +72,38 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
         References(schema);
         FiredEntities(schema);
         Entities(schema);
+        Director(schema);
         return schema;
     });
+
+    // The HD2R Editor's Spawning pages (mappings/director.json, scripts/ExportDirector.py; native/mod-loader/director.c):
+    // "difficulty" (a level's DifficultySettings row, 1 to 11), "rosters" (an enemy's spawn weights by difficulty) and
+    // "compositions" (a squad: its groups' counts, weight, cost and the difficulties and player counts it is drawn at).
+    // Family is a faction; Class a composition's role (patrol, map, reinforcement).
+    static void Director(StatsSchema schema)
+    {
+        using var stream = typeof(StatsSchema).Assembly.GetManifestResourceStream("HellForge.Core.mappings.director.json")!;
+        using var json = JsonDocument.Parse(stream);
+        foreach (var category in new[] { "difficulty", "rosters", "compositions" })
+        {
+            var targets = new Dictionary<string, StatsTarget>(StringComparer.Ordinal);
+            foreach (var t in json.RootElement.GetProperty(category).EnumerateObject())
+            {
+                var fields = new Dictionary<string, StatsField>(StringComparer.Ordinal);
+                var order = 0;
+                foreach (var f in t.Value.GetProperty("fields").EnumerateArray())
+                    fields[f.GetProperty("key").GetString()!] = new StatsField(f.GetProperty("label").GetString()!, f.GetProperty("kind").GetString()!, "",
+                        "0x0", f.GetProperty("record").GetInt64(), f.GetProperty("offset").GetInt32(), f.GetProperty("storage").GetString()!,
+                        Number(f, "min"), Number(f, "max"), Text(f, "unit"), true, true)
+                    { Order = ++order, Section = Text(f, "section"), Note = Text(f, "note"), Hd2rKey = Text(f, "hd2r") };
+                targets[t.Name] = new StatsTarget(fields, new Dictionary<string, string>(StringComparer.Ordinal), new Dictionary<string, string>(StringComparer.Ordinal))
+                {
+                    Label = Text(t.Value, "label"), Family = Text(t.Value, "faction"), Class = Text(t.Value, "role"),
+                };
+            }
+            schema.Targets[category] = targets;
+        }
+    }
 
     // The entities another page shows instead (StatsCatalog: the MS-11 Solo Silo's rack and missile), and the one whose
     // main fields join the Helldiver page; the enemies category lists the rest.

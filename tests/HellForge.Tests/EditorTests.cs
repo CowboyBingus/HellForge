@@ -12,8 +12,9 @@ static class EditorTests
             check(catalog["format"]!.GetValue<int>() == EditorCatalog.Format && catalog["build"]!.GetValue<string>() == StatsSchema.Current.Build, "Format and build.");
             var navs = catalog["categories"]!.AsArray().Select(c => c!["id"]!.GetValue<string>()).ToList();
             check(navs.SequenceEqual(["primary", "secondary", "throwables", "offensive", "defensive", "support", "backpacks", "vehicles", "mission", "boosters", "helldiver", "perks",
-                    "terminids", "automatons", "illuminate", "structures", "entities", "statuses", "explosions", "projectiles", "damage"]),
-                "Weapons, stratagems, boosters, the Helldiver, the enemies: " + string.Join(", ", navs));
+                    "terminids", "automatons", "illuminate", "structures", "entities", "difficulty", "rosters", "compositions", "statuses", "explosions",
+                    "projectiles", "damage"]),
+                "Weapons, stratagems, boosters, the Helldiver, the enemies, spawning: " + string.Join(", ", navs));
             var objects = catalog["objects"]!.AsArray().Select(o => o!.AsObject()).ToList();
             foreach (var nav in navs)
                 check(objects.Count(o => o["category"]!.GetValue<string>() == nav && o["id"]!.GetValue<string>() != "helldiver/armor-perks") == StatsCatalog.Items.Count(i => i.Nav == nav), $"Every {nav} item is listed.");
@@ -193,6 +194,34 @@ static class EditorTests
             check(saved.Any(e => e is { Component: "HealthComponentData", Resource: 0x9E2E17F2CCCCAFDD, Offset: 0, Value: 7000 }) &&
                   saved.Any(e => e is { Component: "HealthComponentData", Resource: 0x4D1C334D294DFA97, Record: 76, Offset: 0, Value: 200 }),
                 "Saved in Local Stats, an enemy's and the Helldiver's main health come back at the next boot: " + string.Join(", ", saved.Select(e => e.Key)));
+        });
+
+        test("The HD2R Editor's Spawning pages: difficulties, spawn rosters and compositions, as the engine names their rows (director.c)", () =>
+        {
+            var targets = StatsSchema.Current.Targets;
+            check(targets["difficulty"].Count == 11 && targets["rosters"].Count == 191 && targets["compositions"].Count == 452,
+                "11 difficulties (11 with a mod that adds it), 191 roster rows, 452 compositions.");
+            var scavenger = targets["rosters"]["terminids/row_0"];
+            check(scavenger.Label == "Scavenger - Scavenger Tier 1" && scavenger.Fields["spawn.weight_3"] is { Kind: "EnemyRoster", Record: 0, Offset: 8, Storage: "f32" } &&
+                  scavenger.Fields["spawn.weight_11"] is { Kind: "EnemyRosterLevel11", Offset: 0 } &&
+                  targets["rosters"]["automatons/row_4"].Fields["spawn.weight_1"].Record == (2 << 16 | 4),
+                "A roster row by (roster << 16) | row in the engine's roster order; its weights from 0, level 11's of its own.");
+            var patrol = targets["compositions"]["automatons/family_1/row_0"];
+            check(patrol.Class == "patrol" && patrol.Fields["composition.weight"] is { Kind: "EnemyComposition", Record: 2 << 16, Offset: 0xE0 } &&
+                  targets["compositions"]["terminids/family_3/row_2"].Fields["composition.weight"].Record == (0 << 16 | 2 << 12 | 2),
+                "A composition by (roster << 16) | (family - 1 << 12) | row.");
+            check(targets.Where(t => t.Key is "difficulty" or "rosters" or "compositions").SelectMany(t => t.Value.Values).SelectMany(t => t.Fields.Values)
+                    .All(f => SdkMappings.Current.FieldAt(f.Kind, f.Offset, f.Storage) != null),
+                "Every field is one the engine maps (mappings/components.json).");
+            var saved = StatsData.Parse("""{"format":1,"compositions":{"automatons/family_1/row_0":{"composition.group_0_count":4}},"rosters":{"terminids/row_0":{"spawn.weight_11":2}},"difficulty":{"7":{"difficulty.encounter_points":500}}}""",
+                EntityProfile.Current);
+            check(saved.Any(e => e is { Kind: "EnemyComposition", Record: 2 << 16, Offset: 4, Value: 4 }) && saved.Any(e => e is { Kind: "EnemyRosterLevel11", Record: 0 }) &&
+                  saved.Any(e => e is { Kind: "DifficultySettings", Record: 7, Offset: 0xE4 }),
+                "Saved in Local Stats, they come back at the next boot: " + string.Join(", ", saved.Select(e => e.Key)));
+            var catalog = EditorCatalog.Build();
+            var row = catalog["objects"]!.AsArray().Select(o => o!.AsObject()).Single(o => o["id"]!.GetValue<string>() == "compositions/automatons/family_1/row_0")["page"]!
+                .AsArray().SelectMany(c => c!["subs"]!.AsArray()).SelectMany(s => s!["rows"]!.AsArray()).First(r => r!["key"]!.GetValue<string>() == "composition.weight")!;
+            check(row["hd2r"]![0]!.GetValue<string>() == "ed|composition/automatons/family_1/row_0|composition.weight", "Keyed as HD2R Editor presets name them.");
         });
 
         test("The editor's icons are the game's sprite pixels: block formats decoded exactly, written in the editor's format", () =>

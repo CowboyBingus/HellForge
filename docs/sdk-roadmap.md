@@ -68,10 +68,11 @@ Full parity with the HD2R Editor, in three steps:
 2. Enemies: stats, damage zones, attacks, spawn rosters and compositions. Started: every entity's page with the fields
    the engine maps (`mappings/entities.json`, `scripts/ExportEntities.py`; about 35,800 of the HD2R Editor's editable
    rows, the HealthComponent's zones and HiveMind's multipliers named by `scripts/ImportSchemaMappings.py <HD2Runtime>`).
-   Left: components the engine has no mapping for (UnitComponentData, AiSpawnerComponentData,
+   Spawn rosters, compositions and the difficulty rows are done (`native/mod-loader/director.c`, `mappings/director.json`;
+   level 11's weights too). Left: components the engine has no mapping for (UnitComponentData, AiSpawnerComponentData,
    SquadTransportFormationComponentData, Gore, SquadTransport, StratagemBlocker, Bughole; the exporter lists their rows
-   with a third path), spawn rosters and compositions (game.dll tables, not components: they need a resolver of their
-   own beside `difficulty.c`), and in co-op, enemy edits that follow the host even when every player keeps their own.
+   with a third path), adding roster rows or compositions (their counts are in the game's code), and in co-op, enemy
+   edits that follow the host even when every player keeps their own.
 3. Structures (demolition and destruction settings) and mission settings.
 
 ### Events, hooks and registries (phase 5b)

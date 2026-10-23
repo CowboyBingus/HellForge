@@ -1005,6 +1005,45 @@ static const SdkField kSdkFieldsAbilityWeapon[] = {
     {"mode1_spends_round", 72, 1, HF_TYPE_U8, HF_APPLIES_RESPAWN, REF_NONE},
     {"mode1_always", 73, 1, HF_TYPE_U8, HF_APPLIES_RESPAWN, REF_NONE},
 };
+static const SdkField kSdkFieldsEnemyRoster[] = {
+    {"weights", 0, 40, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+};
+static const SdkField kSdkFieldsEnemyRosterLevel11[] = {
+    {"weight", 0, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+};
+static const SdkField kSdkFieldsEnemyComposition[] = {
+    {"group_0_key", 0, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_0_count", 4, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_0_emission_time", 8, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_1_key", 12, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_1_count", 16, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_1_emission_time", 20, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_2_key", 24, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_2_count", 28, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_2_emission_time", 32, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_3_key", 36, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_3_count", 40, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_3_emission_time", 44, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_4_key", 48, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_4_count", 52, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_4_emission_time", 56, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_5_key", 60, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_5_count", 64, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_5_emission_time", 68, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_6_key", 72, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_6_count", 76, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_6_emission_time", 80, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_7_key", 84, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_7_count", 88, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"group_7_emission_time", 92, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"weight", 224, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"cost_multiplier", 228, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"post_schedule_duration", 232, 4, HF_TYPE_F32, HF_APPLIES_MISSION, REF_NONE},
+    {"minimum_tech_level", 236, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"maximum_tech_level", 240, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"minimum_players", 244, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+    {"maximum_players", 248, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
+};
 static const SdkComponent kSdkComponents[] = {
     {"ProjectileWeapon", "ProjectileWeaponComponentData", 25480438u, 616u, kSdkFieldsProjectileWeapon, 45, 0, 321},
     {"WeaponData", "WeaponDataComponentData", 25480438u, 1232u, kSdkFieldsWeaponData, 20, 0, 236},
@@ -1057,4 +1096,7 @@ static const SdkComponent kSdkComponents[] = {
     {"MeleeHitVolume", "MeleeHitVolume", 25480438u, 248u, kSdkFieldsMeleeHitVolume, 7, 1, -1},
     {"MeleeWeapon", "MeleeWeaponComponentData", 25480438u, 192u, kSdkFieldsMeleeWeapon, 1, 0, 268},
     {"AbilityWeapon", "AbilityWeaponComponentData", 25480438u, 88u, kSdkFieldsAbilityWeapon, 6, 0, 267},
+    {"EnemyRoster", "EnemyRoster", 25480438u, 40u, kSdkFieldsEnemyRoster, 1, 1, -1},
+    {"EnemyRosterLevel11", "EnemyRosterLevel11", 25480438u, 4u, kSdkFieldsEnemyRosterLevel11, 1, 1, -1},
+    {"EnemyComposition", "EnemyComposition", 25480438u, 280u, kSdkFieldsEnemyComposition, 31, 1, -1},
 };

@@ -148,9 +148,11 @@ moves planets from one enemy to another but leaves their effects as they were. T
 
 ### Difficulty 11 and custom missions
 
-Difficulty 11 ("Hell Forge") is done apart from its enemy mix. For now every enemy's chance of spawning at level 11 is
-a copy of its chance at level 10, so the mix is Super Helldive's with bigger budgets. It needs a way to set its own,
-which is an SDK registry for its enemy weights.
+Difficulty 11 ("Hell Forge") is done apart from its enemy mix. Every enemy's chance of spawning at level 11 starts as
+a copy of its chance at level 10, so the mix is Super Helldive's with bigger budgets. On the `editor-content` branch the
+in-game editor's Spawn Rosters can now set each enemy's weight at level 11, and Spawn Compositions which squads are drawn
+up to it. Next: a default mix shipped with the mod, and an SDK registry for it. Adding new enemies or new squad types to
+the mix still needs research.
 
 Custom missions would come in steps. First, a Missions category in the editor for timers and per-difficulty settings.
 Second, remixed missions through a mission registry like the stratagem one, once we've studied the mission definition

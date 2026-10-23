@@ -30,6 +30,8 @@ public static class EditorCatalog
         ("helldiver", "Helldiver", "HELLDIVER", null), ("perks", "Armor perks", "HELLDIVER", null),
         ("terminids", "Terminids", "ENEMIES", null), ("automatons", "Automatons", "ENEMIES", null), ("illuminate", "Illuminate", "ENEMIES", null),
         ("structures", "Structures", "ENEMIES", null), ("entities", "Other Entities", "ENEMIES", null),
+        ("difficulty", "Mission Difficulty", "SPAWNING", null), ("rosters", "Spawn Rosters", "SPAWNING", null),
+        ("compositions", "Spawn Compositions", "SPAWNING", null),
         ("statuses", "Status Effects", "EFFECTS", null),
         ("explosions", "Explosions", "ADVANCED", null), ("projectiles", "Projectiles", "ADVANCED", null), ("damage", "Damage Types", "ADVANCED", null),
     ];
@@ -157,7 +159,7 @@ public static class EditorCatalog
     {
         // An entity's rows are the HD2R Editor's Enemies rows already ('en|<entity>|<row id>', mappings/entities.json); the
         // Helldiver's main fields are its avatar entity's.
-        string? entity = row.Part.Category == "enemies" ? $"en|{row.Part.Target}|{row.Key}" : null;
+        string? entity = row.Part.Category == "enemies" ? $"en|{row.Part.Target}|{row.Key}" : row.Field.Hd2rKey;
         if (!Hd2rByAddress.Value.TryGetValue(row.Field.Hd2rAddress, out var keys))
         {
             if (entity == null && row.Part.Category == "helldiver" && row.Key.StartsWith("entity.", StringComparison.Ordinal))

@@ -725,6 +725,27 @@ page, and the MS-11 Solo Silo's rack and missile are parts of its stratagem's pa
 leaving out bytes the page shows already. Only an enemy class's main health and zone armor are proven in game
 (HD2Runtime's evidence); the rest are marked unverified.
 
+The SPAWNING group is the HD2R Editor's Mission Difficulty, Spawn Rosters and Spawn Compositions, from
+`mappings/director.json` (`scripts/ExportDirector.py`, from HD2Runtime's `domains/enemy_director.lua`), written by
+`native/mod-loader/director.c`:
+
+- **Mission Difficulty:** a level's `DifficultySettings` row (1 to 10, and 11 with a mod that adds it). It holds the HD2R
+  Editor's three budgets, plus the objectives and per-faction patrol interval and cap. Without level 11 the game's own
+  table is written: the copy HD2Runtime edits, and every other of its 19 copies that held the same bytes.
+- **Spawn Rosters:** an enemy's spawn weight at each difficulty (`EnemyRoster`, a row by `(roster << 16) | row` in
+  `difficulty.c`'s roster order). The weights sit at +0x30, or at +0x2C once level 11 gave every row an 11th, which is
+  then `EnemyRosterLevel11`.
+- **Spawn Compositions:** a squad (`EnemyComposition`, `(roster << 16) | (family - 1 << 12) | row`). It holds its groups'
+  counts and emission times, its weight, cost multiplier and post-schedule duration, and the tech levels and player
+  counts it is drawn at.
+
+Every write, live or from Local Stats at boot (`StatsDirectorReady`), is checked against the row as it is: a squad's
+groups total at most 32 (the AI squad queue's capacity; a 33rd entry crashed the game in HD2Runtime's research), a group
+with no roster key takes no count, the lowest tech level and player count may not exceed the highest, tech levels go to
+11 only with level 11, and weights are finite. The director reads these tables when a mission is set up, so a change
+applies from the next mission. Only the host's tables decide what spawns. None of it is proven in game yet (HD2Runtime's
+director research is offline). Demolition templates and destruction models are not here yet.
+
 Every change and reset is staged until APPLY (F9), so DISCARD takes any of them back. Once applied, a change goes
 through `set_live` and into Local Stats, so it comes back at every boot.
 

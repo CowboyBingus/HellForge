@@ -7050,6 +7050,274 @@
           "source": "game.dll 0x7D6080 (an ability weapon fires: its mode settings, 0x7D5FB0) and the C4 detonator record (abilities 521, 520); 2026-10-18"
         }
       }
+    },
+    "EnemyRoster": {
+      "component": "EnemyRoster",
+      "table": true,
+      "stride": 40,
+      "layout": "25480438",
+      "meaning": "an enemy roster row's spawn weights (a row by (roster << 16) | row; the weights wherever level 11 put them)",
+      "applies": "mission",
+      "appliesVerified": false,
+      "appliesSource": "the director reads them when a mission is set up (HD2Runtime enemy_director lifecycle)",
+      "fields": {
+        "weights": {
+          "offset": 0,
+          "type": "f32",
+          "count": 10,
+          "meaning": "spawn weight at tech levels (difficulties) 1 to 10",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        }
+      }
+    },
+    "EnemyRosterLevel11": {
+      "component": "EnemyRosterLevel11",
+      "table": true,
+      "stride": 4,
+      "layout": "25480438",
+      "meaning": "an enemy roster row's spawn weight at level 11 (only with a mod that adds it)",
+      "applies": "mission",
+      "appliesVerified": false,
+      "appliesSource": "the director reads them when a mission is set up (HD2Runtime enemy_director lifecycle)",
+      "fields": {
+        "weight": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "spawn weight at level 11",
+          "verified": false,
+          "source": "native/mod-loader/difficulty.c (row +0x54)"
+        }
+      }
+    },
+    "EnemyComposition": {
+      "component": "EnemyComposition",
+      "table": true,
+      "stride": 280,
+      "layout": "25480438",
+      "meaning": "an enemy squad composition (a row by (roster << 16) | (family << 12) | row)",
+      "applies": "mission",
+      "appliesVerified": false,
+      "appliesSource": "the director reads them when a mission is set up (HD2Runtime enemy_director lifecycle)",
+      "fields": {
+        "group_0_key": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "group 1: the roster group it draws enemies from (not edited)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_0_count": {
+          "offset": 4,
+          "type": "u32",
+          "meaning": "group 1: how many (the groups total at most 32)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_0_emission_time": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "group 1: emission time (s)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_1_key": {
+          "offset": 12,
+          "type": "u32",
+          "meaning": "group 2: the roster group it draws enemies from (not edited)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_1_count": {
+          "offset": 16,
+          "type": "u32",
+          "meaning": "group 2: how many (the groups total at most 32)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_1_emission_time": {
+          "offset": 20,
+          "type": "f32",
+          "meaning": "group 2: emission time (s)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_2_key": {
+          "offset": 24,
+          "type": "u32",
+          "meaning": "group 3: the roster group it draws enemies from (not edited)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_2_count": {
+          "offset": 28,
+          "type": "u32",
+          "meaning": "group 3: how many (the groups total at most 32)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_2_emission_time": {
+          "offset": 32,
+          "type": "f32",
+          "meaning": "group 3: emission time (s)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_3_key": {
+          "offset": 36,
+          "type": "u32",
+          "meaning": "group 4: the roster group it draws enemies from (not edited)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_3_count": {
+          "offset": 40,
+          "type": "u32",
+          "meaning": "group 4: how many (the groups total at most 32)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_3_emission_time": {
+          "offset": 44,
+          "type": "f32",
+          "meaning": "group 4: emission time (s)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_4_key": {
+          "offset": 48,
+          "type": "u32",
+          "meaning": "group 5: the roster group it draws enemies from (not edited)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_4_count": {
+          "offset": 52,
+          "type": "u32",
+          "meaning": "group 5: how many (the groups total at most 32)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_4_emission_time": {
+          "offset": 56,
+          "type": "f32",
+          "meaning": "group 5: emission time (s)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_5_key": {
+          "offset": 60,
+          "type": "u32",
+          "meaning": "group 6: the roster group it draws enemies from (not edited)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_5_count": {
+          "offset": 64,
+          "type": "u32",
+          "meaning": "group 6: how many (the groups total at most 32)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_5_emission_time": {
+          "offset": 68,
+          "type": "f32",
+          "meaning": "group 6: emission time (s)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_6_key": {
+          "offset": 72,
+          "type": "u32",
+          "meaning": "group 7: the roster group it draws enemies from (not edited)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_6_count": {
+          "offset": 76,
+          "type": "u32",
+          "meaning": "group 7: how many (the groups total at most 32)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_6_emission_time": {
+          "offset": 80,
+          "type": "f32",
+          "meaning": "group 7: emission time (s)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_7_key": {
+          "offset": 84,
+          "type": "u32",
+          "meaning": "group 8: the roster group it draws enemies from (not edited)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_7_count": {
+          "offset": 88,
+          "type": "u32",
+          "meaning": "group 8: how many (the groups total at most 32)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "group_7_emission_time": {
+          "offset": 92,
+          "type": "f32",
+          "meaning": "group 8: emission time (s)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "weight": {
+          "offset": 224,
+          "type": "f32",
+          "meaning": "how often it is picked",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "cost_multiplier": {
+          "offset": 228,
+          "type": "f32",
+          "meaning": "its cost against the budget",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "post_schedule_duration": {
+          "offset": 232,
+          "type": "f32",
+          "meaning": "post-schedule duration (s)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "minimum_tech_level": {
+          "offset": 236,
+          "type": "u32",
+          "meaning": "lowest tech level (difficulty)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "maximum_tech_level": {
+          "offset": 240,
+          "type": "u32",
+          "meaning": "highest tech level (difficulty)",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "minimum_players": {
+          "offset": 244,
+          "type": "u32",
+          "meaning": "fewest players",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        },
+        "maximum_players": {
+          "offset": 248,
+          "type": "u32",
+          "meaning": "most players",
+          "verified": false,
+          "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
+        }
+      }
     }
   }
 }

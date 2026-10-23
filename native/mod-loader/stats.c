@@ -26,7 +26,8 @@ static int g_perksDone; /* the stats pass wrote the armor perk edits (or refused
 static int StatsTableKind(const char* kind)
 {
     return !strcmp(kind, "ProjectileSettings") || !strcmp(kind, "DamageInfo") || !strcmp(kind, "StratagemDefinition") ||
-        !strcmp(kind, "BoosterSettings") || !strcmp(kind, "PassiveModifier") || !strcmp(kind, "PassiveStat") || !strcmp(kind, "MeleeHitVolume");
+        !strcmp(kind, "BoosterSettings") || !strcmp(kind, "PassiveModifier") || !strcmp(kind, "PassiveStat") || !strcmp(kind, "MeleeHitVolume") ||
+        !strcmp(kind, "DifficultySettings") || DirectorKind(kind);
 }
 static StatEdit g_stats[MAX_STATS];
 static int g_statCount;

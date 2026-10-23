@@ -3551,6 +3551,128 @@ HF_ASSERT_OFFSET(HfAbilityWeapon, mode1_spends_round, 72);
 HF_ASSERT_OFFSET(HfAbilityWeapon, mode1_always, 73);
 #define HF_TYPE_AbilityWeapon_mode1_always HF_TYPE_U8
 
+/* EnemyRoster (40-byte table rows, found by id): an enemy roster row's spawn weights (a row by (roster << 16) | row; the weights wherever level 11 put them) */
+#define HfEnemyRoster_INFO "EnemyRoster", 25480438u
+typedef struct HfEnemyRoster
+{
+    float weights[10];                           /* +0x00 spawn weight at tech levels (difficulties) 1 to 10 (unverified) [mission?] */
+} HfEnemyRoster;
+HF_ASSERT_SIZE(HfEnemyRoster, 40);
+HF_ASSERT_OFFSET(HfEnemyRoster, weights, 0);
+#define HF_TYPE_EnemyRoster_weights HF_TYPE_F32
+
+/* EnemyRosterLevel11 (4-byte table rows, found by id): an enemy roster row's spawn weight at level 11 (only with a mod that adds it) */
+#define HfEnemyRosterLevel11_INFO "EnemyRosterLevel11", 25480438u
+typedef struct HfEnemyRosterLevel11
+{
+    float weight;                                /* +0x00 spawn weight at level 11 (unverified) [mission?] */
+} HfEnemyRosterLevel11;
+HF_ASSERT_SIZE(HfEnemyRosterLevel11, 4);
+HF_ASSERT_OFFSET(HfEnemyRosterLevel11, weight, 0);
+#define HF_TYPE_EnemyRosterLevel11_weight HF_TYPE_F32
+
+/* EnemyComposition (280-byte table rows, found by id): an enemy squad composition (a row by (roster << 16) | (family << 12) | row) */
+#define HfEnemyComposition_INFO "EnemyComposition", 25480438u
+typedef struct HfEnemyComposition
+{
+    uint32_t group_0_key;                        /* +0x00 group 1: the roster group it draws enemies from (not edited) (unverified) [mission?] */
+    uint32_t group_0_count;                      /* +0x04 group 1: how many (the groups total at most 32) (unverified) [mission?] */
+    float group_0_emission_time;                 /* +0x08 group 1: emission time (s) (unverified) [mission?] */
+    uint32_t group_1_key;                        /* +0x0C group 2: the roster group it draws enemies from (not edited) (unverified) [mission?] */
+    uint32_t group_1_count;                      /* +0x10 group 2: how many (the groups total at most 32) (unverified) [mission?] */
+    float group_1_emission_time;                 /* +0x14 group 2: emission time (s) (unverified) [mission?] */
+    uint32_t group_2_key;                        /* +0x18 group 3: the roster group it draws enemies from (not edited) (unverified) [mission?] */
+    uint32_t group_2_count;                      /* +0x1C group 3: how many (the groups total at most 32) (unverified) [mission?] */
+    float group_2_emission_time;                 /* +0x20 group 3: emission time (s) (unverified) [mission?] */
+    uint32_t group_3_key;                        /* +0x24 group 4: the roster group it draws enemies from (not edited) (unverified) [mission?] */
+    uint32_t group_3_count;                      /* +0x28 group 4: how many (the groups total at most 32) (unverified) [mission?] */
+    float group_3_emission_time;                 /* +0x2C group 4: emission time (s) (unverified) [mission?] */
+    uint32_t group_4_key;                        /* +0x30 group 5: the roster group it draws enemies from (not edited) (unverified) [mission?] */
+    uint32_t group_4_count;                      /* +0x34 group 5: how many (the groups total at most 32) (unverified) [mission?] */
+    float group_4_emission_time;                 /* +0x38 group 5: emission time (s) (unverified) [mission?] */
+    uint32_t group_5_key;                        /* +0x3C group 6: the roster group it draws enemies from (not edited) (unverified) [mission?] */
+    uint32_t group_5_count;                      /* +0x40 group 6: how many (the groups total at most 32) (unverified) [mission?] */
+    float group_5_emission_time;                 /* +0x44 group 6: emission time (s) (unverified) [mission?] */
+    uint32_t group_6_key;                        /* +0x48 group 7: the roster group it draws enemies from (not edited) (unverified) [mission?] */
+    uint32_t group_6_count;                      /* +0x4C group 7: how many (the groups total at most 32) (unverified) [mission?] */
+    float group_6_emission_time;                 /* +0x50 group 7: emission time (s) (unverified) [mission?] */
+    uint32_t group_7_key;                        /* +0x54 group 8: the roster group it draws enemies from (not edited) (unverified) [mission?] */
+    uint32_t group_7_count;                      /* +0x58 group 8: how many (the groups total at most 32) (unverified) [mission?] */
+    float group_7_emission_time;                 /* +0x5C group 8: emission time (s) (unverified) [mission?] */
+    uint8_t _unknown_60[128];
+    float weight;                                /* +0xE0 how often it is picked (unverified) [mission?] */
+    float cost_multiplier;                       /* +0xE4 its cost against the budget (unverified) [mission?] */
+    float post_schedule_duration;                /* +0xE8 post-schedule duration (s) (unverified) [mission?] */
+    uint32_t minimum_tech_level;                 /* +0xEC lowest tech level (difficulty) (unverified) [mission?] */
+    uint32_t maximum_tech_level;                 /* +0xF0 highest tech level (difficulty) (unverified) [mission?] */
+    uint32_t minimum_players;                    /* +0xF4 fewest players (unverified) [mission?] */
+    uint32_t maximum_players;                    /* +0xF8 most players (unverified) [mission?] */
+    uint8_t _unknown_FC[28];
+} HfEnemyComposition;
+HF_ASSERT_SIZE(HfEnemyComposition, 280);
+HF_ASSERT_OFFSET(HfEnemyComposition, group_0_key, 0);
+#define HF_TYPE_EnemyComposition_group_0_key HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_0_count, 4);
+#define HF_TYPE_EnemyComposition_group_0_count HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_0_emission_time, 8);
+#define HF_TYPE_EnemyComposition_group_0_emission_time HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_1_key, 12);
+#define HF_TYPE_EnemyComposition_group_1_key HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_1_count, 16);
+#define HF_TYPE_EnemyComposition_group_1_count HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_1_emission_time, 20);
+#define HF_TYPE_EnemyComposition_group_1_emission_time HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_2_key, 24);
+#define HF_TYPE_EnemyComposition_group_2_key HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_2_count, 28);
+#define HF_TYPE_EnemyComposition_group_2_count HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_2_emission_time, 32);
+#define HF_TYPE_EnemyComposition_group_2_emission_time HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_3_key, 36);
+#define HF_TYPE_EnemyComposition_group_3_key HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_3_count, 40);
+#define HF_TYPE_EnemyComposition_group_3_count HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_3_emission_time, 44);
+#define HF_TYPE_EnemyComposition_group_3_emission_time HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_4_key, 48);
+#define HF_TYPE_EnemyComposition_group_4_key HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_4_count, 52);
+#define HF_TYPE_EnemyComposition_group_4_count HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_4_emission_time, 56);
+#define HF_TYPE_EnemyComposition_group_4_emission_time HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_5_key, 60);
+#define HF_TYPE_EnemyComposition_group_5_key HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_5_count, 64);
+#define HF_TYPE_EnemyComposition_group_5_count HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_5_emission_time, 68);
+#define HF_TYPE_EnemyComposition_group_5_emission_time HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_6_key, 72);
+#define HF_TYPE_EnemyComposition_group_6_key HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_6_count, 76);
+#define HF_TYPE_EnemyComposition_group_6_count HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_6_emission_time, 80);
+#define HF_TYPE_EnemyComposition_group_6_emission_time HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_7_key, 84);
+#define HF_TYPE_EnemyComposition_group_7_key HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_7_count, 88);
+#define HF_TYPE_EnemyComposition_group_7_count HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, group_7_emission_time, 92);
+#define HF_TYPE_EnemyComposition_group_7_emission_time HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, weight, 224);
+#define HF_TYPE_EnemyComposition_weight HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, cost_multiplier, 228);
+#define HF_TYPE_EnemyComposition_cost_multiplier HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, post_schedule_duration, 232);
+#define HF_TYPE_EnemyComposition_post_schedule_duration HF_TYPE_F32
+HF_ASSERT_OFFSET(HfEnemyComposition, minimum_tech_level, 236);
+#define HF_TYPE_EnemyComposition_minimum_tech_level HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, maximum_tech_level, 240);
+#define HF_TYPE_EnemyComposition_maximum_tech_level HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, minimum_players, 244);
+#define HF_TYPE_EnemyComposition_minimum_players HF_TYPE_U32
+HF_ASSERT_OFFSET(HfEnemyComposition, maximum_players, 248);
+#define HF_TYPE_EnemyComposition_maximum_players HF_TYPE_U32
+
 #pragma pack(pop)
 
 #endif

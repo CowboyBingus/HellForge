@@ -16,7 +16,7 @@ there) and `mappings/` (fields and content); do not edit it by hand. To change i
 
 - [API](#api): [SDK 1](#sdk-1), [SDK 2](#sdk-2), [SDK 3](#sdk-3), [SDK 4](#sdk-4), [SDK 5](#sdk-5), [SDK 6](#sdk-6), [SDK 7](#sdk-7), [SDK 9](#sdk-9), [SDK 10](#sdk-10), [SDK 11](#sdk-11-actions-hf_act_-check-hf-size-before-calling), [SDK 12](#sdk-12), [SDK 13](#sdk-13), [SDK 14](#sdk-14-mod-sync-hfsyncstate-check-hf-size-before-calling)
 - [Components](#components): [HfProjectileWeapon](#hfprojectileweapon), [HfWeaponData](#hfweapondata), [HfWeaponMagazine](#hfweaponmagazine), [HfTag](#hftag), [HfMount](#hfmount), [HfBehavior](#hfbehavior), [HfLoadoutPackage](#hfloadoutpackage), [HfDeposit](#hfdeposit), [HfHealth](#hfhealth), [HfJumppack](#hfjumppack), [HfRecharge](#hfrecharge), [HfShield](#hfshield), [HfHellpodPayload](#hfhellpodpayload), [HfSensorEye](#hfsensoreye), [HfTurret](#hfturret), [HfWeaponWindUp](#hfweaponwindup), [HfBeamWeapon](#hfbeamweapon), [HfWeaponHeat](#hfweaponheat), [HfEagle](#hfeagle), [HfThrower](#hfthrower), [HfBombardment](#hfbombardment), [HfExplosive](#hfexplosive), [HfThrowable](#hfthrowable), [HfVehicleMotion](#hfvehiclemotion), [HfWeaponCharge](#hfweaponcharge), [HfWeaponReload](#hfweaponreload), [HfWeaponRounds](#hfweaponrounds), [HfArcWeapon](#hfarcweapon), [HfHiveMind](#hfhivemind), [HfOrbitalAbility](#hforbitalability), [HfRotation](#hfrotation), [HfDisplacement](#hfdisplacement), [HfSeekingMissile](#hfseekingmissile), [HfLoadoutEntry](#hfloadoutentry), [HfHellpodRack](#hfhellpodrack), [HfAvatar](#hfavatar), [HfInventory](#hfinventory), [HfMeleeWeapon](#hfmeleeweapon), [HfAbilityWeapon](#hfabilityweapon)
-- [Settings tables](#settings-tables): [HfDifficultySettings](#hfdifficultysettings), [HfDamageInfo](#hfdamageinfo), [HfProjectileSettings](#hfprojectilesettings), [HfStratagemSettings](#hfstratagemsettings), [HfExplosionSettings](#hfexplosionsettings), [HfArcSettings](#hfarcsettings), [HfBeamSettings](#hfbeamsettings), [HfStatusEffectSettings](#hfstatuseffectsettings), [HfBoosterSettings](#hfboostersettings), [HfPassiveModifier](#hfpassivemodifier), [HfPassiveStat](#hfpassivestat), [HfMeleeHitVolume](#hfmeleehitvolume)
+- [Settings tables](#settings-tables): [HfDifficultySettings](#hfdifficultysettings), [HfDamageInfo](#hfdamageinfo), [HfProjectileSettings](#hfprojectilesettings), [HfStratagemSettings](#hfstratagemsettings), [HfExplosionSettings](#hfexplosionsettings), [HfArcSettings](#hfarcsettings), [HfBeamSettings](#hfbeamsettings), [HfStatusEffectSettings](#hfstatuseffectsettings), [HfBoosterSettings](#hfboostersettings), [HfPassiveModifier](#hfpassivemodifier), [HfPassiveStat](#hfpassivestat), [HfMeleeHitVolume](#hfmeleehitvolume), [HfEnemyRoster](#hfenemyroster), [HfEnemyRosterLevel11](#hfenemyrosterlevel11), [HfEnemyComposition](#hfenemycomposition)
 - [Content](#content): [HF_ITEM_...](#hf_item_-168-hf_kind_item), [HF_PROJECTILE_...](#hf_projectile_-61-hf_kind_projectile), [HF_STRATAGEM_...](#hf_stratagem_-149-hf_kind_stratagem), [HF_BEHAVIOUR_...](#hf_behaviour_-2-hf_kind_behaviour), [HF_ENTITY_...](#hf_entity_-369-hf_kind_entity), [HF_DAMAGE_...](#hf_damage_-1-hf_kind_damage), [HF_PACKAGE_...](#hf_package_-1-hf_kind_package), [HF_TAG_...](#hf_tag_-1-hf_kind_tag), [HF_TRAIT_...](#hf_trait_-29-hf_kind_trait), [HF_CATEGORY_...](#hf_category_-5-hf_kind_category), [HF_BEAM_...](#hf_beam_-3-hf_kind_beam), [HF_BOOSTER_...](#hf_booster_-20-hf_kind_booster)
 
 ## API
@@ -1445,6 +1445,60 @@ and statuses without code.
 | `offset_y` | +0x3C | f32 | now? | Hit volume local offset Y (unverified) |
 | `offset_z` | +0x40 | f32 | now? | Hit volume local offset Z (unverified) |
 | `repeat_hit_interval` | +0xAC | f32 | now? | Repeat-hit interval (0 once per attack) (unverified) |
+
+### HfEnemyRoster
+
+`EnemyRoster`: 40-byte rows found by id. an enemy roster row's spawn weights (a row by (roster << 16) | row; the weights wherever level 11 put them).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `weights` | +0x00 | f32[10] | mission? | spawn weight at tech levels (difficulties) 1 to 10 (unverified) |
+
+### HfEnemyRosterLevel11
+
+`EnemyRosterLevel11`: 4-byte rows found by id. an enemy roster row's spawn weight at level 11 (only with a mod that adds it).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `weight` | +0x00 | f32 | mission? | spawn weight at level 11 (unverified) |
+
+### HfEnemyComposition
+
+`EnemyComposition`: 280-byte rows found by id. an enemy squad composition (a row by (roster << 16) | (family << 12) | row).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `group_0_key` | +0x00 | u32 | mission? | group 1: the roster group it draws enemies from (not edited) (unverified) |
+| `group_0_count` | +0x04 | u32 | mission? | group 1: how many (the groups total at most 32) (unverified) |
+| `group_0_emission_time` | +0x08 | f32 | mission? | group 1: emission time (s) (unverified) |
+| `group_1_key` | +0x0C | u32 | mission? | group 2: the roster group it draws enemies from (not edited) (unverified) |
+| `group_1_count` | +0x10 | u32 | mission? | group 2: how many (the groups total at most 32) (unverified) |
+| `group_1_emission_time` | +0x14 | f32 | mission? | group 2: emission time (s) (unverified) |
+| `group_2_key` | +0x18 | u32 | mission? | group 3: the roster group it draws enemies from (not edited) (unverified) |
+| `group_2_count` | +0x1C | u32 | mission? | group 3: how many (the groups total at most 32) (unverified) |
+| `group_2_emission_time` | +0x20 | f32 | mission? | group 3: emission time (s) (unverified) |
+| `group_3_key` | +0x24 | u32 | mission? | group 4: the roster group it draws enemies from (not edited) (unverified) |
+| `group_3_count` | +0x28 | u32 | mission? | group 4: how many (the groups total at most 32) (unverified) |
+| `group_3_emission_time` | +0x2C | f32 | mission? | group 4: emission time (s) (unverified) |
+| `group_4_key` | +0x30 | u32 | mission? | group 5: the roster group it draws enemies from (not edited) (unverified) |
+| `group_4_count` | +0x34 | u32 | mission? | group 5: how many (the groups total at most 32) (unverified) |
+| `group_4_emission_time` | +0x38 | f32 | mission? | group 5: emission time (s) (unverified) |
+| `group_5_key` | +0x3C | u32 | mission? | group 6: the roster group it draws enemies from (not edited) (unverified) |
+| `group_5_count` | +0x40 | u32 | mission? | group 6: how many (the groups total at most 32) (unverified) |
+| `group_5_emission_time` | +0x44 | f32 | mission? | group 6: emission time (s) (unverified) |
+| `group_6_key` | +0x48 | u32 | mission? | group 7: the roster group it draws enemies from (not edited) (unverified) |
+| `group_6_count` | +0x4C | u32 | mission? | group 7: how many (the groups total at most 32) (unverified) |
+| `group_6_emission_time` | +0x50 | f32 | mission? | group 7: emission time (s) (unverified) |
+| `group_7_key` | +0x54 | u32 | mission? | group 8: the roster group it draws enemies from (not edited) (unverified) |
+| `group_7_count` | +0x58 | u32 | mission? | group 8: how many (the groups total at most 32) (unverified) |
+| `group_7_emission_time` | +0x5C | f32 | mission? | group 8: emission time (s) (unverified) |
+| `weight` | +0xE0 | f32 | mission? | how often it is picked (unverified) |
+| `cost_multiplier` | +0xE4 | f32 | mission? | its cost against the budget (unverified) |
+| `post_schedule_duration` | +0xE8 | f32 | mission? | post-schedule duration (s) (unverified) |
+| `minimum_tech_level` | +0xEC | u32 | mission? | lowest tech level (difficulty) (unverified) |
+| `maximum_tech_level` | +0xF0 | u32 | mission? | highest tech level (difficulty) (unverified) |
+| `minimum_players` | +0xF4 | u32 | mission? | fewest players (unverified) |
+| `maximum_players` | +0xF8 | u32 | mission? | most players (unverified) |
 
 ## Content
 
