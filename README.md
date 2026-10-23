@@ -26,8 +26,9 @@ lobbies of other HellForge players show on the Galactic Map: HellForge lists the
 Arrowhead's. A public lobby shows its players' names and its host's Steam account id to anyone who looks. You cannot
 play with the normal game's players.
 
-Joining a lobby whose host runs other gameplay mods offers to download them and restart with the host's mods. Mods that
-run code (a DLL, sources or Lua) download only when HellForge has verified that exact version. A blocklist hides lobbies
+Joining a lobby whose host runs other gameplay mods offers to download them and restart with the host's mods. Only
+what HellForge checks itself downloads by itself: mods that run code (a DLL, sources or Lua) or carry data it cannot
+check (binary data patches, raw stats) download only when HellForge has verified that exact version. A blocklist hides lobbies
 running mods you don't want, and lobbies whose host plays with edited stats (which you would play with) are hidden
 unless you show them on the Mods page.
 

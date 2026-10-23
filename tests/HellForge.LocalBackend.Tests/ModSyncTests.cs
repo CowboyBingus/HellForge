@@ -82,7 +82,10 @@ static class ModSyncTests
         File.WriteAllBytes(path, bytes);
     }
 
-    // The host: native edits, a 600 KB data patch (several chunks) and a prebuilt DLL. The joiner has the native edits only.
+    const string Stats = """{"format":1,"weapons":{"AR-23 Liberator":{"rpm":900}}}""";
+
+    // The host: network field types, schema stats (content), a 600 KB data patch (raw, several chunks) and a prebuilt DLL
+    // (code). The joiner has the network field types only.
     static (ModSet Host, ModSet Guest) Fixture(string root)
     {
         var host = Path.Combine(root, "host", "mods");
@@ -91,6 +94,8 @@ static class ModSyncTests
         Patch(Path.Combine(host, "texture", "data", "9ba626afa44a3aa3.patch_0"), 600_000, 7);
         Write(Path.Combine(host, "code"), ModCatalog.ManifestName, """{"format":1,"id":"test.code","name":"Code","version":"1","code":{"dll":"mod.dll","sdk":1}}""");
         Write(Path.Combine(host, "code"), "mod.dll", "synthetic dll");
+        Write(Path.Combine(host, "stats"), ModCatalog.ManifestName, """{"format":1,"id":"test.stats","name":"Stats","version":"1"}""");
+        Write(Path.Combine(host, "stats"), StatsData.FileName, Stats);
         var guest = Path.Combine(root, "guest", "mods");
         Write(Path.Combine(guest, "ammo"), ModCatalog.ManifestName, Ammo);
         return (ModSet.Of(ModCatalog.LoadOrder(ModCatalog.Load(host).Mods)), ModSet.Of(ModCatalog.LoadOrder(ModCatalog.Load(guest).Mods)));
@@ -112,24 +117,26 @@ static class ModSyncTests
     {
         root = Path.Combine(root, "mod-sync");
         var (hostSet, guestSet) = Fixture(root);
-        var allowCode = false;
-        bool Verified(string id, string hash) => allowCode && hostSet.Find(id, hash)?.Class == ModClass.Code;
+        var allowVerified = false;
+        bool Verified(string id, string hash) => allowVerified && hostSet.Find(id, hash) is { } mod && ModSets.NeedsVerified(mod.Class);
         var network = new InMemoryNetwork();
         var host = new Node(network, HostId, Path.Combine(root, "host"), hostSet, Verified);
         var guest = new Node(network, GuestId, Path.Combine(root, "guest"), guestSet, Verified);
         SyncAction Action(SyncView view, string id) => view.Items.Single(i => i.Mod.Id == id).Action;
 
-        // Unverified code: the lobby cannot be joined, and the code mod is named.
+        // Unverified code and raw data: the lobby cannot be joined, and both are named; schema stats would download.
         var blocked = Refused(host, guest, check, "a", "blocked");
-        check(Action(blocked, "test.ammo") == SyncAction.Have && Action(blocked, "test.texture") == SyncAction.Download && Action(blocked, "test.code") == SyncAction.Manual &&
-            blocked.Message.Contains("Code") && blocked.Message.Contains("not verified"), "Unverified code: " + blocked.Message);
+        check(Action(blocked, "test.ammo") == SyncAction.Have && Action(blocked, "test.stats") == SyncAction.Download &&
+            Action(blocked, "test.texture") == SyncAction.Manual && Action(blocked, "test.code") == SyncAction.Manual &&
+            blocked.Message.Contains("Code, Texture") && blocked.Message.Contains("cannot check and has not verified"), "Unverified code and raw data: " + blocked.Message);
         check(File.Exists(Path.Combine(guest.Run, "backend", ModSync.OfferFile)), "The offer is in the session's logs.");
 
-        // Verified code: an offer; accepted, everything downloads, is checked and stored; restart writes the next session.
-        allowCode = true;
+        // Verified code and raw data: an offer; accepted, everything downloads, is checked and stored; restart writes the
+        // next session.
+        allowVerified = true;
         var offer = Refused(host, guest, check, "b", "offer");
         var expected = hostSet.Mods.Where(m => m.Id != "test.ammo").Sum(m => m.Bytes);
-        check(offer.Bytes == expected && Action(offer, "test.code") == SyncAction.Download && offer.Message.Contains("2 mod(s)"), "Offer: " + offer.Message);
+        check(offer.Bytes == expected && Action(offer, "test.code") == SyncAction.Download && offer.Message.Contains("3 mod(s)"), "Offer: " + offer.Message);
         guest.Sync.Answer(["syncanswer", offer.Version.ToString(), "accept"]);
         var ready = guest.Shown.Next(check, "ready", "failed");
         check(ready.State == "ready" && ready.Done == expected, $"Downloaded: {ready.State} {ready.Message} ({ready.Done} of {expected})");
@@ -218,10 +225,10 @@ static class ModSyncTests
         Patch(patch, 600_000, 7);
 
         // A host that calls its code mod content: the joiner reads the manifest and stops before the DLL.
-        allowCode = false;
+        allowVerified = false;
         var code = hostSet.Mods.Single(m => m.Id == "test.code");
         Directory.Delete(SyncedStore.Find(guest.Mods, code.Id, code.Hash)!, recursive: true);
-        var liar = new Node(network, 0x110000100000024, Path.Combine(root, "liar"), hostSet with { Mods = [.. hostSet.Mods.Select(m => m.Id == code.Id ? m with { Class = ModClass.Content } : m)] },
+        var liar = new Node(network, 0x110000100000024, Path.Combine(root, "liar"), hostSet with { Mods = [.. hostSet.Mods.Where(m => m.Id is "test.ammo" || m.Id == code.Id).Select(m => m.Id == code.Id ? m with { Class = ModClass.Content } : m)] },
             Verified);
         liar.Lobby.FromLocal(MultiplayerTests.Create("h-create", 0x110000100000024));
         guest.Lobby.FromLocal(MultiplayerTests.Join("h-join", GuestId, liar.Next("lobby.result", check).Text(4)));
@@ -231,11 +238,47 @@ static class ModSyncTests
         guest.Sync.Answer(["syncanswer", lied.Version.ToString(), "accept"]);
         var caught = guest.Shown.Next(check, "failed");
         check(caught.Message.Contains("runs code") && SyncedStore.Find(guest.Mods, code.Id, code.Hash) == null, "A lying host is caught: " + caught.Message);
+        await Liars(network, guest, hostSet, root, check);
 
         await LiveDisplay(root, check);
         await liar.Sync.DisposeAsync();
         await guest.Sync.DisposeAsync();
         await host.Sync.DisposeAsync();
+    }
+
+    // Hosts that call raw data content (the class kept to the verified list): a data patch, which its file list shows; raw
+    // stats lines dressed as schema stats, which its stats file shows; and componentWrites, which its manifest shows. Each
+    // stops before its other bytes, and nothing is stored.
+    static async Task Liars(InMemoryNetwork network, Node guest, ModSet hostSet, string root, Action<bool, string> check)
+    {
+        var folder = Path.Combine(root, "raw-liars", "mods");
+        var texture = hostSet.Mods.Single(m => m.Id == "test.texture");
+        if (SyncedStore.Find(guest.Mods, texture.Id, texture.Hash) is { } stored) Directory.Delete(stored, recursive: true);
+        Write(Path.Combine(folder, "rawstats"), ModCatalog.ManifestName, """{"format":1,"id":"test.rawstats","name":"Raw stats","version":"1"}""");
+        Write(Path.Combine(folder, "rawstats"), StatsData.FileName,
+            """{"format":1,"weapons":{"AR-23 Liberator":{"rpm":900}},"raw":[{"component":"DepositComponentData","resource":"0x1","offset":0,"type":"u32","value":10,"expect":5}]}""");
+        Write(Path.Combine(folder, "rawstats"), "padding.txt", new string('p', 300_000));
+        Write(Path.Combine(folder, "writes"), ModCatalog.ManifestName, """{"format":1,"id":"test.writes","name":"Writes","version":"1","native":{"componentWrites":[{"component":"DepositComponentData","resource":"0x056DE1C5E21E723E","fields":[{"name":"capacity","offset":0,"expect":1000,"value":10000}]}]}}""");
+        Write(Path.Combine(folder, "writes"), "padding.txt", new string('w', 300_000));
+        var raw = ModSet.Of(ModCatalog.LoadOrder(ModCatalog.Load(folder).Mods));
+        check(raw.Mods.Count == 2 && raw.Mods.All(m => m.Class == ModClass.Raw), "Raw stats lines and componentWrites are raw: " + string.Join(", ", raw.Mods.Select(m => m.Id + " " + m.Class)));
+        ulong next = 0x110000100000030;
+        foreach (var (id, set, file) in new[] { (texture.Id, hostSet, "data/9ba626afa44a3aa3.patch_0"), ("test.rawstats", raw, "padding.txt"), ("test.writes", raw, "padding.txt") })
+        {
+            var target = set.Mods.Single(m => m.Id == id);
+            var liar = new Node(network, ++next, Path.Combine(root, "raw-liar-" + id), new ModSet(set.Digest, [target with { Class = ModClass.Content }]), (_, _) => false);
+            liar.Lobby.FromLocal(MultiplayerTests.Create(id + "-create", next));
+            guest.Lobby.FromLocal(MultiplayerTests.Join(id + "-join", GuestId, liar.Next("lobby.result", check).Text(4)));
+            guest.Next("lobby.result", check);
+            var lied = guest.Shown.Next(check, "offer");
+            check(lied.Items.Single(i => i.Mod.Id == id).Action == SyncAction.Download, id + ": the joiner first believes the host's class.");
+            guest.Sync.Answer(["syncanswer", lied.Version.ToString(), "accept"]);
+            var caught = guest.Shown.Next(check, "failed");
+            var partial = Path.Combine(SyncedStore.Root(guest.Mods), ".partial", id + "@" + target.Hash[..16]);
+            check(caught.Message.Contains("carries data HellForge cannot check") && caught.Done < target.Files.Single(f => f.Path == file).Size &&
+                SyncedStore.Find(guest.Mods, id, target.Hash) == null && !Directory.Exists(partial), $"{id}, called content, is caught before its bytes: {caught.Message} ({caught.Done} bytes)");
+            await liar.Sync.DisposeAsync();
+        }
     }
 
     // The game's side over the live-edit pipe: the offer's lines, and its answer back.
@@ -265,10 +308,12 @@ static class ModSyncTests
             }
         });
         var mod = new ModSetEntry("test.tab", "Name\twith a tab", "1", new string('a', 64), 1234, ModClass.Code, 0);
-        var view = new SyncView(7, "offer", "Host\nName", 1234, 0, "Message", [new SyncItem(mod, SyncAction.Download, null)]);
+        var raw = new ModSetEntry("test.raw", "Raw", "2", new string('b', 64), 10, ModClass.Raw, 1);
+        var view = new SyncView(7, "offer", "Host\nName", 1244, 0, "Message", [new SyncItem(mod, SyncAction.Download, null), new SyncItem(raw, SyncAction.Manual, null)]);
         check(await new LiveSyncDisplay(live).ShowAsync(view, withMods: true), "The game took the offer.");
         await game;
-        check(lines.SequenceEqual(["syncmod\t7\t0\tdownload\tcode\t1234\ttest.tab\tNamewith a tab\t1", "syncstate\t7\toffer\tHostName\t1234\t0\t1\tMessage"]),
+        check(lines.SequenceEqual(["syncmod\t7\t0\tdownload\tcode\t1234\ttest.tab\tNamewith a tab\t1", "syncmod\t7\t1\tmanual\traw\t10\ttest.raw\tRaw\t2",
+                "syncstate\t7\toffer\tHostName\t1244\t0\t2\tMessage"]),
             "The lines: " + string.Join(" | ", lines));
         await writer.WriteLineAsync("syncanswer\t7\tblock\ttest.tab");
         check(answers.TryTake(out var answer, TimeSpan.FromSeconds(5)) && answer!.SequenceEqual(["syncanswer", "7", "block", "test.tab"]), "The game's answer arrives.");

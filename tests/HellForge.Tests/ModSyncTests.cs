@@ -50,8 +50,8 @@ static class ModSyncTests
     static string Manifest(string id, string version, string extra = "") =>
         $$"""{"format":1,"id":"{{id}}","name":"{{id}} mod","version":"{{version}}"{{extra}}}""";
 
-    // A mod folder of each kind: native edits (content), a data patch (content), a prebuilt DLL (code), a source mod with an
-    // IDE's leftovers (code), a cosmetic one, and a data patch holding Lua inside a mod with stats-free content (code).
+    // A mod folder of each kind: network field types (content), a data patch (raw), a prebuilt DLL (code), a source mod
+    // with an IDE's leftovers (code), a cosmetic one, and a data patch holding Lua beside network field types (code).
     static string Mods(string root, string name)
     {
         var mods = Path.Combine(root, name);
@@ -95,8 +95,9 @@ static class ModSyncTests
                 check(ModCatalog.Digest(subset) == DigestBefore(subset), "A subset's digest changed.");
             check(set.Mods.Select(m => m.Id).SequenceEqual(["test.ammo", "test.prebuilt", "test.scripted", "test.source", "test.texture"]), "Gameplay mods by id, cosmetic left out.");
             ModSetEntry M(string id) => set.Mods.Single(m => m.Id == id);
-            check(M("test.ammo").Class == ModClass.Content && M("test.texture").Class == ModClass.Content && M("test.prebuilt").Class == ModClass.Code &&
-                M("test.source").Class == ModClass.Code && M("test.scripted").Class == ModClass.Code, "Classes: native edits and textures content; a DLL, sources and Lua code.");
+            check(M("test.ammo").Class == ModClass.Content && M("test.texture").Class == ModClass.Raw && M("test.prebuilt").Class == ModClass.Code &&
+                M("test.source").Class == ModClass.Code && M("test.scripted").Class == ModClass.Code,
+                "Classes: network field types content; a texture patch raw; a DLL, sources and Lua code.");
             check(M("test.source").Files.Select(f => f.Path).SequenceEqual([ModCatalog.ManifestName, "src/mod.c"]), "A source mod's files leave out its build and the IDE's.");
             var ammo = loaded.Single(m => m.Id == "test.ammo");
             check(M("test.ammo").Hash == ModSets.ContentHash(ammo) && M("test.ammo").Hash.Length == 64 && M("test.ammo").Bytes == new FileInfo(Path.Combine(ammo.Folder, ModCatalog.ManifestName)).Length,
@@ -215,6 +216,69 @@ static class ModSyncTests
             check(A(ModSyncPlan.Make(bundled, true, own, locator.Find, none), host.Mods[0].Id) == SyncAction.Update, "A different bundled mod is another HellForge.");
         });
 
+        test("Mod sync: only what HellForge checks itself downloads unverified: data specs, schema stats, network field types; raw data needs the verified list, from friends too", () =>
+        {
+            var folder = Path.Combine(root, "sync-classes");
+            Write(Path.Combine(folder, "spec"), ModCatalog.ManifestName, Manifest("test.spec", "1"));
+            Write(Path.Combine(folder, "spec"), DataSpecs.FileName,
+                """{"format":1,"patches":[{"archives":["1111111111111111"],"resources":[{"type":"unit","copy":"0x3333","name":"test/mod/unit"}]}]}""");
+            Write(Path.Combine(folder, "stats"), ModCatalog.ManifestName, Manifest("test.stats", "1"));
+            Write(Path.Combine(folder, "stats"), StatsData.FileName, """{"format":1,"weapons":{"AR-23 Liberator":{"rpm":900}}}""");
+            Write(Path.Combine(folder, "ammo"), ModCatalog.ManifestName, Ammo);
+            Write(Path.Combine(folder, "rawstats"), ModCatalog.ManifestName, Manifest("test.rawstats", "1"));
+            Write(Path.Combine(folder, "rawstats"), StatsData.FileName,
+                """{"format":1,"raw":[{"component":"DepositComponentData","resource":"0x1","offset":0,"type":"u32","value":10,"expect":5}]}""");
+            Write(Path.Combine(folder, "writes"), ModCatalog.ManifestName, Manifest("test.writes", "1",
+                ",\"native\":{\"componentWrites\":[{\"component\":\"DepositComponentData\",\"resource\":\"0x056DE1C5E21E723E\",\"fields\":[{\"name\":\"capacity\",\"offset\":0,\"expect\":1000,\"value\":10000}]}]}"));
+            Write(Path.Combine(folder, "patch"), ModCatalog.ManifestName, Manifest("test.patch", "1"));
+            Patch(Path.Combine(folder, "patch", "data", "9ba626afa44a3aa3.patch_0"), ResourceTypes.Texture);
+            Write(Path.Combine(folder, "dll"), ModCatalog.ManifestName, Manifest("test.dll", "1", ",\"code\":{\"dll\":\"mod.dll\",\"sdk\":1}"));
+            Write(Path.Combine(folder, "dll"), "mod.dll", "synthetic dll");
+            var (loaded, problems) = ModCatalog.Load(folder);
+            check(loaded.Count == 7, "Fixture mods load: " + string.Join(" | ", problems));
+            var set = ModSet.Of(ModCatalog.LoadOrder(loaded));
+            var expected = new Dictionary<string, ModClass>
+            {
+                ["test.spec"] = ModClass.Content, ["test.stats"] = ModClass.Content, ["test.ammo"] = ModClass.Content,
+                ["test.rawstats"] = ModClass.Raw, ["test.writes"] = ModClass.Raw, ["test.patch"] = ModClass.Raw, ["test.dll"] = ModClass.Code
+            };
+            foreach (var (id, kind) in expected) check(set.Find(id, set.Mods.Single(m => m.Id == id).Hash)!.Class == kind, $"{id} is {kind}.");
+            check(ModSet.Parse(set.ToJson(local: false).ToJsonString(), local: false).Mods.Single(m => m.Id == "test.patch").Class == ModClass.Raw, "The raw class goes over the wire.");
+
+            // The plan: unverified, content downloads and the rest is the player's to install; verified, all of it downloads.
+            // One rule for every host (no friends' exception: the plan is not told who the host is).
+            var none = new ModSet("none", []);
+            var plan = ModSyncPlan.Make(set, true, none, (_, _) => null, new HashSet<string>(), verified: (_, _) => false);
+            foreach (var (id, kind) in expected)
+                check(plan.Items.Single(i => i.Mod.Id == id).Action == (kind == ModClass.Content ? SyncAction.Download : SyncAction.Manual), $"{id}: unverified plan.");
+            var verifiedPlan = ModSyncPlan.Make(set, true, none, (_, _) => null, new HashSet<string>(), verified: (id, hash) => set.Find(id, hash) != null);
+            check(verifiedPlan.Items.All(i => i.Action == SyncAction.Download), "Verified raw data and code download.");
+
+            // Before the bytes: the file list, the manifest and the stats file show code and raw data.
+            foreach (var mod in set.Mods)
+            {
+                var manifest = File.ReadAllText(Path.Combine(mod.Folder!, ModCatalog.ManifestName));
+                var statsFile = Path.Combine(mod.Folder!, StatsData.FileName);
+                var declared = ModSets.Declared(mod.Files.Select(f => f.Path), manifest, File.Exists(statsFile) ? File.ReadAllText(statsFile) : null);
+                check(declared == (expected[mod.Id] == ModClass.Content ? null : expected[mod.Id]), $"{mod.Id}: declared {declared?.ToString() ?? "nothing"}.");
+            }
+
+            // The store: content goes in unverified; raw data only when verified, whatever the host calls it.
+            var install = new InstallLayout(Path.Combine(root, "sync-classes-install"));
+            install.Create(SupportedBuild.Current.BuildId);
+            Directory.CreateDirectory(install.Mods);
+            string Fresh(ModSetEntry mod) { var p = SyncedStore.Partial(install.Mods, mod.Id, mod.Hash); CopyFiles(mod, p); return p; }
+            foreach (var mod in set.Mods.Where(m => expected[m.Id] == ModClass.Content))
+                check(SyncedStore.Install(install.Mods, mod, Fresh(mod), verified: (_, _) => false) == SyncedStore.Find(install.Mods, mod.Id, mod.Hash), mod.Id + " is stored unverified.");
+            foreach (var mod in set.Mods.Where(m => expected[m.Id] == ModClass.Raw))
+            {
+                reject(() => SyncedStore.Install(install.Mods, mod with { Class = ModClass.Content }, Fresh(mod), verified: (_, _) => false));
+                check(SyncedStore.Find(install.Mods, mod.Id, mod.Hash) == null, mod.Id + " is refused unverified.");
+                check(SyncedStore.Install(install.Mods, mod, Fresh(mod), verified: (id, hash) => id == mod.Id && hash == mod.Hash) == SyncedStore.Find(install.Mods, mod.Id, mod.Hash),
+                    mod.Id + " is stored verified.");
+            }
+        });
+
         test("Mod sync: only safe paths a digest would count can be written by a download", () =>
         {
             foreach (var good in new[] { "hellforge-mod.json", "data/9ba626afa44a3aa3.patch_0", "src/a b/c.cpp", "images/icon.png" })
@@ -235,9 +299,13 @@ static class ModSyncTests
             install.Create(SupportedBuild.Current.BuildId);
             Directory.CreateDirectory(install.Mods);
             var texture = host.Mods.Single(m => m.Id == "test.texture");
+            bool TextureVerified(string id, string hash) => id == texture.Id && hash == texture.Hash;
             var partial = SyncedStore.Partial(install.Mods, texture.Id, texture.Hash);
             CopyFiles(texture, partial);
-            var installed = SyncedStore.Install(install.Mods, texture, partial);
+            reject(() => SyncedStore.Install(install.Mods, texture with { Class = ModClass.Content }, partial));
+            check(!Directory.Exists(partial) && SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == null, "A raw data patch is refused unverified, whatever the host calls it.");
+            CopyFiles(texture, partial);
+            var installed = SyncedStore.Install(install.Mods, texture, partial, TextureVerified);
             check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == installed && !Directory.Exists(partial), "Installed and found by hash.");
             check(new ModLocator(install.Mods).Find(texture.Id, texture.Hash) == installed, "The locator finds the store's copy.");
             check(ModCatalog.Load(install.Mods).Mods.Count == 0, "Normal sessions never load the store.");
@@ -288,7 +356,7 @@ static class ModSyncTests
             var texture = host.Mods.Single(m => m.Id == "test.texture");
             var partial = SyncedStore.Partial(install.Mods, texture.Id, texture.Hash);
             CopyFiles(texture, partial);
-            SyncedStore.Install(install.Mods, texture, partial);
+            SyncedStore.Install(install.Mods, texture, partial, verified: (id, hash) => id == texture.Id && hash == texture.Hash);
 
             var file = ModSyncSession.PathIn(install);
             var session = new ModSyncSession("1100001DEADBEEF", "Host", "hellforge1-lobby;x;1100001DEADBEEF", host.Digest,
@@ -308,7 +376,7 @@ static class ModSyncTests
             check(missing == null && why!.Contains("test.texture"), "A missing mod falls back: " + why);
             var wrong = read with { Digest = new string('0', 32) };
             CopyFiles(texture, partial = SyncedStore.Partial(install.Mods, texture.Id, texture.Hash));
-            SyncedStore.Install(install.Mods, texture, partial);
+            SyncedStore.Install(install.Mods, texture, partial, verified: (id, hash) => id == texture.Id && hash == texture.Hash);
             check(wrong.Resolve(install.Mods, ModCatalog.Load(install.Mods).Mods).Problem != null, "Another digest falls back.");
             File.WriteAllText(file, File.ReadAllText(file).Replace(texture.Hash, "nothex"));
             reject(() => ModSyncSession.Read(file));

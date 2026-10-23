@@ -106,7 +106,7 @@ static void LiveSyncFixture(void)
     assert(!strncmp(reply, "5\trefused\t", 10)); /* a mod count changed without its mods */
 
     /* a new version: its syncstate without all of its syncmod lines is refused, the old offer stays */
-    SyncLine("syncmod\t6\t6\t1\toff\tcontent\t0\tmine.extra\tExtra\t1.0", reply, sizeof reply);
+    SyncLine("syncmod\t6\t6\t1\toff\traw\t0\tmine.extra\tExtra\t1.0", reply, sizeof reply); /* raw: data HellForge cannot check */
     SyncLine("syncstate\t7\t6\tready\tFriend One\t0\t0\t2\t", reply, sizeof reply);
     assert(!strncmp(reply, "7\trefused\t", 10) && strstr(reply, "missing"));
     assert(ApiSyncState(NULL, &state) && state.version == 5);
@@ -115,7 +115,7 @@ static void LiveSyncFixture(void)
     assert(!strcmp(reply, "9\tok\tnow"));
     assert(ApiSyncState(NULL, &state) && state.state == HF_SYNC_READY && state.version == 6 && state.mods == 2);
     assert(ApiSyncMod(NULL, 0, &mod) && mod.action == HF_SYNC_MOD_HAVE && mod.kind == HF_SYNC_CLASS_BUNDLED);
-    assert(ApiSyncMod(NULL, 1, &mod) && mod.action == HF_SYNC_MOD_OFF && !strcmp(mod.id, "mine.extra"));
+    assert(ApiSyncMod(NULL, 1, &mod) && mod.action == HF_SYNC_MOD_OFF && mod.kind == HF_SYNC_CLASS_RAW && !strcmp(mod.id, "mine.extra"));
 
     /* malformed lines: refused, nothing changes */
     const char* bad[] = {

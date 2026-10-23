@@ -12,10 +12,14 @@ namespace HellForge.Core;
 // set (ModSet); the joiner's backend plans the difference (ModSyncPlan), downloads what it may from the host's backend
 // into the synced store (SyncedStore) and restarts the session with the host's set (ModSyncSession). What a joiner takes
 // from a host depends on the mod's class, which the joiner reads from the bytes it received, never from the host:
-//   content  data patches without Lua, data specs, stats, native edits: from any host;
+//   content  what HellForge checks itself: data specs (built from the joiner's own game files), schema stats (named fields
+//            within their reviewed ranges) and network field types (integer widenings): from any host;
 //   code     a DLL, sources HellForge compiles, or a patch holding Lua: only when VerifiedMods lists its exact content;
+//   raw      bytes HellForge cannot check, which reach the game's own parsers or any field: binary data patches (data/),
+//            raw stats lines and componentWrites: only when VerifiedMods lists its exact content, as code;
 //   bundled  a mod HellForge ships (the in-game editor): never downloaded; a different one is another HellForge version.
-public enum ModClass { Content, Code, Bundled }
+// Every host gets the same rule, a Steam friend too.
+public enum ModClass { Content, Code, Bundled, Raw }
 
 // A file of a mod as the digest counts it: its path in the mod folder ('/'), size and SHA-256 (upper-case hex).
 public sealed record ModFile(string Path, long Size, string Sha256);
@@ -153,17 +157,49 @@ public static class ModSets
     // A mod's content hash, read from its folder now.
     public static string ContentHash(ModManifest mod) => Hash(Block(mod, Files(mod)));
 
-    // Code runs in the game: a DLL (or sources HellForge builds into one), or a patch with Lua scripts.
+    // Code runs in the game: a DLL (or sources HellForge builds into one), or a patch with Lua scripts. Raw is what reaches
+    // the game unchecked: binary data patches, componentWrites, and raw stats lines (StatsData's "raw" section, the only
+    // stats edits that carry an expected vanilla value rather than a reviewed range).
     public static ModClass ClassOf(ModManifest mod) =>
-        BundledMods.ShippedFiles(mod.Folder) != null ? ModClass.Bundled : mod.HasCode || mod.Lua ? ModClass.Code : ModClass.Content;
+        BundledMods.ShippedFiles(mod.Folder) != null ? ModClass.Bundled
+        : mod.HasCode || mod.Lua ? ModClass.Code
+        : mod.DataFiles.Count > 0 || mod.ComponentWrites.Count > 0 || mod.Stats.Any(e => e.Expect != null) ? ModClass.Raw
+        : ModClass.Content;
 
-    public static string ClassName(ModClass kind) => kind switch { ModClass.Code => "code", ModClass.Bundled => "bundled", _ => "content" };
+    // Downloads only when the verified list names its exact content.
+    public static bool NeedsVerified(ModClass kind) => kind is ModClass.Code or ModClass.Raw;
+
+    // What a download already shows before the rest of its bytes: the host's file list, its manifest, and its stats file
+    // (null when it lists none). Code or Raw when they show it, null otherwise: the whole mod decides then (ClassOf).
+    public static ModClass? Declared(IEnumerable<string> paths, string manifestJson, string? statsJson)
+    {
+        using var manifest = JsonDocument.Parse(manifestJson);
+        var root = manifest.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) return null;
+        if (root.TryGetProperty("code", out _)) return ModClass.Code;
+        if (paths.Any(p => p.StartsWith("data/", StringComparison.OrdinalIgnoreCase))) return ModClass.Raw;
+        if (root.TryGetProperty("native", out var native) && native.ValueKind == JsonValueKind.Object && native.TryGetProperty("componentWrites", out _))
+            return ModClass.Raw;
+        if (statsJson == null) return null;
+        using var stats = JsonDocument.Parse(statsJson);
+        return stats.RootElement.ValueKind == JsonValueKind.Object && stats.RootElement.TryGetProperty("raw", out _) ? ModClass.Raw : null;
+    }
+
+    public static string ClassName(ModClass kind) => kind switch
+    {
+        ModClass.Code => "code", ModClass.Bundled => "bundled", ModClass.Raw => "raw", _ => "content"
+    };
 
     public static ModClass ClassNamed(string name) => name switch
     {
-        "content" => ModClass.Content, "code" => ModClass.Code, "bundled" => ModClass.Bundled,
+        "content" => ModClass.Content, "code" => ModClass.Code, "bundled" => ModClass.Bundled, "raw" => ModClass.Raw,
         _ => throw new InvalidDataException($"{name} is not a mod class.")
     };
+
+    // Why a mod of this class needs the verified list, for the player.
+    public static string Unchecked(ModClass kind) => kind == ModClass.Raw
+        ? "carries data HellForge cannot check (data patches, raw stats or component writes)"
+        : "runs code (a DLL, sources or Lua)";
 
     internal static bool Hex(string text, int length) => text.Length == length && text.All(char.IsAsciiHexDigitLower);
 }
@@ -261,7 +297,7 @@ public sealed record ModSyncPlan(IReadOnlyList<SyncItem> Items)
             var folder = own.Find(mod.Id, mod.Hash)?.Folder ?? find(mod.Id, mod.Hash);
             var action = folder != null ? SyncAction.Have
                 : mod.Class == ModClass.Bundled ? SyncAction.Update
-                : !hostShares || mod.Class == ModClass.Code && !verified(mod.Id, mod.Hash) ? SyncAction.Manual
+                : !hostShares || ModSets.NeedsVerified(mod.Class) && !verified(mod.Id, mod.Hash) ? SyncAction.Manual
                 : SyncAction.Download;
             items.Add(new(mod, action, folder));
         }
@@ -337,8 +373,8 @@ public static class SyncedStore
     static string Visible(string text) => string.Concat(text.Take(80).Select(c => char.IsControl(c) ? '?' : c));
 
     // Checks a finished download against what the plan expected and moves it into the store; returns its folder. It
-    // must be a mod with that id and version, the same content hash read from its own files, and content, or code the
-    // verified list names (read from its own manifest and patches, whatever the host said). Throws InvalidDataException,
+    // must be a mod with that id and version, the same content hash read from its own files, and content, or code or raw
+    // data the verified list names (read from its own files, whatever the host said). Throws InvalidDataException,
     // with the download deleted.
     public static string Install(string modsFolder, ModSetEntry expected, string partial, Func<string, string, bool>? verified = null,
         EntityProfile? profile = null)
@@ -372,12 +408,10 @@ public static class SyncedStore
         var counted = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
         if (Directory.GetFiles(partial, "*", SearchOption.AllDirectories).Any(f => !counted.Contains(Path.GetRelativePath(partial, f).Replace('\\', '/'))))
             throw new InvalidDataException($"{expected.Id}: it holds files the host did not list.");
-        switch (ModSets.ClassOf(mod))
-        {
-            case ModClass.Bundled: throw new InvalidDataException($"{expected.Id} is a mod HellForge ships; it is never downloaded.");
-            case ModClass.Code when !verified(mod.Id, expected.Hash):
-                throw new InvalidDataException($"{expected.Id} runs code (a DLL, sources or Lua) and is not on HellForge's verified list.");
-        }
+        var kind = ModSets.ClassOf(mod);
+        if (kind == ModClass.Bundled) throw new InvalidDataException($"{expected.Id} is a mod HellForge ships; it is never downloaded.");
+        if (ModSets.NeedsVerified(kind) && !verified(mod.Id, expected.Hash))
+            throw new InvalidDataException($"{expected.Id} {ModSets.Unchecked(kind)} and is not on HellForge's verified list.");
     }
 }
 

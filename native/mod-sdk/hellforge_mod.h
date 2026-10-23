@@ -807,9 +807,10 @@ typedef struct HfSyncState
 #define HF_SYNC_MOD_BLOCKED 3u  /* on the player's blocklist */
 #define HF_SYNC_MOD_UPDATE 4u   /* part of HellForge, another version: both players need the same HellForge */
 #define HF_SYNC_MOD_OFF 5u      /* one of this machine's own, off for the synced session (the host does not run it) */
-#define HF_SYNC_CLASS_CONTENT 0u /* data, stats or native edits: no code */
+#define HF_SYNC_CLASS_CONTENT 0u /* what HellForge checks: data specs, schema stats, network field types */
 #define HF_SYNC_CLASS_CODE 1u    /* a DLL, sources HellForge builds, or Lua */
 #define HF_SYNC_CLASS_BUNDLED 2u /* shipped with HellForge (the in-game editor) */
+#define HF_SYNC_CLASS_RAW 3u     /* data HellForge cannot check: data patches, raw stats or component writes */
 typedef struct HfSyncMod
 {
     uint32_t size;      /* sizeof(HfSyncMod): set by the caller */

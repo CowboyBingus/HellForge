@@ -11,7 +11,7 @@
  *             get <seq> <kind> <component> <resource hex> <record> <offset> <storage>
  *             session <seq> <solo|host|joiner> [<host name>]
  *             notice <seq> <error|info> <title> [<line>...]   (SDK 12: a message the in-game editor shows the player)
- *             syncmod <seq> <version> <index> <have|download|manual|blocked|update|off> <content|code|bundled> <bytes>
+ *             syncmod <seq> <version> <index> <have|download|manual|blocked|update|off> <content|code|bundled|raw> <bytes>
  *                     <id> <name> <mod version>
  *             syncstate <seq> <version> <none|offer|blocked|downloading|ready|failed> <host name> <bytes> <done> <mods>
  *                       <message>                                      (syncmod, syncstate: SDK 14, mod sync)
@@ -93,7 +93,7 @@ static void SetNotice(char** f, int n)
 #define SYNC_MAX_MODS 64
 static const char* const kSyncStates[] = {"none", "offer", "blocked", "downloading", "ready", "failed"};
 static const char* const kSyncActions[] = {"have", "download", "manual", "blocked", "update", "off"};
-static const char* const kSyncClasses[] = {"content", "code", "bundled"};
+static const char* const kSyncClasses[] = {"content", "code", "bundled", "raw"};
 static SRWLOCK g_syncLock = SRWLOCK_INIT;
 static HfSyncState g_sync;
 static HfSyncMod g_syncMods[SYNC_MAX_MODS];
@@ -155,7 +155,7 @@ static void SyncModLine(char* line, char* reply, size_t size)
     char* f[10];
     int n = SplitAll(line, f, 10);
     uint64_t version = 0, index = 0, bytes = 0;
-    int action = n == 10 ? SyncName(f[4], kSyncActions, 6) : -1, kind = n == 10 ? SyncName(f[5], kSyncClasses, 3) : -1;
+    int action = n == 10 ? SyncName(f[4], kSyncActions, 6) : -1, kind = n == 10 ? SyncName(f[5], kSyncClasses, 4) : -1;
     if (n != 10 || !SyncNumber(f[2], &version) || version > UINT32_MAX || !SyncNumber(f[3], &index) || !SyncNumber(f[6], &bytes) ||
         action < 0 || kind < 0 || !f[7][0])
     { snprintf(reply, size, "%s\trefused\tmalformed syncmod", n >= 2 ? f[1] : "-"); return; }

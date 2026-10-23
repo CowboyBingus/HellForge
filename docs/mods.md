@@ -92,7 +92,7 @@ the host's mods and what happens to it:
 |---|---|
 | you have it | an installed mod (on or off) or one downloaded before has the same id and content |
 | downloads | it comes from the host's backend over the Steam peer link |
-| install it yourself | the host does not share their mods, or it runs code that HellForge has not verified |
+| install it yourself | the host does not share their mods, or it runs code or carries data that HellForge cannot check and has not verified |
 | blocked | it is on your blocklist, so the lobby cannot be joined |
 | needs another HellForge | a mod HellForge ships differs: both players need the same HellForge |
 | off for this session | one of your own gameplay mods that the host does not run |
@@ -103,19 +103,27 @@ the launcher starts a new one with the host's mods, in the host's load order, pl
 Stats. Join the lobby again from the social tab or the map. Only that one session plays the host's mods: your Mods page
 and its switches never change, and the next session you start yourself runs your own mods again.
 
-**What may download (the trust rule).** Your backend decides each mod's class from the bytes it received, never from
-what the host says:
-- *Content* mods download from any host: data patches without Lua, data specs, stats and native edits.
-- *Code* mods (a DLL, C or C++ sources HellForge compiles, or a patch holding Lua) download only when HellForge's
-  verified list names that exact content: `data/verified-mods.json`, shipped with each HellForge release, entries
-  `{"id","name","version","hash","reviewed"}`. The hash is the mod's content hash: the SHA-256 of the lines the modlist
-  code takes from it (`ModSets.ContentHash`). Any other code mod is one you install yourself.
+**What may download (the trust rule).** Only what HellForge checks itself downloads by itself. Your backend decides
+each mod's class from the bytes it received, never from what the host says, and the rule is the same for every host,
+Steam friends included:
+- *Content* downloads from any host: data specs (`hellforge-data.json`, whose patches HellForge builds from your own
+  game files), schema stats (`hellforge-stats.json` fields by name, each within its reviewed range) and network field
+  types (an integer field widened, never past 31 bits).
+- *Raw data* reaches the game without HellForge being able to check it: binary data patches (a `data/` folder, read by
+  the game's own file parsers), raw stats lines (the stats file's `"raw"` section) and `componentWrites` (any field of
+  a component record). It downloads only as code does, below.
+- *Code* (a DLL, C or C++ sources HellForge compiles, or a patch holding Lua) and raw data download only when
+  HellForge's verified list names that exact content: `data/verified-mods.json`, shipped with each HellForge release,
+  entries `{"id","name","version","hash","reviewed"}`. The hash is the mod's content hash: the SHA-256 of the lines the
+  modlist code takes from it (`ModSets.ContentHash`). Any other such mod is one you install yourself; the prompt marks
+  it CODE or RAW DATA.
 - *Bundled* mods (the in-game editor) never download.
 
-**Checks.** The manifest comes first: a mod that declares code and is not verified stops there, before its other
-files. Every file must have a safe path and match the size and SHA-256 the host listed. The finished mod must parse,
-have the expected id and version, rehash to the host's content hash, and be content or verified code. Only then is it
-kept, in `mods/.synced/<id>@<hash>/`; a failed download is deleted. Normal sessions never load that folder.
+**Checks.** The file list, the manifest and the stats file come first: a mod that shows code or raw data there and is
+not verified stops before its other files. Every file must have a safe path and match the size and SHA-256 the host
+listed. The finished mod must parse, have the expected id and version, rehash to the host's content hash, and be
+content or verified. Only then is it kept, in `mods/.synced/<id>@<hash>/`; a failed download is deleted. Normal
+sessions never load that folder.
 
 **Blocking.** **BLOCK** on a row of the prompt (or **B**) puts that mod on your blocklist: lobbies running it are not
 offered again. Unblock it on the launcher's Mods page (MOD SYNC card).

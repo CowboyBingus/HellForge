@@ -139,9 +139,10 @@ host sends its mod set (`mods.offer`); the joiner's backend plans the difference
 the in-game editor shows the MOD SYNC prompt (SDK 14 `sync_state`, `sync_mod`, `sync_answer`). On accept the joiner
 downloads each mod's counted files from the host over the Steam link (`mods.files`, `mods.get`, paced to 1 MiB/s per
 machine), checks every file and the whole mod (`SyncedStore.Install`), keeps it in `mods/.synced/<id>@<hash>/`, and the
-launcher restarts the session with the host's mods (`--mod-sync`). Each mod's class comes from the bytes received:
-content downloads from any host, code only when `data/verified-mods.json` names its exact content hash, bundled mods
-never. The host side is `src/HellForge.LocalBackend/Multiplayer/ModSync.cs`; the protocol and limits are in
+launcher restarts the session with the host's mods (`--mod-sync`). Each mod's class comes from the bytes received,
+with one rule for every host, Steam friends included (`ModSets.ClassOf`). Content (data specs, schema stats, network
+field types) downloads from any host. Code and raw data (binary data patches, raw stats lines, `componentWrites`)
+download only when `data/verified-mods.json` names their exact content hash. Bundled mods never download. The host side is `src/HellForge.LocalBackend/Multiplayer/ModSync.cs`; the protocol and limits are in
 [Step 6](#step-6-mod-sync-a-joiner-takes-the-hosts-mods-2026-10-22) below.
 
 ### Public lobbies (the lobby directory)
@@ -491,8 +492,8 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
     editor shows its MOD SYNC prompt over the game, the editor window closed. The answer comes back as
   `syncanswer <version> <answer> [<mod id>]`.
   - The offer is also written to `<run>/backend/mod-sync.json`.
-  - On accept it downloads, four requests in flight. The manifest comes first: a declared code mod that is not on
-    the verified list stops there.
+  - On accept it downloads, four requests in flight. The file list, the manifest and the stats file come first: a
+    mod they show to be code or raw data (`ModSets.Declared`) that is not on the verified list stops there.
   - Each file is checked against its listed size and SHA-256, and the whole mod by `SyncedStore.Install`, before it
     goes to `mods/.synced/`.
   - On restart it writes `<install>/temp/mod-sync/session.json` (`ModSyncSession`) and `mod-sync` into

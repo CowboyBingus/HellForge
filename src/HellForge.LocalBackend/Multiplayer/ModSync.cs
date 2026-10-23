@@ -292,7 +292,7 @@ public sealed class ModSync : IAsyncDisposable
             SyncVerdict.Unjoinable when plan.Items.Any(i => i.Action == SyncAction.Update) =>
                 ("blocked", $"{o.HostName} runs another HellForge version ({Names(SyncAction.Update)} differs): both players need the same HellForge."),
             SyncVerdict.Unjoinable when !o.Shares => ("blocked", $"{o.HostName} does not share their mods. Install them yourself to join: {Names(SyncAction.Manual)}."),
-            SyncVerdict.Unjoinable => ("blocked", $"Some of {o.HostName}'s mods run code HellForge has not verified. Install them yourself to join: {Names(SyncAction.Manual)}."),
+            SyncVerdict.Unjoinable => ("blocked", $"Some of {o.HostName}'s mods run code or carry data that HellForge cannot check and has not verified. Install them yourself to join: {Names(SyncAction.Manual)}."),
             SyncVerdict.Download => ("offer", $"{o.HostName} plays with {plan.Items.Count(i => i.Action == SyncAction.Download)} mod(s) you don't have ({Megabytes(plan.DownloadBytes)}). Download them and restart with {o.HostName}'s mods to join."),
             _ => ("offer", $"You have all of {o.HostName}'s mods. Restart with them to join.")
         };
@@ -374,12 +374,17 @@ public sealed class ModSync : IAsyncDisposable
         var partial = SyncedStore.Partial(modsFolder, mod.Id, mod.Hash);
         try
         {
-            // The manifest first: a mod that declares code and is not verified stops before its bytes.
+            // The manifest and the stats file first: a mod that shows code or raw data (its file list, its manifest, its
+            // stats file) and is not verified stops before its other bytes. SyncedStore.Install decides from all of them.
             var manifest = files.First(f => f.Path is ModCatalog.ManifestName or ModCatalog.LegacyManifestName);
-            await DownloadFileAsync(current, mod, manifest, partial, token);
-            if (DeclaresCode(SyncedStore.Target(partial, manifest.Path)) && !verified(mod.Id, mod.Hash))
-                throw new InvalidDataException($"{mod.Name} runs code and is not on HellForge's verified list.");
-            foreach (var file in files.Where(f => f != manifest)) await DownloadFileAsync(current, mod, file, partial, token);
+            var stats = files.FirstOrDefault(f => f.Path == StatsData.FileName);
+            var first = stats == null ? [manifest] : new[] { manifest, stats };
+            foreach (var file in first) await DownloadFileAsync(current, mod, file, partial, token);
+            var declared = ModSets.Declared(files.Select(f => f.Path), File.ReadAllText(SyncedStore.Target(partial, manifest.Path)),
+                stats == null ? null : File.ReadAllText(SyncedStore.Target(partial, stats.Path)));
+            if (declared is { } kind && !verified(mod.Id, mod.Hash))
+                throw new InvalidDataException($"{mod.Name} {ModSets.Unchecked(kind)} and is not on HellForge's verified list.");
+            foreach (var file in files.Where(f => !first.Contains(f))) await DownloadFileAsync(current, mod, file, partial, token);
         }
         catch
         {
@@ -410,12 +415,6 @@ public sealed class ModSync : IAsyncDisposable
         if (files.Sum(f => f.Size) != mod.Bytes) throw new InvalidDataException($"{mod.Name}: the host's files are not the size its mod list says.");
         if (!files.Any(f => f.Path is ModCatalog.ManifestName or ModCatalog.LegacyManifestName)) throw new InvalidDataException($"{mod.Name}: the host listed no manifest.");
         return files;
-    }
-
-    static bool DeclaresCode(string manifest)
-    {
-        using var document = JsonDocument.Parse(File.ReadAllText(manifest));
-        return document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("code", out _);
     }
 
     // One file, Window chunks in flight, written and hashed in order.
