@@ -93,17 +93,13 @@ public static class GameCopier
         }
     }
 
-    // A file that is in place with the build's content.
-    static bool Matches(string path, SupportedFile file)
-    {
-        var info = new FileInfo(path);
-        return info.Exists && info.Length == file.Size && SupportedBuild.Sha1(path).Equals(file.Sha1, StringComparison.OrdinalIgnoreCase);
-    }
+    // A file that is in place with the build's content (a swapped upscaler is kept: SupportedBuild.IsReplaceable).
+    static bool Matches(string path, SupportedFile file) => SupportedBuild.Accepts(path, file);
 
     // The cheap test used to estimate free space: present with the right size.
     static bool Present(string path, SupportedFile file)
     {
         var info = new FileInfo(path);
-        return info.Exists && info.Length == file.Size;
+        return info.Exists && (info.Length == file.Size || SupportedBuild.IsReplaceable(file.Path));
     }
 }

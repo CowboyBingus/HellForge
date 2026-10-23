@@ -323,11 +323,7 @@ public static partial class Downpatcher
         }
     }
 
-    static bool Matches(string path, SupportedFile file)
-    {
-        var info = new FileInfo(path);
-        return info.Exists && info.Length == file.Size && SupportedBuild.Sha1(path).Equals(file.Sha1, StringComparison.OrdinalIgnoreCase);
-    }
+    static bool Matches(string path, SupportedFile file) => SupportedBuild.Accepts(path, file);
 
     sealed record DownpatchIndex(int SchemaVersion, DownpatchIndexEntry?[]? Packs);
 

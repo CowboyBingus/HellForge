@@ -48,8 +48,16 @@ sealed class PlaySession(PlayOptions options)
         log?.Flush();
     }
 
-    // Scrubbed (Privacy): readers take only its status and messages from it.
-    void Save() => File.WriteAllText(Path.Combine(run, "result.json"), Privacy.ScrubJson(result), new UTF8Encoding(false));
+    // Scrubbed (Privacy): readers take only its status and messages from it. Written beside it and moved into place, so a
+    // reader never sees half of it; a reader still holding it (the launcher polls each second) is waited out.
+    void Save()
+    {
+        var path = Path.Combine(run, "result.json");
+        File.WriteAllText(path + ".partial", Privacy.ScrubJson(result), new UTF8Encoding(false));
+        for (var attempt = 1; ; attempt++)
+            try { File.Move(path + ".partial", path, overwrite: true); return; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException && attempt < 40) { Thread.Sleep(50); }
+    }
 
     public int Run()
     {
@@ -176,16 +184,26 @@ sealed class PlaySession(PlayOptions options)
         };
         foreach (var problem in plan["problems"] as JsonArray ?? []) Say("Mod not loaded: " + (string?)problem);
 
-        // Every game file is held read-only for the session, then verified against the supported build while
-        // data/settings.ini is pointed at this profile's user data inside the installation.
+        // Every game file (the build's, and everything in data/: staged mods and the player's own patches) is held
+        // read-only for the session, then verified against the supported build while data/settings.ini is pointed at
+        // this profile's user data inside the installation. Other files in the copy are the player's (ReShade's settings,
+        // presets and shaders) and stay writable; so does a steam_appid.txt left by a session that was cut short, which
+        // Play removes (issue 6: held here, it could never be removed again).
         var settingsPath = Path.GetFullPath(Path.Combine(copy, "data", "settings.ini"));
+        var data = Path.GetFullPath(Path.Combine(copy, "data")) + Path.DirectorySeparatorChar;
+        var gameFiles = SupportedBuild.Current.Files.Select(f => Path.GetFullPath(Path.Combine(copy, f.Path))).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var file in Directory.EnumerateFiles(copy, "*", SearchOption.AllDirectories))
         {
             var full = Path.GetFullPath(file);
             if (full.Equals(settingsPath, StringComparison.OrdinalIgnoreCase) || full.EndsWith(".partial", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!gameFiles.Contains(full) && !full.StartsWith(data, StringComparison.OrdinalIgnoreCase)) continue;
             Tools.NoLinks(full);
-            var share = full.Contains(@"\bin\GameGuard", StringComparison.OrdinalIgnoreCase) ? FileShare.ReadWrite : FileShare.Read;
-            locks.Add(new FileStream(full, FileMode.Open, FileAccess.Read, share));
+            try { locks.Add(new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read)); }
+            catch (IOException error) when (error is not FileNotFoundException and not DirectoryNotFoundException)
+            {
+                throw new SessionFailure($"A game file is in use by another program: {Path.GetRelativePath(copy, full)}. Close that program " +
+                    "(or restart the PC) and press Play again.");
+            }
         }
         var prepared = Tools.ParseJson(HellForgeCli("prepare-session", "--install", install.Root, "--profile", profileName) ?? "")
             ?? throw new SessionFailure("Session preparation failed; see cli-output.txt in this session's log folder.");

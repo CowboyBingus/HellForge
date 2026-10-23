@@ -74,6 +74,8 @@ public partial class MainWindow
                 var relative = Path.GetRelativePath(folder, path).Replace('\\', '/');
                 var name = Path.GetFileName(relative);
                 if (relative.Split('/').Any(p => p.StartsWith('.')) || name.StartsWith(ModSettings.LegacyFileName, StringComparison.OrdinalIgnoreCase)) return;
+                // Office's lock and temporary files come and go as a document kept beside a mod is opened and saved
+                if (name.StartsWith("~$", StringComparison.Ordinal) || name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) return;
                 // the page's own saves are drawn already; another program's (HellForge.Cli, a mod manager) are loaded
                 if (name.StartsWith(ModSettings.FileName, StringComparison.OrdinalIgnoreCase) &&
                     (!name.Equals(ModSettings.FileName, StringComparison.OrdinalIgnoreCase) || OwnSettings(path))) return;
@@ -129,8 +131,18 @@ public partial class MainWindow
         // what friends compare (ModCatalog.Digest): not Local Stats, since in co-op everyone plays with the host's
         var gameplay = active.Count(m => m.Gameplay && m.Id != ModCatalog.LocalStatsId);
         var ownStats = active.Any(m => m.Id == ModCatalog.LocalStatsId) ? " Your Local Stats is not compared: in co-op everyone plays with the host's." : "";
-        ModsDigestText.Text = (gameplay == 0 ? "No gameplay mods to compare: you can play with friends who have none."
-            : $"Modlist code {ModCatalog.Digest(ModCatalog.LoadOrder(active))[..8]}: friends need the same {gameplay} gameplay mod{(gameplay == 1 ? "" : "s")}; the order is up to you.") + ownStats;
+        string compared;
+        try
+        {
+            compared = gameplay == 0 ? "No gameplay mods to compare: you can play with friends who have none."
+                : $"Modlist code {ModCatalog.Digest(ModCatalog.LoadOrder(active))[..8]}: friends need the same {gameplay} gameplay mod{(gameplay == 1 ? "" : "s")}; the order is up to you.";
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // a file in a mod's folder that another program holds (issue 18): the list still shows
+            compared = "Modlist code unavailable: a mod's file could not be read (" + Privacy.Scrub(error.Message) + "). Close the program using it, then Refresh.";
+        }
+        ModsDigestText.Text = compared + ownStats;
 
         // the folder's problems, and what the last Add mods refused (until the next one)
         var notices = problems.Concat(modsRefused.Select(p => "Not added: " + p)).ToList();
@@ -335,7 +347,12 @@ public partial class MainWindow
     {
         if (!mod.HasSource || paths.InstallRoot == null) return null;
         var record = ModBuilds.Record(new InstallLayout(paths.InstallRoot), mod.Id);
-        var current = record != null && Sdk is { } sdk && ModKit.ToolsReady(sdk) && record.Key == ModBuilds.Key(mod.Folder, sdk, SupportedBuild.Current.BuildId);
+        bool current;
+        try { current = record != null && Sdk is { } sdk && ModKit.ToolsReady(sdk) && record.Key == ModBuilds.Key(mod.Folder, sdk, SupportedBuild.Current.BuildId); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return ("Its sources could not be read: " + Privacy.Scrub(error.Message), Orange);
+        }
         return record == null ? ("Built from its sources when a session starts.", Light)
             : record.Error != null && current ? ("Did not compile; it stays off until fixed:\n" + record.Error, Red)
             : record.Error != null ? ("Its last build did not compile; the sources changed since, so the next session builds it again.", Orange)

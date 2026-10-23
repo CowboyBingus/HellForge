@@ -324,15 +324,28 @@ public static partial class ModCatalog
                 // a source mod by its sources: the DLL in its folder (an IDE's build) is not what loads (ModBuilds)
                 .Where(f => !mod.HasSource || !(f == mod.CodeDll || f.EndsWith(".lib", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)))
                 .Order(StringComparer.Ordinal))
-                lines.Append(file).Append('|').Append(zipped?[file] ?? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(mod.Folder, file))))).Append('\n');
+                lines.Append(file).Append('|').Append(zipped?[file] ?? Convert.ToHexString(SHA256.HashData(ReadShared(Path.Combine(mod.Folder, file))))).Append('\n');
             yield return (mod, lines.ToString());
         }
     }
 
+    // A mod's file, read while another program may have it open (a spreadsheet kept beside the mod, open in Excel:
+    // File.ReadAllBytes is refused then, issue 18).
+    internal static byte[] ReadShared(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        var bytes = new byte[stream.Length];
+        stream.ReadExactly(bytes);
+        return bytes;
+    }
+
+    // An editor's files, not the mod's: dot files and folders, an IDE's build folder and user settings, and Office's lock
+    // (~$name) and temporary (.tmp) files, which it holds open with no sharing at all.
     internal static bool IsWorkspaceFile(string relative)
     {
         var parts = relative.Split('/');
-        return parts.Any(p => p.StartsWith('.')) || parts[0] == "build" || relative.EndsWith(".user", StringComparison.OrdinalIgnoreCase);
+        return parts.Any(p => p.StartsWith('.') || p.StartsWith("~$", StringComparison.Ordinal)) || parts[0] == "build" ||
+            relative.EndsWith(".user", StringComparison.OrdinalIgnoreCase) || relative.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase);
     }
 
     static string Text(JsonElement element, string name) =>

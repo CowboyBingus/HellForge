@@ -3,14 +3,20 @@
  * get_live, mod_folder), F8 pressed, the window resized and the editor closed and opened again; then, as a player would,
  * Tab to the objects and to the fields, a field picked with the arrows, "1200" typed and applied with F9. It passes when
  * every Present succeeds, the device is never removed, the editor reports it is drawing, its window shows on screen (with
- * a screenshot), the change reached set_live, and Local Stats holds it.
+ * a screenshot), the change reached set_live, and Local Stats holds it. With D3D12, an "overlay" has a direct queue of
+ * its own on the same device and runs a list on it before and after the game's every frame (as RivaTuner, Steam, OBS or
+ * Overwolf can): the editor must draw on the swap chain's queue, not that one. And after the first frames, an "overlay"
+ * hooks Present's and Present1's code over the editor's as RivaTuner does (issue #5), calling past the editor: the editor
+ * must get in front of it again and still draw, the overlay still called, and the shared method table left alone.
  * Usage: overlay_test.exe <hellforge_editor.dll> [<screenshot.bmp> [<editor folder: editor-catalog.json, game-icons.bin>]]
- * HELLFORGE_EDITOR_TEST_D3D11=1: the window presents with Direct3D 11 instead, as the game does with --use-d3d11. */
+ * HELLFORGE_EDITOR_TEST_D3D11=1: the window presents with Direct3D 11 instead, as the game does with --use-d3d11.
+ * HELLFORGE_EDITOR_TEST_NO_OVERLAY_QUEUE=1: no overlay queue (a real overlay, RivaTuner say, tried on its own). */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d11.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "MinHook.h"
@@ -21,6 +27,8 @@ static HfMod g_mod;
 static HfApi g_api;
 static HfEventCallback g_ready;
 static int g_drawing, g_hooked, g_lives, g_presetImports;
+static void* g_drawnQueue; /* the queue the editor says it draws on (D3D12) */
+static int g_again; /* times the editor got in front of an overlay that hooked over it */
 static int g_modPage, g_modApplied; /* a mod's stratagem: its page made, its saved value sent to its own row */
 static char g_modDir[MAX_PATH] = "";
 static HfSession g_sessionNow; /* the co-op role the stand-in loader reports */
@@ -40,17 +48,52 @@ static void Log(HfMod*, const char* format, ...)
     va_end(arguments);
     printf("  mod: %s\n", line);
     if (strstr(line, "drawing on the game's queue") || strstr(line, "drawing with Direct3D 11")) g_drawing = 1;
+    if (const char* at = strstr(line, "drawing on the game's queue ")) sscanf(at + strlen("drawing on the game's queue "), "%p", &g_drawnQueue);
     if (strstr(line, "hooked the swap chain")) g_hooked = 1;
+    if (strstr(line, "the editor runs first again")) g_again++;
     if (strstr(line, "staged (APPLY writes them)")) g_presetImports++;
     if (strstr(line, "A/MG-101 Heavy MG Sentry gets a page")) g_modPage = 1;
 }
 static const char* Build() { return "25480438"; }
 static const char* ModFolder(HfMod*) { return g_folder; }
 static int On(HfMod* mod, HfEvent event, HfEventCallback callback, void* user) { if (event == HF_EVENT_ENTITIES_READY) g_ready = callback; return 0; }
+/* the originals the editor got, by target (the test's "overlay" calls past the editor with them) */
+static struct { uintptr_t target; void** original; } g_hooks[64];
+static int g_hookCount;
 static int Hook(HfMod*, uintptr_t target, void* detour, void** original)
 {
     if (MH_CreateHook((void*)target, detour, original) != MH_OK) return 1;
+    if (g_hookCount < 64) { g_hooks[g_hookCount].target = target; g_hooks[g_hookCount++].original = original; }
     return MH_EnableHook((void*)target) == MH_OK ? 0 : 1;
+}
+static void* OriginalOf(void* target) { for (int i = 0; i < g_hookCount; i++) if (g_hooks[i].target == (uintptr_t)target) return *g_hooks[i].original; return NULL; }
+/* An overlay that hooks Present's and Present1's code after the editor as RivaTuner does: its own jump written over the
+ * one at the start of the code (to a stub of its own within 2 GB, which jumps on to its detour), its detour calling the
+ * code as it was before the editor, past the editor's detour. */
+typedef HRESULT(STDMETHODCALLTYPE* PresentCall)(IDXGISwapChain3*, UINT, UINT);
+typedef HRESULT(STDMETHODCALLTYPE* Present1Call)(IDXGISwapChain3*, UINT, UINT, const DXGI_PRESENT_PARAMETERS*);
+static PresentCall g_overlayPresentNext;
+static Present1Call g_overlayPresent1Next;
+static int g_overlayPresents;
+static HRESULT STDMETHODCALLTYPE OverlayPresent(IDXGISwapChain3* chain, UINT interval, UINT flags) { g_overlayPresents++; return g_overlayPresentNext(chain, interval, flags); }
+static HRESULT STDMETHODCALLTYPE OverlayPresent1(IDXGISwapChain3* chain, UINT interval, UINT flags, const DXGI_PRESENT_PARAMETERS* p)
+{ g_overlayPresents++; return g_overlayPresent1Next(chain, interval, flags, p); }
+static bool OverlayHooks(void* code, void* detour)
+{
+    uint8_t* stub = NULL;
+    for (uintptr_t at = ((uintptr_t)code & ~(uintptr_t)0xFFFF) - 0x10000; stub == NULL && at > (uintptr_t)code - 0x70000000; at -= 0x10000)
+        stub = (uint8_t*)VirtualAlloc((void*)at, 4096, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    if (stub == NULL) return false; /* its jump goes over the one there (the editor's, or a real overlay's), five bytes */
+    stub[0] = 0xFF; stub[1] = 0x25; memset(stub + 2, 0, 4); memcpy(stub + 6, &detour, 8);
+    uint8_t jump[5] = {0xE9};
+    int32_t rel = (int32_t)(stub - ((uint8_t*)code + 5));
+    memcpy(jump + 1, &rel, 4);
+    DWORD protect;
+    VirtualProtect(code, 5, PAGE_EXECUTE_READWRITE, &protect);
+    memcpy(code, jump, 5);
+    VirtualProtect(code, 5, protect, &protect);
+    FlushInstructionCache(GetCurrentProcess(), code, 5);
+    return true;
 }
 static int g_resets;
 static int g_refuseCapacity; /* the big preset's test: magazine capacities refused (its errors) */
@@ -264,6 +307,9 @@ int main(int argc, char** argv)
         FAILED(chain1->QueryInterface(IID_PPV_ARGS(&chain))))
     { puts("FAIL no D3D12 swap chain on this machine"); return 1; }
 
+    /* the code of Present and Present1, as the swap chain's method table gives it before the editor is in */
+    void* presentCode = (*(void***)chain)[8];
+    void* present1Code = (*(void***)chain)[22];
     HMODULE editor = LoadLibraryA(argv[1]);
     typedef int (*Init)(const HfApi*, HfMod*);
     Init init = editor ? (Init)(void*)GetProcAddress(editor, "hellforge_mod_init") : NULL;
@@ -285,6 +331,14 @@ int main(int argc, char** argv)
         device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
         device->CreateDescriptorHeap(&rtv, IID_PPV_ARGS(&rtvHeap));
     }
+    /* the overlay's own queue and an (empty) list it runs */
+    ID3D12CommandQueue* overlayQueue = NULL; ID3D12CommandAllocator* overlayAllocator = NULL; ID3D12GraphicsCommandList* overlayList = NULL;
+    if (!d3d11 && !getenv("HELLFORGE_EDITOR_TEST_NO_OVERLAY_QUEUE") && (FAILED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&overlayQueue))) ||
+        FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&overlayAllocator))) ||
+        FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, overlayAllocator, NULL, IID_PPV_ARGS(&overlayList)))))
+    { puts("FAIL no second queue for the overlay"); return 1; }
+    if (overlayList) overlayList->Close();
+    auto overlay = [&]() { if (overlayQueue) { ID3D12CommandList* lists[] = {overlayList}; overlayQueue->ExecuteCommandLists(1, lists); } };
     HANDLE event = CreateEventW(NULL, FALSE, FALSE, NULL);
     UINT64 value = 0;
     int failures = 0;
@@ -293,6 +347,17 @@ int main(int argc, char** argv)
     {
         MSG message;
         while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
+        /* an overlay hooks Present's and Present1's code over the editor's after it has started, and never calls the
+         * editor's detour (RivaTuner coming in late, issue #5); the editor must get in front of it again */
+        if (frame == 10)
+        {
+            g_overlayPresentNext = (PresentCall)OriginalOf(presentCode);
+            g_overlayPresent1Next = (Present1Call)OriginalOf(present1Code);
+            bool cut = g_overlayPresentNext && g_overlayPresent1Next && OverlayHooks(presentCode, (void*)OverlayPresent) &&
+                OverlayHooks(present1Code, (void*)OverlayPresent1);
+            printf("  overlay: Present's code %s\n", cut ? "hooked over the editor's, as RivaTuner does" : "NOT hooked over (the editor's hooks not found)");
+            if (!cut) { puts("FAIL the editor's hooks on Present's code were not where the test looked"); failures++; }
+        }
         if (frame == 30 || frame == 260 || frame == 300) SendMessageW(window, WM_KEYDOWN, VK_F8, 0);     /* open, close, open */
         /* closed: a friend's lobby refuses this game's join, and the editor shows why over the "game" (its top centre) */
         if (frame == 264)
@@ -304,6 +369,7 @@ int main(int argc, char** argv)
                 "(the host has it)\nSmarter Guard Dogs & Sentries: you have 5.2.0, the host has 5.1.0\nTurn on the same gameplay mods on the "
                 "launcher's MODS page, then start a new session.");
         }
+        if (frame == 288) Sleep(300); /* the editor asks for the notice every 250 ms: 24 frames are less than that at 144 Hz */
         if (frame == 290)
         {
             char shot[MAX_PATH] = "";
@@ -368,7 +434,9 @@ int main(int argc, char** argv)
         list->ResourceBarrier(1, &barrier);
         list->Close();
         ID3D12CommandList* lists[] = {list};
+        overlay(); /* the overlay's queue first, and last before the present */
         queue->ExecuteCommandLists(1, lists);
+        overlay();
         HRESULT presented = chain->Present(1, 0);
         if (FAILED(presented)) { printf("FAIL Present 0x%08lx at frame %d\n", (unsigned long)presented, frame); failures++; }
         queue->Signal(fence, ++value);
@@ -619,6 +687,18 @@ int main(int argc, char** argv)
     HRESULT removed = d3d11 ? device11->GetDeviceRemovedReason() : device->GetDeviceRemovedReason();
     if (removed != S_OK) { printf("FAIL device removed 0x%08lx\n", (unsigned long)removed); failures++; }
     if (!g_hooked || !g_drawing) { puts("FAIL the editor did not hook or start drawing"); failures++; }
+    /* in front of the overlay again, and the overlay still called (after the editor); the method table every swap chain
+     * shares never patched (Steam's overlay hooks whatever it holds, and a table pointing at the editor made it recurse) */
+    printf("  overlay: the editor got in front of it %d time(s); its detour ran %d time(s)\n", g_again, g_overlayPresents);
+    /* (a real RivaTuner in the process may take its place back from the test's overlay: then only the first counts) */
+    bool rivaTuner = GetModuleHandleW(L"RTSSHooks64.dll") != NULL;
+    if (g_again < 1 || (!rivaTuner && g_overlayPresents < 100)) { puts("FAIL the editor did not get in front of the overlay that hooked over it, or cut it out"); failures++; }
+    if ((*(void***)chain)[8] != presentCode || (*(void***)chain)[22] != present1Code) { puts("FAIL the swap chains' shared method table was patched"); failures++; }
+    if (!d3d11)
+    {
+        printf("  queues: the swap chain's %p, the overlay's %p; the editor draws on %p\n", (void*)queue, (void*)overlayQueue, g_drawnQueue);
+        if (g_drawnQueue != (void*)queue) { puts("FAIL the editor draws on another queue than the swap chain's (the overlay's?)"); failures++; }
+    }
     printf("%s overlay: hooked %d, drawing %d, 420 frames, two resizes, F8 open/close/open, device %s\n", failures ? "FAIL" : "PASS",
         g_hooked, g_drawing, removed == S_OK ? "healthy" : "removed");
     return failures ? 1 : 0;

@@ -400,7 +400,15 @@ window's input goes to ImGui (the window procedure is replaced; ClipCursor, SetC
 back). It started with one live control (the Liberator's fire rate through `set_live`), passed `overlay_test` (a real
 D3D12 swap chain: resizes, F8, a screenshot check), and was tried in game (the change applies on respawn). A game
 started with `--use-d3d11` (launch options) is drawn on with ImGui's DX11 backend (2026-10-18), and
-`HELLFORGE_EDITOR_TEST_D3D11=1` runs `overlay_test` on a D3D11 swap chain. Changes are saved into the Local Stats mod
+`HELLFORGE_EDITOR_TEST_D3D11=1` runs `overlay_test` on a D3D11 swap chain. With RivaTuner running (issue #5, 2026-10-23),
+F8 took the input and nothing was drawn: RivaTuner hooks Present's code after the editor (late, after its 15 s delay
+where Steam's overlay is loaded), its jump written over the editor's, and never calls it. A thread now watches the first
+bytes of Present / Present1 / ResizeBuffers and, when another jump is written there, hooks where it goes, so the editor
+runs first again. Patching dxgi.dll's shared method table instead was tried and crashed the game at the title screen:
+Steam's overlay hooks again whatever the table holds and kept the editor as its original, so they called each other
+until the stack ran out. The queue drawn on is the swap chain's own (read where a throwaway swap chain keeps it), not
+the first direct queue seen (an overlay can have one of its own); `overlay_test` simulates both, and checks the shared
+table is left alone. Changes are saved into the Local Stats mod
 (`mods/zz.local.stats`, which was also the launcher STATS page's save file, merged under its lock) a second after the
 last one, so the stats pass applies them at every boot. Reset removes the field and puts the game's own value back
 (`set_live` with `HF_LIVE_BASE`).

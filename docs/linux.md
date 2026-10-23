@@ -183,6 +183,11 @@ The galactic war is fetched just before the namespace is entered (`HellForge.Loc
 session serves that copy. With "Follow the live galactic war", the war is the one from launch time and moves on at the
 next launch.
 
+The mod tools are fetched there too, once (`HellForge.Cli.exe mod-tools`: HellForge's pinned Zig, about 90 MB from
+ziglang.org), and again only when a release pins another Zig. Source mods are compiled when a session starts, inside the
+namespace, where the download would be refused ("Access denied. (ziglang.org:443)"). The Mods page's "Install mod tools"
+button cannot fetch them on Linux for the same reason; start HellForge again with `hellforge-linux.sh` instead.
+
 ## One prefix, one network
 
 Wine opens a Windows program's sockets in the prefix's `wineserver`, so a program gets the wineserver's network, not its
