@@ -1,7 +1,7 @@
 # HellForge
 
 HellForge runs your own copy of HELLDIVERS 2 offline, against a local backend on your PC, and loads mods into it: new
-stratagems, weapons, stats and difficulties. You can play solo or with Steam friends who run HellForge too. It comes with
+stratagems, weapons, stats and difficulties. You can play solo or with other players who run HellForge too. It comes with
 an in-game editor (F8) and a C mod SDK with guides and examples.
 
 Status: beta (0.2.0-beta), made for modders first, so expect rough edges. The launcher shows its version and the game
@@ -21,9 +21,16 @@ The copy is offline. It talks to a local backend on your PC in place of Arrowhea
 in the Windows Filtering Platform stops it reaching anything but this PC. It never connects to official servers, so it
 cannot be used to play online with a modified game.
 
-Co-op with Steam friends is the only multiplayer. You host or join friends from your Steam friends list who also run
-HellForge with the same gameplay mods; HellForge checks the mods before a join. There is no matchmaking, there are no
-public lobbies, and you cannot play with the normal game's players.
+Multiplayer is co-op with other HellForge players only. You host or join Steam friends who run HellForge, and public
+lobbies of other HellForge players show on the Galactic Map: HellForge lists them on Steam's lobby service, never on
+Arrowhead's. A public lobby shows its players' names and its host's Steam account id to anyone who looks. You cannot
+play with the normal game's players.
+
+Joining a lobby whose host runs other gameplay mods offers to download them and restart with the host's mods. Only
+what HellForge checks itself downloads by itself: mods that run code (a DLL, sources or Lua) or carry data it cannot
+check (binary data patches, raw stats) download only when HellForge has verified that exact version. A blocklist hides lobbies
+running mods you don't want, and lobbies whose host plays with edited stats (which you would play with) are hidden
+unless you show them on the Mods page.
 
 Profiles are local. A new profile starts with every item unlocked, and other templates can be picked. The galactic war can
 follow the live war read-only from the community mirror [api.helldivers2.dev](https://api.helldivers2.dev), stay

@@ -30,7 +30,7 @@ the mod's kind, and one mod can be several kinds at once (code with a data spec,
   "description": "What it changes, in a sentence or two.",
   "icon": "images/icon.png",
   "gameplay": true,
-  "code": { "dll": "liberator_tweaks.dll", "sdk": 13 }
+  "code": { "dll": "liberator_tweaks.dll", "sdk": 14 }
 }
 ```
 
@@ -127,7 +127,8 @@ game: use `hf_set` or `edit_entity` instead.
 ## Co-op
 
 - The modlist code. Before a friend joins, HellForge compares both players' gameplay mods: ids, versions and files (a
-  source mod's sources, not a DLL). Any difference refuses the join, and both games say which mods differ. Cosmetic
+  source mod's sources, not a DLL). Any difference refuses the join, and both games say which mods differ; the
+  joiner may then sync to the host's mods ([mods.md](../mods.md#playing-with-other-mods)). Cosmetic
   mods, packs and Lua mods are not compared. Nor is the order: friends who order the same mods differently can play
   together, but where two mods conflict, a different one may win on each machine.
 - Every machine runs its own mods. Each player's game runs the mods' code and data. A hit is applied by the machine
@@ -160,7 +161,7 @@ page.
 ## Compatibility
 
 - SDK versions. The manifest's `code.sdk` is the SDK the mod needs. A HellForge with an older SDK refuses the mod
-  ("needs HellForge mod SDK 14; this HellForge provides SDK 13"), and newer ones load it. Functions are only ever added
+  ("needs HellForge mod SDK 15; this HellForge provides SDK 14"), and newer ones load it. Functions are only ever added
   at the end of `HfApi`, so a mod built for SDK 6 runs on SDK 13. In code, check what you use:
 
   ```c

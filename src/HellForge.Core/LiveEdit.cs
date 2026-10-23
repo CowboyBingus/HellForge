@@ -52,6 +52,8 @@ public sealed class LiveEditServer : IAsyncDisposable
     // The connected game runs another build or schema than this HellForge: requests are not sent.
     public bool Mismatched => Connected && (GameBuild != build || GameSchema != "-" && GameSchema != StatsSchema.Fingerprint);
     public event Action? StateChanged;
+    // A line the game sent on its own (not a reply), split at its tabs: mod sync's "syncanswer" (native/mod-loader/live.c).
+    public event Action<string[]>? Received;
 
     // build: the game build the session must run (the schema's; a test harness passes its own).
     public LiveEditServer(string runId, string? build = null)
@@ -85,7 +87,10 @@ public sealed class LiveEditServer : IAsyncDisposable
                         StateChanged?.Invoke();
                     }
                     else if (int.TryParse(parts[0], CultureInfo.InvariantCulture, out var seq))
+                    {
                         lock (pending) if (pending.Remove(seq, out var waiter)) waiter.TrySetResult(line);
+                    }
+                    else if (parts[0].Length > 0 && parts[0].All(char.IsAsciiLetterLower)) Received?.Invoke(parts);
                 }
             }
             catch (Exception error) when (error is IOException or OperationCanceledException or ObjectDisposedException) { }
@@ -123,6 +128,17 @@ public sealed class LiveEditServer : IAsyncDisposable
         SendAsync("notice", string.Join('\t', new[] { kind, title }.Concat(lines.Take(8)).Select(t => string.Concat(t.Where(c => !char.IsControl(c)).Take(200)))));
     // The field's value in the running game now.
     public Task<LiveResult> GetAsync(StatsField field) => SendAsync("get", Identity(field));
+
+    // Mod sync (HfApi sync_state / sync_mod): an offer's mods, index 0 up, then its state, which publishes them in the
+    // game. A progress update is the state alone, with the same version. Words, not numbers, for actions, classes and states.
+    public Task<LiveResult> SyncModAsync(int version, int index, string action, string modClass, long bytes, string id, string name, string modVersion) =>
+        SendAsync("syncmod", string.Join('\t', Invariant(version), Invariant(index), action, modClass, Invariant(bytes), Field(id), Field(name), Field(modVersion)));
+    public Task<LiveResult> SyncStateAsync(int version, string state, string host, long bytes, long done, int mods, string message) =>
+        SendAsync("syncstate", string.Join('\t', Invariant(version), state, Field(host), Invariant(bytes), Invariant(done), Invariant(mods), Field(message)));
+
+    static string Invariant(long number) => number.ToString(CultureInfo.InvariantCulture);
+    // Text inside one field: no tabs, line breaks or other control characters, at most 200 characters.
+    static string Field(string text) => string.Concat(text.Where(c => !char.IsControl(c)).Take(200));
 
     async Task<LiveResult> SendAsync(string verb, string rest)
     {

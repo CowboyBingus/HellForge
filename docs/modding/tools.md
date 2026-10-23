@@ -80,7 +80,7 @@ DLL in the folder is loaded. A mod that ships both and wants its own DLL loaded 
 build the DLL was built for, so that another build refuses it with a message instead of crashing:
 
 ```json
-"code": { "dll": "my_mod.dll", "sdk": 13, "prebuilt": true, "game": "25480438" }
+"code": { "dll": "my_mod.dll", "sdk": 14, "prebuilt": true, "game": "25480438" }
 ```
 
 Friends then compare the DLL itself, so everyone needs the identical file.

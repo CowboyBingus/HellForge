@@ -163,7 +163,84 @@ public partial class MainWindow
             AddModGroup(mods, mods.Where(m => m.Cosmetic).ToList(), "COSMETIC", "Only on your PC: friends need not have the same ones.",
                 "No cosmetic mods. Add a cosmetic pack (its .zip, .rar, .7z or manifest.json) with Add mods...", ref number);
         }
+        AddModSyncCard(paths.ModsFolder);
         SetModsLocked(modsLocked);
+    }
+
+    // Mod sync (ModSyncPlan, docs/mods.md "Playing with other mods"): whether players who join may download this player's
+    // mods, the mods whose lobbies are never offered (blocked from the in-game MOD SYNC prompt), and the downloaded mods.
+    void AddModSyncCard(string modsFolder)
+    {
+        var settings = ModSettings.Read(modsFolder);
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(new TextBlock { Text = "MOD SYNC", Classes = { "h2" }, Margin = new(0) });
+        panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Classes = { "muted" }, Text =
+            "Joining a lobby whose host runs other gameplay mods offers to download them and restart with the host's mods. " +
+            "Mods that run code (a DLL, sources or Lua) download only when HellForge has verified that exact version; others you install yourself." });
+        var share = new ToggleSwitch { IsChecked = settings.Share, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
+        share.IsCheckedChanged += (_, _) =>
+        {
+            try { ModSettings.SetShare(modsFolder, share.IsChecked == true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the mod sync setting: " + error.Message, Red); }
+        };
+        var shareRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        shareRow.Children.Add(share);
+        shareRow.Children.Add(new TextBlock { Text = "Let players who join me download my gameplay mods", VerticalAlignment = VerticalAlignment.Center });
+        panel.Children.Add(shareRow);
+        // Joiners play with the host's stats: public lobbies whose host edited them are hidden on the Galactic Map unless shown.
+        var edited = new ToggleSwitch { IsChecked = settings.ShowEditedStats, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
+        edited.IsCheckedChanged += (_, _) =>
+        {
+            try { ModSettings.SetShowEditedStats(modsFolder, edited.IsChecked == true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the mod sync setting: " + error.Message, Red); }
+        };
+        var editedRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        editedRow.Children.Add(edited);
+        editedRow.Children.Add(new TextBlock { Text = "Show public lobbies whose host plays with edited stats (you would play with theirs)", VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(editedRow);
+
+        panel.Children.Add(new TextBlock { Text = settings.Blocked.Count == 0
+            ? "No blocked mods. BLOCK on the in-game MOD SYNC prompt hides lobbies that run a mod."
+            : "Blocked: lobbies running these mods are not offered.", TextWrapping = TextWrapping.Wrap });
+        foreach (var id in settings.Blocked.Order(StringComparer.Ordinal))
+        {
+            var row = new DockPanel();
+            var unblock = new Button { Content = "Unblock", Classes = { "flat" } };
+            unblock.Click += (_, _) =>
+            {
+                try { ModSettings.SetBlocked(modsFolder, id, false); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not unblock " + id + ": " + error.Message, Red); }
+                RefreshMods();
+            };
+            DockPanel.SetDock(unblock, Dock.Right);
+            row.Children.Add(unblock);
+            row.Children.Add(new TextBlock { Text = id, VerticalAlignment = VerticalAlignment.Center });
+            panel.Children.Add(row);
+        }
+
+        var store = SyncedStore.Root(modsFolder);
+        var stored = Directory.Exists(store) ? Directory.GetDirectories(store).Where(d => !Path.GetFileName(d).StartsWith('.')).ToList() : [];
+        if (stored.Count > 0)
+        {
+            long bytes = 0;
+            try { bytes = stored.Sum(d => Directory.GetFiles(d, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length)); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            var row = new DockPanel();
+            var clear = new Button { Content = "Delete downloaded mods", Classes = { "flat" }, IsEnabled = !modsLocked };
+            clear.Click += (_, _) =>
+            {
+                try { Directory.Delete(store, recursive: true); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not delete the downloaded mods: " + error.Message, Red); }
+                RefreshMods();
+            };
+            DockPanel.SetDock(clear, Dock.Right);
+            row.Children.Add(clear);
+            row.Children.Add(new TextBlock { Text = $"{stored.Count} mod{(stored.Count == 1 ? "" : "s")} downloaded from hosts ({bytes / 1048576.0:0.0} MB), used only when you play with their mods.",
+                TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+            panel.Children.Add(row);
+        }
+        ModsList.Children.Add(new Border { Classes = { "card" }, Child = panel });
     }
 
     void AddModGroup(List<ModManifest> all, List<ModManifest> group, string title, string hint, string empty, ref int number)

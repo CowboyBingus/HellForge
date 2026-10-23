@@ -1,4 +1,5 @@
 using System.Globalization;
+using HellForge.Core;
 
 namespace HellForge.LocalBackend.Multiplayer;
 
@@ -6,7 +7,7 @@ namespace HellForge.LocalBackend.Multiplayer;
 // friends' backends, and the lobby and Party services between them. Friends sharing a lobby or network are pinged every
 // 2 s; one silent for 15 s (game crashed, connection lost) is treated as gone. Logs to <evidence>/multiplayer.log.
 //   link "none"                                  this machine only (hosting works, joins fail)
-//   link "steam:<steam_api64.dll>"               Steam networking, friends only
+//   link "steam:<steam_api64.dll>"               Steam networking: friends, and strangers through the lobby directory
 //   link "udp:<id>:<port>:<peer id>=<port>,..."  loopback UDP between backends on one PC (test harness; ids in hex)
 public sealed class MultiplayerHost : IAsyncDisposable
 {
@@ -22,6 +23,13 @@ public sealed class MultiplayerHost : IAsyncDisposable
     public PartyService Party { get; }
     // The host's stats for joiners, and this game's when joined (null without a peer link or the session's mods folder).
     public StatsShare? Stats { get; private set; }
+    // Mod sync: joiners download this session's mods, and this machine the mods of a host it could not join (null
+    // without a peer link or the session's mods folder).
+    public ModSync? Sync { get; private set; }
+    // The Galactic Map's public lobbies (null without a peer link): this machine's public lobby listed, the game's searches
+    // answered.
+    public DirectoryService? Directory { get; private set; }
+    StrangerGate? gate;
 
     readonly WarClock? warClock;
     AccountKeyExchange? keyExchange;
@@ -52,16 +60,18 @@ public sealed class MultiplayerHost : IAsyncDisposable
         if (transport != null)
             transport.Received += (peer, bytes) =>
             {
-                lock (lastHeard) lastHeard[peer] = DateTime.UtcNow;
                 Frame frame;
                 try { frame = Frame.Decode(bytes); }
                 catch (InvalidDataException) { Log("Dropped a malformed peer frame."); return; }
+                if (gate != null && !gate.Admit(peer, frame)) return;
+                lock (lastHeard) lastHeard[peer] = DateTime.UtcNow;
                 keyExchange?.Heard(peer);
                 if (frame.Type.StartsWith("lobby.", StringComparison.Ordinal)) Lobby.FromPeer(peer, frame);
                 else if (frame.Type == "account.key") keyExchange?.FromPeer(peer, frame);
                 else if (frame.Type is "presence" or "presence.hello") FromPeerPresence(peer, frame);
                 else if (frame.Type.StartsWith("party.", StringComparison.Ordinal)) Party.FromPeer(peer, frame);
                 else if (frame.Type.StartsWith("stats.", StringComparison.Ordinal)) Stats?.FromPeer(peer, frame);
+                else if (frame.Type.StartsWith("mods.", StringComparison.Ordinal)) Sync?.FromPeer(peer, frame);
                 else if (frame.Type == "war.clock" && warClock != null && Lobby.HostsJoinedLobby(peer) && long.TryParse(frame.Text(0), out var seconds))
                 {
                     warClock.Set(seconds);
@@ -70,8 +80,11 @@ public sealed class MultiplayerHost : IAsyncDisposable
             };
     }
 
+    // modSetFile: the session's mod set (mods-stage --modset), which joiners lacking its mods may download. directory: the
+    // lobby directory (by default Steam's for a Steam link; directoryFolder a folder's, for the loopback harness; none otherwise).
     public static MultiplayerHost Start(string pipeName, string link, string modDigest, string evidenceDirectory, WarClock? warClock = null,
-        AccountKeys? accountKeys = null, FriendPresence? presence = null, string? modsFolder = null, string? modList = null)
+        AccountKeys? accountKeys = null, FriendPresence? presence = null, string? modsFolder = null, string? modList = null, string? modSetFile = null,
+        ILobbyDirectory? directory = null, string? directoryFolder = null)
     {
         var host = new MultiplayerHost(pipeName, link, modDigest, evidenceDirectory, warClock, accountKeys, presence, modList);
         host.transport?.Start();
@@ -85,6 +98,9 @@ public sealed class MultiplayerHost : IAsyncDisposable
             }
             catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException) { host.Log("Stats sharing is off: " + error.Message); }
         }
+        if (host.transport != null && modsFolder != null) host.StartSync(modsFolder, modSetFile, evidenceDirectory);
+        directory ??= host.transport != null && directoryFolder != null ? new FolderLobbyDirectory(directoryFolder, host.transport.LocalId) : null;
+        host.StartDirectory(directory ?? (host.transport as SteamPeerTransport)?.Directory);
         // The transport knows this machine's SteamID only once started.
         if (host.transport != null && accountKeys != null) host.keyExchange = new AccountKeyExchange(host.transport, accountKeys, host.Log);
         host.pipes.Start();
@@ -94,14 +110,54 @@ public sealed class MultiplayerHost : IAsyncDisposable
         return host;
     }
 
-    // A friend's name as Steam shows it, for the joiner's editor ("Host: <name>").
-    string FriendName(ulong peer) =>
-        (transport as IFriendSource)?.HellForgeFriends.FirstOrDefault(f => f.SteamId == peer)?.Name ?? "Steam friend " + LobbyService.EntityId(peer);
+    // The session folder is the evidence folder's parent; the next session's mods go to the installation's temp folder.
+    void StartSync(string modsFolder, string? modSetFile, string evidenceDirectory)
+    {
+        ModSet? own = null;
+        try { if (modSetFile != null) own = ModSet.Parse(File.ReadAllText(modSetFile), local: true); }
+        catch (Exception error) when (error is InvalidDataException or IOException) { Log("Mod sync: this session's mod set could not be read, so joiners cannot download it: " + error.Message); }
+        var install = new InstallLayout(Path.GetDirectoryName(Path.GetFullPath(modsFolder))!);
+        Sync = new ModSync(transport!, modsFolder, own, Path.GetDirectoryName(Path.GetFullPath(evidenceDirectory))!, evidenceDirectory,
+            ModSyncSession.PathIn(install), FriendName, Log);
+        Lobby.ModsRefused = Sync.OfferMods;
+        Sync.Expected = Lobby.JoinedRecently;
+        if (Stats?.Live is { } live)
+        {
+            Sync.Display = new LiveSyncDisplay(live);
+            live.Received += parts => { if (parts[0] == "syncanswer") Sync.Answer(parts); };
+            live.StateChanged += () => { if (live.Connected) Sync.Republish(); };
+        }
+        Log($"Mod sync: {(own != null ? own.Mods.Count + " gameplay mods to share" : "nothing to share")}; offers go to {(Sync.Display != null ? "the game" : "the session log only")}.");
+    }
 
+    // The lobby directory and the gate for strangers, who reach this machine through it only.
+    void StartDirectory(ILobbyDirectory? directory)
+    {
+        if (transport == null) return;
+        if (directory != null && presence != null)
+            Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.Edited == true);
+        gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, Log);
+        if (transport is SteamPeerTransport steam) steam.AcceptStranger = peer => Directory?.Listing == true || Related(peer);
+        Log(Directory != null ? "Directory: public lobbies are listed and searched." : "Directory: off (no lobby directory for this link).");
+    }
+
+    // A machine this one deals with: in a lobby hosted here, hosting one joined (or being joined) from here, or a mod download.
+    bool Related(ulong peer) => Lobby.InHostedLobby(peer) || Lobby.HostsJoinedLobby(peer) || Lobby.Joining(peer) || Sync?.Related(peer) == true;
+
+    // A friend's name as Steam shows it, for the joiner's editor ("Host: <name>").
+    // A stranger's is the host's player name in the lobby record their listing carried.
+    string FriendName(ulong peer) =>
+        (transport as IFriendSource)?.HellForgeFriends.FirstOrDefault(f => f.SteamId == peer)?.Name ?? Directory?.HostName(peer) ??
+        (transport?.IsFriend(peer) == false ? "Player " : "Steam friend ") + LobbyService.EntityId(peer);
+
+    // HELLFORGE_TEST_STRANGERS=1: friends are treated as strangers (testing the lobby directory's stranger path with two
+    // friends' PCs; docs/multiplayer.md step 7).
     static IPeerTransport? CreateTransport(string link, Action<string> log)
     {
         if (link == "none") return null;
-        if (link.StartsWith("steam:", StringComparison.Ordinal)) return new SteamPeerTransport(link[6..], log);
+        var strangers = Environment.GetEnvironmentVariable("HELLFORGE_TEST_STRANGERS") == "1";
+        if (strangers) log("Test mode (HELLFORGE_TEST_STRANGERS): Steam friends are treated as strangers: no presence, the directory's gate.");
+        if (link.StartsWith("steam:", StringComparison.Ordinal)) return new SteamPeerTransport(link[6..], log) { TreatFriendsAsStrangers = strangers };
         var parts = link.Split(':');
         if (parts is ["udp", var id, var port, var peers] && LobbyService.TryNode(id, out var localId) && int.TryParse(port, out var localPort))
         {
@@ -113,7 +169,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
                     throw new ArgumentException("Bad udp peer: " + entry);
                 table[peer] = peerPort;
             }
-            return new UdpLoopbackTransport(localId, localPort, table);
+            return new UdpLoopbackTransport(localId, localPort, table) { TreatPeersAsStrangers = strangers };
         }
         throw new ArgumentException("--link must be none, steam:<steam_api64.dll> or udp:<id>:<port>:<peer>=<port>,...");
     }
@@ -223,6 +279,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (heartbeat != null) await heartbeat.DisposeAsync();
+        if (Directory != null) await Directory.DisposeAsync();
+        if (Sync != null) await Sync.DisposeAsync();
         if (Stats != null) await Stats.DisposeAsync();
         await pipes.DisposeAsync();
         transport?.Dispose();

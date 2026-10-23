@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using HellForge.Core.GameData;
 
@@ -66,13 +67,14 @@ public static partial class ModCatalog
         File.Exists(Path.Combine(folder, ManifestName)) ? Path.Combine(folder, ManifestName)
         : File.Exists(Path.Combine(folder, LegacyManifestName)) ? Path.Combine(folder, LegacyManifestName) : null;
     // The mod SDK version this HellForge provides (native/mod-sdk/hellforge_mod.h).
-    public const int SdkVersion = 13;
+    public const int SdkVersion = 14;
 
     [GeneratedRegex("^[A-Za-z0-9_.-]{1,64}\\.dll$")]
     private static partial Regex DllName();
 
     [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,63}$")]
     private static partial Regex ModId();
+    public static bool IsModId(string id) => ModId().IsMatch(id);
 
     [GeneratedRegex("^[0-9a-f]{16}\\.patch_([0-9]{1,4})(\\.gpu_resources|\\.stream)?$")]
     public static partial Regex PatchFile();
@@ -304,40 +306,53 @@ public static partial class ModCatalog
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(m.Lines)))[..16].ToLowerInvariant()))]);
     }
 
-    static IEnumerable<(ModManifest Mod, string Lines)> Compared(IEnumerable<ModManifest> mods)
+    // Each compared mod with its counted files (ModSets.Files) and its lines (ModSets.Block): the digest and the
+    // fingerprints come from these lines, and mod sync's content hash is their SHA-256 (ModSets.Hash).
+    internal static IEnumerable<(ModManifest Mod, List<ModFile> Files, string Lines)> Compared(IEnumerable<ModManifest> mods)
     {
         // by id, whatever the load order: friends need the same gameplay mods, not the same order. A different order is
         // the players' to sort out (which mod wins a conflict); what mods add is numbered by mod id, the same for everyone.
-        foreach (var mod in mods.Where(m => m.Gameplay && m.Id != LocalStatsId).OrderBy(m => m.Id, StringComparer.Ordinal))
+        foreach (var mod in mods.Where(Counted).OrderBy(m => m.Id, StringComparer.Ordinal))
         {
-            var lines = new StringBuilder();
-            lines.Append(mod.Id).Append('|').Append(mod.Version).Append('\n');
-            if (mod.HasDataSpec) lines.Append("data-builder|").Append(ModDataBuilder.Version).Append('\n');
-            // a zipped mod by what its zip ships, not the files it writes into its unpacked folder as it runs (key bindings, a
-            // cache: each player's own); a zip that cannot be read again is compared by its folder
-            var zipped = mod.Archive != null ? ModArchives.Shipped(mod.Archive, mod.Folder) : null;
-            // a bundled mod (the in-game editor) by the files HellForge ships for it, not what the player saved beside them
-            var shipped = BundledMods.ShippedFiles(mod.Folder);
-            var files = zipped?.Keys ?? Directory.GetFiles(mod.Folder, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(mod.Folder, f).Replace('\\', '/'));
-            foreach (var file in files.Where(f => !IsWorkspaceFile(f))
-                .Where(f => shipped == null || shipped.Contains(f))
-                // a source mod by its sources: the DLL in its folder (an IDE's build) is not what loads (ModBuilds)
-                .Where(f => !mod.HasSource || !(f == mod.CodeDll || f.EndsWith(".lib", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)))
-                .Order(StringComparer.Ordinal))
-                lines.Append(file).Append('|').Append(zipped?[file] ?? Convert.ToHexString(SHA256.HashData(ReadShared(Path.Combine(mod.Folder, file))))).Append('\n');
-            yield return (mod, lines.ToString());
+            var files = ModSets.Files(mod);
+            yield return (mod, files, ModSets.Block(mod, files));
         }
     }
+
+    // The mods the digest counts: gameplay mods except Local Stats.
+    public static bool Counted(ModManifest mod) => mod.Gameplay && mod.Id != LocalStatsId;
+
+    // The files the digest counts in a mod (relative, '/'), in order, with the SHA-256 it takes from the mod's zip (null:
+    // read the file). A zipped mod by what its zip ships, not the files it writes into its unpacked folder as it runs (key
+    // bindings, a cache: each player's own); a zip that cannot be read again is compared by its folder. A bundled mod (the
+    // in-game editor) by the files HellForge ships for it, not what the player saved beside them. A source mod by its
+    // sources: the DLL in its folder (an IDE's build) is not what loads (ModBuilds).
+    internal static IEnumerable<(string Path, string? Sha256)> DigestFiles(ModManifest mod)
+    {
+        var zipped = mod.Archive != null ? ModArchives.Shipped(mod.Archive, mod.Folder) : null;
+        var shipped = BundledMods.ShippedFiles(mod.Folder);
+        var files = zipped?.Keys ?? Directory.GetFiles(mod.Folder, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(mod.Folder, f).Replace('\\', '/'));
+        return files.Where(f => !IsWorkspaceFile(f))
+            .Where(f => shipped == null || shipped.Contains(f))
+            .Where(f => !mod.HasSource || !SourceBuildOutput(mod, f))
+            .Order(StringComparer.Ordinal)
+            .Select(f => (f, zipped?[f]));
+    }
+
+    internal static bool SourceBuildOutput(ModManifest mod, string relative) =>
+        relative == mod.CodeDll || relative.EndsWith(".lib", StringComparison.OrdinalIgnoreCase) || relative.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase);
 
     // A mod's file, read while another program may have it open (a spreadsheet kept beside the mod, open in Excel:
     // File.ReadAllBytes is refused then, issue 18).
     internal static byte[] ReadShared(string path)
     {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var stream = OpenShared(path);
         var bytes = new byte[stream.Length];
         stream.ReadExactly(bytes);
         return bytes;
     }
+
+    internal static FileStream OpenShared(string path) => new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
     // An editor's files, not the mod's: dot files and folders, an IDE's build folder and user settings, and Office's lock
     // (~$name) and temporary (.tmp) files, which it holds open with no sharing at all.
@@ -622,8 +637,9 @@ public static class ModLoaderPlan
     }
 }
 
-// The Mods page's settings: <installation>/mods/hellforge-mods.json {"format":1,"disabled":[ids],"order":[ids],"packs":{...}}.
-// Mods are on by default, so a mod dropped into the folder loads without any setup.
+// The Mods page's settings: <installation>/mods/hellforge-mods.json {"format":1,"disabled":[ids],"order":[ids],"packs":{...},
+// "blocked":[ids],"share":true,"showEditedStats":false}. Mods are on by default, so a mod dropped into the folder loads
+// without any setup.
 public static class ModSettings
 {
     public const string FileName = "hellforge-mods.json";
@@ -634,8 +650,15 @@ public static class ModSettings
     public static string? LastWritten { get; private set; }
 
     // What the Mods page keeps: mods switched off, the order (top first; the bottom mod loads first, as in the
-    // community's managers), and each cosmetic pack's choice.
-    public sealed record State(HashSet<string> Disabled, List<string> Order, Dictionary<string, CosmeticPacks.Choice> Choices);
+    // community's managers), and each cosmetic pack's choice. Mod sync (ModSyncPlan): mods whose lobbies the player never
+    // wants to see or join (Blocked, by id), and whether joiners may download this player's mods when hosting (Share).
+    // The Galactic Map's public lobbies: whether lobbies whose host plays with edited stats (which joiners take) are shown.
+    public sealed record State(HashSet<string> Disabled, List<string> Order, Dictionary<string, CosmeticPacks.Choice> Choices)
+    {
+        public HashSet<string> Blocked { get; } = new(StringComparer.Ordinal);
+        public bool Share { get; set; } = true;
+        public bool ShowEditedStats { get; set; }
+    }
 
     public static State Read(string modsFolder)
     {
@@ -649,6 +672,10 @@ public static class ModSettings
             var root = document.RootElement;
             if (root.TryGetProperty("disabled", out var list) && list.ValueKind == JsonValueKind.Array)
                 foreach (var e in list.EnumerateArray()) if (e.ValueKind == JsonValueKind.String) state.Disabled.Add(e.GetString()!);
+            if (root.TryGetProperty("blocked", out var blocked) && blocked.ValueKind == JsonValueKind.Array)
+                foreach (var e in blocked.EnumerateArray()) if (e.ValueKind == JsonValueKind.String) state.Blocked.Add(e.GetString()!);
+            if (root.TryGetProperty("share", out var share) && share.ValueKind == JsonValueKind.False) state.Share = false;
+            if (root.TryGetProperty("showEditedStats", out var edited) && edited.ValueKind == JsonValueKind.True) state.ShowEditedStats = true;
             if (root.TryGetProperty("order", out var order) && order.ValueKind == JsonValueKind.Array)
                 foreach (var e in order.EnumerateArray()) if (e.ValueKind == JsonValueKind.String && !state.Order.Contains(e.GetString()!)) state.Order.Add(e.GetString()!);
             if (root.TryGetProperty("packs", out var packs) && packs.ValueKind == JsonValueKind.Object)
@@ -683,19 +710,40 @@ public static class ModSettings
 
     public static void SetChoice(string modsFolder, string id, CosmeticPacks.Choice choice) => Change(modsFolder, state => state.Choices[id] = choice);
 
+    // Mod sync's blocklist: a lobby running a blocked mod is hidden and never joined (ModSyncPlan).
+    public static void SetBlocked(string modsFolder, string id, bool blocked) => Change(modsFolder, state =>
+    {
+        if (blocked) state.Blocked.Add(id);
+        else state.Blocked.Remove(id);
+    });
+
+    // Hosting: whether joiners who lack this player's mods may download them from this machine.
+    public static void SetShare(string modsFolder, bool share) => Change(modsFolder, state => state.Share = share);
+
+    // The Galactic Map: whether public lobbies whose host plays with edited stats are shown.
+    public static void SetShowEditedStats(string modsFolder, bool show) => Change(modsFolder, state => state.ShowEditedStats = show);
+
     static void Change(string modsFolder, Action<State> change)
     {
         var state = Read(modsFolder);
         change(state);
         Directory.CreateDirectory(modsFolder);
         var path = Path.Combine(modsFolder, FileName);
-        var packs = state.Choices.OrderBy(c => c.Key, StringComparer.Ordinal).ToDictionary(c => c.Key, c => new
+        var root = new JsonObject
         {
-            off = c.Value.Off.Order(StringComparer.Ordinal).ToList(),
-            sub = c.Value.Sub.OrderBy(s => s.Key, StringComparer.Ordinal).ToDictionary(s => s.Key, s => s.Value)
-        });
-        var text = JsonSerializer.Serialize(new { format = 1, disabled = state.Disabled.Order(StringComparer.Ordinal), order = state.Order, packs },
-            new JsonSerializerOptions { WriteIndented = true }) + "\n";
+            ["format"] = 1,
+            ["disabled"] = new JsonArray([.. state.Disabled.Order(StringComparer.Ordinal).Select(id => (JsonNode?)id)]),
+            ["order"] = new JsonArray([.. state.Order.Select(id => (JsonNode?)id)]),
+            ["packs"] = new JsonObject(state.Choices.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)new JsonObject
+            {
+                ["off"] = new JsonArray([.. c.Value.Off.Order(StringComparer.Ordinal).Select(o => (JsonNode?)o)]),
+                ["sub"] = new JsonObject(c.Value.Sub.OrderBy(s => s.Key, StringComparer.Ordinal).Select(s => KeyValuePair.Create(s.Key, (JsonNode?)s.Value)))
+            }))),
+            ["blocked"] = new JsonArray([.. state.Blocked.Order(StringComparer.Ordinal).Select(id => (JsonNode?)id)]),
+            ["share"] = state.Share,
+            ["showEditedStats"] = state.ShowEditedStats
+        };
+        var text = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n";
         File.WriteAllText(path + ".tmp", text);
         LastWritten = text;
         File.Move(path + ".tmp", path, overwrite: true);

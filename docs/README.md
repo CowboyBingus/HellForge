@@ -49,8 +49,8 @@ Reference and related pages:
   each profile.
 - [Build patches](downpatch.md): for maintainers; how setup patches a newer Steam build and how to publish a patch after
   a game update.
-- [Multiplayer research and plan](multiplayer.md): how the game does co-op and how HellForge's friends-only co-op was
-  worked out.
+- [Co-op and public lobbies](multiplayer.md): how HellForge's co-op, mod sync and public lobbies work, and the research
+  log from building them.
 - [Stratagem selection categories](stratagem-categories.md): the research behind SDK 8's selection headings.
 - [Engine roadmap](engine-roadmap.md): planned engine work, starting with network isolation.
 - [SDK roadmap](sdk-roadmap.md): the modding SDK's design and what is planned.

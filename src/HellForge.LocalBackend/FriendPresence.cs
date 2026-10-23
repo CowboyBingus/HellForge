@@ -13,10 +13,18 @@ namespace HellForge.LocalBackend;
 // HellForge answers both from Steam friends who run HellForge (Multiplayer.MultiplayerHost finds them and swaps lobbies with their
 // backends, with the PlayFab profile objects each game sets for itself, which the engine needs to list a friend);
 // account ids are taken to be SteamID64s, like /Account/Keys.
+// Lobbies the game's Galactic Map search found in the lobby directory (Multiplayer.DirectoryService) answer for their
+// hosts too, after friends: the map asks /lobby/accounts for the hosts of the lobbies its search returned.
 public sealed class FriendPresence
 {
     public sealed record Friend(ulong SteamId, string Name);
     sealed record Lobby(string LobbyId, string ConnectionString, JsonObject Body, DateTime Heard);
+    // A lobby the directory listed: its id, connection string, the host's lobby record and its live record (or null).
+    public sealed record DirectoryLobby(string LobbyId, string ConnectionString, JsonObject Body, JsonObject? Live);
+
+    // The directory's lobbies by host account id (decimal) and by lobby id.
+    public Func<string, DirectoryLobby?>? DirectoryByAccount { get; set; }
+    public Func<string, DirectoryLobby?>? DirectoryByLobby { get; set; }
 
     // A friend's lobby is shown while their backend keeps sending it.
     public static readonly TimeSpan Fresh = TimeSpan.FromSeconds(45);
@@ -35,7 +43,7 @@ public sealed class FriendPresence
     readonly Dictionary<ulong, JsonObject> friendObjects = [];
     JsonObject localObjects = [];
     string lastUnknown = "";
-    JsonObject? localBody;
+    JsonObject? localBody, localLive;
     string? localLobbyId;
     long localVersion;
 
@@ -87,9 +95,55 @@ public sealed class FriendPresence
         lock (gate)
         {
             localBody = null;
+            localLive = null;
             localLobbyId = null;
             localVersion++;
         }
+    }
+
+    // PUT /lobby/<id>/live: the game's live mission state (missionTime, playerPositions, objective and outpost masks,
+    // state), never seen from a solo host so far (docs/multiplayer.md step 7).
+    public void SetLocalLive(string lobbyId, JsonElement body)
+    {
+        if (body.ValueKind != JsonValueKind.Object) return;
+        var copy = JsonNode.Parse(body.GetRawText())!.AsObject();
+        bool first;
+        lock (gate)
+        {
+            first = localLive == null;
+            localLive = copy;
+            localVersion++;
+        }
+        if (first) Log?.Invoke($"The game uploads its live lobby state ({lobbyId}): " + string.Join(", ", copy.Select(p => p.Key)) + ".");
+    }
+
+    public JsonObject? LocalLive { get { lock (gate) return localLive?.DeepClone().AsObject(); } }
+
+    // GET /lobby/<id>: the lobby's record from this machine's own, a friend's or the directory's, completed as
+    // /lobby/accounts completes it; null when unknown.
+    public JsonObject? LobbyRecord(string lobbyId)
+    {
+        JsonObject? body = null;
+        string? connection = null;
+        lock (gate)
+        {
+            if (localLobbyId == lobbyId && localBody != null) (body, connection) = (localBody.DeepClone().AsObject(), (string?)localBody["connectionString"]);
+            else if (friendLobbies.Values.FirstOrDefault(l => l.LobbyId == lobbyId && DateTime.UtcNow - l.Heard <= Fresh) is { } friend)
+                (body, connection) = (friend.Body.DeepClone().AsObject(), friend.ConnectionString);
+        }
+        if (body == null && DirectoryByLobby?.Invoke(lobbyId) is { } listed) (body, connection) = (listed.Body.DeepClone().AsObject(), listed.ConnectionString);
+        if (body == null) return null;
+        body["lobbyId"] = lobbyId;
+        if (connection != null) body["connectionString"] = connection;
+        CompleteRequired(body);
+        return body;
+    }
+
+    // GET /lobby/<id>/live: this machine's own live state, or a directory lobby's.
+    public JsonObject? LiveRecord(string lobbyId)
+    {
+        lock (gate) if (localLobbyId == lobbyId && localLive != null) return localLive.DeepClone().AsObject();
+        return DirectoryByLobby?.Invoke(lobbyId)?.Live?.DeepClone().AsObject();
     }
 
     public (string? LobbyId, JsonObject? Body, JsonObject Objects, long Version) Local
@@ -187,8 +241,12 @@ public sealed class FriendPresence
         {
             foreach (var id in ids)
             {
-                if (!ulong.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var steamId) ||
-                    !friendLobbies.TryGetValue(steamId, out var lobby) || DateTime.UtcNow - lobby.Heard > Fresh)
+                Lobby? lobby = null;
+                if (ulong.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var steamId) && friendLobbies.TryGetValue(steamId, out var friend) &&
+                    DateTime.UtcNow - friend.Heard <= Fresh) lobby = friend;
+                // a lobby the Galactic Map's search found in the directory
+                else if (DirectoryByAccount?.Invoke(id) is { } found) lobby = new Lobby(found.LobbyId, found.ConnectionString, found.Body, DateTime.UtcNow);
+                if (lobby == null)
                 {
                     unknown.Add(id);
                     continue;
@@ -208,7 +266,7 @@ public sealed class FriendPresence
             if (missing == lastUnknown) missing = "";
             else lastUnknown = missing;
         }
-        if (missing.Length > 0) Log?.Invoke($"Asked for the lobbies of account(s) {missing}; none is a HellForge friend in a lobby.");
+        if (missing.Length > 0) Log?.Invoke($"Asked for the lobbies of account(s) {missing}; none is a HellForge friend in a lobby or a lobby the map's search found.");
         return new JsonObject { ["accountLobbies"] = accountLobbies, ["lobbies"] = lobbies };
     }
 }

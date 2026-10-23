@@ -11,7 +11,12 @@
  *             get <seq> <kind> <component> <resource hex> <record> <offset> <storage>
  *             session <seq> <solo|host|joiner> [<host name>]
  *             notice <seq> <error|info> <title> [<line>...]   (SDK 12: a message the in-game editor shows the player)
+ *             syncmod <seq> <version> <index> <have|download|manual|blocked|update|off> <content|code|bundled|raw> <bytes>
+ *                     <id> <name> <mod version>
+ *             syncstate <seq> <version> <none|offer|blocked|downloading|ready|failed> <host name> <bytes> <done> <mods>
+ *                       <message>                                      (syncmod, syncstate: SDK 14, mod sync)
  *   loader:   <seq> ok <now|respawn|mission> [<value hex>]     or     <seq> refused <reason>
+ *             syncanswer <version> <accept|decline|restart|block> <mod id or ->   (unasked: the player's answer to an offer)
  * A request names a field as the stats schema does (kind "component" and a component record, or a settings kind and
  * its row id; a stratagem by its stable id), so the editor sends what it would save. Each becomes a set_live edit of the
  * Local Stats mod (zz.local.stats), whose file the editor saves into: same checks, same conflict reports. */
@@ -78,6 +83,212 @@ static void SetNotice(char** f, int n)
     g_notice.version++;
     Note("notice (%s): %s%s%s", g_notice.kind == HF_NOTICE_ERROR ? "error" : "info", g_notice.title, used ? ": " : "", g_notice.text);
     ReleaseSRWLockExclusive(&g_sessionLock);
+}
+
+/* SDK 14, mod sync: the backend's offer to download the host's mods and restart with them (docs/mods.md "Playing with
+ * other mods"), for an editor to show (sync_state, sync_mod) and answer (sync_answer). A version's syncmod lines come
+ * first and wait in g_syncNext (the pipe's thread alone touches it); its syncstate line publishes them with the state. A
+ * syncstate of the version already published is progress (state, done, message): its mods stay. Answers are queued
+ * for LiveWatch, the pipe's only writer, so an answer never waits on the pipe's pending read. */
+#define SYNC_MAX_MODS 64
+static const char* const kSyncStates[] = {"none", "offer", "blocked", "downloading", "ready", "failed"};
+static const char* const kSyncActions[] = {"have", "download", "manual", "blocked", "update", "off"};
+static const char* const kSyncClasses[] = {"content", "code", "bundled", "raw"};
+static SRWLOCK g_syncLock = SRWLOCK_INIT;
+static HfSyncState g_sync;
+static HfSyncMod g_syncMods[SYNC_MAX_MODS];
+static HfSyncMod g_syncNext[SYNC_MAX_MODS];
+static uint32_t g_syncNextVersion;
+static uint64_t g_syncNextSeen; /* the indices of g_syncNext that arrived */
+/* Lines for LiveWatch to write (the answers), and whether a backend is connected to take them. */
+static SRWLOCK g_liveOutLock = SRWLOCK_INIT;
+static char g_liveOut[1024];
+static size_t g_liveOutUsed;
+static int g_liveConnected;
+static HANDLE g_liveOutEvent;
+
+static int SyncName(const char* text, const char* const* names, int count)
+{
+    for (int i = 0; i < count; i++) if (!strcmp(text, names[i])) return i;
+    return -1;
+}
+
+static int SyncNumber(const char* text, uint64_t* out)
+{
+    char* end;
+    if (*text < '0' || *text > '9') return 0;
+    *out = strtoull(text, &end, 10);
+    return *end == 0;
+}
+
+/* Copies text into a field of `size` bytes; cut short, it ends on a whole UTF-8 character. */
+static void SyncCopy(char* out, size_t size, const char* text)
+{
+    size_t length = strlen(text);
+    if (length >= size)
+    {
+        length = size - 1;
+        while (length > 0 && ((unsigned char)text[length] & 0xC0) == 0x80) length--;
+    }
+    memcpy(out, text, length);
+    out[length] = 0;
+}
+
+/* Splits at every tab and keeps empty fields (Split skips them): a host name or message may be empty. The last field
+ * takes the rest of the line. */
+static int SplitAll(char* line, char** fields, int capacity)
+{
+    int count = 0;
+    for (char* at = line; count < capacity;)
+    {
+        fields[count++] = at;
+        char* tab = count < capacity ? strchr(at, '\t') : NULL;
+        if (tab == NULL) break;
+        *tab = 0;
+        at = tab + 1;
+    }
+    return count;
+}
+
+static void SyncModLine(char* line, char* reply, size_t size)
+{
+    char* f[10];
+    int n = SplitAll(line, f, 10);
+    uint64_t version = 0, index = 0, bytes = 0;
+    int action = n == 10 ? SyncName(f[4], kSyncActions, 6) : -1, kind = n == 10 ? SyncName(f[5], kSyncClasses, 4) : -1;
+    if (n != 10 || !SyncNumber(f[2], &version) || version > UINT32_MAX || !SyncNumber(f[3], &index) || !SyncNumber(f[6], &bytes) ||
+        action < 0 || kind < 0 || !f[7][0])
+    { snprintf(reply, size, "%s\trefused\tmalformed syncmod", n >= 2 ? f[1] : "-"); return; }
+    if (index >= SYNC_MAX_MODS) { snprintf(reply, size, "%s\trefused\tan offer lists at most %d mods", f[1], SYNC_MAX_MODS); return; }
+    if ((uint32_t)version != g_syncNextVersion)
+    {
+        memset(g_syncNext, 0, sizeof g_syncNext);
+        g_syncNextVersion = (uint32_t)version;
+        g_syncNextSeen = 0;
+    }
+    HfSyncMod* m = &g_syncNext[index];
+    memset(m, 0, sizeof *m);
+    m->size = sizeof *m;
+    m->action = (uint32_t)action;
+    m->kind = (uint32_t)kind;
+    m->bytes = bytes;
+    SyncCopy(m->id, sizeof m->id, f[7]);
+    SyncCopy(m->name, sizeof m->name, f[8]);
+    SyncCopy(m->version, sizeof m->version, f[9]);
+    g_syncNextSeen |= 1ull << index;
+    snprintf(reply, size, "%s\tok\tnow", f[1]);
+}
+
+static void SyncStateLine(char* line, char* reply, size_t size)
+{
+    char* f[9];
+    int n = SplitAll(line, f, 9);
+    uint64_t version = 0, bytes = 0, done = 0, mods = 0;
+    int state = n == 9 ? SyncName(f[3], kSyncStates, 6) : -1;
+    if (n != 9 || !SyncNumber(f[2], &version) || version > UINT32_MAX || state < 0 || !SyncNumber(f[5], &bytes) || !SyncNumber(f[6], &done) ||
+        !SyncNumber(f[7], &mods))
+    { snprintf(reply, size, "%s\trefused\tmalformed syncstate", n >= 2 ? f[1] : "-"); return; }
+    if (mods > SYNC_MAX_MODS) { snprintf(reply, size, "%s\trefused\tan offer lists at most %d mods", f[1], SYNC_MAX_MODS); return; }
+    uint64_t all = mods == 64 ? ~0ull : (1ull << mods) - 1;
+    AcquireSRWLockExclusive(&g_syncLock);
+    int fresh = (uint32_t)version != g_sync.version;
+    const char* why = !fresh && (uint32_t)mods != g_sync.mods ? "its mod count changed without its mods" :
+        fresh && mods > 0 && (g_syncNextVersion != (uint32_t)version || (g_syncNextSeen & all) != all) ? "its syncmod lines are missing" : NULL;
+    if (why != NULL)
+    {
+        ReleaseSRWLockExclusive(&g_syncLock);
+        snprintf(reply, size, "%s\trefused\t%s", f[1], why);
+        return;
+    }
+    int changed = fresh || g_sync.state != (uint32_t)state;
+    if (fresh) memcpy(g_syncMods, g_syncNext, (size_t)mods * sizeof g_syncMods[0]);
+    g_sync.size = sizeof g_sync;
+    g_sync.version = (uint32_t)version;
+    g_sync.state = (uint32_t)state;
+    g_sync.mods = (uint32_t)mods;
+    g_sync.bytes = bytes;
+    g_sync.done = done;
+    SyncCopy(g_sync.host, sizeof g_sync.host, f[4]);
+    SyncCopy(g_sync.message, sizeof g_sync.message, f[8]);
+    HfSyncState noted = g_sync;
+    ReleaseSRWLockExclusive(&g_syncLock);
+    /* logged after the lock: the editor's render thread reads the state under it */
+    if (changed)
+        Note("mod sync %u: %s%s%s, %u mod(s), %llu bytes to download%s%s", noted.version, kSyncStates[state], noted.host[0] ? " from " : "",
+            noted.host, noted.mods, (unsigned long long)bytes, noted.message[0] ? ": " : "", noted.message);
+    snprintf(reply, size, "%s\tok\tnow", f[1]);
+}
+
+/* The backend is gone: no offer stands. */
+static void SyncClear(void)
+{
+    AcquireSRWLockExclusive(&g_syncLock);
+    if (g_sync.state != HF_SYNC_NONE) Note("mod sync %u: withdrawn (the backend disconnected)", g_sync.version);
+    memset(&g_sync, 0, sizeof g_sync);
+    ReleaseSRWLockExclusive(&g_syncLock);
+}
+
+/* SDK 14, sync_state: the current offer (state HF_SYNC_NONE, and 0, without one). At most out->size bytes are written. */
+static int ApiSyncState(HfMod* mod, HfSyncState* out)
+{
+    (void)mod;
+    if (out == NULL || out->size < sizeof(uint32_t)) return 0;
+    uint32_t size = out->size;
+    AcquireSRWLockShared(&g_syncLock);
+    HfSyncState now = g_sync;
+    ReleaseSRWLockShared(&g_syncLock);
+    memcpy(out, &now, size < sizeof now ? size : sizeof now);
+    out->size = size;
+    return now.state != HF_SYNC_NONE;
+}
+
+/* SDK 14, sync_mod: the index-th mod of the current offer. At most out->size bytes are written. */
+static int ApiSyncMod(HfMod* mod, uint32_t index, HfSyncMod* out)
+{
+    (void)mod;
+    if (out == NULL || out->size < sizeof(uint32_t)) return 0;
+    uint32_t size = out->size;
+    HfSyncMod now;
+    AcquireSRWLockShared(&g_syncLock);
+    int ok = g_sync.state != HF_SYNC_NONE && index < g_sync.mods;
+    if (ok) now = g_syncMods[index];
+    ReleaseSRWLockShared(&g_syncLock);
+    if (!ok) return 0;
+    memcpy(out, &now, size < sizeof now ? size : sizeof now);
+    out->size = size;
+    return 1;
+}
+
+/* SDK 14, sync_answer: the player's answer to the offer of that version, queued for the backend. 0 when another offer
+ * came since, none stands, or no backend is connected. */
+static int ApiSyncAnswer(HfMod* mod, uint32_t version, uint32_t answer, const char* modId)
+{
+    (void)mod;
+    const char* word = answer == HF_SYNC_ACCEPT ? "accept" : answer == HF_SYNC_DECLINE ? "decline" : answer == HF_SYNC_RESTART ? "restart" :
+        answer == HF_SYNC_BLOCK ? "block" : NULL;
+    if (word == NULL) return 0;
+    char id[65] = "-";
+    if (answer == HF_SYNC_BLOCK)
+    {
+        size_t n = 0;
+        for (const char* c = modId != NULL ? modId : ""; *c && n < sizeof id - 1; c++) if ((unsigned char)*c >= 0x20 && *c != 0x7F) id[n++] = *c;
+        id[n] = 0;
+        if (n == 0) return 0;
+    }
+    AcquireSRWLockShared(&g_syncLock);
+    int current = g_sync.state != HF_SYNC_NONE && g_sync.version == version;
+    ReleaseSRWLockShared(&g_syncLock);
+    if (!current) { Note("mod sync: answer %s to offer %u dropped: it is not the current offer", word, version); return 0; }
+    char line[128];
+    int length = snprintf(line, sizeof line, "syncanswer\t%u\t%s\t%s\n", version, word, id);
+    AcquireSRWLockExclusive(&g_liveOutLock);
+    int queued = g_liveConnected && length > 0 && g_liveOutUsed + (size_t)length <= sizeof g_liveOut;
+    if (queued) { memcpy(g_liveOut + g_liveOutUsed, line, (size_t)length); g_liveOutUsed += (size_t)length; }
+    ReleaseSRWLockExclusive(&g_liveOutLock);
+    if (queued && g_liveOutEvent != NULL) SetEvent(g_liveOutEvent);
+    Note("mod sync %u: the player answered %s%s%s%s", version, word, answer == HF_SYNC_BLOCK ? " " : "", answer == HF_SYNC_BLOCK ? id : "",
+        queued ? "" : " (not sent: no backend connected)");
+    return queued;
 }
 
 /* The Local Stats mod when the session loads it, else a stand-in under its id with a log of its own. */
@@ -271,6 +482,8 @@ static int ApiSetStat(HfMod* mod, const HfStat* stat, const HfValue* value, uint
 /* One request; the reply goes to `reply`. Also the native fixture's entry point. */
 static void LiveRequest(char* line, char* reply, size_t size)
 {
+    if (!strncmp(line, "syncmod\t", 8)) { SyncModLine(line, reply, size); return; }
+    if (!strncmp(line, "syncstate\t", 10)) { SyncStateLine(line, reply, size); return; }
     char* f[12];
     int n = Split(line, f, 12);
     if (n < 2) { snprintf(reply, size, "-\trefused\tmalformed request"); return; }
@@ -353,34 +566,77 @@ static void LiveRequest(char* line, char* reply, size_t size)
         set ? (strtoul(f[8], NULL, 16) == now ? " (as sent)" : " (NOT as sent)") : "");
 }
 
-static int LiveSend(HANDLE pipe, const char* text)
+/* One write on the overlapped pipe, waited for. */
+static int LiveWrite(HANDLE pipe, OVERLAPPED* op, const char* data, size_t length)
 {
-    DWORD written;
-    size_t length = strlen(text);
-    return WriteFile(pipe, text, (DWORD)length, &written, NULL) && written == length && WriteFile(pipe, "\n", 1, &written, NULL);
+    DWORD written = 0;
+    ResetEvent(op->hEvent);
+    if (!WriteFile(pipe, data, (DWORD)length, NULL, op) && GetLastError() != ERROR_IO_PENDING) return 0;
+    return GetOverlappedResult(pipe, op, &written, TRUE) && written == length;
 }
 
-/* Connects to the launcher's pipe while the session runs; one connection at a time. */
+static int LiveSend(HANDLE pipe, OVERLAPPED* op, const char* text)
+{
+    char line[600];
+    int length = snprintf(line, sizeof line, "%s\n", text);
+    return length > 0 && (size_t)length < sizeof line && LiveWrite(pipe, op, line, (size_t)length);
+}
+
+/* The queued answers (sync_answer), written here: this thread is the pipe's only writer. */
+static int LiveFlush(HANDLE pipe, OVERLAPPED* op)
+{
+    char out[sizeof g_liveOut];
+    AcquireSRWLockExclusive(&g_liveOutLock);
+    size_t used = g_liveOutUsed;
+    memcpy(out, g_liveOut, used);
+    g_liveOutUsed = 0;
+    ReleaseSRWLockExclusive(&g_liveOutLock);
+    return used == 0 || LiveWrite(pipe, op, out, used);
+}
+
+/* Connects to the launcher's pipe while the session runs; one connection at a time. The pipe is overlapped: a
+ * synchronous handle serializes its I/O, so an answer written from another thread would wait for the next request. This
+ * thread waits for either a request or a queued answer, and does all the writing. */
 static DWORD WINAPI LiveWatch(void* parameter)
 {
     const wchar_t* session = wcsrchr(g_logs, L'\\');
     wchar_t path[MAX_PATH];
     if (session == NULL || swprintf(path, MAX_PATH, L"\\\\.\\pipe\\hellforge-live-%ls", session + 1) < 0) return 0;
+    g_liveOutEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+    OVERLAPPED readOp = {0}, writeOp = {0};
+    readOp.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    writeOp.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (g_liveOutEvent == NULL || readOp.hEvent == NULL || writeOp.hEvent == NULL) return 0;
     for (;;)
     {
         if (!g_fired[HF_EVENT_ENTITIES_READY]) { Sleep(500); continue; }
-        HANDLE pipe = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        HANDLE pipe = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
         if (pipe == INVALID_HANDLE_VALUE) { Sleep(2000); continue; }
         Note("live editor connected");
+        AcquireSRWLockExclusive(&g_liveOutLock);
+        g_liveConnected = 1;
+        g_liveOutUsed = 0;
+        ReleaseSRWLockExclusive(&g_liveOutLock);
         char hello[160];
         snprintf(hello, sizeof hello, "hello\t%d\t%s\t%s", LIVE_PROTOCOL, g_build, g_statsSchema[0] ? g_statsSchema : "-");
         char buffer[8192], reply[512];
         size_t used = 0;
-        int open = LiveSend(pipe, hello);
+        int open = LiveSend(pipe, &writeOp, hello), reading = 0;
         while (open)
         {
+            if (!reading)
+            {
+                ResetEvent(readOp.hEvent);
+                if (!ReadFile(pipe, buffer + used, (DWORD)(sizeof buffer - 1 - used), NULL, &readOp) && GetLastError() != ERROR_IO_PENDING) break;
+                reading = 1;
+            }
+            HANDLE waits[2] = {readOp.hEvent, g_liveOutEvent};
+            DWORD woke = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+            if (woke == WAIT_OBJECT_0 + 1) { open = LiveFlush(pipe, &writeOp); continue; }
+            if (woke != WAIT_OBJECT_0) break;
             DWORD read = 0;
-            if (!ReadFile(pipe, buffer + used, (DWORD)(sizeof buffer - 1 - used), &read, NULL) || read == 0) break;
+            reading = 0;
+            if (!GetOverlappedResult(pipe, &readOp, &read, FALSE) || read == 0) break;
             used += read;
             char* start = buffer;
             for (char* newline; open && (newline = memchr(start, '\n', used - (size_t)(start - buffer))) != NULL; start = newline + 1)
@@ -389,14 +645,25 @@ static DWORD WINAPI LiveWatch(void* parameter)
                 if (newline > start && newline[-1] == '\r') newline[-1] = 0;
                 if (*start == 0) continue;
                 LiveRequest(start, reply, sizeof reply);
-                open = LiveSend(pipe, reply);
+                open = LiveSend(pipe, &writeOp, reply);
             }
             used -= (size_t)(start - buffer);
             memmove(buffer, start, used);
             if (used >= sizeof buffer - 1) used = 0; /* a line too long to be a request */
         }
+        if (reading)
+        {
+            DWORD read;
+            CancelIoEx(pipe, &readOp);
+            GetOverlappedResult(pipe, &readOp, &read, TRUE);
+        }
+        AcquireSRWLockExclusive(&g_liveOutLock);
+        g_liveConnected = 0;
+        g_liveOutUsed = 0;
+        ReleaseSRWLockExclusive(&g_liveOutLock);
         CloseHandle(pipe);
         Note("live editor disconnected");
         SetSession(HF_SESSION_SOLO, ""); /* the backend is gone: nothing tells this game it is joined */
+        SyncClear();
     }
 }

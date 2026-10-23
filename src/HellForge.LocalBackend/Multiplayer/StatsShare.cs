@@ -29,6 +29,32 @@ public sealed class StatsShare : IAsyncDisposable
     readonly Func<ulong, string> nameOf;
     readonly Action<string> log;
     readonly LiveEditServer live;
+    // The session's live-edit pipe, which mod sync shares (ModSync's offers to the game, its answers back).
+    public LiveEditServer Live => live;
+
+    // Whether this player plays with edited stats: Local Stats edits, the in-game editor's mod content values or arm swaps.
+    // A public lobby's listing says so (DirectoryService), since joiners play with the host's.
+    public bool Edited
+    {
+        get
+        {
+            string? stats, mods, mounts;
+            lock (gate) (stats, mods, mounts) = (mine, mineMods, mineMounts);
+            return StatsSync.Values(stats, out var bootOnly).Count > 0 || bootOnly > 0 || !string.IsNullOrEmpty(mounts) && mounts != "{}" || HasModValues(mods);
+        }
+    }
+
+    // mod-stats.json: {category: {target: {field: number}}}; any number is an edit.
+    static bool HasModValues(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            return System.Text.Json.Nodes.JsonNode.Parse(json) is System.Text.Json.Nodes.JsonObject root && root.Select(c => c.Value).OfType<System.Text.Json.Nodes.JsonObject>()
+                .SelectMany(c => c.Select(t => t.Value)).OfType<System.Text.Json.Nodes.JsonObject>().SelectMany(t => t.Select(f => f.Value)).OfType<System.Text.Json.Nodes.JsonValue>().Any();
+        }
+        catch (System.Text.Json.JsonException) { return false; }
+    }
     readonly StatsSync sync = new();
     readonly SemaphoreSlim applying = new(1, 1);
     readonly object gate = new();

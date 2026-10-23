@@ -19,7 +19,7 @@ try
             create-install --root <folder>
             prepare-session --install <folder> --profile <name>
             migrate --install <folder> --from <artifacts/host-startup> [--appdata <folder>]
-            mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>]
+            mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>] [--modset <file>] [--sync <mod sync session file>]
             build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> [--steam-data <Steam's game data folder>] --out <folder>]
             check-stats --mod <mod folder>
             sdk-headers --repo <HellForge source folder> [--mode write | check]
@@ -81,7 +81,7 @@ try
         "create-install" => ["--root"],
         "prepare-session" => ["--install", "--profile"],
         "migrate" => ["--install", "--from", "--appdata"],
-        "mods-stage" => ["--install", "--plan", "--logs", "--progress"],
+        "mods-stage" => ["--install", "--plan", "--logs", "--progress", "--modset", "--sync"],
         "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--out"],
         "check-stats" => ["--mod"],
         "sdk-headers" => ["--repo", "--mode"],
@@ -206,9 +206,27 @@ try
             var bundledProblems = BundledMods.Sync(modInstall, Console.Error.WriteLine);
             var (mods, modProblems) = ModCatalog.Load(Path.Combine(modInstall.Root, "mods"));
             modProblems.InsertRange(0, bundledProblems);
+            var loadOrder = ModCatalog.LoadOrder(ModCatalog.Active(mods)); // bottom of the Mods page first
+            // --sync: the session after a mod sync plays the host's gameplay mods (ModSyncSession); if they are not all here
+            // as the host has them, the player's own mods, and the problem is reported.
+            string? syncedWith = null;
+            if (options.TryGetValue("--sync", out var syncFile))
+            {
+                try
+                {
+                    var sync = ModSyncSession.Read(syncFile);
+                    var (synced, syncProblem) = sync.Resolve(modInstall.Mods, mods);
+                    if (synced != null) (loadOrder, syncedWith) = (synced, sync.HostName.Length > 0 ? sync.HostName : sync.Host);
+                    else modProblems.Add("Mod sync: playing your own mods, because " + syncProblem);
+                }
+                catch (Exception error) when (error is InvalidDataException or IOException or System.Text.Json.JsonException)
+                {
+                    modProblems.Add("Mod sync: playing your own mods, because the sync file could not be read (" + error.Message + ").");
+                }
+            }
             // Mods with a data spec get their data built from the copy's game data first (once per game data and spec);
             // a mod whose data cannot be built is not loaded.
-            var (active, dataProblems) = ModDataCache.Prepare(modInstall, ModCatalog.LoadOrder(ModCatalog.Active(mods)), Console.Error.WriteLine); // bottom of the Mods page first
+            var (active, dataProblems) = ModDataCache.Prepare(modInstall, loadOrder, Console.Error.WriteLine);
             modProblems.AddRange(dataProblems);
             // Source mods are built (or their cached build reused) for this session; one that does not compile stays off.
             // --progress: a JSON file the launcher reads for its "compiling mods" bar (written whole, then moved in place)
@@ -232,8 +250,11 @@ try
             var code = active.Where(m => m.NeedsLoader).ToList();
             if (options.TryGetValue("--plan", out var planPath))
                 File.WriteAllText(planPath, ModLoaderPlan.Text(code, Path.GetFullPath(Required("--logs")), EntityProfile.Current, SupportedBuild.Current.BuildId));
-            // modlist: the digest's mods one by one (ModlistDiff's wire form), so a refused co-op join can say which differ
-            var (digest, compared) = ModCatalog.Modlist(active);
+            // The gameplay mods with their content hashes, for the backend (mod sync: joiners whose mods differ get it), and
+            // the digest's mods one by one (ModlistDiff's wire form), so a refused co-op join can say which differ.
+            var modSet = ModSet.Of(active);
+            if (options.TryGetValue("--modset", out var modSetPath)) modSet.Write(modSetPath);
+            var (digest, compared) = (modSet.Digest, modSet.Fingerprints());
             result = new
             {
                 mods = active.Select(m => new { m.Id, m.Name, m.Version, m.Gameplay, native = m.HasNative, code = m.CodeDll, source = m.HasSource, dataFiles = m.DataFiles.Count, dataSpec = m.HasDataSpec }),
@@ -241,7 +262,9 @@ try
                 loaderRequired = true, // read-only stats snapshots are also collected without mods
                 disabled = mods.Where(m => !m.Enabled).Select(m => m.Id),
                 problems = modProblems, staged, stagedCopied = ModStaging.LastCounts.Copied, stagedKept = ModStaging.LastCounts.Kept,
-                native = active.Any(m => m.HasNative), digest, modlist = ModlistDiff.Encode(compared)
+                native = active.Any(m => m.HasNative), digest, modlist = ModlistDiff.Encode(compared), syncedWith,
+                // the session's mods with network type edits (after a mod sync, the host's), for the session's native applier
+                nativeFolders = active.Where(m => m.NetworkFieldTypes.Count > 0).Select(m => Path.GetFullPath(m.Folder))
             };
             break;
         }

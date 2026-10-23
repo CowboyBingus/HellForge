@@ -519,6 +519,12 @@ try
     await StatsShareTests.Run(root, Check);
     results.Add(new { mode = "stats-share", outcome = "passed" });
     Console.WriteLine("PASS stats share: a joiner plays with the host's Local Stats (joined, changed, host gone), its live-edit pipe");
+    await DirectoryTests.Run(root, Check);
+    results.Add(new { mode = "directory", outcome = "passed" });
+    Console.WriteLine("PASS lobby directory: the map's filter, listing values, publishing rules, search and records, edited stats, blocked and unjoinable mods, strangers");
+    await ModSyncTests.Run(root, Check);
+    results.Add(new { mode = "mod-sync", outcome = "passed" });
+    Console.WriteLine("PASS mod sync: a refusal's offer, download, checks and restart; blocked, unshared and unverified mods; the host's limits; a lying host; the live pipe");
     RegisteredItemsTests.Run(root, Check);
     results.Add(new { mode = "registered-items", outcome = "passed" });
     Console.WriteLine("PASS registered items: child hash, catalogue children, mastery package, progress, inventory");

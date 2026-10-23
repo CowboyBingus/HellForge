@@ -4,7 +4,7 @@ This page is for contributors. It records the plan for the mod SDK, phase by pha
 planned. [modding/README.md](modding/README.md) and [sdk-reference.md](sdk-reference.md) document what exists today;
 [engine-roadmap.md](engine-roadmap.md) is the engine's side.
 
-Status (2026-10-22: mod SDK 13, engine 0.1.28, HellForge 0.2.0-beta):
+Status (2026-10-23: mod SDK 14, engine 0.1.28, HellForge 0.2.0-beta):
 
 | Phase | Status |
 |---|---|
@@ -492,6 +492,9 @@ and `notice` (12). [sdk-reference.md](sdk-reference.md) lists them.
 
 SDK 13 (2026-10-21): managed hooks, as described under [Mod conflicts, events and
 hooks](#mod-conflicts-events-and-hooks).
+
+SDK 14 (2026-10-23): mod sync's `sync_state`, `sync_mod` and `sync_answer`, which the in-game editor's MOD SYNC prompt
+uses ([mods.md](mods.md#playing-with-other-mods), [multiplayer.md](multiplayer.md)).
 
 ### 6. Editor (HellRaiser)
 

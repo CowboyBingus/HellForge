@@ -4,8 +4,10 @@ using System.Globalization;
 namespace HellForge.Core;
 
 // A session's choices, as the launcher's Settings page keeps them (launcher-settings.json, ProfileStore) or as another
-// launcher passes them (HellForge.Cli play). The game options are already checked (GameLaunchOptions.Parse).
-public sealed record SessionOptions(bool LocalPlayFab, bool SdkShims, string War, bool EngineLog, bool CrashDump, IReadOnlyList<string> GameOptions);
+// launcher passes them (HellForge.Cli play). The game options are already checked (GameLaunchOptions.Parse). ModSync:
+// the next session's mods after a mod sync (a ModSyncSession file), for that one session.
+public sealed record SessionOptions(bool LocalPlayFab, bool SdkShims, string War, bool EngineLog, bool CrashDump, IReadOnlyList<string> GameOptions,
+    string? ModSync = null);
 
 // Starts and stops the engine's session runner (HellForge.Session.exe play). It owns every safety step (verified copy,
 // Steam ownership, network block, cleanup); this class only starts it and asks it to stop. It runs without a window and
@@ -39,6 +41,7 @@ public sealed class SessionRunner
         if (options.EngineLog) arguments.Add("--engine-log");
         // the player's launch options, for the session runner to add to the game's command line (GameLaunchOptions)
         if (options.GameOptions.Count > 0) arguments.AddRange(["--game-options", GameLaunchOptions.CommandLine(options.GameOptions)]);
+        if (options.ModSync != null) arguments.AddRange(["--mod-sync", options.ModSync]);
         return arguments;
     }
 

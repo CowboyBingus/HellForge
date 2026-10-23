@@ -1,11 +1,12 @@
-# Friends-only co-op
+# Co-op and public lobbies
 
-This page explains how HellForge's co-op with Steam friends works: first for players, then for contributors working on
-it. The second half is the research and build log from October 2026, kept as history.
+This page explains how HellForge's co-op works: first for players, then for contributors working on it. The second half
+is the research and build log from October 2026, kept as history.
 
-Friends, each running HellForge with their own local backend, play together through the game's own social menu and
-join flow. There is no port forwarding and no central HellForge server. The copied game never reaches PlayFab,
-Arrowhead's services or vanilla players' sessions.
+Players, each running HellForge with their own local backend, play together through the game's own social menu, join
+flow and Galactic Map. Friends find each other through Steam presence; public lobbies are listed on Steam's lobby
+service, never on Arrowhead's. There is no port forwarding and no central HellForge server. The copied game never
+reaches PlayFab, Arrowhead's services or vanilla players' sessions.
 
 ## How co-op works for players
 
@@ -14,7 +15,9 @@ Arrowhead's services or vanilla players' sessions.
    console still calls them experimental.)
 2. Compare modlist codes. Friends need the same gameplay mods, in the same versions with the same files; the order is
    up to each player, and cosmetic mods, packs and Lua mods are each player's own. The Mods page shows the code.
-   [mods.md](mods.md#playing-with-friends) describes what each player sees when a join is refused.
+   [mods.md](mods.md#playing-with-friends) describes what each player sees when a join is refused. When the host shares
+   their mods, the joiner can download them and restart with them instead
+   ([mods.md](mods.md#playing-with-other-mods)).
 3. Start a session. In the game's social menu, the friends list shows Steam friends who are playing HELLDIVERS 2 with
    HellForge running, and you join their game from there. Steam sign-in, Steam friends and Steam lobbies are the real
    ones.
@@ -22,6 +25,9 @@ Arrowhead's services or vanilla players' sessions.
    in-game editor turns grey and read-only, with "READ-ONLY · HOST: <name>" in its header. The host's shows "HOSTING ·
    FRIENDS PLAY WITH YOUR STATS".
 5. When the host leaves, the lobby closes for everyone, as HD2's host ends the session. Your own stats come back.
+6. A Public lobby is listed for other HellForge players, who see it on the Galactic Map and can join it from there. It
+   shows its players' names and the host's Steam account id. Lobbies a player could not join (a blocked mod, mods to
+   install by hand, or a host who plays with edited stats unless shown) are left off their map.
 
 Each session's logs hold `backend/multiplayer.log` (the backend's side of co-op) and `coop-diagnostics.log` (what this
 machine's game saw of mod content). Collect both players' logs (launcher Console > "Save logs to Desktop") for a bug
@@ -126,6 +132,31 @@ still interoperate.
 
 Once a join is accepted, the host sends `war.clock`, and the joiner's backend adopts the host's war time.
 
+### Mod sync
+
+A joiner refused for different gameplay mods can take the host's (protocol `hellforge-mp-7`). Before the refusal the
+host sends its mod set (`mods.offer`); the joiner's backend plans the difference (`ModSyncPlan` in HellForge.Core) and
+the in-game editor shows the MOD SYNC prompt (SDK 14 `sync_state`, `sync_mod`, `sync_answer`). On accept the joiner
+downloads each mod's counted files from the host over the Steam link (`mods.files`, `mods.get`, paced to 1 MiB/s per
+machine), checks every file and the whole mod (`SyncedStore.Install`), keeps it in `mods/.synced/<id>@<hash>/`, and the
+launcher restarts the session with the host's mods (`--mod-sync`). Each mod's class comes from the bytes received,
+with one rule for every host, Steam friends included (`ModSets.ClassOf`). Content (data specs, schema stats, network
+field types) downloads from any host. Code and raw data (binary data patches, raw stats lines, `componentWrites`)
+download only when `data/verified-mods.json` names their exact content hash. Bundled mods never download. The host side is `src/HellForge.LocalBackend/Multiplayer/ModSync.cs`; the protocol and limits are in
+[Step 6](#step-6-mod-sync-a-joiner-takes-the-hosts-mods-2026-10-22) below.
+
+### Public lobbies (the lobby directory)
+
+Each backend lists the public lobby its game hosts as an Invisible Steam lobby of the game's app, held beside the game's
+own (`Multiplayer/SteamLobbyDirectory.cs`, `LobbyDirectory.cs`, `DirectoryService.cs`). Its data carries the lobby's
+PlayFab search properties, its record with every account id but the host's at 0, its mod set and whether the host plays
+with edited stats. The lobby stand-in sends the game's `PFMultiplayerFindLobbies` to the backend (`lobby.find`), which
+searches the directory and evaluates the game's filter, drops lobbies the player could not join, and answers
+`lobby.found`. The map's records come from the listings (`POST /lobby/accounts`). The Steam link accepts someone who is
+not a Steam friend only while it deals with them (`StrangerGate.cs`): while a lobby is listed, a member or host of a
+lobby here, or a mod download. `HELLFORGE_TEST_STRANGERS=1` makes a backend treat friends as strangers, for testing
+with two friends' PCs. Details and open questions: [Step 7](#step-7-public-lobbies-on-the-galactic-map-2026-10-22).
+
 ### The join gate
 
 The host's join gate in the game (game.dll 0x108BC70) still applies its privacy rules and compares the game and
@@ -174,7 +205,8 @@ Everyone in a session plays with the host's Local Stats. The design is in [sdk-r
   values come back (`set`, or `reset` where it had none).
 - Not synced: a stats mod's own records (`"own"`), and armor perks, which are solo only (with more than one player,
   everyone gets the armor's own).
-- Trust: joiners take the host's values. That is fine for friends-only co-op.
+- Trust: joiners take the host's values. Between friends that is fine; a public lobby whose host plays with edited
+  stats is hidden from other players' maps unless they choose to show such lobbies.
 
 ### When the host leaves
 
@@ -211,12 +243,15 @@ one HellForge runs (25480438) use Easy Anti-Cheat instead.
 
 ### Tests
 
-`tests/HellForge.LocalBackend.Tests` holds the multiplayer and stats sharing checks (`MultiplayerTests.cs`,
-`StatsShareTests.cs`). `HellForge.SdkShimGen smoke-lobby-link` runs two backend processes over loopback UDP and two
-copies of each stand-in through the PlayFab C APIs: create, join, member data, Party connect, endpoints, a 1,200-byte
-message and a broadcast, and leaving.
+`tests/HellForge.LocalBackend.Tests` holds the multiplayer, stats sharing, mod sync and directory checks
+(`MultiplayerTests.cs`, `StatsShareTests.cs`, `ModSyncTests.cs`, `DirectoryTests.cs`); `tests/HellForge.Tests` has
+Core's mod sync checks (`ModSyncTests.cs`). `HellForge.SdkShimGen smoke-lobby-link` runs two backend processes over
+loopback UDP and two copies of each stand-in through the PlayFab C APIs: create, join, member data, Party connect,
+endpoints, a 1,200-byte message and a broadcast, and leaving. `HellForge.SdkShimGen smoke-lobby-search` runs two
+backends sharing a folder directory and two lobby stand-ins, as friends and again as strangers: the friend's search
+finds the host's lobby, joins it, and stops finding it after the host leaves.
 
-## History: research and build log (2026-10-14 to 2026-10-21)
+## History: research and build log (2026-10-14 to 2026-10-22)
 
 This section is the record of how co-op was researched and built. It describes the game and HellForge as they were at
 each date, and some of it is out of date: where it differs from the sections above, the sections above describe the
@@ -428,6 +463,146 @@ The two-PC test written for it (the user and a friend, both on the installer):
 5. The host leaves (or closes the game): the friend's editor is editable again and their own values are back.
 6. Collect both sessions' logs (launcher Console > "Save logs to Desktop"): `multiplayer.log` ("Stats:" lines) and
    `modloader.log` / `mod-zz.local.stats.log` ("session:", "live set") on each side.
+
+### Step 6: mod sync, a joiner takes the host's mods (2026-10-22)
+
+Built 2026-10-22. On two PCs a refusal and its offer are confirmed; the download and restart are not yet. Players see
+it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
+
+- Each session writes its mod set (`<run>/modset.json`, from `mods-stage --modset`): every gameplay mod with its
+  content hash, class (content, code, bundled), load-order place, folder and counted files. The backend reads it with
+  `--modset`.
+- **Host** (`Multiplayer/ModSync.cs`):
+  - A joiner refused for different gameplay mods is first sent the set without its folders:
+    `mods.offer [lobby id, set JSON, sharing 0|1]`. Then comes the refusal, as before: `lobby.refused [reason,
+    line...]`, its lines shown by both games. When the host shares, the joiner's last line says the MOD SYNC window
+    offers the download. A backend from before ignores the offer.
+  - A joiner takes an offer only for a join it asked for in the last minute.
+  - The joiner's machine (a stranger too: step 7's gate lets a download through) may then download for 10 minutes:
+    - `mods.files [req, id, hash]` → `mods.filelist [req, ok, count, (path, size, sha256)...]`;
+    - `mods.get [req, id, hash, path, offset, length ≤ 128 KiB]` → `mods.chunk [req, ok, offset, bytes]`;
+    - or `[req, refused, reason]`.
+  - It serves only a mod in its set (not a bundled one), only a file that mod counts, and only within the file's size.
+  - One worker reads the files, at most 8 queued requests per machine, paced to 1 MiB/s per machine and 2 MiB/s in
+    total.
+  - `"share": false` in `hellforge-mods.json` stops it.
+- **Joiner:**
+  - The offer becomes the game's (`ModSyncPlan` in HellForge.Core). The loader's live pipe gets
+    `syncmod` lines and then `syncstate` (`native/mod-loader/live.c`, SDK 14 `sync_state`/`sync_mod`), and the in-game
+    editor shows its MOD SYNC prompt over the game, the editor window closed. The answer comes back as
+  `syncanswer <version> <answer> [<mod id>]`.
+  - The offer is also written to `<run>/backend/mod-sync.json`.
+  - On accept it downloads, four requests in flight. The file list, the manifest and the stats file come first: a
+    mod they show to be code or raw data (`ModSets.Declared`) that is not on the verified list stops there.
+  - Each file is checked against its listed size and SHA-256, and the whole mod by `SyncedStore.Install`, before it
+    goes to `mods/.synced/`.
+  - On restart it writes `<install>/temp/mod-sync/session.json` (`ModSyncSession`) and `mod-sync` into
+    `stop-observation.signal`. The session runner reports `restart: mod-sync`, and the launcher starts the next
+    session with `--mod-sync <file>` (`mods-stage --sync`).
+  - That session plays the host's mods, each found by id and content hash, in the host's order. If they do not make
+    the host's modlist digest, it plays the player's own mods and reports why.
+- **Still to do:**
+  - rejoining by itself after the restart (the player joins again from the social tab or the map);
+  - a launcher prompt for sessions without the in-game editor.
+
+**To test on two PCs:**
+1. The host enables a content mod (a data patch or stats mod) and a code mod; the friend has neither.
+2. The friend joins. Check that the MOD SYNC prompt shows (no editor window behind it), lists the content mod as
+   downloading and the code mod as "install it yourself", and refuses to start.
+3. The host turns the code mod off and starts a new session. The friend joins again, then DOWNLOAD AND RESTART:
+   - check the progress bar and that the files land in `mods/.synced`;
+   - check that the session restarts with "Playing with <host>'s mods" in the launcher;
+   - check that joining again from the social tab works.
+4. Time how long a large download takes, and whether the host notices it in game (it is paced to 1 MiB/s).
+5. BLOCK a mod from the dialog: the next join to that lobby shows it blocked; unblock it on the Mods page.
+6. Collect both sessions' `multiplayer.log` ("Mod sync:" lines), `backend/mod-sync.json` and `modloader.log`
+   ("mod sync" lines).
+
+### Step 7: public lobbies on the Galactic Map (2026-10-22)
+
+Built 2026-10-22 and tested on one PC only.
+
+- **The directory** (`Multiplayer/LobbyDirectory.cs`):
+  - Every backend lists the public lobby its game hosts on Steam matchmaking (app 553850), as an Invisible Steam lobby
+    the backend holds beside the game's own (`SteamLobbyDirectory`, on the peer link's Steam thread).
+  - Listed means: privacy `number_key6` 0, not locked, not full. A listing appears and goes at once; changes are
+    written at most every 5 s (`DirectoryService`).
+  - A listing's data:
+    - `hellforge` (the protocol);
+    - `hf.connection`, `hf.lobbyId`, `hf.host` (SteamID64 in decimal);
+    - `hf.members`, `hf.maxMembers`, `hf.slots`, `hf.lock`;
+    - every PlayFab search property under its own name (`string_keyN`, `number_keyN`);
+    - `hf.lobby` (the game's `PUT /lobby` record, gzip and base64; long values split into parts) and `hf.live`;
+    - `hf.mods` (the mod set), `hf.digest`, `hf.share`;
+    - `hf.stats` (the host plays with edited stats).
+  - **Published record (decided 2026-10-22):** player names are kept, and every account id except the host's becomes
+    0.
+- **The search:**
+  - The lobby stand-in sends `PFMultiplayerFindLobbies` to the backend: `lobby.find [op, entity, filter, sort, count]`.
+    It logs the game's filter string when it changes.
+  - The backend asks the directory with coarse filters: the protocol, the filter's `eq` clauses, a slot free,
+    worldwide, at most 50. It then evaluates the game's whole filter (`LobbyFilter`: `and` of `eq ne gt lt ge le`).
+    Two clauses are left out on purpose: `number_key7`'s random window and the continent exclusions
+    (`string_key6 ne`).
+  - It then drops lobbies the player could not join (`ModSync.Joinable`): a blocked mod, mods to install by hand, or a
+    host with edited stats unless `"showEditedStats"`. It also drops its own lobby.
+  - It answers `lobby.found [op, hresult, count, (lobby id, connection string, owner, max, members, locked, search
+    properties)...]`, which the stand-in turns into `FindLobbiesCompleted` with `PFLobbySearchResult`s. The last four
+    searches' results stay valid after their batch.
+  - The game's two searches per scan (about 30 ms apart) share one directory search; nothing older than 500 ms is
+    reused.
+- **The map's records:** `POST /lobby/accounts` answers, after friends, for the hosts the last searches found (for 2
+    minutes), with the listing's record, its lobby id and connection string. `GET /lobby/<id>` and
+    `GET /lobby/<id>/live` answer from the local, a friend's or a found lobby. `PUT /lobby/<id>/live` is stored and
+    listed. The game has not been seen calling the GET routes; an unknown lobby is a 404 (`lobby_unknown`).
+- **Strangers** (`StrangerGate`):
+  - The Steam link accepts a session from someone who is not a Steam friend only while this machine lists a lobby, or
+    when it deals with them: a member of a lobby hosted here, the host of a lobby joined or being joined from here, or
+    a mod download.
+  - From a stranger, a backend takes `lobby.join` (at most 6 a minute from one machine, 60 in all, and only with a
+    lobby listed), pings, and then what follows once it deals with them. Presence (the social tab) stays between
+    friends. A stranger host's name comes from the record its listing carried.
+- **Multiplayer needs Local PlayFab.** The session runner and the launcher refuse `--multiplayer` without it: the
+  platform matchmaking selector that sessions clear without Local PlayFab sends the game's own search to Steam's
+  lobbies, where vanilla games list theirs under the same build string.
+- **Tests on one PC:**
+  - `HellForge.LocalBackend.Tests` (directory: filter, values, publishing, search, records, edited stats, blocked and
+    unjoinable mods, strangers);
+  - `HellForge.SdkShimGen smoke-lobby-search <stand-ins> <HellForge.LocalBackend.dll>`: two backends over loopback UDP
+    sharing a folder directory (`--directory`), and two lobby stand-ins through the PlayFab C API. The friend's
+    search finds the host's lobby about 0.35 s after it is listed, joins with the connection string it found, and
+    stops finding it about 0.35 s after the host leaves. It runs twice: as friends, then as strangers
+    (`HELLFORGE_TEST_STRANGERS`, below). As strangers the join passes the gate, no presence is swapped, and the map's
+    record for the host is the listing's (names kept, other account ids 0).
+- **Test mode for two friends' PCs: `HELLFORGE_TEST_STRANGERS=1`.** A backend started with it treats every Steam
+  friend as a stranger:
+  - no presence, so the social tab lists none;
+  - the stranger gate applies;
+  - Steam sessions are accepted only by the directory's rule.
+
+  `multiplayer.log` says "Test mode (HELLFORGE_TEST_STRANGERS)". Set it on both PCs before starting the launcher
+  (the session runner and the backend inherit it), for example in Command Prompt:
+  `set HELLFORGE_TEST_STRANGERS=1` then `start "" "<installation>\HellForge.exe"`. Steam itself still sees two friends;
+  nothing in the directory depends on that.
+- **Not yet known:**
+  - whether the Galactic Map shows a marker and hover card from these records (which string keys the map lists);
+  - whether the hover card works with the other members' account ids at 0;
+  - Steam's search rate limits;
+  - the map's exact filter string (now logged).
+
+**To test on two PCs that are not Steam friends** (or two friends' PCs with `HELLFORGE_TEST_STRANGERS=1` on both):
+1. Both turn on multiplayer and Local PlayFab. The host opens a Public lobby on a planet.
+2. The other player opens the Galactic Map on that planet. Check:
+   - a marker and a hover card with the host's name;
+   - `multiplayer.log` "Directory: search ... shown";
+   - the stand-in log's `PFMultiplayerFindLobbies: filter "..."`.
+3. JOIN from the map. Check:
+   - the join is admitted (the host's log has no "Dropped ... not a Steam friend");
+   - the mission plays.
+   Then with different mods: the MOD SYNC prompt shows.
+4. The host turns Invite Only, or the lobby fills: within a scan or two the marker goes.
+5. The host edits a stat (F8, APPLY): the lobby disappears from the other player's map until "Show public lobbies
+   whose host plays with edited stats" is on.
 
 ### Co-op diagnostics (engine 0.1.19, the 0.1.11 diagnostics beta)
 

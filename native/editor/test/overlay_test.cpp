@@ -35,6 +35,41 @@ static HfSession g_sessionNow; /* the co-op role the stand-in loader reports */
 static void Session(HfMod*, HfSession* out) { *out = g_sessionNow; }
 static HfNotice g_noticeNow; /* HellForge's message for the player, as the stand-in loader reports it */
 static void Notice(HfMod*, HfNotice* out) { *out = g_noticeNow; }
+/* SDK 14, mod sync: the offer the stand-in loader reports, how often the editor read it, and the answers it sent */
+static HfSyncState g_syncNow;
+static HfSyncMod g_syncList[3];
+static int g_syncReads, g_syncOpens, g_syncAnswers[5], g_syncAlone, g_syncGone, g_editorOpens;
+static char g_syncBlocked[65];
+static int SyncState(HfMod*, HfSyncState* out)
+{
+    g_syncReads++;
+    uint32_t size = out->size;
+    memcpy(out, &g_syncNow, size < sizeof g_syncNow ? size : sizeof g_syncNow);
+    out->size = size;
+    return g_syncNow.state != HF_SYNC_NONE;
+}
+static int SyncMod(HfMod*, uint32_t index, HfSyncMod* out)
+{
+    if (g_syncNow.state == HF_SYNC_NONE || index >= g_syncNow.mods || index >= 3) return 0;
+    uint32_t size = out->size;
+    memcpy(out, &g_syncList[index], size < sizeof(HfSyncMod) ? size : sizeof(HfSyncMod));
+    out->size = size;
+    return 1;
+}
+static int SyncAnswer(HfMod*, uint32_t version, uint32_t answer, const char* id)
+{
+    if (g_syncNow.state == HF_SYNC_NONE || version != g_syncNow.version || answer < 1 || answer > 4) return 0;
+    g_syncAnswers[answer]++;
+    if (answer == HF_SYNC_BLOCK) snprintf(g_syncBlocked, sizeof g_syncBlocked, "%s", id ? id : "");
+    return 1;
+}
+static void SyncOffer(uint32_t state, uint32_t version, uint64_t bytes, uint64_t done)
+{
+    g_syncNow = {};
+    g_syncNow.size = sizeof g_syncNow; g_syncNow.state = state; g_syncNow.version = version; g_syncNow.mods = 3;
+    g_syncNow.bytes = bytes; g_syncNow.done = done;
+    snprintf(g_syncNow.host, sizeof g_syncNow.host, "Friend Host");
+}
 static double g_lastLive;
 static char g_folder[MAX_PATH] = "";
 static char g_logsFolder[MAX_PATH] = "";
@@ -53,6 +88,10 @@ static void Log(HfMod*, const char* format, ...)
     if (strstr(line, "the editor runs first again")) g_again++;
     if (strstr(line, "staged (APPLY writes them)")) g_presetImports++;
     if (strstr(line, "A/MG-101 Heavy MG Sentry gets a page")) g_modPage = 1;
+    if (strstr(line, "editor: mod sync") && strstr(line, "the dialog opens")) g_syncOpens++;
+    if (strstr(line, "the mod sync prompt shows over the game")) g_syncAlone++;
+    if (strstr(line, "the mod sync prompt goes")) g_syncGone++;
+    if (strstr(line, "sound: the editor opens")) g_editorOpens++;
 }
 static const char* Build() { return "25480438"; }
 static const char* ModFolder(HfMod*) { return g_folder; }
@@ -225,6 +264,7 @@ int main(int argc, char** argv)
     g_api.content = Content;
     g_api.mods = Mods;
     g_api.notice = Notice;
+    g_api.sync_state = SyncState; g_api.sync_mod = SyncMod; g_api.sync_answer = SyncAnswer;
     g_modsView = getenv("HELLFORGE_EDITOR_TEST_VIEW") != NULL && !strcmp(getenv("HELLFORGE_EDITOR_TEST_VIEW"), "mods");
     /* the editor's folder in a mods folder of the test's own: its catalogue and icons, and Local Stats next to it */
     char mods[MAX_PATH], stats[MAX_PATH];
@@ -343,6 +383,7 @@ int main(int argc, char** argv)
     UINT64 value = 0;
     int failures = 0;
     UINT width = 1280, height = 720;
+    ULONGLONG noticeAt = 0;
     for (int frame = 0; frame < 420; frame++)
     {
         MSG message;
@@ -368,8 +409,10 @@ int main(int argc, char** argv)
             snprintf(g_noticeNow.text, sizeof g_noticeNow.text, "Your gameplay mods don't match the host's.\nMissing: Stratagem Compendium 1.2.0 "
                 "(the host has it)\nSmarter Guard Dogs & Sentries: you have 5.2.0, the host has 5.1.0\nTurn on the same gameplay mods on the "
                 "launcher's MODS page, then start a new session.");
+            noticeAt = GetTickCount64();
         }
-        if (frame == 288) Sleep(300); /* the editor asks for the notice every 250 ms: 24 frames are less than that at 144 Hz */
+        /* the editor reads the notice every 250 ms, and on a fast display the 26 frames to the screenshot take less */
+        if (frame == 288) while (GetTickCount64() - noticeAt < 300) Sleep(10);
         if (frame == 290)
         {
             char shot[MAX_PATH] = "";
@@ -683,6 +726,51 @@ int main(int argc, char** argv)
                 if (joined != 90 || g_modCooldown != 150) { puts("FAIL the mod content values did not follow the co-op role"); failures++; }
             }
         }
+        /* mod sync (SDK 14): the offer is read at most once every 30 frames; one shows its dialog alone over the game, the
+         * editor window staying closed. Esc answers no; Enter downloads, and once ready (the prompt back by itself after
+         * Esc hid the download) restarts; B blocks the selected mod; a blocked lobby's OK answers no. The keys reaching
+         * the prompt show it holds the game's input. */
+        for (int i = 0; i < 3; i++) { Key(window, VK_ESCAPE); frames(4); } /* the window closed, whatever was open in it */
+        int reads = g_syncReads, editorOpens = g_editorOpens;
+        frames(90);
+        int idleReads = g_syncReads - reads;
+        g_syncList[0] = {sizeof(HfSyncMod), HF_SYNC_MOD_DOWNLOAD, HF_SYNC_CLASS_CONTENT, 0, 3u << 20, "friend.tanks", "Tanks", "2.0"};
+        g_syncList[1] = {sizeof(HfSyncMod), HF_SYNC_MOD_MANUAL, HF_SYNC_CLASS_CODE, 0, 200000, "friend.guns", "Guns", "1.1"};
+        g_syncList[2] = {sizeof(HfSyncMod), HF_SYNC_MOD_OFF, HF_SYNC_CLASS_CONTENT, 0, 0, "mine.extra", "My Extra Mod", "1.0"};
+        SyncOffer(HF_SYNC_OFFER, 1, 3u << 20, 0);
+        frames(40);
+        if (argc > 2 && dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-sync.bmp"); Screenshot(shot, width, height); }
+        Key(window, VK_ESCAPE); frames(4);
+        bool declined = g_syncAnswers[HF_SYNC_DECLINE] == 1;
+        g_syncNow.state = HF_SYNC_NONE; frames(40);
+        SyncOffer(HF_SYNC_OFFER, 2, 3u << 20, 0); frames(40);
+        Key(window, VK_RETURN); frames(4);
+        bool accepted = g_syncAnswers[HF_SYNC_ACCEPT] == 1;
+        SyncOffer(HF_SYNC_DOWNLOADING, 2, 3u << 20, 1u << 20); frames(40);
+        if (argc > 2 && dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-sync-progress.bmp"); Screenshot(shot, width, height); }
+        Key(window, VK_ESCAPE); frames(4); /* hides the window: the download goes on */
+        bool kept = g_syncAnswers[HF_SYNC_DECLINE] == 1;
+        SyncOffer(HF_SYNC_READY, 2, 3u << 20, 3u << 20); frames(40);
+        Key(window, VK_RETURN); frames(4);
+        bool restarted = g_syncAnswers[HF_SYNC_RESTART] == 1;
+        SyncOffer(HF_SYNC_OFFER, 3, 3u << 20, 0); frames(40);
+        Key(window, 'B'); frames(4);
+        bool blocked = g_syncAnswers[HF_SYNC_BLOCK] == 1 && !strcmp(g_syncBlocked, "friend.tanks");
+        SyncOffer(HF_SYNC_BLOCKED, 4, 0, 0); frames(40);
+        Key(window, VK_RETURN); frames(4);
+        bool acknowledged = g_syncAnswers[HF_SYNC_DECLINE] == 2;
+        g_syncNow.state = HF_SYNC_NONE; frames(40);
+        printf("  mod sync: %d read(s) in 90 idle frames, %d dialog(s) opened; Esc no %s, Enter download %s, Esc while downloading kept it %s, "
+            "ready's Enter restart %s, B block %s (%s), blocked's OK %s\n", idleReads, g_syncOpens, declined ? "yes" : "NO", accepted ? "yes" : "NO",
+            kept ? "yes" : "NO", restarted ? "yes" : "NO", blocked ? "yes" : "NO", g_syncBlocked, acknowledged ? "yes" : "NO");
+        if (idleReads > 3) { puts("FAIL the editor read the mod sync state more than once every 30 frames"); failures++; }
+        if (g_syncOpens != 5 || !declined || !accepted || !kept || !restarted || !blocked || !acknowledged)
+        { puts("FAIL the mod sync dialog did not open or answer as expected"); failures++; }
+        printf("  mod sync prompt: shown alone %d time(s), gone %d, the editor window opened %d time(s)\n", g_syncAlone, g_syncGone,
+            g_editorOpens - editorOpens);
+        /* offer, offer (on through the download until Esc), ready, blocked; v3's offer came while ready's dialog showed */
+        if (g_syncAlone != 4 || g_syncGone != 4 || g_editorOpens != editorOpens)
+        { puts("FAIL the mod sync prompt did not show alone over the game, or the editor window opened behind it"); failures++; }
     }
     HRESULT removed = d3d11 ? device11->GetDeviceRemovedReason() : device->GetDeviceRemovedReason();
     if (removed != S_OK) { printf("FAIL device removed 0x%08lx\n", (unsigned long)removed); failures++; }

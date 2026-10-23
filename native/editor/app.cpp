@@ -2464,6 +2464,263 @@ void DrawMods(float y0, float h)
 /* ---- keys ---- */
 bool Pressed(ImGuiKey key) { return ImGui::IsKeyPressed(key, true); }
 
+/* ---- mod sync (SDK 14): a lobby whose host plays with other gameplay mods ----
+ * The session's backend offers to download the host's mods and restart the session with them (docs/mods.md "Playing
+ * with other mods"); the loader hands the offer over (sync_state, sync_mod) and the player's answer back (sync_answer).
+ * Tick reads it every 30 frames. An offer that needs the player (new, ready, blocked, failed) shows this dialog by itself:
+ * alone over the game, with no editor behind it, or in the window when that is open. Esc or closing the window answers
+ * no, except while downloading: the download goes on, and the dialog is back when it is ready. */
+struct
+{
+    bool on = false;     /* the dialog is shown */
+    bool alone = false;  /* it is shown over the game by itself, the window closed */
+    bool sent = false;   /* an answer went: the buttons wait for the backend's next state */
+    HfSyncState state{}; /* as last read */
+    std::vector<HfSyncMod> mods;
+    int index = 0;       /* the selected mod (keyboard) */
+} g_sync;
+bool g_windowShown; /* Opened() to Closed() */
+
+bool HasSync() { return g_host.api->size >= offsetof(HfApi, sync_answer) + sizeof(void*) && g_host.api->sync_state != nullptr; }
+
+/* Keys let go while the editor was closed went to the game, not to ImGui: forget every key state on opening and closing,
+ * or a key held then (Escape) counts as held when it opens again and closes it at once. */
+void ForgetKeys()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    io.ClearEventsQueue();
+    io.ClearInputKeys();
+    io.ClearInputMouse();
+    io.InputQueueCharacters.resize(0);
+    /* where the mouse is now (the queue held the moves): a click before any move lands where it is */
+    POINT at;
+    HWND window = GetForegroundWindow();
+    if (window != nullptr && GetCursorPos(&at) && ScreenToClient(window, &at)) io.AddMousePosEvent((float)at.x, (float)at.y);
+}
+
+/* The dialog alone over the game, the window closed: the editor holds the game's input for it, as for the window. */
+void ShowSyncAlone(bool on)
+{
+    if (g_sync.alone == on) return;
+    g_sync.alone = on;
+    g_host.modal(on);
+    ForgetKeys();
+    sounds::EditorOpen(on);
+    g_host.api->log(g_host.mod, on ? "editor: the mod sync prompt shows over the game, the window closed" : "editor: the mod sync prompt goes");
+    if (on) Sound(sounds::SHOW);
+}
+
+std::string SizeText(uint64_t bytes)
+{
+    char text[32];
+    if (bytes >= 1024 * 1024) snprintf(text, sizeof text, "%.1f MB", (double)bytes / 1048576.0);
+    else snprintf(text, sizeof text, "%llu KB", (unsigned long long)((bytes + 1023) / 1024));
+    return text;
+}
+
+/* The dialog goes (an open window stays). */
+void CloseSync()
+{
+    g_sync.on = false;
+    ShowSyncAlone(false);
+}
+
+void AnswerSync(uint32_t answer, const char* id = nullptr)
+{
+    bool sent = g_host.api->sync_answer(g_host.mod, g_sync.state.version, answer, id) != 0;
+    g_sync.sent = sent && (answer == HF_SYNC_ACCEPT || answer == HF_SYNC_RESTART);
+    if (!sent) Toast("That offer is gone: the session's backend has a newer one, or is not connected", ERROR_);
+    else Sound(answer == HF_SYNC_DECLINE ? sounds::BACK : sounds::APPLY);
+    if (!sent || answer == HF_SYNC_DECLINE || answer == HF_SYNC_BLOCK) CloseSync();
+}
+
+/* Every 30 frames (Tick): the backend's offer, when it changed. Nothing is allocated unless it did. */
+void ReadSync()
+{
+    static int frames;
+    if (!HasSync() || ++frames < 30) return;
+    frames = 0;
+    HfSyncState now{};
+    now.size = sizeof now;
+    g_host.api->sync_state(g_host.mod, &now);
+    HfSyncState& was = g_sync.state;
+    bool turned = now.version != was.version || now.state != was.state;
+    if (!turned && now.done == was.done && now.bytes == was.bytes && !strcmp(now.message, was.message) && !strcmp(now.host, was.host)) return;
+    if (now.version != was.version || now.mods != g_sync.mods.size())
+    {
+        g_sync.mods.clear();
+        for (uint32_t i = 0; i < now.mods; i++)
+        {
+            HfSyncMod mod{};
+            mod.size = sizeof mod;
+            if (!g_host.api->sync_mod(g_host.mod, i, &mod)) break;
+            g_sync.mods.push_back(mod);
+        }
+        g_sync.index = 0;
+    }
+    g_sync.state = now;
+    if (!turned) return;
+    g_sync.sent = false;
+    if (now.state == HF_SYNC_NONE) { if (g_sync.on) CloseSync(); return; }
+    if (now.state == HF_SYNC_DOWNLOADING) return;
+    g_host.api->log(g_host.mod, "editor: mod sync %u from %s: %u mod(s), %llu bytes to download; the dialog opens", now.version,
+        now.host[0] ? now.host : "the host", now.mods, (unsigned long long)now.bytes);
+    bool fresh = !g_sync.on;
+    if (fresh)
+    {
+        g_sync.on = true;
+        g_picker.on = false;
+        g_errorsPopup.on = false;
+        g_edit.on = false;
+        g_seen.erase("sync");
+    }
+    /* over the game (again, when it was hidden while downloading), or in the open window */
+    if (!g_windowShown) ShowSyncAlone(true);
+    else if (fresh) Sound(sounds::OPEN);
+}
+
+const char* SyncActionText(uint32_t action)
+{
+    switch (action)
+    {
+    case HF_SYNC_MOD_HAVE: return "you have it";
+    case HF_SYNC_MOD_DOWNLOAD: return "downloads";
+    case HF_SYNC_MOD_MANUAL: return "install it yourself";
+    case HF_SYNC_MOD_BLOCKED: return "blocked";
+    case HF_SYNC_MOD_UPDATE: return "needs another HellForge";
+    default: return "off for this session";
+    }
+}
+
+ImU32 SyncActionColour(uint32_t action)
+{
+    return action == HF_SYNC_MOD_HAVE ? OK : action == HF_SYNC_MOD_DOWNLOAD ? GOLD : action == HF_SYNC_MOD_MANUAL ? PENDING :
+        action == HF_SYNC_MOD_OFF ? FAINT : ERROR_;
+}
+
+/* A row's BLOCK: on mods that would come from the host or be installed by hand, while an offer stands. */
+bool SyncBlockable(const HfSyncMod& mod)
+{
+    uint32_t state = g_sync.state.state;
+    return !g_sync.sent && (mod.action == HF_SYNC_MOD_DOWNLOAD || mod.action == HF_SYNC_MOD_MANUAL) &&
+        (state == HF_SYNC_OFFER || state == HF_SYNC_DOWNLOADING || state == HF_SYNC_READY);
+}
+
+/* The dialog's first button and its answer, by state ("" none). */
+const char* SyncPrimary(uint32_t* answer)
+{
+    const HfSyncState& s = g_sync.state;
+    *answer = s.state == HF_SYNC_OFFER ? (s.bytes > 0 ? HF_SYNC_ACCEPT : HF_SYNC_RESTART) : s.state == HF_SYNC_READY ? HF_SYNC_RESTART :
+        s.state == HF_SYNC_BLOCKED || s.state == HF_SYNC_FAILED ? HF_SYNC_DECLINE : 0;
+    if (s.state == HF_SYNC_OFFER) return s.bytes > 0 ? "DOWNLOAD AND RESTART" : "RESTART TO JOIN";
+    if (s.state == HF_SYNC_READY) return "RESTART TO JOIN";
+    if (s.state == HF_SYNC_BLOCKED || s.state == HF_SYNC_FAILED) return "OK";
+    return "";
+}
+
+void SyncKeys()
+{
+    int n = (int)g_sync.mods.size();
+    if (Pressed(ImGuiKey_UpArrow)) g_sync.index = std::max(0, g_sync.index - 1);
+    if (Pressed(ImGuiKey_DownArrow)) g_sync.index = std::min(std::max(0, n - 1), g_sync.index + 1);
+    if (ImGui::IsKeyPressed(ImGuiKey_B, false) && g_sync.index < n && SyncBlockable(g_sync.mods[g_sync.index]))
+        AnswerSync(HF_SYNC_BLOCK, g_sync.mods[g_sync.index].id);
+    uint32_t answer;
+    const char* primary = SyncPrimary(&answer);
+    if ((ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) && primary[0] && !g_sync.sent)
+        AnswerSync(answer);
+    if (!ImGui::IsKeyPressed(ImGuiKey_Escape, false)) return;
+    if (g_windowShown) g_host.close(); /* Closed() answers */
+    else if (g_sync.sent || g_sync.state.state == HF_SYNC_DOWNLOADING) { ShowSyncAlone(false); Sound(sounds::BACK); } /* it goes on */
+    else AnswerSync(HF_SYNC_DECLINE);
+}
+
+void DrawSync()
+{
+    if (!g_sync.on) return;
+    const HfSyncState& s = g_sync.state;
+    int n = (int)g_sync.mods.size();
+    bool bad = s.state == HF_SYNC_BLOCKED || s.state == HF_SYNC_FAILED;
+    if (g_sync.alone) g_cv.Rect(-g_cv.ox, -g_cv.oy, g_cv.width, g_cv.height, C(0, 0, 0, 150), 8); /* the game, dimmed */
+    else g_cv.Rect(0, 0, PANEL_W, g_panelH, C(0, 0, 0, 120), 8);
+    float w = std::min(900.0f, PANEL_W - 60), h = std::clamp(214.0f + 40.0f * (float)std::max(1, n), 320.0f, g_panelH - 80);
+    float x = (PANEL_W - w) / 2, y = (g_panelH - h) / 2;
+    g_cv.Block();
+    g_cv.Rect(x, y, w, h, PANEL_ALT, 9);
+    g_cv.Frame(x, y, w, h, LINE_STRONG, 10);
+    g_cv.Rect(x, y, w, 3, bad ? ERROR_ : GOLD, 10);
+    float tw = g_cv.Text("MOD SYNC", x + 24, y + 30, T(18, bad ? ERROR_ : GOLD, ui::TITLE, ui::LEFT, 0, 11));
+    g_cv.Text(std::string(s.host[0] ? s.host : "The host") + "'s lobby", x + 36 + tw, y + 31, T(SZ_LABEL, TEXT, ui::BODY, ui::LEFT, w - tw - 80, 11));
+    std::string say = s.message[0] ? s.message :
+        s.state == HF_SYNC_OFFER ? "The host plays with gameplay mods you don't have. Get them, restart with the host's mods, then join again." :
+        s.state == HF_SYNC_DOWNLOADING ? "Downloading the host's mods; each file is checked before it is kept." :
+        s.state == HF_SYNC_READY ? "Every mod is here. Restart with the host's mods, then join the lobby again." :
+        s.state == HF_SYNC_BLOCKED ? "You cannot join this lobby with these mods." : "The download failed.";
+    g_cv.Text(say, x + 24, y + 58, T(SZ_SMALL, bad ? ERROR_ : DIM, ui::BODY, ui::LEFT, w - 48, 11));
+    float hy = y + 80;
+    g_cv.Rect(x + 1, hy, w - 2, 22, HEADER, 10);
+    g_cv.Text("MOD", x + 24, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::LEFT, 0, 11));
+    g_cv.Text("WHAT HAPPENS", x + w - 380, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::LEFT, 0, 11));
+    ListOpts o;
+    o.x = x + 2; o.y = hy + 26; o.w = w - 4; o.h = y + h - hy - 26 - 108; o.rowH = 40; o.count = n; o.selected = g_sync.index;
+    o.key = "sync"; o.focused = true; o.layer = 12;
+    o.click = [&](int i) { g_sync.index = i; };
+    o.draw = [&](int i, float rx, float ry, float rw, float rh, bool hovered) {
+        const HfSyncMod& mod = g_sync.mods[i];
+        bool selected = i == g_sync.index;
+        if (selected) { g_cv.Rect(rx + 10, ry + 2, rw - 20, rh - 4, SELECT, 10); g_cv.Rect(rx + 10, ry + 2, 3, rh - 4, GOLD, 11); }
+        else if (hovered) g_cv.Rect(rx + 10, ry + 2, rw - 20, rh - 4, HOVER, 10);
+        float lx = rx + 22, right = rx + rw - 380;
+        if (mod.kind == HF_SYNC_CLASS_CODE) lx += Chip("CODE", lx, ry + rh / 2, INVERSE, LUA, false, 12) + 8;
+        else if (mod.kind == HF_SYNC_CLASS_RAW) lx += Chip("RAW DATA", lx, ry + rh / 2, INVERSE, LUA, false, 12) + 8;
+        float nw = g_cv.Text(mod.name[0] ? mod.name : mod.id, lx, ry + rh / 2, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, (right - lx) * 0.7f, 12));
+        g_cv.Text(mod.version, lx + nw + 10, ry + rh / 2, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, right - lx - nw - 20, 12));
+        std::string what = SyncActionText(mod.action);
+        if (mod.action == HF_SYNC_MOD_DOWNLOAD) what += " (" + SizeText(mod.bytes) + ")";
+        g_cv.Text(what, right + 2, ry + rh / 2, T(SZ_SMALL, SyncActionColour(mod.action), ui::BODY, ui::LEFT, 260, 12));
+    };
+    o.after = [&](int i, float rx, float ry, float rw, float rh) {
+        if (SyncBlockable(g_sync.mods[i]) && Button("BLOCK", rx + rw - 102, ry + (rh - 24) / 2, 78, 24, DANGER, ui::Id("syncblock", (uint64_t)i), 12))
+            AnswerSync(HF_SYNC_BLOCK, g_sync.mods[i].id);
+    };
+    List(o);
+    if (n == 0) g_cv.Text("The host's mods are not listed.", x + 28, hy + 48, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, 0, 12));
+    float fy = y + h - 104;
+    g_cv.Rect(x + 12, fy, w - 24, 1, LINE, 10);
+    if (s.state == HF_SYNC_DOWNLOADING)
+    {
+        float bw = w - 48, filled = s.bytes > 0 ? bw * (float)std::min(1.0, (double)s.done / (double)s.bytes) : 0;
+        g_cv.Rect(x + 24, fy + 16, bw, 10, BOX, 11);
+        g_cv.Rect(x + 24, fy + 16, filled, 10, GOLD, 12);
+        g_cv.Text(SizeText(s.done) + " of " + SizeText(s.bytes), x + 24, fy + 40, T(SZ_SMALL, DIM, ui::BODY, ui::LEFT, 0, 11));
+    }
+    else
+        g_cv.Text(s.bytes > 0 ? SizeText(s.bytes) + " to download from the host" : "Nothing to download", x + 24, fy + 22,
+            T(SZ_SMALL, s.bytes > 0 ? TEXT : FAINT, ui::BODY, ui::LEFT, 0, 11));
+    uint32_t answer;
+    const char* primary = SyncPrimary(&answer);
+    float bx = x + w - 24;
+    const char* second = s.state == HF_SYNC_OFFER || s.state == HF_SYNC_DOWNLOADING ? "CANCEL" : s.state == HF_SYNC_READY ? "LATER" : "";
+    if (second[0])
+    {
+        bx -= 150;
+        if (Button(second, bx, y + h - 66, 150, 30, NORMAL, ui::Id("syncsecond"), 11)) AnswerSync(HF_SYNC_DECLINE);
+        bx -= 12;
+    }
+    if (primary[0])
+    {
+        float pw = std::max(150.0f, g_cv.Measure(primary, SZ_TAB, ui::TITLE) + 40);
+        bx -= pw;
+        if (Button(g_sync.sent ? (answer == HF_SYNC_RESTART ? "RESTARTING..." : "STARTING...") : primary, bx, y + h - 66, pw, 30,
+                g_sync.sent ? DISABLED : bad ? NORMAL : PRIMARY, ui::Id("syncprimary"), 11))
+            AnswerSync(answer);
+    }
+    std::string keys = "\xE2\x86\x91\xE2\x86\x93 select   B block the mod   ";
+    if (primary[0]) keys += std::string("Enter ") + primary + "   ";
+    keys += s.state == HF_SYNC_DOWNLOADING ? "Esc hide (the download goes on)" : "Esc close (no)";
+    g_cv.Text(keys, x + 24, y + h - 20, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, 0, 11));
+}
+
 void NextView(int delta)
 {
     g_view = (View)(((int)g_view + delta + VIEW_COUNT) % VIEW_COUNT);
@@ -2503,6 +2760,7 @@ void HandleKeys()
     ImGuiIO& io = ImGui::GetIO();
     bool ctrl = io.KeyCtrl, shift = io.KeyShift;
     auto chars = Chars();
+    if (g_sync.on) { SyncKeys(); return; }
     if (g_errorsPopup.on)
     {
         auto list = ErrorRows();
@@ -3403,6 +3661,7 @@ void Draw()
     if (Locked()) g_cv.Rect(0, bodyY, PANEL_W, g_panelH - bodyY, C(40, 42, 48, 150), 7); /* read-only: greyed, still browsable */
     DrawPicker();
     DrawErrors();
+    DrawSync();
 }
 
 /* The picker of a choice row (the HD2R Editor's pickers): its options with their icons and notes, a dialog over the panel. */
@@ -3809,6 +4068,7 @@ void AddModContent()
 
 void Tick()
 {
+    ReadSync();
     static ULONGLONG next, nextNotice;
     ULONGLONG now = GetTickCount64();
     if (now >= nextNotice) { nextNotice = now + 250; ReadNotice(); }
@@ -3837,7 +4097,7 @@ void Frame(ImDrawList* list, float width, float height, float dt)
     g_cv.Input(io.MousePos.x, io.MousePos.y, ImGui::IsMouseClicked(0), ImGui::IsMouseClicked(1), io.MouseWheel);
     if (ImGui::IsMouseClicked(0) && g_edit.on) CommitEdit();
     if (ImGui::IsMouseClicked(0) && g_search.active) g_search.active = false;
-    if (g_catalogOk) HandleKeys();
+    if (g_catalogOk || g_sync.on) HandleKeys();
     else if (ImGui::IsKeyPressed(ImGuiKey_Escape)) g_host.close();
     Draw();
     DrawNotice();
@@ -3856,23 +4116,26 @@ void Overlay(ImDrawList* list, float width, float height)
     g_cv.End();
 }
 
-/* Keys let go while the editor was closed went to the game, not to ImGui: forget every key state on opening and closing,
- * or a key held then (Escape) counts as held when it opens again and closes it at once. */
-void ForgetKeys()
+void Modal(ImDrawList* list, float width, float height, float dt)
 {
+    g_time += dt;
+    g_frame++;
+    float ox, oy, s;
+    Layout(width, height, &ox, &oy, &s);
+    g_cv.Begin(list, ox, oy, s, width, height);
     ImGuiIO& io = ImGui::GetIO();
-    io.ClearEventsQueue();
-    io.ClearInputKeys();
-    io.ClearInputMouse();
-    io.InputQueueCharacters.resize(0);
-    /* where the mouse is now (the queue held the moves): a click before any move lands where it is */
-    POINT at;
-    HWND window = GetForegroundWindow();
-    if (window != nullptr && GetCursorPos(&at) && ScreenToClient(window, &at)) io.AddMousePosEvent((float)at.x, (float)at.y);
+    g_cv.Input(io.MousePos.x, io.MousePos.y, ImGui::IsMouseClicked(0), ImGui::IsMouseClicked(1), io.MouseWheel);
+    if (g_sync.on) SyncKeys();
+    DrawSync();
+    DrawNotice();
+    if (g_cv.Clicked()) Sound(sounds::CLICK);
+    g_cv.End();
 }
 
 void Opened()
 {
+    g_windowShown = true;
+    ShowSyncAlone(false); /* F8 over the prompt: the window opens on the dialog */
     ForgetKeys();
     sounds::Report("the editor opens");
     sounds::EditorOpen(true);
@@ -3884,6 +4147,9 @@ void Opened()
 
 void Closed()
 {
+    g_windowShown = false;
+    /* the window closed on an offer: no, unless it is downloading (the dialog is back over the game when it is ready) */
+    if (g_sync.on && !g_sync.sent && g_sync.state.state != HF_SYNC_DOWNLOADING) AnswerSync(HF_SYNC_DECLINE);
     ForgetKeys();
     g_picker.on = false;
     sounds::Report("the editor closes");
