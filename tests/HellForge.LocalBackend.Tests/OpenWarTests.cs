@@ -35,6 +35,22 @@ static class OpenWarTests
         var shares = owner.Where(o => o.Key != 0).GroupBy(o => o.Value).ToDictionary(g => g.Key, g => g.Count());
         check(shares.Count == 3 && shares.Values.All(n => n >= 60), "Each enemy holds a large share of the galaxy: " + string.Join(", ", shares.Select(s => s.Key + "=" + s.Value)));
         check(OpenWar.Status(info, frozen).GetRawText() == open.GetRawText(), "The same on every machine.");
+        // subfactions: the effect definitions are served, a planet holds only its enemy's, every Illuminate planet one
+        var subfactions = OpenWar.Subfactions();
+        var definitions = LocalBackend.LoadStartupFixtures()["/WarSeason/GalacticWarEffects"];
+        check(definitions.GetArrayLength() == 13 && definitions.EnumerateArray().All(e => e.GetProperty("effectType").GetInt32() == 40 &&
+            subfactions.ContainsKey(e.GetProperty("id").GetInt32())), "The 13 subfaction effects are served (not an empty list).");
+        var onPlanet = open.GetProperty("planetActiveEffects").EnumerateArray()
+            .Select(e => (Index: e.GetProperty("index").GetInt32(), Id: e.GetProperty("galacticEffectId").GetInt32()))
+            .Where(e => subfactions.TryGetValue(e.Id, out var f) && f != 0).ToList();
+        check(onPlanet.All(e => owner[e.Index] == subfactions[e.Id]), "No planet keeps another enemy's subfaction.");
+        var illuminate = owner.Where(o => o.Value == 4).Select(o => o.Key).ToList();
+        check(illuminate.All(i => onPlanet.Any(e => e.Index == i)), "Every Illuminate planet has an Illuminate subfaction.");
+        check(owner[171] == 2 && onPlanet.Contains((171, 1243)), "A frozen-war subfaction of the planet's enemy stays (Predator Strain on 171).");
+        foreach (var faction in new[] { 2, 3 })
+            check(onPlanet.Where(e => owner[e.Index] == faction).Select(e => e.Id).Distinct().Count() >= 2 &&
+                  owner.Count(o => o.Value == faction) > onPlanet.Count(e => owner[e.Index] == faction),
+                $"Faction {faction}: several subfactions across its sectors, and planets without one.");
 
         // served by the backend in place of the frozen war
         await using var app = LocalBackend.Create(0, Path.Combine(root, "open-war-backend"), LoginMode.LocalSession, true, openWar: true);

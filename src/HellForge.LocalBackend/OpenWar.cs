@@ -16,12 +16,33 @@ namespace HellForge.LocalBackend;
 // galaxy). The galaxy is cut into the fronts' wedges along sector borders, about a third each, the same on every machine.
 // The frozen war's defenses, attacks and joint operations go: they name campaigns and events that no longer exist.
 // warinfo is unchanged.
+//
+// Subfactions (galactic-war-effects.json): a planet's type-40 effects add the enemy tags its missions spawn from (the
+// Predator Strain, Jet Brigade, the Illuminate's...). A planet keeps the frozen war's subfaction effects of its new enemy
+// and loses another enemy's; each sector then gets one of its enemy's subfactions or none, picked by a stable hash of the
+// sector's name (the same on every machine of a lobby, which each build their missions' tags themselves). An Illuminate
+// sector always gets one: every Illuminate squad needs an Illuminate tag (HD2Mods research/subfactions).
 public static class OpenWar
 {
     public const string Mode = "open";
     // Campaign ids: past the war's own (about 51000 in war-data.json), one per planet.
     public const int CampaignIdBase = 900000;
-    const int SuperEarth = 1;
+    const int SuperEarth = 1, Illuminate = 4;
+
+    // The subfaction effects by id, with the enemy each belongs to (0: any enemy).
+    public static IReadOnlyDictionary<int, int> Subfactions()
+    {
+        using var data = LocalBackend.LoadResource("galactic-war-effects.json");
+        return data.RootElement.GetProperty("subfactions").EnumerateArray().ToDictionary(s => s.GetProperty("id").GetInt32(), s => s.GetProperty("faction").GetInt32());
+    }
+
+    // FNV-1a of a sector's name: string.GetHashCode differs per process.
+    static uint StableHash(string text)
+    {
+        var hash = 2166136261u;
+        foreach (var c in text) { hash ^= c; hash *= 16777619u; }
+        return hash;
+    }
 
     // The galaxy map's sector of each planet (planet-sectors.json), by planet index.
     public static IReadOnlyDictionary<int, string> Sectors()
@@ -105,6 +126,31 @@ public static class OpenWar
         if (node["planetRegions"] is JsonArray regions)
             foreach (var r in regions)
                 if (r?["planetIndex"] is { } at && changed.TryGetValue((int)at, out var enemy)) r["owner"] = enemy;
+        // subfactions: the new enemy's own, else one per sector (or none), always one on an Illuminate planet
+        var subfactions = Subfactions();
+        var now = planetStatus.ToDictionary(p => (int)p!["index"]!, p => (int)p!["owner"]!);
+        var effects = new JsonArray();
+        var has = new HashSet<int>();
+        foreach (var e in node["planetActiveEffects"] as JsonArray ?? [])
+        {
+            int index = (int)e!["index"]!, id = (int)e["galacticEffectId"]!;
+            if (subfactions.TryGetValue(id, out var of) && of != 0)
+            {
+                if (!now.TryGetValue(index, out var holder) || holder != of) continue; /* another enemy's */
+                has.Add(index);
+            }
+            effects.Add((JsonNode)new JsonObject { ["index"] = index, ["galacticEffectId"] = id });
+        }
+        foreach (var (index, holder) in now.OrderBy(o => o.Key))
+        {
+            if (holder == SuperEarth || has.Contains(index) || home.Contains(index) || disabled.Contains(index)) continue;
+            var choices = subfactions.Where(s => s.Value == holder).Select(s => s.Key).OrderBy(id => id).ToList();
+            if (choices.Count == 0) continue;
+            var key = sectors.TryGetValue(index, out var sector) ? sector : "planet " + index;
+            var pick = (int)(StableHash(key + "/" + holder) % (uint)(choices.Count + (holder == Illuminate ? 0 : 1)));
+            if (pick < choices.Count) effects.Add((JsonNode)new JsonObject { ["index"] = index, ["galacticEffectId"] = choices[pick] });
+        }
+        node["planetActiveEffects"] = effects;
         using var document = JsonDocument.Parse(node.ToJsonString());
         return document.RootElement.Clone();
     }
