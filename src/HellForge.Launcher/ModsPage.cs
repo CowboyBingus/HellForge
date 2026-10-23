@@ -178,8 +178,8 @@ public partial class MainWindow
             "Joining a lobby whose host runs other gameplay mods offers to download them and restart with the host's mods. " +
             "Only what HellForge checks itself downloads from any host: stats, network field types, and data specs that don't replace values. " +
             "Mods that run code (a DLL, sources or Lua) or carry data HellForge cannot check (data patches, raw stats, component writes, " +
-            "data specs that replace values) download only from a Steam friend, and only when HellForge has verified that exact version; " +
-            "others you install yourself." });
+            "data specs that replace values) download only from a Steam friend, and only when HellForge has verified that exact version " +
+            "or you trusted it on the prompt; others you install yourself (a mod's GET IT shows where, when its author gave one)." });
         var share = new ToggleSwitch { IsChecked = settings.Share, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
         share.IsCheckedChanged += (_, _) =>
         {
@@ -232,6 +232,37 @@ public partial class MainWindow
             DockPanel.SetDock(unblock, Dock.Right);
             row.Children.Add(unblock);
             row.Children.Add(new TextBlock { Text = id, VerticalAlignment = VerticalAlignment.Center });
+            panel.Children.Add(row);
+        }
+
+        // Trusted (TRUST on the in-game prompt): each exact mod, who hosted it and when. Untrusting it deletes its downloaded
+        // copy too, so no synced session runs it again unless it is trusted (or verified) again.
+        panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Text = settings.Trusted.Count == 0
+            ? "No trusted mods. TRUST on the in-game MOD SYNC prompt lets a Steam friend's mod that HellForge has not verified download."
+            : "Trusted: these exact versions download from Steam friends though HellForge has not verified them. They run their own code on your PC." });
+        foreach (var trusted in settings.Trusted)
+        {
+            var row = new DockPanel();
+            var untrust = new Button { Content = "Untrust", Classes = { "flat" }, IsEnabled = !modsLocked };
+            ToolTip.SetTip(untrust, "Take the trust back and delete the copy downloaded from your friend.");
+            untrust.Click += (_, _) =>
+            {
+                try
+                {
+                    ModSettings.Untrust(modsFolder, trusted.Id, trusted.Hash);
+                    SyncedStore.Forget(modsFolder, trusted.Id, trusted.Hash);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not untrust " + trusted.Id + ": " + error.Message, Red); }
+                RefreshMods();
+            };
+            DockPanel.SetDock(untrust, Dock.Right);
+            row.Children.Add(untrust);
+            var since = DateTime.TryParse(trusted.Since, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var when)
+                ? " on " + when.ToLocalTime().ToString("yyyy-MM-dd") : "";
+            var text = new TextBlock { Text = $"{trusted.Name} {trusted.Version} ({trusted.Id})  ·  from {trusted.From}{since}", VerticalAlignment = VerticalAlignment.Center,
+                TextWrapping = TextWrapping.Wrap };
+            ToolTip.SetTip(text, "Content hash " + trusted.Hash);
+            row.Children.Add(text);
             panel.Children.Add(row);
         }
 
@@ -470,6 +501,15 @@ public partial class MainWindow
             details.Children.Add(new TextBlock { Text = b.Text, FontSize = 12, Foreground = b.Colour, TextWrapping = TextWrapping.Wrap,
                 FontFamily = b.Colour == Red ? new FontFamily("Consolas") : FontFamily.Default });
         if (mod.Pack is { Options.Count: > 0 } pack) details.Children.Add(PackOptions(mod, pack));
+        // where players get it (its manifest's "url", an https:// address): opened in the browser
+        if (mod.Url is { } url)
+        {
+            var link = new Button { Content = url, Classes = { "flat" }, FontSize = 12, Padding = new(0), HorizontalAlignment = HorizontalAlignment.Left,
+                Foreground = Solid("#4FA3FF"), Cursor = new Cursor(StandardCursorType.Hand) };
+            ToolTip.SetTip(link, "Where to get this mod: opens in your browser.");
+            link.Click += (_, _) => OpenLink(url);
+            details.Children.Add(link);
+        }
         details.Children.Add(new TextBlock { Text = $"{mod.Id}  ·  {mod.Archive ?? Path.GetFileName(mod.Folder)}", FontSize = 11, Classes = { "muted" } });
         if (RemoveConfirmation(mod) is { } confirm) details.Children.Add(confirm);
         return details;

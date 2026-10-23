@@ -41,8 +41,8 @@ static void Notice(HfMod*, HfNotice* out) { *out = g_noticeNow; }
 /* SDK 14, mod sync: the offer the stand-in loader reports, how often the editor read it, and the answers it sent */
 static HfSyncState g_syncNow;
 static HfSyncMod g_syncList[3];
-static int g_syncReads, g_syncOpens, g_syncAnswers[5], g_syncAlone, g_syncGone, g_editorOpens;
-static char g_syncBlocked[65];
+static int g_syncReads, g_syncOpens, g_syncAnswers[7], g_syncAlone, g_syncGone, g_editorOpens, g_syncWarnings;
+static char g_syncBlocked[65], g_syncTrusted[65], g_syncOpened[65];
 static int SyncState(HfMod*, HfSyncState* out)
 {
     g_syncReads++;
@@ -61,9 +61,11 @@ static int SyncMod(HfMod*, uint32_t index, HfSyncMod* out)
 }
 static int SyncAnswer(HfMod*, uint32_t version, uint32_t answer, const char* id)
 {
-    if (g_syncNow.state == HF_SYNC_NONE || version != g_syncNow.version || answer < 1 || answer > 4) return 0;
+    if (g_syncNow.state == HF_SYNC_NONE || version != g_syncNow.version || answer < 1 || answer > 6) return 0;
     g_syncAnswers[answer]++;
     if (answer == HF_SYNC_BLOCK) snprintf(g_syncBlocked, sizeof g_syncBlocked, "%s", id ? id : "");
+    if (answer == HF_SYNC_TRUST) snprintf(g_syncTrusted, sizeof g_syncTrusted, "%s", id ? id : "");
+    if (answer == HF_SYNC_OPEN) snprintf(g_syncOpened, sizeof g_syncOpened, "%s", id ? id : "");
     return 1;
 }
 static void SyncOffer(uint32_t state, uint32_t version, uint64_t bytes, uint64_t done)
@@ -95,6 +97,7 @@ static void Log(HfMod*, const char* format, ...)
     if (strstr(line, "editor: mod sync") && strstr(line, "the dialog opens")) g_syncOpens++;
     if (strstr(line, "the mod sync prompt shows over the game")) g_syncAlone++;
     if (strstr(line, "the mod sync prompt goes")) g_syncGone++;
+    if (strstr(line, "the trust warning for")) g_syncWarnings++;
     if (strstr(line, "sound: the editor opens")) g_editorOpens++;
 }
 static const char* Build() { return "25480438"; }
@@ -799,6 +802,45 @@ int main(int argc, char** argv)
         /* offer, offer (on through the download until Esc), ready, blocked; v3's offer came while ready's dialog showed */
         if (g_syncAlone != 4 || g_syncGone != 4 || g_editorOpens != editorOpens)
         { puts("FAIL the mod sync prompt did not show alone over the game, or the editor window opened behind it"); failures++; }
+        /* TRUST and GET IT: a Steam friend's code mod HellForge has not verified waits for the player's trust. T shows the
+         * warning in the prompt's place; neither a click before it arms nor Enter trusts, Esc goes back to the list; G opens
+         * the selected mod's page (the backend does: the editor only names the mod); a click on TRUST AND DOWNLOAD a second
+         * after the warning appears trusts that mod. The warning is 420 units high, centred: its button's right edge is 186
+         * units in from the right of its 760, its middle 51 up from the bottom. */
+        g_syncList[0] = {sizeof(HfSyncMod), HF_SYNC_MOD_TRUST, HF_SYNC_CLASS_CODE, 0, 200000, "friend.guns", "Guns", "1.1", "https://example.com/guns"};
+        g_syncList[1] = {sizeof(HfSyncMod), HF_SYNC_MOD_MANUAL, HF_SYNC_CLASS_RAW, 0, 0, "other.textures", "Textures", "3", "https://example.com/textures"};
+        g_syncList[2] = {sizeof(HfSyncMod), HF_SYNC_MOD_OFF, HF_SYNC_CLASS_CONTENT, 0, 0, "mine.extra", "My Extra Mod", "1.0", ""};
+        int warnings = g_syncWarnings, declines = g_syncAnswers[HF_SYNC_DECLINE];
+        SyncOffer(HF_SYNC_BLOCKED, 6, 0, 0); armed();
+        if (argc > 2 && dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-sync-trust.bmp"); Screenshot(shot, width, height); }
+        Key(window, 'T'); frames(4);
+        bool warned = g_syncWarnings == warnings + 1;
+        float unit = (float)height / 1080.0f, ox = (float)(int)(((float)width / unit - 1260) / 2 + 0.5f), oy = (1080 - 930) / 2.0f;
+        LPARAM trustAt = MAKELPARAM((int)((ox + 250 + 760 - 206) * unit), (int)((oy + 255 + 420 - 51) * unit));
+        auto click = [&](LPARAM at) {
+            SendMessageW(window, WM_MOUSEMOVE, 0, at); frames(3);
+            SendMessageW(window, WM_LBUTTONDOWN, MK_LBUTTON, at); frames(2);
+            SendMessageW(window, WM_LBUTTONUP, 0, at); frames(4);
+        };
+        click(trustAt);
+        Key(window, VK_RETURN); frames(4);
+        bool unarmed = g_syncAnswers[HF_SYNC_TRUST] == 0;
+        armed();
+        if (argc > 2 && dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-sync-warning.bmp"); Screenshot(shot, width, height); }
+        Key(window, VK_RETURN); frames(4);
+        bool noEnter = g_syncAnswers[HF_SYNC_TRUST] == 0;
+        Key(window, VK_ESCAPE); frames(4);
+        bool back = g_syncAnswers[HF_SYNC_DECLINE] == declines && g_syncAnswers[HF_SYNC_TRUST] == 0;
+        Key(window, 'G'); frames(4);
+        bool opened = g_syncAnswers[HF_SYNC_OPEN] == 1 && !strcmp(g_syncOpened, "friend.guns");
+        Key(window, 'T'); frames(4); armed();
+        click(trustAt);
+        bool trusted = g_syncAnswers[HF_SYNC_TRUST] == 1 && !strcmp(g_syncTrusted, "friend.guns") && g_syncWarnings == warnings + 2;
+        g_syncNow.state = HF_SYNC_NONE; frames(40);
+        printf("  mod sync trust: T warns %s, an early click and Enter do not trust %s/%s, Esc back to the list %s, G opens %s (%s), "
+            "a click after a second trusts %s (%s)\n", warned ? "yes" : "NO", unarmed ? "yes" : "NO", noEnter ? "yes" : "NO", back ? "yes" : "NO",
+            opened ? "yes" : "NO", g_syncOpened, trusted ? "yes" : "NO", g_syncTrusted);
+        if (!warned || !unarmed || !noEnter || !back || !opened || !trusted) { puts("FAIL the mod sync TRUST warning or GET IT did not answer as expected"); failures++; }
     }
     HRESULT removed = d3d11 ? device11->GetDeviceRemovedReason() : device->GetDeviceRemovedReason();
     if (removed != S_OK) { printf("FAIL device removed 0x%08lx\n", (unsigned long)removed); failures++; }

@@ -527,7 +527,7 @@ try
     Console.WriteLine("PASS lobby privacy: Public, Friends only and Invite only against friends, strangers and invited players; kicks and no rejoin; invitations; frame limits; the stranger gate's limits and memory");
     await ModSyncTests.Run(root, Check);
     results.Add(new { mode = "mod-sync", outcome = "passed" });
-    Console.WriteLine("PASS mod sync: a refusal's offer, download, checks and restart; blocked, unshared and unverified mods; the host's limits; a lying host; the live pipe");
+    Console.WriteLine("PASS mod sync: a refusal's offer, download, checks and restart; blocked, unshared and unverified mods; the host's limits; a lying host; trusting a friend's mods and GET IT, never a stranger's; the live pipe");
     RegisteredItemsTests.Run(root, Check);
     results.Add(new { mode = "registered-items", outcome = "passed" });
     Console.WriteLine("PASS registered items: child hash, catalogue children, mastery package, progress, inventory");

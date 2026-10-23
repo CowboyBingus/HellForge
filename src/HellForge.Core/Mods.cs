@@ -57,6 +57,9 @@ public sealed record ModManifest(string Id, string Name, string Version, string 
     public string? Icon { get; init; }
     // A patch of it holds Lua scripts (ModCatalog.HoldsLua): an HD2Runtime or Bingus Shared Loader mod, or one made for them.
     public bool Lua { get; init; }
+    // Where players get it (the manifest's "url", an https:// address: ModCatalog.WebAddress), or null. The Mods page links
+    // it, and mod sync's prompt offers it (GET IT) to a joiner who has to install the mod themselves.
+    public string? Url { get; init; }
 }
 
 public static partial class ModCatalog
@@ -78,6 +81,18 @@ public static partial class ModCatalog
     [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,63}$")]
     private static partial Regex ModId();
     public static bool IsModId(string id) => ModId().IsMatch(id);
+
+    // A mod's web address ("url" in its manifest; a mod set's entry from a host): https:// only, at most MaxUrl characters,
+    // a host name with a dot and the default port, and nothing a browser or the shell could read as something else (no user
+    // name or password, spaces, quotes, backslashes, control or non-ASCII characters). The address as given, or null.
+    public const int MaxUrl = 200;
+    public static string? WebAddress(string? text)
+    {
+        if (text == null || text.Length is < 12 or > MaxUrl || !text.StartsWith("https://", StringComparison.Ordinal)) return null;
+        if (text.Any(c => c <= ' ' || c >= 0x7F || c is '"' or '\\' or '\'' or '<' or '>' or '`' or '^' or '{' or '}' or '|')) return null;
+        return Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && uri.HostNameType == UriHostNameType.Dns &&
+            uri.Host.Contains('.') && uri.UserInfo.Length == 0 && uri.IsDefaultPort ? text : null;
+    }
 
     [GeneratedRegex("^[0-9a-f]{16}\\.patch_([0-9]{1,4})(\\.gpu_resources|\\.stream)?$")]
     public static partial Regex PatchFile();
@@ -298,8 +313,10 @@ public static partial class ModCatalog
             var full = Path.GetFullPath(Path.Combine(folder, iconPath.Replace('\\', '/')));
             if (LocalInstall.Within(full, folder) && File.Exists(full)) icon = full;
         }
+        // "url": where players get the mod; one that is not an https:// address (WebAddress) is left out
+        var url = root.TryGetProperty("url", out var urlElement) && urlElement.ValueKind == JsonValueKind.String ? WebAddress(urlElement.GetString()) : null;
         return new ModManifest(id, name, version, description, gameplay, Path.GetFullPath(folder), types, writes, data)
-            { CodeDll = code, HasSource = source, HasDataSpec = spec, UncheckedSpec = dataSpec == null ? null : DataSpecs.Unchecked(dataSpec), Stats = stats, Icon = icon, Lua = lua };
+            { CodeDll = code, HasSource = source, HasDataSpec = spec, UncheckedSpec = dataSpec == null ? null : DataSpecs.Unchecked(dataSpec), Stats = stats, Icon = icon, Lua = lua, Url = url };
     }
 
     // What friends compare before playing together: every gameplay mod's id, version and exact files. "none" without any.
@@ -662,8 +679,8 @@ public static class ModLoaderPlan
 }
 
 // The Mods page's settings: <installation>/mods/hellforge-mods.json {"format":1,"disabled":[ids],"order":[ids],"packs":{...},
-// "blocked":[ids],"share":true,"showEditedStats":false,"listPublic":true}. Mods are on by default, so a mod dropped into the folder loads
-// without any setup.
+// "blocked":[ids],"trusted":[TrustedMod],"share":true,"showEditedStats":false,"listPublic":true}. Mods are on by default, so a mod
+// dropped into the folder loads without any setup.
 public static class ModSettings
 {
     public const string FileName = "hellforge-mods.json";
@@ -679,9 +696,13 @@ public static class ModSettings
     // The Galactic Map's public lobbies: whether lobbies whose host plays with edited stats (which joiners take) are shown,
     // and whether this player's own lobby is listed for other HellForge players while it is Public (ListPublic, on by
     // default; off, a Public lobby still admits whoever reaches it, but no stranger can find it).
+    // Trusted: mods the player trusted on mod sync's prompt (TRUST), each by its exact content (id and content hash), with
+    // its name and version, the Steam friend who hosted it and when: they download as the verified list's do (ModSyncPlan).
     public sealed record State(HashSet<string> Disabled, List<string> Order, Dictionary<string, CosmeticPacks.Choice> Choices)
     {
         public HashSet<string> Blocked { get; } = new(StringComparer.Ordinal);
+        public List<TrustedMod> Trusted { get; } = [];
+        public bool Trusts(string id, string hash) => Trusted.Any(t => t.Id == id && t.Hash == hash);
         public bool Share { get; set; } = true;
         public bool ShowEditedStats { get; set; }
         public bool ListPublic { get; set; } = true;
@@ -701,6 +722,9 @@ public static class ModSettings
                 foreach (var e in list.EnumerateArray()) if (e.ValueKind == JsonValueKind.String) state.Disabled.Add(e.GetString()!);
             if (root.TryGetProperty("blocked", out var blocked) && blocked.ValueKind == JsonValueKind.Array)
                 foreach (var e in blocked.EnumerateArray()) if (e.ValueKind == JsonValueKind.String) state.Blocked.Add(e.GetString()!);
+            if (root.TryGetProperty("trusted", out var trusted) && trusted.ValueKind == JsonValueKind.Array)
+                foreach (var e in trusted.EnumerateArray())
+                    if (TrustedMod.Read(e) is { } mod && !state.Trusts(mod.Id, mod.Hash)) state.Trusted.Add(mod);
             if (root.TryGetProperty("share", out var share) && share.ValueKind == JsonValueKind.False) state.Share = false;
             if (root.TryGetProperty("showEditedStats", out var edited) && edited.ValueKind == JsonValueKind.True) state.ShowEditedStats = true;
             if (root.TryGetProperty("listPublic", out var listed) && listed.ValueKind == JsonValueKind.False) state.ListPublic = false;
@@ -745,6 +769,16 @@ public static class ModSettings
         else state.Blocked.Remove(id);
     });
 
+    // Mod sync's trusted mods: one the player trusted (that exact content) downloads from a Steam friend as a verified one
+    // does; untrusted (the Mods page), it is the player's to install again.
+    public static void SetTrusted(string modsFolder, TrustedMod mod) => Change(modsFolder, state =>
+    {
+        state.Trusted.RemoveAll(t => t.Id == mod.Id && t.Hash == mod.Hash);
+        state.Trusted.Add(mod);
+    });
+
+    public static void Untrust(string modsFolder, string id, string hash) => Change(modsFolder, state => state.Trusted.RemoveAll(t => t.Id == id && t.Hash == hash));
+
     // Hosting: whether joiners who lack this player's mods may download them from this machine.
     public static void SetShare(string modsFolder, bool share) => Change(modsFolder, state => state.Share = share);
 
@@ -771,6 +805,7 @@ public static class ModSettings
                 ["sub"] = new JsonObject(c.Value.Sub.OrderBy(s => s.Key, StringComparer.Ordinal).Select(s => KeyValuePair.Create(s.Key, (JsonNode?)s.Value)))
             }))),
             ["blocked"] = new JsonArray([.. state.Blocked.Order(StringComparer.Ordinal).Select(id => (JsonNode?)id)]),
+            ["trusted"] = new JsonArray([.. state.Trusted.Select(t => (JsonNode?)t.ToJson())]),
             ["share"] = state.Share,
             ["showEditedStats"] = state.ShowEditedStats,
             ["listPublic"] = state.ListPublic
@@ -780,6 +815,26 @@ public static class ModSettings
         LastWritten = text;
         File.Move(path + ".tmp", path, overwrite: true);
         File.Delete(Path.Combine(modsFolder, LegacyFileName));
+    }
+}
+
+// A mod the player trusted on mod sync's prompt: its id and content hash (ModSets.ContentHash: that exact content, no
+// other version or bytes), its name and version as the host listed them, the Steam friend who hosted it (their name, then
+// their SteamID64) and when (UTC, ISO 8601). In hellforge-mods.json's "trusted"; an entry that is malformed is left out.
+public sealed record TrustedMod(string Id, string Hash, string Name, string Version, string From, string Since)
+{
+    public JsonObject ToJson() => new()
+    {
+        ["id"] = Id, ["hash"] = Hash, ["name"] = Name, ["version"] = Version, ["from"] = From, ["since"] = Since
+    };
+
+    public static TrustedMod? Read(JsonElement e)
+    {
+        if (e.ValueKind != JsonValueKind.Object) return null;
+        string Text(string name, int max) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString()!.Length <= max &&
+            !v.GetString()!.Any(char.IsControl) ? v.GetString()! : "";
+        var mod = new TrustedMod(Text("id", 64), Text("hash", 64), Text("name", 80), Text("version", 32), Text("from", 120), Text("since", 40));
+        return ModCatalog.IsModId(mod.Id) && ModSets.Hex(mod.Hash, 64) ? mod : null;
     }
 }
 

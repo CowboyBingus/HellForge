@@ -23,7 +23,9 @@ namespace HellForge.LocalBackend.Multiplayer;
 //           or [req, "refused", reason]. The player can turn sharing off (ModSettings.Share).
 //   joiner: a mod offer for a join this machine asked for (Expected: LobbyService.JoinedRecently) becomes an offer for
 //           the game (ModSyncPlan; HfApi sync_state, the in-game editor's MOD
-//           SYNC view). On accept it downloads the plan's mods into the synced store, every byte checked (SyncedStore). On
+//           SYNC view). A Steam friend's code or raw mod HellForge has not verified waits for the player's trust (TRUST on
+//           the prompt: that exact content goes on ModSettings' Trusted list), and GET IT opens a mod's web address in
+//           the player's browser. On accept it downloads the plan's mods into the synced store, every byte checked (SyncedStore). On
 //           restart it writes the next session's mods (ModSyncSession) and stops this session ("mod-sync" in
 //           stop-observation.signal), which the launcher starts again with them.
 public sealed class ModSync : IAsyncDisposable
@@ -174,9 +176,10 @@ public sealed class ModSync : IAsyncDisposable
         try { set = ModSet.Parse(wire, local: false); }
         catch (InvalidDataException) { why = "its mod list is malformed"; return false; }
         var plan = ModSyncPlan.Make(set, listing.Data.GetValueOrDefault(DirectoryKeys.Share) == "1", own ?? new ModSet("none", []), Locator.Find, settings.Blocked, verified,
-            hostIsFriend: transport.IsFriend(listing.Host));
+            hostIsFriend: transport.IsFriend(listing.Host), trusted: settings.Trusts);
         why = plan.Verdict switch { SyncVerdict.Blocked => "it runs a blocked mod", SyncVerdict.Unjoinable => "it runs mods that cannot be downloaded", _ => "" };
-        return plan.Verdict is SyncVerdict.Ready or SyncVerdict.Download;
+        // a friend's mods the player may still trust on the prompt: shown
+        return plan.Verdict is SyncVerdict.Ready or SyncVerdict.Download or SyncVerdict.Trust;
     }
 
     // A machine this one downloads from or lets download (a stranger is let through for that: MultiplayerHost's gate).
@@ -329,7 +332,8 @@ public sealed class ModSync : IAsyncDisposable
         });
     }
 
-    void MakeOffer(ulong host, string connection, ModSet set, bool shares)
+    // accept: the player trusted a mod and asked for the download (TRUST AND DOWNLOAD): it starts when nothing else waits.
+    void MakeOffer(ulong host, string connection, ModSet set, bool shares, bool accept = false)
     {
         var plan = Plan(set, shares, host);
         Offer made;
@@ -342,12 +346,21 @@ public sealed class ModSync : IAsyncDisposable
         }
         log($"Mod sync: {made.HostName}'s lobby: {plan.Verdict}, " + string.Join(", ", plan.Items.Select(i => $"{i.Mod.Id} {ModSyncPlan.ActionName(i.Action)}")) + ".");
         _ = PublishAsync(made, withMods: true);
+        if (accept && plan.Verdict == SyncVerdict.Download) Accept(made);
     }
 
-    // A stranger host's code and raw mods are the player's to install: hosts serve them only to Steam friends.
-    ModSyncPlan Plan(ModSet set, bool shares, ulong host) =>
-        ModSyncPlan.Make(set, shares, own ?? new ModSet("none", []), new ModLocator(modsFolder).Find, ModSettings.Read(modsFolder).Blocked, verified,
-            hostIsFriend: transport.IsFriend(host));
+    // A stranger host's code and raw mods are the player's to install: hosts serve them only to Steam friends. A friend's
+    // download once verified or trusted.
+    ModSyncPlan Plan(ModSet set, bool shares, ulong host)
+    {
+        var settings = ModSettings.Read(modsFolder);
+        return ModSyncPlan.Make(set, shares, own ?? new ModSet("none", []), new ModLocator(modsFolder).Find, settings.Blocked, verified,
+            hostIsFriend: transport.IsFriend(host), trusted: settings.Trusts);
+    }
+
+    // What lets a code or raw mod's exact content through on this machine: HellForge's verified list, or the player's trust
+    // (read again each time: the Mods page can take it back).
+    bool Allowed(string id, string hash) => verified(id, hash) || ModSettings.Read(modsFolder).Trusts(id, hash);
 
     (string State, string Message) Describe(Offer o)
     {
@@ -360,7 +373,9 @@ public sealed class ModSync : IAsyncDisposable
                 ("blocked", $"{o.HostName} runs another HellForge version ({Names(SyncAction.Update)} differs): both players need the same HellForge."),
             SyncVerdict.Unjoinable when !o.Shares => ("blocked", $"{o.HostName} does not share their mods. Install them yourself to join: {Names(SyncAction.Manual)}."),
             SyncVerdict.Unjoinable when !transport.IsFriend(o.Host) => ("blocked", $"Some of {o.HostName}'s mods run code or carry data that HellForge cannot check: those download only from Steam friends, and only when HellForge has verified them. Install them yourself to join: {Names(SyncAction.Manual)}."),
-            SyncVerdict.Unjoinable => ("blocked", $"Some of {o.HostName}'s mods run code or carry data that HellForge cannot check and has not verified. Install them yourself to join: {Names(SyncAction.Manual)}."),
+            SyncVerdict.Unjoinable => ("blocked", $"Install these mods yourself to join: {Names(SyncAction.Manual)}."),
+            // (the message is cut at 191 bytes in the game: names last)
+            SyncVerdict.Trust => ("blocked", $"HellForge has not checked these mods. TRUST one to download it from {o.HostName}, or install it yourself: {Names(SyncAction.Trust)}."),
             SyncVerdict.Download => ("offer", $"{o.HostName} plays with {plan.Items.Count(i => i.Action == SyncAction.Download)} mod(s) you don't have ({Megabytes(plan.DownloadBytes)}). Download them and restart with {o.HostName}'s mods to join."),
             _ => ("offer", $"You have all of {o.HostName}'s mods. Restart with them to join.")
         };
@@ -368,7 +383,19 @@ public sealed class ModSync : IAsyncDisposable
 
     static string Megabytes(long bytes) => (bytes / 1048576.0).ToString(bytes < 10 << 20 ? "0.0" : "0", CultureInfo.InvariantCulture) + " MB";
 
-    // An answer from the game (HfApi sync_answer): "syncanswer" version accept|decline|restart|block [mod id].
+    // Opens a mod's web address in the player's browser (GET IT); a test sets its own.
+    public Action<string> Browse { get; set; } = OpenInBrowser;
+    DateTime browsed;
+
+    // Only an https:// address that passes ModCatalog.WebAddress again, handed to the shell as the URI it parses to: the
+    // default browser opens it, nothing else is started.
+    static void OpenInBrowser(string address)
+    {
+        if (ModCatalog.WebAddress(address) is not { } checkedAddress || !Uri.TryCreate(checkedAddress, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
+        using var _ = Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true, Verb = "open" });
+    }
+
+    // An answer from the game (HfApi sync_answer): "syncanswer" version accept|decline|restart|block|trust|open [mod id].
     public void Answer(IReadOnlyList<string> parts)
     {
         if (parts.Count < 3 || parts[0] != "syncanswer" || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var version)) return;
@@ -384,6 +411,28 @@ public sealed class ModSync : IAsyncDisposable
                 ModSettings.SetBlocked(modsFolder, parts[3], true);
                 log($"Mod sync: {parts[3]} is blocked; lobbies running it are not offered again.");
                 _ = Task.Run(() => MakeOffer(current.Host, current.Connection, current.Set, current.Shares));
+                break;
+            // TRUST AND DOWNLOAD: that exact content (id and hash), only a mod the plan offers for trust (a Steam friend's,
+            // shared, not verified); the offer is made again, and downloads when nothing else waits
+            case "trust" when parts.Count > 3 && current.Plan.Items.FirstOrDefault(i => i.Mod.Id == parts[3] && i.Action == SyncAction.Trust) is { } item:
+                ModSettings.SetTrusted(modsFolder, new TrustedMod(item.Mod.Id, item.Mod.Hash, item.Mod.Name, item.Mod.Version,
+                    $"{current.HostName} ({LobbyService.EntityId(current.Host)})", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)));
+                log($"Mod sync: the player trusts {item.Mod.Id} {item.Mod.Version} ({item.Mod.Hash[..16]}) from {current.HostName}.");
+                _ = Task.Run(() => MakeOffer(current.Host, current.Connection, current.Set, current.Shares, accept: true));
+                break;
+            // GET IT: the mod's own web address from the host's set (checked when the set was read, and again before it opens)
+            case "open" when parts.Count > 3 && current.Set.Mods.FirstOrDefault(m => m.Id == parts[3])?.Url is { } url:
+                lock (gate)
+                {
+                    if (DateTime.UtcNow - browsed < TimeSpan.FromSeconds(1)) return; // a double click opens one page
+                    browsed = DateTime.UtcNow;
+                }
+                log($"Mod sync: opening {parts[3]}'s page in the browser: {url}");
+                _ = Task.Run(() =>
+                {
+                    try { Browse(url); }
+                    catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException) { log("Mod sync: the browser did not open: " + error.Message); }
+                });
                 break;
             default: log($"Mod sync: the answer {parts[2]} does not fit the offer's state ({current.State})."); break;
         }
@@ -464,8 +513,8 @@ public sealed class ModSync : IAsyncDisposable
             foreach (var file in first) await DownloadFileAsync(current, mod, file, partial, token);
             string? Read(ModFile? file) => file == null ? null : File.ReadAllText(SyncedStore.Target(partial, file.Path));
             var declared = ModSets.Declared(files.Select(f => f.Path), Read(manifest)!, Read(stats), Read(spec));
-            if (declared is { } kind && !verified(mod.Id, mod.Hash))
-                throw new InvalidDataException($"{mod.Name} {ModSets.Unchecked(kind)} and is not on HellForge's verified list.");
+            if (declared is { } kind && !Allowed(mod.Id, mod.Hash))
+                throw new InvalidDataException($"{mod.Name} {ModSets.Unchecked(kind)} and is neither on HellForge's verified list nor trusted.");
             foreach (var file in files.Where(f => !first.Contains(f))) await DownloadFileAsync(current, mod, file, partial, token);
         }
         catch
@@ -474,7 +523,7 @@ public sealed class ModSync : IAsyncDisposable
             throw;
         }
         // Install deletes the download itself when it refuses it or is cancelled
-        var folder = await Task.Run(() => SyncedStore.Install(modsFolder, mod, partial, verified, cancel: token), CancellationToken.None);
+        var folder = await Task.Run(() => SyncedStore.Install(modsFolder, mod, partial, Allowed, cancel: token), CancellationToken.None);
         log($"Mod sync: {mod.Id} {mod.Version} checked and stored in {folder}.");
     }
 
@@ -637,7 +686,7 @@ public sealed class ModSync : IAsyncDisposable
                 ["mods"] = new JsonArray([.. view.Items.Select(i => (JsonNode?)new JsonObject
                 {
                     ["id"] = i.Mod.Id, ["name"] = i.Mod.Name, ["version"] = i.Mod.Version, ["class"] = ModSets.ClassName(i.Mod.Class),
-                    ["action"] = ModSyncPlan.ActionName(i.Action), ["bytes"] = i.Mod.Bytes
+                    ["action"] = ModSyncPlan.ActionName(i.Action), ["bytes"] = i.Mod.Bytes, ["url"] = i.Mod.Url
                 })])
             }.ToJsonString());
         }
@@ -690,7 +739,7 @@ public sealed class LiveSyncDisplay(LiveEditServer live) : ISyncDisplay
                 {
                     var item = items[i];
                     if (!(await live.SyncModAsync(view.Version, i, ModSyncPlan.ActionName(item.Action), ModSets.ClassName(item.Mod.Class), item.Mod.Bytes, item.Mod.Id,
-                            item.Mod.Name, item.Mod.Version)).Ok) return false;
+                            item.Mod.Name, item.Mod.Version, item.Mod.Url)).Ok) return false;
                 }
             return (await live.SyncStateAsync(view.Version, view.State, view.Host, view.Bytes, view.Done, items.Count, message)).Ok;
         }

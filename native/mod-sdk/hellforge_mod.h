@@ -784,7 +784,8 @@ typedef struct HfModInfo
  * download's progress (done) changes without it. */
 #define HF_SYNC_NONE 0u        /* no offer */
 #define HF_SYNC_OFFER 1u       /* the lobby needs mods: HF_SYNC_ACCEPT downloads them (or, with bytes 0, restarts) */
-#define HF_SYNC_BLOCKED 2u     /* the lobby cannot be joined: a blocked mod, or one to install by hand (message says) */
+#define HF_SYNC_BLOCKED 2u     /* the lobby cannot be joined as it is: a blocked mod, one to install by hand, or mods the
+                                * player must trust first (HF_SYNC_MOD_TRUST rows); the message says */
 #define HF_SYNC_DOWNLOADING 3u /* downloading from the host: done of bytes */
 #define HF_SYNC_READY 4u       /* everything is here: HF_SYNC_RESTART restarts the session with the host's mods */
 #define HF_SYNC_FAILED 5u      /* the download or its checks failed (message says why) */
@@ -803,10 +804,13 @@ typedef struct HfSyncState
 /* One mod of an offer (sync_mod): what happens to it. */
 #define HF_SYNC_MOD_HAVE 0u     /* this machine has it (installed or synced before) */
 #define HF_SYNC_MOD_DOWNLOAD 1u /* downloads from the host */
-#define HF_SYNC_MOD_MANUAL 2u   /* the player installs it by hand (a code mod HellForge has not verified, or the host does not share) */
+#define HF_SYNC_MOD_MANUAL 2u   /* the player installs it by hand (code or unchecked data from a host who is not a Steam
+                                 * friend, or the host does not share); url, when set, says where to get it */
 #define HF_SYNC_MOD_BLOCKED 3u  /* on the player's blocklist */
 #define HF_SYNC_MOD_UPDATE 4u   /* part of HellForge, another version: both players need the same HellForge */
 #define HF_SYNC_MOD_OFF 5u      /* one of this machine's own, off for the synced session (the host does not run it) */
+#define HF_SYNC_MOD_TRUST 6u    /* code or unchecked data HellForge has not verified, from a Steam friend who shares:
+                                 * downloads once the player trusts it (HF_SYNC_TRUST), or the player installs it by hand */
 #define HF_SYNC_CLASS_CONTENT 0u /* what HellForge checks: data specs, schema stats, network field types */
 #define HF_SYNC_CLASS_CODE 1u    /* a DLL, sources HellForge builds, or Lua */
 #define HF_SYNC_CLASS_BUNDLED 2u /* shipped with HellForge (the in-game editor) */
@@ -821,6 +825,7 @@ typedef struct HfSyncMod
     char id[65];
     char name[81];      /* UTF-8 */
     char version[33];
+    char url[201];      /* where players get it: an https:// address from its manifest ("url"), or "" */
 } HfSyncMod;
 
 /* The player's answer to an offer (sync_answer). */
@@ -828,6 +833,9 @@ typedef struct HfSyncMod
 #define HF_SYNC_DECLINE 2u /* no: the offer goes (a download stops) */
 #define HF_SYNC_RESTART 3u /* restart the session with the host's mods (HF_SYNC_READY, or an offer with nothing to download) */
 #define HF_SYNC_BLOCK 4u   /* put mod_id on the blocklist; the offer goes */
+#define HF_SYNC_TRUST 5u   /* trust mod_id (an HF_SYNC_MOD_TRUST row: that exact content) and download it once nothing else
+                            * waits; a new offer follows. Ask the player first: the mod runs its own code on their PC */
+#define HF_SYNC_OPEN 6u    /* open mod_id's url in the player's browser (the backend opens only an https:// address) */
 
 typedef struct HfEntityDef HfEntityDef;
 
@@ -1171,7 +1179,8 @@ typedef struct HfApi
     /* The index-th mod of the current offer: 1 with *out filled (at most out->size bytes), 0 past the last. */
     int (*sync_mod)(HfMod* mod, uint32_t index, HfSyncMod* out);
     /* Sends the player's answer (HF_SYNC_ACCEPT ...) to the offer of that version; mod_id names the mod for
-     * HF_SYNC_BLOCK (NULL otherwise). 1 sent; 0 not (another offer came since, or no backend connected). */
+     * HF_SYNC_BLOCK, HF_SYNC_TRUST and HF_SYNC_OPEN (NULL otherwise). 1 sent; 0 not (another offer came since, or no
+     * backend connected). */
     int (*sync_answer)(HfMod* mod, uint32_t version, uint32_t answer, const char* mod_id);
 } HfApi;
 

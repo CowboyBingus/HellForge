@@ -15,13 +15,14 @@ namespace HellForge.Core;
 //   content  what HellForge checks itself: data specs it checks all of (built from the joiner's own game files: icons, and
 //            copies and includes of the reviewed types with only HellForge's own edits; DataSpecs.Unchecked), schema
 //            stats (named fields within their reviewed ranges) and network field types (integer widenings): from any host;
-//   code     a DLL, sources HellForge compiles, or a patch holding Lua: only when VerifiedMods lists its exact content;
+//   code     a DLL, sources HellForge compiles, or a patch holding Lua: only when VerifiedMods lists its exact content, or
+//            the player trusted that exact content (ModSettings' Trusted: TRUST on the prompt, for a Steam friend's mod);
 //   raw      bytes HellForge cannot check, which reach the game's own parsers or any field: binary data patches (data/),
-//            data specs with "replace" or other resource types, raw stats lines and componentWrites: only when
-//            VerifiedMods lists its exact content, as code;
+//            data specs with "replace" or other resource types, raw stats lines and componentWrites: as code;
 //   bundled  a mod HellForge ships (the in-game editor): never downloaded; a different one is another HellForge version.
 // Every host gets the same rule, a Steam friend too; and code and raw mods come only from Steam friends (a host serves them
 // only to its friends: a stranger could not take them unverified anyway, and they may be a modder's unreleased sources).
+// Trust changes only which list lets a hash through: every byte is checked against it as before.
 public enum ModClass { Content, Code, Bundled, Raw }
 
 // A file of a mod as the digest counts it: its path in the mod folder ('/'), size and SHA-256 (upper-case hex).
@@ -29,11 +30,13 @@ public sealed record ModFile(string Path, long Size, string Sha256);
 
 // One gameplay mod of a mod set. Hash is its content hash: the SHA-256 (lower-case hex) of the lines the modlist digest
 // takes from it (ModSets.Block). Order is its place in the session's load order (0 loads first). Folder and Files are
-// this machine's own and never leave it (ModSet.ToJson(local: false)).
+// this machine's own and never leave it (ModSet.ToJson(local: false)). Url is where players get the mod (its manifest's
+// "url", ModCatalog.WebAddress; never a bundled mod's), or null: the prompt's GET IT.
 public sealed record ModSetEntry(string Id, string Name, string Version, string Hash, long Bytes, ModClass Class, int Order)
 {
     public string? Folder { get; init; }
     public IReadOnlyList<ModFile> Files { get; init; } = [];
+    public string? Url { get; init; }
 }
 
 // The gameplay mods a session runs, with the modlist digest they make. Written per session (mods-stage --modset) for the
@@ -52,8 +55,9 @@ public sealed record ModSet(string Digest, IReadOnlyList<ModSetEntry> Mods)
         foreach (var (mod, files, block) in ModCatalog.Compared(counted))
         {
             lines.Append(block);
-            entries.Add(new ModSetEntry(mod.Id, mod.Name, mod.Version, ModSets.Hash(block), files.Sum(f => f.Size), ModSets.ClassOf(mod), counted.IndexOf(mod))
-                { Folder = mod.Folder, Files = files });
+            var kind = ModSets.ClassOf(mod);
+            entries.Add(new ModSetEntry(mod.Id, mod.Name, mod.Version, ModSets.Hash(block), files.Sum(f => f.Size), kind, counted.IndexOf(mod))
+                { Folder = mod.Folder, Files = files, Url = kind == ModClass.Bundled ? null : mod.Url });
         }
         var digest = lines.Length == 0 ? "none" : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(lines.ToString())))[..32].ToLowerInvariant();
         return new ModSet(digest, entries);
@@ -75,6 +79,7 @@ public sealed record ModSet(string Digest, IReadOnlyList<ModSetEntry> Mods)
                 ["id"] = mod.Id, ["name"] = mod.Name, ["version"] = mod.Version, ["hash"] = mod.Hash, ["bytes"] = mod.Bytes,
                 ["class"] = ModSets.ClassName(mod.Class), ["order"] = mod.Order
             };
+            if (mod.Url != null) item["url"] = mod.Url;
             if (local)
             {
                 item["folder"] = mod.Folder;
@@ -114,8 +119,10 @@ public sealed record ModSet(string Digest, IReadOnlyList<ModSetEntry> Mods)
             if (!ModCatalog.IsModId(id)) throw new InvalidDataException("A mod set entry's id is malformed.");
             var hash = Text("hash", 64);
             if (!ModSets.Hex(hash, 64)) throw new InvalidDataException($"{id}: its content hash is malformed.");
-            var entry = new ModSetEntry(id, Text("name", 80), Text("version", 32), hash, Number("bytes", 1L << 40),
-                ModSets.ClassNamed(Text("class", 16)), (int)Number("order", MaxMods));
+            var kind = ModSets.ClassNamed(Text("class", 16));
+            // a url that is not a web address HellForge would open (or a bundled mod's) is left out, not the set
+            var url = kind == ModClass.Bundled || item["url"] is not JsonValue address || !address.TryGetValue<string>(out var given) ? null : ModCatalog.WebAddress(given);
+            var entry = new ModSetEntry(id, Text("name", 80), Text("version", 32), hash, Number("bytes", 1L << 40), kind, (int)Number("order", MaxMods)) { Url = url };
             if (local)
             {
                 var files = new List<ModFile>();
@@ -171,7 +178,7 @@ public static class ModSets
         : mod.DataFiles.Count > 0 || mod.ComponentWrites.Count > 0 || mod.UncheckedSpec != null || mod.Stats.Any(e => e.Expect != null) ? ModClass.Raw
         : ModClass.Content;
 
-    // Downloads only when the verified list names its exact content.
+    // Downloads only when the verified list names its exact content, or the player trusted it.
     public static bool NeedsVerified(ModClass kind) => kind is ModClass.Code or ModClass.Raw;
 
     // What a download already shows before the rest of its bytes: the host's file list, its manifest, its stats file and
@@ -216,9 +223,10 @@ public static class ModSets
     internal static bool Hex(string text, int length) => text.Length == length && text.All(char.IsAsciiHexDigitLower);
 }
 
-// HellForge's verified list (data/verified-mods.json, embedded in Core): code mods whose exact content a HellForge
-// maintainer reviewed, which mod sync may download from any host. A version of a mod is listed by its content hash
-// (ModSets.ContentHash), so any other bytes under the same id and version are not verified.
+// HellForge's verified list (data/verified-mods.json, embedded in Core): code and raw mods whose exact content a HellForge
+// maintainer reviewed, which mod sync may download from a Steam friend. A version of a mod is listed by its content hash
+// (ModSets.ContentHash), so any other bytes
+// under the same id and version are not verified.
 //   {"format":1,"mods":[{"id":"...","name":"...","version":"...","hash":"<64 hex>","reviewed":"<date>, <by whom>"}]}
 public static class VerifiedMods
 {
@@ -294,14 +302,17 @@ public sealed class ModLocator(string modsFolder, EntityProfile? profile = null)
 
 // What joining a host's lobby takes, mod by mod (each host mod in id order, then this machine's mods the host lacks).
 //   have      this machine has it (installed, on or off, or synced before): Folder;
-//   download  a content mod, or a verified code mod, the host shares;
-//   manual    the host does not share, or a code or raw mod that is not verified or whose host is not a Steam friend:
-//             the player installs it themselves;
+//   download  a content mod, or a verified or trusted code or raw mod from a Steam friend, the host shares;
+//   manual    the host does not share, or a code or raw mod whose host is not a Steam friend: the player installs it
+//             themselves (its Url, when it has one, says where);
 //   blocked   on the player's blocklist;
 //   update    a mod HellForge ships differs: one of the two players runs another HellForge version;
-//   off       this machine's own gameplay mod the host does not run: left out of the synced session.
-public enum SyncAction { Have, Download, Manual, Blocked, Update, Off }
-public enum SyncVerdict { Ready, Download, Unjoinable, Blocked }
+//   off       this machine's own gameplay mod the host does not run: left out of the synced session;
+//   trust     a code or raw mod HellForge has not verified, from a Steam friend who shares: it downloads once the player
+//             trusts that exact content (TRUST on the prompt), or the player installs it themselves.
+public enum SyncAction { Have, Download, Manual, Blocked, Update, Off, Trust }
+// Trust: nothing else stands in the way, but mods wait for the player's trust.
+public enum SyncVerdict { Ready, Download, Unjoinable, Blocked, Trust }
 public sealed record SyncItem(ModSetEntry Mod, SyncAction Action, string? Folder);
 
 public sealed record ModSyncPlan(IReadOnlyList<SyncItem> Items)
@@ -309,16 +320,20 @@ public sealed record ModSyncPlan(IReadOnlyList<SyncItem> Items)
     public SyncVerdict Verdict =>
         Items.Any(i => i.Action == SyncAction.Blocked) ? SyncVerdict.Blocked
         : Items.Any(i => i.Action is SyncAction.Manual or SyncAction.Update) ? SyncVerdict.Unjoinable
+        : Items.Any(i => i.Action == SyncAction.Trust) ? SyncVerdict.Trust
         : Items.Any(i => i.Action == SyncAction.Download) ? SyncVerdict.Download : SyncVerdict.Ready;
 
     public long DownloadBytes => Items.Where(i => i.Action == SyncAction.Download).Sum(i => i.Mod.Bytes);
 
     // own: this session's mod set (the joiner's); find: an installed or synced mod by id and hash (ModLocator.Find);
-    // hostIsFriend: the host is a Steam friend (only friends serve code and raw mods).
+    // verified: HellForge's verified list (VerifiedMods.Contains); trusted: the player's trusted mods (ModSettings' Trusted),
+    // both by id and exact content hash; hostIsFriend: the host is a Steam friend (only friends serve code and raw mods,
+    // so only a friend's can be trusted).
     public static ModSyncPlan Make(ModSet host, bool hostShares, ModSet own, Func<string, string, string?> find, IReadOnlySet<string> blocked,
-        Func<string, string, bool>? verified = null, bool hostIsFriend = true)
+        Func<string, string, bool>? verified = null, bool hostIsFriend = true, Func<string, string, bool>? trusted = null)
     {
         verified ??= VerifiedMods.Contains;
+        trusted ??= (_, _) => false;
         var items = new List<SyncItem>();
         foreach (var mod in host.Mods.OrderBy(m => m.Id, StringComparer.Ordinal))
         {
@@ -326,7 +341,8 @@ public sealed record ModSyncPlan(IReadOnlyList<SyncItem> Items)
             var folder = own.Find(mod.Id, mod.Hash)?.Folder ?? find(mod.Id, mod.Hash);
             var action = folder != null ? SyncAction.Have
                 : mod.Class == ModClass.Bundled ? SyncAction.Update
-                : !hostShares || ModSets.NeedsVerified(mod.Class) && (!hostIsFriend || !verified(mod.Id, mod.Hash)) ? SyncAction.Manual
+                : !hostShares || ModSets.NeedsVerified(mod.Class) && !hostIsFriend ? SyncAction.Manual
+                : ModSets.NeedsVerified(mod.Class) && !verified(mod.Id, mod.Hash) && !trusted(mod.Id, mod.Hash) ? SyncAction.Trust
                 : SyncAction.Download;
             items.Add(new(mod, action, folder));
         }
@@ -366,6 +382,14 @@ public static class SyncedStore
             return mod.Id == id && ModSets.ContentHash(mod) == hash ? folder : null;
         }
         catch (Exception error) when (error is JsonException or InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException) { return null; }
+    }
+
+    // Deletes the store's copy of a mod (the player took back their trust in it); none there is nothing to do.
+    public static void Forget(string modsFolder, string id, string hash)
+    {
+        if (!ModCatalog.IsModId(id) || !ModSets.Hex(hash, 64)) return;
+        var folder = Path.Combine(Root(modsFolder), Name(id, hash));
+        if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
     }
 
     public const string PartialFolder = ".partial";
@@ -420,8 +444,9 @@ public static class SyncedStore
 
     // Checks a finished download against what the plan expected and moves it into the store; returns its folder. It
     // must be a mod with that id and version, the same content hash read from its own files, and content, or code or raw
-    // data the verified list names (read from its own files, whatever the host said). Throws InvalidDataException (or
-    // OperationCanceledException when cancelled), with the download deleted whatever went wrong.
+    // data verified lets through (the verified list, or the player's trust; the class read from its own files, whatever the
+    // host said). Throws InvalidDataException (or OperationCanceledException when cancelled), with the download deleted
+    // whatever went wrong.
     public static string Install(string modsFolder, ModSetEntry expected, string partial, Func<string, string, bool>? verified = null,
         EntityProfile? profile = null, CancellationToken cancel = default)
     {
@@ -465,7 +490,7 @@ public static class SyncedStore
         var kind = ModSets.ClassOf(mod);
         if (kind == ModClass.Bundled) throw new InvalidDataException($"{expected.Id} is a mod HellForge ships; it is never downloaded.");
         if (ModSets.NeedsVerified(kind) && !verified(mod.Id, expected.Hash))
-            throw new InvalidDataException($"{expected.Id} {ModSets.Unchecked(kind)} and is not on HellForge's verified list.");
+            throw new InvalidDataException($"{expected.Id} {ModSets.Unchecked(kind)} and is neither on HellForge's verified list nor trusted.");
     }
 }
 

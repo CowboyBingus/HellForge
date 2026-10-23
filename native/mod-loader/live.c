@@ -11,12 +11,12 @@
  *             get <seq> <kind> <component> <resource hex> <record> <offset> <storage>
  *             session <seq> <solo|host|joiner> [<host name>]
  *             notice <seq> <error|info> <title> [<line>...]   (SDK 12: a message the in-game editor shows the player)
- *             syncmod <seq> <version> <index> <have|download|manual|blocked|update|off> <content|code|bundled|raw> <bytes>
- *                     <id> <name> <mod version>
+ *             syncmod <seq> <version> <index> <have|download|manual|blocked|update|off|trust> <content|code|bundled|raw> <bytes>
+ *                     <id> <name> <mod version> <https:// url or ->
  *             syncstate <seq> <version> <none|offer|blocked|downloading|ready|failed> <host name> <bytes> <done> <mods>
  *                       <message>                                      (syncmod, syncstate: SDK 14, mod sync)
  *   loader:   <seq> ok <now|respawn|mission> [<value hex>]     or     <seq> refused <reason>
- *             syncanswer <version> <accept|decline|restart|block> <mod id or ->   (unasked: the player's answer to an offer)
+ *             syncanswer <version> <accept|decline|restart|block|trust|open> <mod id or ->   (unasked: the player's answer)
  * A request names a field as the stats schema does (kind "component" and a component record, or a settings kind and
  * its row id; a stratagem by its stable id), so the editor sends what it would save. Each becomes a set_live edit of the
  * Local Stats mod (zz.local.stats), whose file the editor saves into: same checks, same conflict reports. */
@@ -93,7 +93,7 @@ static void SetNotice(char** f, int n)
 /* As many as the backend lists (LiveSyncDisplay.MaxMods): a host's set (at most 256) and this machine's own mods. */
 #define SYNC_MAX_MODS 512
 static const char* const kSyncStates[] = {"none", "offer", "blocked", "downloading", "ready", "failed"};
-static const char* const kSyncActions[] = {"have", "download", "manual", "blocked", "update", "off"};
+static const char* const kSyncActions[] = {"have", "download", "manual", "blocked", "update", "off", "trust"};
 static const char* const kSyncClasses[] = {"content", "code", "bundled", "raw"};
 static SRWLOCK g_syncLock = SRWLOCK_INIT;
 static HfSyncState g_sync;
@@ -151,13 +151,25 @@ static int SplitAll(char* line, char** fields, int capacity)
     return count;
 }
 
+/* A mod's web address as the backend checked it (ModCatalog.WebAddress): https://, at most 200 bytes, nothing but printable
+ * ASCII without spaces, quotes or backslashes. Anything else (and "-") is no address: an editor only shows it, and the
+ * backend opens it (HF_SYNC_OPEN) from its own offer. */
+static int SyncUrl(const char* text)
+{
+    size_t length = strlen(text);
+    if (length < 12 || length > 200 || strncmp(text, "https://", 8)) return 0;
+    for (const char* c = text; *c; c++)
+        if ((unsigned char)*c <= ' ' || (unsigned char)*c >= 0x7F || *c == '"' || *c == '\'' || *c == '\\' || *c == '<' || *c == '>' || *c == '`') return 0;
+    return 1;
+}
+
 static void SyncModLine(char* line, char* reply, size_t size)
 {
-    char* f[10];
-    int n = SplitAll(line, f, 10);
+    char* f[11];
+    int n = SplitAll(line, f, 11);
     uint64_t version = 0, index = 0, bytes = 0;
-    int action = n == 10 ? SyncName(f[4], kSyncActions, 6) : -1, kind = n == 10 ? SyncName(f[5], kSyncClasses, 4) : -1;
-    if (n != 10 || !SyncNumber(f[2], &version) || version > UINT32_MAX || !SyncNumber(f[3], &index) || !SyncNumber(f[6], &bytes) ||
+    int action = n == 11 ? SyncName(f[4], kSyncActions, 7) : -1, kind = n == 11 ? SyncName(f[5], kSyncClasses, 4) : -1;
+    if (n != 11 || !SyncNumber(f[2], &version) || version > UINT32_MAX || !SyncNumber(f[3], &index) || !SyncNumber(f[6], &bytes) ||
         action < 0 || kind < 0 || !f[7][0])
     { snprintf(reply, size, "%s\trefused\tmalformed syncmod", n >= 2 ? f[1] : "-"); return; }
     if (index >= SYNC_MAX_MODS) { snprintf(reply, size, "%s\trefused\tan offer lists at most %d mods", f[1], SYNC_MAX_MODS); return; }
@@ -176,6 +188,7 @@ static void SyncModLine(char* line, char* reply, size_t size)
     SyncCopy(m->id, sizeof m->id, f[7]);
     SyncCopy(m->name, sizeof m->name, f[8]);
     SyncCopy(m->version, sizeof m->version, f[9]);
+    if (SyncUrl(f[10])) SyncCopy(m->url, sizeof m->url, f[10]);
     g_syncNextSeen[index / 64] |= 1ull << (index % 64);
     snprintf(reply, size, "%s\tok\tnow", f[1]);
 }
@@ -267,10 +280,11 @@ static int ApiSyncAnswer(HfMod* mod, uint32_t version, uint32_t answer, const ch
 {
     (void)mod;
     const char* word = answer == HF_SYNC_ACCEPT ? "accept" : answer == HF_SYNC_DECLINE ? "decline" : answer == HF_SYNC_RESTART ? "restart" :
-        answer == HF_SYNC_BLOCK ? "block" : NULL;
+        answer == HF_SYNC_BLOCK ? "block" : answer == HF_SYNC_TRUST ? "trust" : answer == HF_SYNC_OPEN ? "open" : NULL;
     if (word == NULL) return 0;
     char id[65] = "-";
-    if (answer == HF_SYNC_BLOCK)
+    int named = answer == HF_SYNC_BLOCK || answer == HF_SYNC_TRUST || answer == HF_SYNC_OPEN; /* these name their mod */
+    if (named)
     {
         size_t n = 0;
         for (const char* c = modId != NULL ? modId : ""; *c && n < sizeof id - 1; c++) if ((unsigned char)*c >= 0x20 && *c != 0x7F) id[n++] = *c;
@@ -288,7 +302,7 @@ static int ApiSyncAnswer(HfMod* mod, uint32_t version, uint32_t answer, const ch
     if (queued) { memcpy(g_liveOut + g_liveOutUsed, line, (size_t)length); g_liveOutUsed += (size_t)length; }
     ReleaseSRWLockExclusive(&g_liveOutLock);
     if (queued && g_liveOutEvent != NULL) SetEvent(g_liveOutEvent);
-    Note("mod sync %u: the player answered %s%s%s%s", version, word, answer == HF_SYNC_BLOCK ? " " : "", answer == HF_SYNC_BLOCK ? id : "",
+    Note("mod sync %u: the player answered %s%s%s%s", version, word, named ? " " : "", named ? id : "",
         queued ? "" : " (not sent: no backend connected)");
     return queued;
 }
