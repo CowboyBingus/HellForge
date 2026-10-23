@@ -140,9 +140,12 @@ the in-game editor shows the MOD SYNC prompt (SDK 14 `sync_state`, `sync_mod`, `
 downloads each mod's counted files from the host over the Steam link (`mods.files`, `mods.get`, paced to 1 MiB/s per
 machine), checks every file and the whole mod (`SyncedStore.Install`), keeps it in `mods/.synced/<id>@<hash>/`, and the
 launcher restarts the session with the host's mods (`--mod-sync`). Each mod's class comes from the bytes received,
-with one rule for every host, Steam friends included (`ModSets.ClassOf`). Content (data specs, schema stats, network
-field types) downloads from any host. Code and raw data (binary data patches, raw stats lines, `componentWrites`)
-download only when `data/verified-mods.json` names their exact content hash. Bundled mods never download. The host side is `src/HellForge.LocalBackend/Multiplayer/ModSync.cs`; the protocol and limits are in
+with one rule for every host, Steam friends included (`ModSets.ClassOf`). Content (data specs HellForge checks all of,
+`DataSpecs.Unchecked`; schema stats; network field types) downloads from any host. Code and raw data (binary data
+patches, data specs with `"replace"` or unreviewed resource types such as `lua`, raw stats lines, `componentWrites`)
+download only when `data/verified-mods.json` names their exact content hash, and only from a Steam friend: a host
+serves them to friends alone. Bundled mods never download. The host side is
+`src/HellForge.LocalBackend/Multiplayer/ModSync.cs`; the protocol and limits are in
 [Step 6](#step-6-mod-sync-a-joiner-takes-the-hosts-mods-2026-10-22) below.
 
 ### Public lobbies (the lobby directory)
@@ -470,32 +473,40 @@ Built 2026-10-22. On two PCs a refusal and its offer are confirmed; the download
 it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
 
 - Each session writes its mod set (`<run>/modset.json`, from `mods-stage --modset`): every gameplay mod with its
-  content hash, class (content, code, bundled), load-order place, folder and counted files. The backend reads it with
-  `--modset`.
+  content hash, class (content, code, raw, bundled), load-order place, folder and counted files. The backend reads
+  it with `--modset`.
 - **Host** (`Multiplayer/ModSync.cs`):
   - A joiner refused for different gameplay mods is first sent the set without its folders:
     `mods.offer [lobby id, set JSON, sharing 0|1]`. Then comes the refusal, as before: `lobby.refused [reason,
     line...]`, its lines shown by both games. When the host shares, the joiner's last line says the MOD SYNC window
     offers the download. A backend from before ignores the offer.
   - A joiner takes an offer only for a join it asked for in the last minute.
-  - The joiner's machine (a stranger too: step 7's gate lets a download through) may then download for 10 minutes:
-    - `mods.files [req, id, hash]` → `mods.filelist [req, ok, count, (path, size, sha256)...]`;
+  - The joiner's machine (a stranger too: step 7's gate lets a download through) may then download for 10 minutes from
+    its first refused join (a later one extends nothing), at most the set's bytes twice over and four chunks:
+    - `mods.files [req, id, hash, start]` → `mods.filelist [req, ok, total, start, (path, size, sha256)...]`, pages
+      of at most 1000 files (a frame holds 4096 fields), at most 10000 files a mod on both sides;
     - `mods.get [req, id, hash, path, offset, length ≤ 128 KiB]` → `mods.chunk [req, ok, offset, bytes]`;
     - or `[req, refused, reason]`.
-  - It serves only a mod in its set (not a bundled one), only a file that mod counts, and only within the file's size.
+  - It serves only a mod in its set (not a bundled one), only a file that mod counts, and only within the file's size;
+    a code or raw mod only to a Steam friend.
   - One worker reads the files, at most 8 queued requests per machine, paced to 1 MiB/s per machine and 2 MiB/s in
-    total.
-  - `"share": false` in `hellforge-mods.json` stops it.
+    total. A request that fails in any way is refused or logged; the worker serves the next one.
+  - `"share": false` in `hellforge-mods.json` stops it. Sharing is on by default (a maintainer's call still open).
 - **Joiner:**
   - The offer becomes the game's (`ModSyncPlan` in HellForge.Core). The loader's live pipe gets
     `syncmod` lines and then `syncstate` (`native/mod-loader/live.c`, SDK 14 `sync_state`/`sync_mod`), and the in-game
     editor shows its MOD SYNC prompt over the game, the editor window closed. The answer comes back as
   `syncanswer <version> <answer> [<mod id>]`.
   - The offer is also written to `<run>/backend/mod-sync.json`.
-  - On accept it downloads, four requests in flight. The file list, the manifest and the stats file come first: a
-    mod they show to be code or raw data (`ModSets.Declared`) that is not on the verified list stops there.
+  - On accept it checks the drive has room (the download and 256 MB), then downloads, four requests in flight. The
+    file list, the manifest (`hellforge-mod.json` before `bts-mod.json`), the stats file and the data spec come
+    first: a mod they show to be code or raw data (`ModSets.Declared`) that is not on the verified list stops there.
   - Each file is checked against its listed size and SHA-256, and the whole mod by `SyncedStore.Install`, before it
-    goes to `mods/.synced/`.
+    goes to `mods/.synced/`. Each attempt writes into its own `.synced/.partial/<id>@<hash>-<attempt>/`, deleted
+    whatever goes wrong; anything that goes wrong ends in `failed` with its message. A stored mod is found again only
+    while its files rehash to its content hash.
+  - The editor's prompt takes answers (buttons, Enter, B) one second after it appears or its state turns.
+  - The loader holds offers of up to 512 mods (`live.c`); the backend lists the ones that need something first.
   - On restart it writes `<install>/temp/mod-sync/session.json` (`ModSyncSession`) and `mod-sync` into
     `stop-observation.signal`. The session runner reports `restart: mod-sync`, and the launcher starts the next
     session with `--mod-sync <file>` (`mods-stage --sync`).
