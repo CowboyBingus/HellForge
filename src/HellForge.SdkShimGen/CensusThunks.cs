@@ -49,6 +49,8 @@ static class CensusThunks
           .seh_endproc
         """;
 
+    const int MaxExports = 2048, MaxName = 127;
+
     public static int Write(string original, string module, string handwritten, string definitionOutput, string codeOutput, Func<string, HashSet<string>> ownFunctions)
     {
         if (!Regex.IsMatch(module, @"^[A-Za-z0-9_]+$")) throw new InvalidDataException("The real module name must be a plain DLL name without extension.");
@@ -59,6 +61,9 @@ static class CensusThunks
         var data = PeTables.DataExports(original);
         var thunked = exports.Where(e => !own.Contains(e.Name) && !data.Contains(e.Name)).OrderBy(e => e.Ordinal).ToList();
         if (thunked.Any(e => !Regex.IsMatch(e.Name, @"^[A-Za-z_][A-Za-z0-9_]*$"))) throw new InvalidDataException("An export name is not a C identifier.");
+        // steam_census.c's tables: CENSUS_EXPORTS thunks, and names short enough for its log keys (CENSUS_KEY)
+        if (thunked.Count > MaxExports) throw new InvalidDataException($"{thunked.Count} exports to thunk; steam_census.c holds {MaxExports} (CENSUS_EXPORTS).");
+        if (thunked.FirstOrDefault(e => e.Name.Length > MaxName) is { } longName) throw new InvalidDataException($"Export name over {MaxName} characters: {longName.Name}");
         var index = thunked.Select((e, i) => (e.Name, i)).ToDictionary(p => p.Name, p => p.i, StringComparer.Ordinal);
 
         var definition = new StringBuilder().AppendLine($"LIBRARY {Path.GetFileName(original)}").AppendLine("EXPORTS");

@@ -52,7 +52,8 @@ FAKE_API void *SteamInternal_FindOrCreateUserInterface(int32_t user, const char 
 
 FAKE_API void SteamAPI_RegisterCallback(void *callback, int id) { g_state.callback = callback; g_state.callbackId = id; }
 FAKE_API void SteamAPI_RegisterCallResult(void *callback, uint64_t call) { g_state.callback = callback; g_state.callbackId = (int)call; }
-FAKE_API int32_t SteamAPI_GetHSteamUser(void) { return 7; }
+// the stand-in writes SteamAPI_GetHSteamUser itself (bridge mode), so the thunk tests use the game server one
+FAKE_API int32_t SteamGameServer_GetHSteamUser(void) { return 7; }
 
 FAKE_API bool SteamAPI_ISteamUserStats_UpdateAvgRateStat(void *self, const char *name, float count, double session)
 {

@@ -24,6 +24,9 @@
 #include "steam_census.h"
 
 #define CENSUS_SEEN 4096
+// A key is kind:name:number. Names are at most 127 characters (the generator refuses longer export names; Clean caps the
+// rest), so a key never reaches the limit and no two keys are cut to the same text.
+#define CENSUS_KEY 192
 
 typedef FARPROC (WINAPI *GetProcAddressFn)(HMODULE, LPCSTR);
 typedef FARPROC (WINAPI *GetProcAddressForCallerFn)(HMODULE, LPCSTR, void *);
@@ -32,7 +35,7 @@ static GetProcAddressForCallerFn g_getProcAddressForCaller;
 static HMODULE g_census;
 static HANDLE g_log = INVALID_HANDLE_VALUE;
 static CRITICAL_SECTION g_censusLock;
-static char g_seen[CENSUS_SEEN][96];
+static char g_seen[CENSUS_SEEN][CENSUS_KEY];
 static int g_seenCount;
 
 // True the first time a key is seen (and it is remembered); false after, or once the list is full.
@@ -58,8 +61,9 @@ static void Line(const char *kind, const char *name, long long number)
 static void Write(const char *kind, const char *name, long long number)
 {
     if (g_log == INVALID_HANDLE_VALUE) return;
-    char key[96];
-    snprintf(key, sizeof key, "%s:%s:%lld", kind, name, number);
+    char key[CENSUS_KEY];
+    int length = snprintf(key, sizeof key, "%s:%s:%lld", kind, name, number);
+    if (length < 0 || length >= (int)sizeof key) return;
     EnterCriticalSection(&g_censusLock);
     if (FirstTime(key)) Line(kind, name, number);
     LeaveCriticalSection(&g_censusLock);
@@ -119,7 +123,13 @@ static uintptr_t CensusMissing(void) { return 0; }
 // Called by an export's thunk with the argument registers saved: where to jump.
 void *CensusExport(int index)
 {
-    if (index < 0 || index >= g_censusExportCount || index >= CENSUS_EXPORTS) return (void *)CensusMissing;
+    if (index < 0 || index >= g_censusExportCount || index >= CENSUS_EXPORTS)
+    {
+        // the generator refuses more than CENSUS_EXPORTS, so this is a build mismatch: said once
+        static volatile LONG said;
+        if (InterlockedExchange(&said, 1) == 0) Write("overflow", "export index past the census table", index);
+        return (void *)CensusMissing;
+    }
     void *target = g_exportTargets[index];
     if (target == NULL)
     {
