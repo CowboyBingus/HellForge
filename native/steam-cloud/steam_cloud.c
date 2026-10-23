@@ -17,6 +17,7 @@
 #include <string.h>
 #include "net_gate.h"
 #include "steam_census.h"
+#include "bridge_channel.h"
 #include "../common/hf_privacy.h"
 
 #define HELLFORGE_API
@@ -31,6 +32,8 @@ static wchar_t g_dir[MAX_PATH];
 static bool g_enabled;
 static HANDLE g_log = INVALID_HANDLE_VALUE;
 static HMODULE g_self;
+static GameChannel g_bridge;
+static bool g_bridged;
 
 static void Log(const char *format, ...)
 {
@@ -269,6 +272,131 @@ HELLFORGE_API void *SteamAPI_SteamRemoteStorage_v016(void)
     return &g_storage;
 }
 
+// --- Flat API: bridge mode handles these; non-bridge forwards to the real DLL. ---
+// The .def generator (SdkShimGen forward) sees HELLFORGE_API and emits these as code exports, not forwarders.
+
+enum { BROKER_CALL_IS_STEAM_RUNNING = 0, BROKER_CALL_RUN_FRAME = 1, BROKER_CALL_SHUTDOWN = 2 };
+
+static int BrokerCall(uint32_t callId, const void *args, uint32_t argsSize, void *result, uint32_t resultCap, uint32_t *resultSize)
+{
+    uint8_t buf[4096 + 4];
+    memcpy(buf, &callId, 4);
+    if (argsSize > 0 && args) memcpy(buf + 4, args, argsSize);
+    if (!BridgePipeSend(g_bridge.pipe, BRIDGE_CALL, buf, 4 + argsSize)) return 0;
+    uint8_t reply[4096 + 8];
+    uint32_t replySize = 0;
+    uint32_t type = BridgePipeRecv(g_bridge.pipe, reply, sizeof reply, &replySize);
+    if (type != BRIDGE_RESULT || replySize < 8) return 0;
+    uint32_t status;
+    memcpy(&status, reply + 4, 4);
+    uint32_t bodySize = replySize - 8;
+    if (resultSize) *resultSize = bodySize;
+    if (bodySize > 0 && result && resultCap >= bodySize) memcpy(result, reply + 8, bodySize);
+    return status == 0;
+}
+
+HELLFORGE_API int __cdecl SteamAPI_RestartAppIfNecessary(uint32_t appId)
+{
+    Log("RestartAppIfNecessary %u -> 0 (stand-in)", appId);
+    return 0;
+}
+
+HELLFORGE_API int __cdecl SteamAPI_Init(void)
+{
+    if (g_bridged) { Log("SteamAPI_Init -> 1 (broker)"); return 1; }
+    HMODULE real = Real();
+    typedef int (__cdecl *Fn)(void);
+    Fn forward = real ? (Fn)(void *)GetProcAddress(real, "SteamAPI_Init") : NULL;
+    int ok = forward ? forward() : 0;
+    Log("SteamAPI_Init -> %d (real)", ok);
+    return ok;
+}
+
+HELLFORGE_API void __cdecl SteamAPI_RunCallbacks(void)
+{
+    if (g_bridged)
+    {
+        BrokerCall(BROKER_CALL_RUN_FRAME, NULL, 0, NULL, 0, NULL);
+        uint32_t cbId;
+        uint8_t cbData[1024];
+        uint32_t cbSize;
+        while (GameChannelReadCallback(&g_bridge, &cbId, cbData, sizeof cbData, &cbSize)) {}
+        return;
+    }
+    HMODULE real = Real();
+    typedef void (__cdecl *Fn)(void);
+    Fn forward = real ? (Fn)(void *)GetProcAddress(real, "SteamAPI_RunCallbacks") : NULL;
+    if (forward) forward();
+}
+
+HELLFORGE_API int __cdecl SteamAPI_IsSteamRunning(void)
+{
+    if (g_bridged)
+    {
+        uint8_t running = 0;
+        uint32_t size = 0;
+        BrokerCall(BROKER_CALL_IS_STEAM_RUNNING, NULL, 0, &running, 1, &size);
+        return size >= 1 ? running : 1;
+    }
+    HMODULE real = Real();
+    typedef int (__cdecl *Fn)(void);
+    Fn forward = real ? (Fn)(void *)GetProcAddress(real, "SteamAPI_IsSteamRunning") : NULL;
+    return forward ? forward() : 1;
+}
+
+HELLFORGE_API void __cdecl SteamAPI_Shutdown(void)
+{
+    if (g_bridged)
+    {
+        BridgePipeSend(g_bridge.pipe, BRIDGE_SHUTDOWN, NULL, 0);
+        GameChannelClose(&g_bridge);
+        g_bridged = false;
+        Log("SteamAPI_Shutdown (broker)");
+        return;
+    }
+    HMODULE real = Real();
+    typedef void (__cdecl *Fn)(void);
+    Fn forward = real ? (Fn)(void *)GetProcAddress(real, "SteamAPI_Shutdown") : NULL;
+    if (forward) forward();
+    Log("SteamAPI_Shutdown (real)");
+}
+
+HELLFORGE_API int __cdecl SteamAPI_GetHSteamPipe(void)
+{
+    if (g_bridged) return 1;
+    HMODULE real = Real();
+    typedef int (__cdecl *Fn)(void);
+    Fn forward = real ? (Fn)(void *)GetProcAddress(real, "SteamAPI_GetHSteamPipe") : NULL;
+    return forward ? forward() : 0;
+}
+
+HELLFORGE_API int __cdecl SteamAPI_GetHSteamUser(void)
+{
+    if (g_bridged) return 1;
+    HMODULE real = Real();
+    typedef int (__cdecl *Fn)(void);
+    Fn forward = real ? (Fn)(void *)GetProcAddress(real, "SteamAPI_GetHSteamUser") : NULL;
+    return forward ? forward() : 0;
+}
+
+HELLFORGE_API void __cdecl SteamAPI_UnregisterCallback(void *callback)
+{
+    if (g_bridged) return;
+    HMODULE real = Real();
+    typedef void (__cdecl *Fn)(void *);
+    Fn forward = real ? (Fn)(void *)GetProcAddress(real, "SteamAPI_UnregisterCallback") : NULL;
+    if (forward) forward(callback);
+}
+
+HELLFORGE_API void __cdecl SteamAPI_ManualDispatch_Init(void)
+{
+    if (g_bridged) return;
+    HMODULE real = Real();
+    typedef void (__cdecl *Fn)(void);
+    Fn forward = real ? (Fn)(void *)GetProcAddress(real, "SteamAPI_ManualDispatch_Init") : NULL;
+    if (forward) forward();
+}
+
 typedef int (*LoaderStart)(const wchar_t *plan);
 
 // Sessions with code mods name the HellForge mod loader and its plan (docs/internals.md, "The load chain"). This DLL is the first HellForge code in the
@@ -296,6 +424,14 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
         NetGateStart();
         // the Steam census, when asked for (steam_census.c): what the game asks of Steam
         SteamCensusStart(instance);
+        // bridge mode (docs/steam-bridge.md): connect to the broker instead of loading Valve's DLL
+        wchar_t suffix[64];
+        DWORD suffixLen = GetEnvironmentVariableW(L"HELLFORGE_BRIDGE_PIPE", suffix, 64);
+        if (suffixLen > 0 && suffixLen < 64)
+        {
+            if (GameChannelConnect(&g_bridge, suffix) && GameChannelHello(&g_bridge))
+                g_bridged = true;
+        }
         if (GetEnvironmentVariableW(L"HELLFORGE_MODLOADER", NULL, 0) > 0)
         {
             HANDLE thread = CreateThread(NULL, 0, StartModLoader, NULL, 0, NULL);
