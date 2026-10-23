@@ -1,6 +1,6 @@
 # HellForge roadmap
 
-What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-24 for HellForge 0.3.0-dev.3.
+What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-24 for HellForge 0.3.0-dev.4.
 Nothing here has a date, and stability comes first.
 
 ## At a glance
@@ -19,8 +19,9 @@ Nothing here has a date, and stability comes first.
 | Faster mod sync | Testing | Built for 0.3.0 |
 | Host-leaves fix | Next | Planned |
 | Co-op tools for mods | Next | Planned |
-| Super Earth and Cyberstan missions | Later | Research first |
-| Subfactions | Later | Research first |
+| Cyberstan missions | Testing | Built for 0.3.0-dev.4 (All planets open) |
+| Super Earth missions | Later | Research done (research/cyberstan sketches it) |
+| Subfactions | Testing | Built for 0.3.0-dev.4; a per-session choice comes later |
 | Custom missions | Later | Planned in steps |
 | Progression system | Later | Design not decided |
 | Custom models | Later | Mesh importer works; physics, AI and textures left |
@@ -38,7 +39,7 @@ subfactions, custom missions, and mod content in progression. The [SDK roadmap](
 The rest of this page goes through each item. Contributors will find more detail in [engine-roadmap.md](engine-roadmap.md)
 (session runner, local backend, mod loader, stand-ins) and [sdk-roadmap.md](sdk-roadmap.md) (the mod SDK).
 
-Versions: HellForge 0.3.0-dev.3, engine 0.1.31, mod SDK 15.
+Versions: HellForge 0.3.0-dev.4, engine 0.1.32, mod SDK 15.
 
 ## Done in 0.2.0-beta
 
@@ -134,24 +135,27 @@ only while the live war has them. The plan:
 
 ### Cyberstan missions
 
-Status: planned. Research comes first.
+Status: built for 0.3.0-dev.4, needs testing in game.
 
-In the war data, Cyberstan is the Automatons' home world (planet 260). In "All planets open" it gets an ordinary
-liberation campaign. The research is the same as for Super Earth: find which campaign type, event, regions or effects
-bring up Cyberstan's own missions, then have "All planets open" serve them.
+Cyberstan (planet 260, the Automatons' home world) has missions of its own, but not from its campaign: the game strips
+its map's drop points (game.dll 0x12D88FB) and builds its operations from its 8 Megafactory regions instead ("LIBERATE
+CYBERSTAN", difficulties 4 to 10). The war never served those regions, so it offered none. "All planets open" now serves
+each of an enemy home world's regions as the enemy's, at full health and available (HD2Mods research/cyberstan). To test:
+each region at difficulty 4 and 10, the map and biome loading, the campaign panel, and a friend joining.
 
 ### Subfactions
 
-Status: planned. Research comes first.
+Status: built for 0.3.0-dev.4 (steps 1 and 2), needs testing in game.
 
-When the game picks an enemy to spawn, it only considers roster rows whose subfaction is active for that mission
-(HD2Runtime's spawn research; the pick is at game.dll 0x953150). We don't know yet what makes a subfaction active. The
-most likely answer is planet effects: the frozen war has 128 of them, with over 60 different ids. "All planets open"
-moves planets from one enemy to another but leaves their effects as they were. The plan:
+A mission's subfactions come from its planet's galactic war effects of type 40: each adds an enemy tag (Predator Strain,
+Spore Burst, Rupture, Dragonroach, Hive Lord; Jet Brigade, Incineration Corps, Cyborgs; the Illuminate's four), and the
+spawn director only picks roster rows and squads whose tags are there (0x953150). The game builds its effect table from
+/WarSeason/GalacticWarEffects, which HellForge served empty, so no planet effect worked. The backend now serves the 13
+subfaction effects, so the frozen and live wars get their own subfactions, and "All planets open" gives each sector one
+of its enemy's (or none) by a stable hash, every Illuminate planet one (HD2Mods research/subfactions).
 
-1. Find out what decides a mission's subfaction (planet effects, region settings, or the mission generator), and name
-   every subfaction and effect id.
-2. Have "All planets open" give each planet subfactions that fit its enemy, the way the live war does.
+1. Find out what decides a mission's subfaction. Done.
+2. Have "All planets open" give each planet subfactions that fit its enemy. Done.
 3. Let players choose subfactions per session or per planet, in the launcher or the editor, and let mods set them
    through the SDK ([SDK roadmap, phase 5b](sdk-roadmap.md#events-hooks-and-registries-phase-5b)). A subfaction is
    set up with the mission and never swapped in per spawn.

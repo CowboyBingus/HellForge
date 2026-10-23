@@ -341,7 +341,7 @@
                            Text="A snapshot of the real war from 14 October 2026, built into HellForge: the same planets and campaigns every session, with no internet needed." />
                 <RadioButton x:Name="WarOpenRadio" GroupName="war" Content="All planets open" />
                 <TextBlock Classes="muted" TextWrapping="Wrap" Margin="28,0,0,0"
-                           Text="Every planet but Super Earth is a liberation campaign you can drop on. Planets Super Earth holds in the frozen war go to the enemy whose front lies that way from Super Earth, so each faction holds about a third of the galaxy. Built from the frozen war, so it is the same on every PC and needs no internet. Applies to the next session." />
+                           Text="Every planet but Super Earth is a liberation campaign you can drop on. Planets Super Earth holds in the frozen war go to the enemy whose front lies that way from Super Earth, so each faction holds about a third of the galaxy. Sectors get their enemy's subfactions (Predator Strain, Jet Brigade...), and Cyberstan's Megafactories can be attacked. Built from the frozen war, so it is the same on every PC and needs no internet. Applies to the next session." />
               </StackPanel>
             </Border>
 

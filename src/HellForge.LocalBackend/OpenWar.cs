@@ -22,6 +22,12 @@ namespace HellForge.LocalBackend;
 // and loses another enemy's; each sector then gets one of its enemy's subfactions or none, picked by a stable hash of the
 // sector's name (the same on every machine of a lobby, which each build their missions' tags themselves). An Illuminate
 // sector always gets one: every Illuminate squad needs an Illuminate tag (HD2Mods research/subfactions).
+//
+// An enemy's home world (warInfo homeWorlds: Cyberstan, the Automatons') has no operations of its own from its campaign:
+// the game strips its map's drop points (game.dll 0x12D88FB), and its operations come from its regions instead (the
+// Megafactories: operation type 13, "LIBERATE CYBERSTAN", difficulties 4 to 10; the region generator 0x11E44D0). So each of
+// its warInfo regions gets a status row: its enemy's, at full health (flags 1 with health 0 reads as taken) and available
+// (HD2Mods research/cyberstan). Not tested in game.
 public static class OpenWar
 {
     public const string Mode = "open";
@@ -151,6 +157,32 @@ public static class OpenWar
             if (pick < choices.Count) effects.Add((JsonNode)new JsonObject { ["index"] = index, ["galacticEffectId"] = choices[pick] });
         }
         node["planetActiveEffects"] = effects;
+        // an enemy home world's regions: its operations (Cyberstan's Megafactories)
+        var enemyHomes = new HashSet<int>();
+        if (warInfo.TryGetProperty("homeWorlds", out var worlds))
+            foreach (var h in worlds.EnumerateArray())
+                if (h.GetProperty("race").GetInt32() != SuperEarth)
+                    foreach (var i in h.GetProperty("planetIndices").EnumerateArray()) enemyHomes.Add(i.GetInt32());
+        if (enemyHomes.Count > 0 && warInfo.TryGetProperty("planetRegions", out var regionInfos))
+        {
+            var rows = node["planetRegions"] as JsonArray ?? [];
+            var kept = new JsonArray();
+            foreach (var r in rows.ToList())
+                if (r?["planetIndex"] is not { } at || !enemyHomes.Contains((int)at)) { rows.Remove(r); kept.Add(r); }
+            foreach (var region in regionInfos.EnumerateArray())
+            {
+                var index = region.GetProperty("planetIndex").GetInt32();
+                if (!enemyHomes.Contains(index) || !now.TryGetValue(index, out var holder) || holder == SuperEarth) continue;
+                var health = region.GetProperty("maxHealth").GetInt64();
+                kept.Add((JsonNode)new JsonObject
+                {
+                    ["planetIndex"] = index, ["regionIndex"] = region.GetProperty("regionIndex").GetInt32(), ["owner"] = holder,
+                    ["health"] = health, ["regerPerSecond"] = (float)(health / 360000.0), ["availabilityFactor"] = 1,
+                    ["isAvailable"] = true, ["players"] = 0,
+                });
+            }
+            node["planetRegions"] = kept;
+        }
         using var document = JsonDocument.Parse(node.ToJsonString());
         return document.RootElement.Clone();
     }

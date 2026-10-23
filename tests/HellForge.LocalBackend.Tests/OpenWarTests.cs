@@ -47,6 +47,17 @@ static class OpenWarTests
         var illuminate = owner.Where(o => o.Value == 4).Select(o => o.Key).ToList();
         check(illuminate.All(i => onPlanet.Any(e => e.Index == i)), "Every Illuminate planet has an Illuminate subfaction.");
         check(owner[171] == 2 && onPlanet.Contains((171, 1243)), "A frozen-war subfaction of the planet's enemy stays (Predator Strain on 171).");
+        // Cyberstan (the Automatons' home world): its 8 Megafactory regions are served available, at full health, with its
+        // campaign; the frozen war's other region rows stay
+        var regionInfos = info.GetProperty("planetRegions").EnumerateArray().Where(r => r.GetProperty("planetIndex").GetInt32() == 260)
+            .ToDictionary(r => r.GetProperty("regionIndex").GetInt32(), r => r.GetProperty("maxHealth").GetInt64());
+        var cyberstan = open.GetProperty("planetRegions").EnumerateArray().Where(r => r.GetProperty("planetIndex").GetInt32() == 260).ToList();
+        check(owner[260] == 3 && regionInfos.Count == 8 && cyberstan.Count == 8 && cyberstan.All(r => r.GetProperty("owner").GetInt32() == 3 &&
+              r.GetProperty("isAvailable").GetBoolean() && r.GetProperty("health").GetInt64() == regionInfos[r.GetProperty("regionIndex").GetInt32()] &&
+              r.EnumerateObject().Count() == 8) && campaigns.Any(c => c.GetProperty("planetIndex").GetInt32() == 260),
+            "Cyberstan's 8 regions are available, the Automatons', at full health, with its campaign.");
+        check(open.GetProperty("planetRegions").GetArrayLength() == frozen.GetProperty("planetRegions").GetArrayLength() + 8,
+            "The other planets' region rows stay.");
         foreach (var faction in new[] { 2, 3 })
             check(onPlanet.Where(e => owner[e.Index] == faction).Select(e => e.Id).Distinct().Count() >= 2 &&
                   owner.Count(o => o.Value == faction) > onPlanet.Count(e => owner[e.Index] == faction),
