@@ -45,7 +45,7 @@ public sealed class ModSync : IAsyncDisposable
     // Free space a download leaves on the drive besides its own bytes.
     public const long SpareDisk = 256L << 20;
     public static readonly TimeSpan GrantTime = TimeSpan.FromMinutes(10), RequestTimeout = TimeSpan.FromSeconds(30);
-    public const string StopSignal = "stop-observation.signal", StopReason = "mod-sync", OfferFile = "mod-sync.json";
+    public const string StopSignal = "stop-observation.signal", StopReason = "mod-sync", OfferFile = ModSyncOffer.FileName;
 
     readonly IPeerTransport transport;
     readonly string modsFolder;
@@ -74,6 +74,24 @@ public sealed class ModSync : IAsyncDisposable
         // downloads an earlier session left unfinished (it stopped mid-download)
         SyncedStore.Clean(modsFolder);
         serving = Task.Run(ServeAsync);
+        launcherAnswers = Task.Run(TakeLauncherAnswersAsync);
+    }
+
+
+    // A launcher's answer (ModSyncOffer.Answer), for a game without the in-game editor: looked for once a second while an
+    // offer is open, and taken as the game's would be.
+    async Task TakeLauncherAnswersAsync()
+    {
+        while (!stop.IsCancellationRequested)
+        {
+            try { await Task.Delay(1000, stop.Token); }
+            catch (OperationCanceledException) { return; }
+            bool open;
+            lock (gate) open = offer != null;
+            if (!open || ModSyncOffer.TakeAnswer(evidenceDirectory) is not { } parts) continue;
+            log($"Mod sync: the launcher answered {parts[2]} to offer {parts[1]}.");
+            Answer(parts);
+        }
     }
 
     // Where the offer is shown: the game (LiveSyncDisplay) or a test.
@@ -100,6 +118,9 @@ public sealed class ModSync : IAsyncDisposable
         try { await serving; }
         catch (OperationCanceledException) { }
         catch (Exception error) { log("Mod sync: the host's worker stopped with an error: " + error); }
+        try { await launcherAnswers; }
+        catch (OperationCanceledException) { }
+        catch (Exception error) { log("Mod sync: the launcher's answers stopped with an error: " + error); }
         stop.Dispose();
     }
 
@@ -131,7 +152,7 @@ public sealed class ModSync : IAsyncDisposable
     readonly Dictionary<ulong, int> queued = [];
     readonly Channel<(ulong Peer, Frame Frame)> requests = Channel.CreateUnbounded<(ulong, Frame)>(new UnboundedChannelOptions { SingleReader = true });
     readonly Dictionary<ulong, long> peerNext = [];
-    readonly Task serving;
+    readonly Task serving, launcherAnswers;
     long totalNext;
 
     // What one grant may download: the whole set twice (a retry after a failed check), and a little over.
