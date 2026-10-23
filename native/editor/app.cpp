@@ -2478,7 +2478,12 @@ struct
     HfSyncState state{}; /* as last read */
     std::vector<HfSyncMod> mods;
     int index = 0;       /* the selected mod (keyboard) */
+    double shownAt = 0;  /* when it last appeared or turned: its answers wait SYNC_ARM seconds */
 } g_sync;
+/* A key or click meant for the game (Enter in chat, a shot) when the prompt pops up must not answer it: its buttons and
+ * keys wait this long after it appears or its state turns. Esc, which only says no or hides it, works at once. */
+const double SYNC_ARM = 1.0;
+bool SyncArmed() { return ImGui::GetTime() - g_sync.shownAt >= SYNC_ARM; }
 bool g_windowShown; /* Opened() to Closed() */
 
 bool HasSync() { return g_host.api->size >= offsetof(HfApi, sync_answer) + sizeof(void*) && g_host.api->sync_state != nullptr; }
@@ -2505,6 +2510,7 @@ void ShowSyncAlone(bool on)
     g_sync.alone = on;
     g_host.modal(on);
     ForgetKeys();
+    if (on) g_sync.shownAt = ImGui::GetTime();
     sounds::EditorOpen(on);
     g_host.api->log(g_host.mod, on ? "editor: the mod sync prompt shows over the game, the window closed" : "editor: the mod sync prompt goes");
     if (on) Sound(sounds::SHOW);
@@ -2563,6 +2569,7 @@ void ReadSync()
     g_sync.sent = false;
     if (now.state == HF_SYNC_NONE) { if (g_sync.on) CloseSync(); return; }
     if (now.state == HF_SYNC_DOWNLOADING) return;
+    g_sync.shownAt = ImGui::GetTime();
     g_host.api->log(g_host.mod, "editor: mod sync %u from %s: %u mod(s), %llu bytes to download; the dialog opens", now.version,
         now.host[0] ? now.host : "the host", now.mods, (unsigned long long)now.bytes);
     bool fresh = !g_sync.on;
@@ -2623,11 +2630,12 @@ void SyncKeys()
     int n = (int)g_sync.mods.size();
     if (Pressed(ImGuiKey_UpArrow)) g_sync.index = std::max(0, g_sync.index - 1);
     if (Pressed(ImGuiKey_DownArrow)) g_sync.index = std::min(std::max(0, n - 1), g_sync.index + 1);
-    if (ImGui::IsKeyPressed(ImGuiKey_B, false) && g_sync.index < n && SyncBlockable(g_sync.mods[g_sync.index]))
+    bool armed = SyncArmed();
+    if (armed && ImGui::IsKeyPressed(ImGuiKey_B, false) && g_sync.index < n && SyncBlockable(g_sync.mods[g_sync.index]))
         AnswerSync(HF_SYNC_BLOCK, g_sync.mods[g_sync.index].id);
     uint32_t answer;
     const char* primary = SyncPrimary(&answer);
-    if ((ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) && primary[0] && !g_sync.sent)
+    if (armed && (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) && primary[0] && !g_sync.sent)
         AnswerSync(answer);
     if (!ImGui::IsKeyPressed(ImGuiKey_Escape, false)) return;
     if (g_windowShown) g_host.close(); /* Closed() answers */
@@ -2680,7 +2688,7 @@ void DrawSync()
         g_cv.Text(what, right + 2, ry + rh / 2, T(SZ_SMALL, SyncActionColour(mod.action), ui::BODY, ui::LEFT, 260, 12));
     };
     o.after = [&](int i, float rx, float ry, float rw, float rh) {
-        if (SyncBlockable(g_sync.mods[i]) && Button("BLOCK", rx + rw - 102, ry + (rh - 24) / 2, 78, 24, DANGER, ui::Id("syncblock", (uint64_t)i), 12))
+        if (SyncBlockable(g_sync.mods[i]) && Button("BLOCK", rx + rw - 102, ry + (rh - 24) / 2, 78, 24, DANGER, ui::Id("syncblock", (uint64_t)i), 12) && SyncArmed())
             AnswerSync(HF_SYNC_BLOCK, g_sync.mods[i].id);
     };
     List(o);
@@ -2704,7 +2712,7 @@ void DrawSync()
     if (second[0])
     {
         bx -= 150;
-        if (Button(second, bx, y + h - 66, 150, 30, NORMAL, ui::Id("syncsecond"), 11)) AnswerSync(HF_SYNC_DECLINE);
+        if (Button(second, bx, y + h - 66, 150, 30, NORMAL, ui::Id("syncsecond"), 11) && SyncArmed()) AnswerSync(HF_SYNC_DECLINE);
         bx -= 12;
     }
     if (primary[0])
@@ -2712,7 +2720,7 @@ void DrawSync()
         float pw = std::max(150.0f, g_cv.Measure(primary, SZ_TAB, ui::TITLE) + 40);
         bx -= pw;
         if (Button(g_sync.sent ? (answer == HF_SYNC_RESTART ? "RESTARTING..." : "STARTING...") : primary, bx, y + h - 66, pw, 30,
-                g_sync.sent ? DISABLED : bad ? NORMAL : PRIMARY, ui::Id("syncprimary"), 11))
+                g_sync.sent || !SyncArmed() ? DISABLED : bad ? NORMAL : PRIMARY, ui::Id("syncprimary"), 11) && SyncArmed())
             AnswerSync(answer);
     }
     std::string keys = "\xE2\x86\x91\xE2\x86\x93 select   B block the mod   ";
