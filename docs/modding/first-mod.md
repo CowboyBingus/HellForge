@@ -243,6 +243,10 @@ Players drop the zip into their `mods` folder as it is, or unpacked, but not bot
 neither. They need no DLL and no tools setup: their HellForge downloads Zig by itself the first time and builds the
 sources. Friends who play together need the same gameplay mods; the Mods page shows the modlist code to compare.
 
+Once the mod has a page (GitHub, Nexus Mods), add its address to the manifest as `"url": "https://..."`. The Mods page
+links it, and players who join a friend running your mod get a GET IT button for it in game
+([tools and sharing](tools.md#players-who-join-you)).
+
 A code mod runs inside the game with the player's permissions, so players should only enable code mods from people they
 trust.
 

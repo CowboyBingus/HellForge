@@ -29,6 +29,7 @@ the mod's kind, and one mod can be several kinds at once (code with a data spec,
   "version": "1.0.0",
   "description": "What it changes, in a sentence or two.",
   "icon": "images/icon.png",
+  "url": "https://github.com/yourname/liberator-tweaks",
   "gameplay": true,
   "code": { "dll": "liberator_tweaks.dll", "sdk": 14 }
 }
@@ -41,6 +42,7 @@ the mod's kind, and one mod can be several kinds at once (code with a data spec,
 | `name`, `description` | what players see on the Mods page |
 | `version` | raise it for every release; friends compare it |
 | `icon` | optional: a PNG or JPEG in the mod folder; square looks best |
+| `url` | optional: where players get the mod, an `https://` address of at most 200 characters (no `http://`, user name, port or spaces). The Mods page links it, and the in-game MOD SYNC prompt shows it as GET IT to a joiner who has to install the mod themselves. Any other address is left out; a bundled mod's is never shown |
 | `gameplay` | default `true`: friends must run the same gameplay mods. Set `false` for cosmetic mods, which are not compared. A mod with stats or `componentWrites` is always gameplay; one holding only Lua patches is always cosmetic |
 | `code.dll` | the DLL's file name; HellForge builds it from `src/` |
 | `code.sdk` | the SDK version the mod needs (see [compatibility](#compatibility)) |
