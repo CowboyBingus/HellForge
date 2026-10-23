@@ -22,6 +22,7 @@ try
             mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>] [--modset <file>] [--sync <mod sync session file>]
             build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> [--steam-data <Steam's game data folder>] --out <folder>]
             check-stats --mod <mod folder>
+            mod-hash --mod <mod folder>
             sdk-headers --repo <HellForge source folder> [--mode write | check]
             new-mod --id <owner.mod-name> --name <name> (--install <folder> | --out <folder>)
             build-mod --mod <mod folder>
@@ -50,6 +51,8 @@ try
             Steam-validated install's depot files and hashes (names and hashes only) for HellForge to target.
             build-data builds a mod's hellforge-data.json from the game data: into the installation's cache (as a
             session does), or into --out; with neither it only checks the spec.
+            mod-hash prints a gameplay mod's content hash, the one mod sync compares, its class (content, raw, code) and
+            the entry data/verified-mods.json takes for it; "reviewed" stays empty until a reviewer fills it in.
             sdk-headers generates the mod SDK's typed headers and the loader's field table from mappings/; check
             only lists the files that differ (exit code 1 if any).
             new-mod makes a code mod from the SDK's template: in the installation's mods folder (built there, it is
@@ -83,7 +86,7 @@ try
         "migrate" => ["--install", "--from", "--appdata"],
         "mods-stage" => ["--install", "--plan", "--logs", "--progress", "--modset", "--sync"],
         "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--out"],
-        "check-stats" => ["--mod"],
+        "check-stats" or "mod-hash" => ["--mod"],
         "sdk-headers" => ["--repo", "--mode"],
         "editor-data" => ["--out", "--install", "--game"],
         "new-mod" => ["--id", "--name", "--install", "--out"],
@@ -266,6 +269,17 @@ try
                 // the session's mods with network type edits (after a mod sync, the host's), for the session's native applier
                 nativeFolders = active.Where(m => m.NetworkFieldTypes.Count > 0).Select(m => Path.GetFullPath(m.Folder))
             };
+            break;
+        }
+        case "mod-hash":
+        {
+            var hashed = ModCatalog.Parse(Path.GetFullPath(Required("--mod")), EntityProfile.Current);
+            if (!ModCatalog.Counted(hashed)) throw new InvalidDataException($"{hashed.Id} is not a gameplay mod mod sync compares (a cosmetic mod, or Local Stats).");
+            var files = ModSets.Files(hashed);
+            var hash = ModSets.Hash(ModSets.Block(hashed, files));
+            var kind = ModSets.ClassOf(hashed);
+            result = new { hashed.Id, hashed.Name, hashed.Version, hash, @class = ModSets.ClassName(kind), needsVerified = ModSets.NeedsVerified(kind),
+                files = files.Count, bytes = files.Sum(f => f.Size), entry = new { id = hashed.Id, name = hashed.Name, version = hashed.Version, hash, reviewed = "" } };
             break;
         }
         case "check-stats":

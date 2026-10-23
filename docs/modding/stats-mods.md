@@ -67,6 +67,9 @@ is a working example.
       "offset": "0x0", "type": "u32", "expect": 1000, "value": 1500 } ] }
   ```
 
+  A raw line has no reviewed range, so a mod with one does not download by itself through mod sync: it needs the
+  verified list ([tools.md](tools.md#mod-sync-and-the-verified-list)). Named fields do.
+
 ## The in-game editor and Local Stats
 
 The in-game editor (F8) edits every field live, showing its default and where its value comes from. APPLY (F9) puts the

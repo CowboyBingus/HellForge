@@ -46,6 +46,7 @@ HellForge.Cli new-mod --id yourname.my-mod --name "My Mod" --install <installati
 HellForge.Cli build-mod --mod <installation>/mods/my-mod                             # compile now
 HellForge.Cli package-mod --mod <installation>/mods/my-mod                           # zip it to share
 HellForge.Cli check-stats --mod <folder>                                             # check a stats mod
+HellForge.Cli mod-hash --mod <folder>                                                # its content hash, for mod sync
 HellForge.Cli build-data --mod <folder> --install <installation>                     # build a data spec
 ```
 
@@ -96,7 +97,25 @@ Friends then compare the DLL itself, so everyone needs the identical file.
    Their HellForge builds it, and they need no tools of their own.
 
 Friends who play together need the same gameplay mods with identical files, so share the zip rather than a folder that
-picked up leftovers. The SDK, template and examples are MIT No Attribution, so your mod is yours under any licence you
+picked up leftovers.
+
+## Mod sync and the verified list
+
+When players join a lobby whose host runs your mod, mod sync can download it for them
+([mods.md](../mods.md#playing-with-other-mods)). What downloads by itself depends on what the mod is made of:
+- **Without review:** data specs, stats files with named fields only, and `networkFieldTypes`. HellForge checks these
+  itself.
+- **Only when verified:** code (a DLL, sources or Lua), binary data patches (`data/`), a stats file's `raw` section and
+  `componentWrites`. HellForge cannot check these, so each exact version of the mod must be on the verified list,
+  `data/verified-mods.json`, which ships with each HellForge release. Until then, players install it themselves.
+
+To get a version on the list:
+1. Release it as above, and run `HellForge.Cli mod-hash --mod <folder>` on the released files (a zip and its unpacked
+   folder give the same hash). It prints the mod's class and the entry for the list.
+2. Open a pull request to HellForge that adds the entry to `data/verified-mods.json`, with a link to the mod's sources
+   and release. Leave `reviewed` empty: the maintainer who reviews the sources fills it in with their name and the date.
+   A list with an empty `reviewed` does not load, so an unreviewed entry cannot ship.
+3. Every new version needs a new entry, since the hash covers every file the modlist code counts. The SDK, template and examples are MIT No Attribution, so your mod is yours under any licence you
 choose.
 
 ## Where to go next
