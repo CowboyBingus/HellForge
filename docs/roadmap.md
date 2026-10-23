@@ -195,8 +195,11 @@ The in-game editor should eventually edit every field the HD2R Editor does
 1. Weapons and the rest of the player's kit. Weapons, stratagems, backpacks, vehicles, boosters, the Helldiver and
    armor are mostly ported. Still to do: beam conversion, the HD2R rows that have no HellForge field yet (a coverage
    count will show which), and checking in game when each field takes effect.
-2. Enemies: their stats, damage zones and attacks, spawn rosters and compositions. More than half of the HD2R Editor's
-   roughly 20,700 fields are in this step.
+2. Enemies: their stats, damage zones and attacks, spawn rosters and compositions. Being built on the `editor-content`
+   branch: the in-game editor now has the HD2R Editor's Enemies pages (Terminids, Automatons, Illuminate, Structures,
+   Other Entities) with health, armor, damage zones and attacks for about 1,170 entities, about 17,200 fields. Next: the
+   fields the engine doesn't map yet, then spawn rosters and compositions. The Helldiver's main health and the Solo
+   Silo's health come with it.
 3. Structures, with their demolition and destruction settings, and mission settings (the other Spawning & Destruction
    pages).
 

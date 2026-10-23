@@ -11,8 +11,9 @@ static class EditorTests
             var catalog = EditorCatalog.Build();
             check(catalog["format"]!.GetValue<int>() == EditorCatalog.Format && catalog["build"]!.GetValue<string>() == StatsSchema.Current.Build, "Format and build.");
             var navs = catalog["categories"]!.AsArray().Select(c => c!["id"]!.GetValue<string>()).ToList();
-            check(navs.SequenceEqual(["primary", "secondary", "throwables", "offensive", "defensive", "support", "backpacks", "vehicles", "mission", "boosters", "helldiver", "perks", "statuses", "explosions", "projectiles", "damage"]),
-                "Weapons, stratagems, boosters, the Helldiver: " + string.Join(", ", navs));
+            check(navs.SequenceEqual(["primary", "secondary", "throwables", "offensive", "defensive", "support", "backpacks", "vehicles", "mission", "boosters", "helldiver", "perks",
+                    "terminids", "automatons", "illuminate", "structures", "entities", "statuses", "explosions", "projectiles", "damage"]),
+                "Weapons, stratagems, boosters, the Helldiver, the enemies: " + string.Join(", ", navs));
             var objects = catalog["objects"]!.AsArray().Select(o => o!.AsObject()).ToList();
             foreach (var nav in navs)
                 check(objects.Count(o => o["category"]!.GetValue<string>() == nav && o["id"]!.GetValue<string>() != "helldiver/armor-perks") == StatsCatalog.Items.Count(i => i.Nav == nav), $"Every {nav} item is listed.");
@@ -146,12 +147,13 @@ static class EditorTests
                 "An attachment's field is read through get_stat: kind, component, resource, record.");
             var targets = StatsSchema.Current.Targets;
             var helldiver = targets["helldiver"]["Helldiver"].Fields;
-            check(helldiver.Count == 53 && helldiver["helldiver.stamina.cost_jump"] is { Component: "AvatarComponentData", Offset: 76 } &&
+            check(helldiver.Count == 55 && helldiver["entity.health"] is { Component: "HealthComponentData", Record: 76, Offset: 0 } &&
+                helldiver["helldiver.stamina.cost_jump"] is { Component: "AvatarComponentData", Offset: 76 } &&
                 helldiver["arm_left:zone.health"] is { Component: "HealthComponentData", Record: 76, Offset: 1856, Storage: "i32", Section: "Left arm" } &&
                 helldiver["head:zone.damage_multiplier"].Choices.Any(c => c.Label == "Critical") &&
                 helldiver["helldiver.supply.stims_from_supply"].Component == "InventoryComponentData", "HD2R Editor's Helldiver page.");
             check(StatsCatalog.Sections(StatsCatalog.Items.Single(i => i.Nav == "helldiver")).Select(s => s.Title)
-                .SequenceEqual(["Speed", "Stamina", "Player refill", "Damage", "Damage Zones"]), "Its sections.");
+                .SequenceEqual(["Health", "Speed", "Stamina", "Player refill", "Damage", "Damage Zones"]), "Its sections (main health first).");
             check(targets["stratagems"]["LIFT-850 Jump Pack"].Fields["payload.spawn_count"] is { Component: "HellpodRackComponentData", Offset: 556, Max: 4 } &&
                 targets["stratagems"]["Orbital Laser"].Fields["orbital.duration"] is { Component: "OrbitalAbilityComponentData", Resource: "0xEC3575E7A93793BB", Offset: 460 } &&
                 targets["boosters"]["Experimental Infusion"].Fields["status.incoming_damage_scale"] is { Kind: "StatusMultiplier", Component: "2", Offset: 4 },
@@ -160,6 +162,37 @@ static class EditorTests
             check(liberatorMelee["zone_1:melee.volume_x"] is { Kind: "MeleeHitVolume", Offset: 40, Shared: true } volume && volume.Record > 0x3000000 &&
                 LiveApplies.Of(volume)?.When == "now" && targets["weapons"]["CQC-30 Stun Baton"].Fields["tuning:melee.stamina_cost"].Component == "MeleeWeaponComponentData",
                 "Melee: a weapon's hit volumes (static in game.dll, by RVA; live) and a melee weapon's stamina cost.");
+        });
+
+        test("The HD2R Editor's Enemies pages: every entity with the fields the engine writes, by HD2R row id; deployed entities on their stratagem's page", () =>
+        {
+            var enemies = StatsSchema.Current.Targets["enemies"];
+            check(enemies.Count > 1000 && enemies.Values.Count(e => e.Family == "terminids") > 30 && enemies.Values.Count(e => e.Family == "automatons") > 60,
+                "Over a thousand entities, each on its faction's (or Structures', or Other entities') page: " + enemies.Count);
+            check(enemies["Bile Titan"].Fields["entity::entity.health"] is { Kind: "component", Component: "HealthComponentData", Resource: "0x9E2E17F2CCCCAFDD", Offset: 0, Unverified: false }
+                && enemies["Bile Titan"].Label == "Bile Titan - Strider", "An enemy's main health: its own HealthComponent record, proven in game (HD2Runtime's evidence).");
+            check(enemies.Values.SelectMany(e => e.Fields).All(f => SdkMappings.Current.FieldAt(f.Value.Kind == "component" ? f.Value.Component : f.Value.Kind, f.Value.Offset, f.Value.Storage) != null),
+                "Every field offered is one the engine maps (mappings/components.json).");
+            check(!enemies.ContainsKey("avatar_helldiver"), "The Helldiver's own entity is the Helldiver page's, not an enemy.");
+            var silo = StatsCatalog.Items.Single(i => i.Id == "stratagems/MS-11 Solo Silo");
+            var siloRows = StatsCatalog.Sections(silo).SelectMany(s => s.Groups).SelectMany(g => g.Rows).ToList();
+            check(silo.Parts.Any(p => p is { Category: "enemies", Target: "weapon_rack_mini_missile_silo", Title: "Rack" }) &&
+                  silo.Parts.Any(p => p is { Category: "enemies", Target: "mini_missile_silo", Title: "Missile" }) &&
+                  !StatsCatalog.Items.Any(i => i.Nav == "entities" && i.Parts.Any(p => p.Target == "mini_missile_silo")),
+                "The Solo Silo's rack and missile are parts of its page, not Other entities.");
+            check(siloRows.GroupBy(r => StatsCatalog.LinkKey(r.Field)).All(g => g.Count() == 1) &&
+                  StatsCatalog.Sections(silo).SelectMany(s => s.Groups).Any(g => g.Title == "Rack · Health & Armor"),
+                "No bytes twice on its page (the missile's attack is the weapon's explosion), and each part's groups say whose.");
+            var catalog = EditorCatalog.Build();
+            var titan = catalog["objects"]!.AsArray().Select(o => o!.AsObject()).Single(o => o["id"]!.GetValue<string>() == "enemies/Bile Titan");
+            var health = titan["page"]!.AsArray().SelectMany(c => c!["subs"]!.AsArray()).SelectMany(s => s!["rows"]!.AsArray()).First(r => r!["key"]!.GetValue<string>() == "entity::entity.health")!;
+            check(titan["category"]!.GetValue<string>() == "terminids" && health["hd2r"]![0]!.GetValue<string>() == "en|Bile Titan|entity::entity.health",
+                "In the in-game editor's catalogue under Terminids, its rows keyed as HD2R Editor presets name them.");
+            var saved = StatsData.Parse("""{"format":1,"enemies":{"Bile Titan":{"entity::entity.health":7000}},"helldiver":{"Helldiver":{"entity.health":200}}}""",
+                EntityProfile.Current);
+            check(saved.Any(e => e is { Component: "HealthComponentData", Resource: 0x9E2E17F2CCCCAFDD, Offset: 0, Value: 7000 }) &&
+                  saved.Any(e => e is { Component: "HealthComponentData", Resource: 0x4D1C334D294DFA97, Record: 76, Offset: 0, Value: 200 }),
+                "Saved in Local Stats, an enemy's and the Helldiver's main health come back at the next boot: " + string.Join(", ", saved.Select(e => e.Key)));
         });
 
         test("The editor's icons are the game's sprite pixels: block formats decoded exactly, written in the editor's format", () =>

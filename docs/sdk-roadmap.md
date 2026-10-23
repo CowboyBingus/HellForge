@@ -65,8 +65,12 @@ Full parity with the HD2R Editor, in three steps:
 
 1. The player's kit, mostly ported. Left: beam conversion, the HD2R rows with no HellForge field yet (a coverage count
    says which), and armor perks in co-op (solo only today).
-2. Enemies: stats, damage zones, attacks, spawn rosters and compositions. Over half of the HD2R Editor's roughly 20,700
-   fields are here.
+2. Enemies: stats, damage zones, attacks, spawn rosters and compositions. Started: every entity's page with the fields
+   the engine maps (`mappings/entities.json`, `scripts/ExportEntities.py`; about 17,200 of the HD2R Editor's editable
+   rows). Left: the HealthComponent, Unit, AiSpawner and other offsets the engine does not map yet (the exporter lists
+   them with a third path), spawn rosters and compositions (game.dll tables, not components: they need a resolver of
+   their own beside `difficulty.c`), and in co-op, enemy edits that follow the host even when every player keeps their
+   own.
 3. Structures (demolition and destruction settings) and mission settings.
 
 ### Events, hooks and registries (phase 5b)
