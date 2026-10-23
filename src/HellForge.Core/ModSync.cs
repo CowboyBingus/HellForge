@@ -12,11 +12,13 @@ namespace HellForge.Core;
 // set (ModSet); the joiner's backend plans the difference (ModSyncPlan), downloads what it may from the host's backend
 // into the synced store (SyncedStore) and restarts the session with the host's set (ModSyncSession). What a joiner takes
 // from a host depends on the mod's class, which the joiner reads from the bytes it received, never from the host:
-//   content  what HellForge checks itself: data specs (built from the joiner's own game files), schema stats (named fields
-//            within their reviewed ranges) and network field types (integer widenings): from any host;
+//   content  what HellForge checks itself: data specs it checks all of (built from the joiner's own game files: icons, and
+//            copies and includes of the reviewed types with only HellForge's own edits; DataSpecs.Unchecked), schema
+//            stats (named fields within their reviewed ranges) and network field types (integer widenings): from any host;
 //   code     a DLL, sources HellForge compiles, or a patch holding Lua: only when VerifiedMods lists its exact content;
 //   raw      bytes HellForge cannot check, which reach the game's own parsers or any field: binary data patches (data/),
-//            raw stats lines and componentWrites: only when VerifiedMods lists its exact content, as code;
+//            data specs with "replace" or other resource types, raw stats lines and componentWrites: only when
+//            VerifiedMods lists its exact content, as code;
 //   bundled  a mod HellForge ships (the in-game editor): never downloaded; a different one is another HellForge version.
 // Every host gets the same rule, a Steam friend too.
 public enum ModClass { Content, Code, Bundled, Raw }
@@ -158,20 +160,23 @@ public static class ModSets
     public static string ContentHash(ModManifest mod) => Hash(Block(mod, Files(mod)));
 
     // Code runs in the game: a DLL (or sources HellForge builds into one), or a patch with Lua scripts. Raw is what reaches
-    // the game unchecked: binary data patches, componentWrites, and raw stats lines (StatsData's "raw" section, the only
-    // stats edits that carry an expected vanilla value rather than a reviewed range).
+    // the game unchecked: binary data patches, componentWrites, raw stats lines (StatsData's "raw" section, the only
+    // stats edits that carry an expected vanilla value rather than a reviewed range), and a data spec HellForge does not
+    // check all of (DataSpecs.Unchecked: a "replace" writes any 8 bytes into a copied resource; a type outside the
+    // reviewed ones, lua among them, is not HellForge's to judge).
     public static ModClass ClassOf(ModManifest mod) =>
         BundledMods.ShippedFiles(mod.Folder) != null ? ModClass.Bundled
         : mod.HasCode || mod.Lua ? ModClass.Code
-        : mod.DataFiles.Count > 0 || mod.ComponentWrites.Count > 0 || mod.Stats.Any(e => e.Expect != null) ? ModClass.Raw
+        : mod.DataFiles.Count > 0 || mod.ComponentWrites.Count > 0 || mod.UncheckedSpec != null || mod.Stats.Any(e => e.Expect != null) ? ModClass.Raw
         : ModClass.Content;
 
     // Downloads only when the verified list names its exact content.
     public static bool NeedsVerified(ModClass kind) => kind is ModClass.Code or ModClass.Raw;
 
-    // What a download already shows before the rest of its bytes: the host's file list, its manifest, and its stats file
-    // (null when it lists none). Code or Raw when they show it, null otherwise: the whole mod decides then (ClassOf).
-    public static ModClass? Declared(IEnumerable<string> paths, string manifestJson, string? statsJson)
+    // What a download already shows before the rest of its bytes: the host's file list, its manifest, its stats file and
+    // its data spec (null when it lists none). Code or Raw when they show it, null otherwise: the whole mod decides then
+    // (ClassOf).
+    public static ModClass? Declared(IEnumerable<string> paths, string manifestJson, string? statsJson, string? specJson = null)
     {
         using var manifest = JsonDocument.Parse(manifestJson);
         var root = manifest.RootElement;
@@ -180,6 +185,12 @@ public static class ModSets
         if (paths.Any(p => p.StartsWith("data/", StringComparison.OrdinalIgnoreCase))) return ModClass.Raw;
         if (root.TryGetProperty("native", out var native) && native.ValueKind == JsonValueKind.Object && native.TryGetProperty("componentWrites", out _))
             return ModClass.Raw;
+        if (specJson != null)
+        {
+            // a spec that does not parse is left to the whole mod's check, which refuses it
+            try { if (DataSpecs.Unchecked(DataSpecs.FromJson(specJson)) != null) return ModClass.Raw; }
+            catch (InvalidDataException) { }
+        }
         if (statsJson == null) return null;
         using var stats = JsonDocument.Parse(statsJson);
         return stats.RootElement.ValueKind == JsonValueKind.Object && stats.RootElement.TryGetProperty("raw", out _) ? ModClass.Raw : null;
@@ -198,7 +209,7 @@ public static class ModSets
 
     // Why a mod of this class needs the verified list, for the player.
     public static string Unchecked(ModClass kind) => kind == ModClass.Raw
-        ? "carries data HellForge cannot check (data patches, raw stats or component writes)"
+        ? "carries data HellForge cannot check (data patches, raw stats, component writes or a data spec's replaced values)"
         : "runs code (a DLL, sources or Lua)";
 
     internal static bool Hex(string text, int length) => text.Length == length && text.All(char.IsAsciiHexDigitLower);
@@ -247,11 +258,13 @@ public static class VerifiedMods
 public sealed class ModLocator(string modsFolder, EntityProfile? profile = null)
 {
     readonly Dictionary<string, List<(string Folder, string Hash)>> byId = new(StringComparer.Ordinal);
+    // The store's answers, each with its record's time: hashed again only when the record changed (stored again or gone).
+    readonly Dictionary<(string Id, string Hash), (DateTime Stamp, string? Folder)> synced = [];
     List<ModManifest>? installed;
 
     public string? Find(string id, string hash)
     {
-        if (SyncedStore.Find(modsFolder, id, hash) is { } synced) return synced;
+        if (FindSynced(id, hash) is { } stored) return stored;
         if (!byId.TryGetValue(id, out var found))
         {
             found = [];
@@ -262,6 +275,19 @@ public sealed class ModLocator(string modsFolder, EntityProfile? profile = null)
             byId[id] = found;
         }
         return found.FirstOrDefault(f => f.Hash == hash).Folder;
+    }
+
+    string? FindSynced(string id, string hash)
+    {
+        if (!ModCatalog.IsModId(id) || !ModSets.Hex(hash, 64)) return null;
+        DateTime stamp;
+        try { stamp = File.GetLastWriteTimeUtc(SyncedStore.RecordIn(modsFolder, id, hash)); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
+        lock (synced)
+            if (synced.TryGetValue((id, hash), out var known) && known.Stamp == stamp) return known.Folder;
+        var folder = SyncedStore.Find(modsFolder, id, hash, profile);
+        lock (synced) synced[(id, hash)] = (stamp, folder);
+        return folder;
     }
 }
 
@@ -311,7 +337,7 @@ public sealed record ModSyncPlan(IReadOnlyList<SyncItem> Items)
 
 // Mods downloaded from hosts: <mods>/.synced/<id>@<first 16 of the content hash>/, which normal sessions never load
 // (ModCatalog.Load skips dot folders); only a synced session (ModSyncSession) does. A download is written into
-// .synced/.partial/<same name>/ and moved in only after SyncedStore.Install has checked all of it.
+// .synced/.partial/<same name>-<attempt>/ and moved in only after SyncedStore.Install has checked all of it.
 public static class SyncedStore
 {
     public const string FolderName = ".synced";
@@ -321,29 +347,45 @@ public static class SyncedStore
 
     public static string Root(string modsFolder) => Path.Combine(modsFolder, FolderName);
     static string Name(string id, string hash) => id + "@" + hash[..16];
+    public static string RecordIn(string modsFolder, string id, string hash) => Path.Combine(Root(modsFolder), Name(id, hash), RecordName);
 
-    // The store's folder of a mod, when it holds that exact one.
-    public static string? Find(string modsFolder, string id, string hash)
+    // The store's folder of a mod, when it holds that exact one: its record names the hash, and its files rehash to it now
+    // (the record only says what was checked when it was stored; a file changed since makes it another mod).
+    public static string? Find(string modsFolder, string id, string hash, EntityProfile? profile = null)
     {
         if (!ModCatalog.IsModId(id) || !ModSets.Hex(hash, 64)) return null;
         var folder = Path.Combine(Root(modsFolder), Name(id, hash));
         try
         {
             var record = Path.Combine(folder, RecordName);
-            return File.Exists(record) && (string?)JsonNode.Parse(File.ReadAllText(record))?["hash"] == hash ? folder : null;
+            if (!File.Exists(record) || (string?)JsonNode.Parse(File.ReadAllText(record))?["hash"] != hash) return null;
+            var mod = ModCatalog.Parse(folder, profile ?? EntityProfile.Current);
+            return mod.Id == id && ModSets.ContentHash(mod) == hash ? folder : null;
         }
-        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException) { return null; }
+        catch (Exception error) when (error is JsonException or InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException) { return null; }
     }
 
-    // An empty folder to download a mod into.
+    public const string PartialFolder = ".partial";
+
+    // An empty folder of its own to download a mod into: each attempt has its own, so two never write into one.
     public static string Partial(string modsFolder, string id, string hash)
     {
         if (!ModCatalog.IsModId(id) || !ModSets.Hex(hash, 64)) throw new InvalidDataException("A synced mod's id or hash is malformed.");
-        var folder = Path.Combine(Root(modsFolder), ".partial", Name(id, hash));
-        if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        var folder = Path.Combine(Root(modsFolder), PartialFolder, Name(id, hash) + "-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(folder);
         return folder;
     }
+
+    // Deletes a download that is not kept; one still held open is left for the next Clean.
+    public static void Discard(string partial)
+    {
+        try { if (Directory.Exists(partial)) Directory.Delete(partial, recursive: true); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+    }
+
+    // The downloads' folder emptied: what an earlier session left there (it stopped mid-download). Only while no download
+    // runs (a backend's start).
+    public static void Clean(string modsFolder) => Discard(Path.Combine(Root(modsFolder), PartialFolder));
 
     // A file a host listed, inside the download folder; refused unless its path is one the digest would count and that
     // Windows reads as written (no device names, no trailing dots or spaces, no streams).
@@ -365,7 +407,8 @@ public static class SyncedStore
         {
             if (part.Length == 0 || part.EndsWith('.') || part.EndsWith(' ') || part.StartsWith(' ')) return false;
             if (part.Any(c => c < 32 || c is '\\' or ':' or '*' or '?' or '"' or '<' or '>' or '|')) return false;
-            if (Devices.Contains(part.Split('.')[0])) return false;
+            // Windows reads "con .txt" and "nul .json" as the devices too: the spaces before the extension do not count
+            if (Devices.Contains(part.Split('.')[0].TrimEnd(' '))) return false;
         }
         return true;
     }
@@ -374,24 +417,28 @@ public static class SyncedStore
 
     // Checks a finished download against what the plan expected and moves it into the store; returns its folder. It
     // must be a mod with that id and version, the same content hash read from its own files, and content, or code or raw
-    // data the verified list names (read from its own files, whatever the host said). Throws InvalidDataException,
-    // with the download deleted.
+    // data the verified list names (read from its own files, whatever the host said). Throws InvalidDataException (or
+    // OperationCanceledException when cancelled), with the download deleted whatever went wrong.
     public static string Install(string modsFolder, ModSetEntry expected, string partial, Func<string, string, bool>? verified = null,
-        EntityProfile? profile = null)
+        EntityProfile? profile = null, CancellationToken cancel = default)
     {
-        try { Verify(expected, partial, verified ?? VerifiedMods.Contains, profile ?? EntityProfile.Current); }
-        catch (InvalidDataException)
+        try
         {
-            try { Directory.Delete(partial, recursive: true); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            cancel.ThrowIfCancellationRequested();
+            Verify(expected, partial, verified ?? VerifiedMods.Contains, profile ?? EntityProfile.Current);
+            cancel.ThrowIfCancellationRequested();
+            File.WriteAllText(Path.Combine(partial, RecordName), new JsonObject { ["hash"] = expected.Hash, ["id"] = expected.Id, ["version"] = expected.Version,
+                ["synced"] = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) }.ToJsonString());
+            var target = Path.Combine(Root(modsFolder), Name(expected.Id, expected.Hash));
+            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+            Directory.Move(partial, target);
+            return target;
+        }
+        catch
+        {
+            Discard(partial);
             throw;
         }
-        File.WriteAllText(Path.Combine(partial, RecordName), new JsonObject { ["hash"] = expected.Hash, ["id"] = expected.Id, ["version"] = expected.Version,
-            ["synced"] = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) }.ToJsonString());
-        var target = Path.Combine(Root(modsFolder), Name(expected.Id, expected.Hash));
-        if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
-        Directory.Move(partial, target);
-        return target;
     }
 
     static void Verify(ModSetEntry expected, string partial, Func<string, string, bool> verified, EntityProfile profile)
@@ -399,6 +446,10 @@ public static class SyncedStore
         ModManifest mod;
         try { mod = ModCatalog.Parse(partial, profile); }
         catch (JsonException error) { throw new InvalidDataException($"{expected.Id}: its manifest is not valid JSON ({error.Message})."); }
+        catch (Exception error) when (error is not (InvalidDataException or OperationCanceledException))
+        {
+            throw new InvalidDataException($"{expected.Id}: it could not be read as a mod ({error.Message}).");
+        }
         if (mod.Id != expected.Id || mod.Version != expected.Version || !mod.Gameplay)
             throw new InvalidDataException($"{expected.Id}: the files are another mod ({mod.Id} {mod.Version}{(mod.Gameplay ? "" : ", cosmetic")}).");
         var files = ModSets.Files(mod);

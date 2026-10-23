@@ -279,12 +279,135 @@ static class ModSyncTests
             }
         });
 
+        test("Mod sync: a data spec is content only when HellForge checks all it builds; a hostile host's replace, lua, or an edit on another type needs the verified list", () =>
+        {
+            var folder = Path.Combine(root, "sync-specs");
+            var specs = new Dictionary<string, (string Resources, ModClass Class)>
+            {
+                ["test.icon"] = ("""{"icon":"icons/a.png","name":"test/mod/icon"}""", ModClass.Content),
+                ["test.colours"] = ("""{"type":"material","copy":"0x3333","name":"test/mod/m","colours":{"0x11111111":[1,0,0]}}""", ModClass.Content),
+                ["test.curves"] = ("""{"type":"particles","copy":"0x3333","name":"test/mod/p","curves":{"preset":"warm-to-blue"}}""", ModClass.Content),
+                ["test.sounds"] = ("""{"type":"wwise_bank","include":["0x4444"]}""", ModClass.Content),
+                // the review's case: 8 bytes of the host's choosing written into a copied resource
+                ["test.replace"] = ("""{"type":"material","copy":"0x3333","name":"test/mod/m","replace":[{"from":"0x2222","to":"0x4141414141414141","at":["0x8C"]}]}""", ModClass.Raw),
+                ["test.luacopy"] = ("""{"type":"lua","copy":"0x5555","name":"test/mod/script"}""", ModClass.Raw),
+                ["test.luainclude"] = ("""{"type":"lua","include":["0x5555"]}""", ModClass.Raw),
+                ["test.luahash"] = ($$"""{"type":"0x{{ResourceTypes.Lua:X16}}","include":["0x5555"]}""", ModClass.Raw),
+                ["test.unknown"] = ("""{"type":"0x1234","copy":"0x5555","name":"test/mod/x"}""", ModClass.Raw),
+                ["test.misedit"] = ("""{"type":"unit","copy":"0x3333","name":"test/mod/u","colours":{"0x11111111":[1,0,0]}}""", ModClass.Raw),
+                ["test.soundcopy"] = ("""{"type":"wwise_bank","copy":"0x4444","name":"test/mod/bank"}""", ModClass.Raw),
+            };
+            foreach (var (id, (resources, _)) in specs)
+            {
+                Write(Path.Combine(folder, id), ModCatalog.ManifestName, Manifest(id, "1"));
+                Write(Path.Combine(folder, id), DataSpecs.FileName, $$"""{"format":1,"patches":[{"archives":["1111111111111111"],"resources":[{{resources}}]}]}""");
+            }
+            Write(Path.Combine(folder, "test.icon"), "icons/a.png", "a picture");
+            var (loaded, problems) = ModCatalog.Load(folder);
+            check(loaded.Count == specs.Count, "Fixture specs load: " + string.Join(" | ", problems));
+            var set = ModSet.Of(ModCatalog.LoadOrder(loaded));
+            foreach (var mod in set.Mods)
+            {
+                check(mod.Class == specs[mod.Id].Class, $"{mod.Id} is {mod.Class}, not {specs[mod.Id].Class}.");
+                var declared = ModSets.Declared(mod.Files.Select(f => f.Path), File.ReadAllText(Path.Combine(mod.Folder!, ModCatalog.ManifestName)), null,
+                    File.ReadAllText(Path.Combine(mod.Folder!, DataSpecs.FileName)));
+                check(declared == (mod.Class == ModClass.Raw ? ModClass.Raw : null), $"{mod.Id}: its spec declares {declared?.ToString() ?? "nothing"} before its other files.");
+            }
+            var plan = ModSyncPlan.Make(set, true, new ModSet("none", []), (_, _) => null, new HashSet<string>(), verified: (_, _) => false);
+            check(plan.Items.All(i => i.Action == (specs[i.Mod.Id].Class == ModClass.Content ? SyncAction.Download : SyncAction.Manual)), "Unverified, only checked specs download.");
+
+            // A hostile host calls its specs content: the joiner's store reads them from their own bytes and refuses them.
+            var install = new InstallLayout(Path.Combine(root, "sync-specs-install"));
+            install.Create(SupportedBuild.Current.BuildId);
+            Directory.CreateDirectory(install.Mods);
+            foreach (var mod in set.Mods)
+            {
+                var partial = SyncedStore.Partial(install.Mods, mod.Id, mod.Hash);
+                CopyFiles(mod, partial);
+                if (mod.Class == ModClass.Content)
+                    check(SyncedStore.Install(install.Mods, mod, partial, verified: (_, _) => false) == SyncedStore.Find(install.Mods, mod.Id, mod.Hash), mod.Id + " is stored unverified.");
+                else
+                {
+                    reject(() => SyncedStore.Install(install.Mods, mod with { Class = ModClass.Content }, partial, verified: (_, _) => false));
+                    check(!Directory.Exists(partial) && SyncedStore.Find(install.Mods, mod.Id, mod.Hash) == null, mod.Id + ", called content, is refused and deleted.");
+                }
+            }
+        });
+
+        test("Mod sync: a host's manifest of the wrong shape is a bad mod, not a crash, and its download is deleted", () =>
+        {
+            var folder = Path.Combine(root, "sync-shapes");
+            var install = new InstallLayout(Path.Combine(root, "sync-shapes-install"));
+            install.Create(SupportedBuild.Current.BuildId);
+            Directory.CreateDirectory(install.Mods);
+            var shapes = new Dictionary<string, string>
+            {
+                ["native-number"] = ",\"native\":1",
+                ["native-list"] = ",\"native\":[]",
+                ["types-object"] = ",\"native\":{\"networkFieldTypes\":{\"a\":1}}",
+                ["types-numbers"] = ",\"native\":{\"networkFieldTypes\":[1,2]}",
+                ["no-expect"] = ",\"native\":{\"networkFieldTypes\":[{\"name\":\"deposit_value\",\"bits\":14}]}",
+                ["expect-number"] = ",\"native\":{\"networkFieldTypes\":[{\"name\":\"deposit_value\",\"expect\":3,\"bits\":14}]}",
+                ["writes-no-fields"] = ",\"native\":{\"componentWrites\":[{\"component\":\"DepositComponentData\",\"resource\":\"0x056DE1C5E21E723E\"}]}",
+                ["writes-fields-text"] = ",\"native\":{\"componentWrites\":[{\"component\":\"DepositComponentData\",\"resource\":\"0x056DE1C5E21E723E\",\"fields\":\"x\"}]}",
+                ["code-text"] = ",\"code\":\"mod.dll\"",
+                ["dll-number"] = ",\"code\":{\"dll\":1,\"sdk\":1}",
+            };
+            foreach (var (name, extra) in shapes)
+            {
+                var id = "test." + name;
+                Write(Path.Combine(folder, name), ModCatalog.ManifestName, Manifest(id, "1", extra));
+                reject(() => ModCatalog.Parse(Path.Combine(folder, name), EntityProfile.Current));
+                var partial = SyncedStore.Partial(install.Mods, id, new string('a', 64));
+                Write(partial, ModCatalog.ManifestName, Manifest(id, "1", extra));
+                reject(() => SyncedStore.Install(install.Mods, new ModSetEntry(id, id, "1", new string('a', 64), 10, ModClass.Content, 0), partial, verified: (_, _) => false));
+                check(!Directory.Exists(partial), name + ": the download is deleted.");
+            }
+            Directory.CreateDirectory(Path.Combine(folder, "array"));
+            File.WriteAllText(Path.Combine(folder, "array", ModCatalog.ManifestName), "[1,2]");
+            reject(() => ModCatalog.Parse(Path.Combine(folder, "array"), EntityProfile.Current));
+            var (loaded, problems) = ModCatalog.Load(folder);
+            check(loaded.Count == 0 && problems.Count == shapes.Count + 1, "The catalogue lists each as a problem: " + string.Join(" | ", problems));
+        });
+
+        test("Mod sync: each download has its own folder, a cancelled one is deleted, and a stored mod changed since is not found", () =>
+        {
+            var (hostMods, _) = ModCatalog.Load(Mods(root, "sync-attempts-host"));
+            var host = ModSet.Of(ModCatalog.LoadOrder(hostMods));
+            var install = new InstallLayout(Path.Combine(root, "sync-attempts-install"));
+            install.Create(SupportedBuild.Current.BuildId);
+            Directory.CreateDirectory(install.Mods);
+            var ammo = host.Mods.Single(m => m.Id == "test.ammo");
+            var first = SyncedStore.Partial(install.Mods, ammo.Id, ammo.Hash);
+            var second = SyncedStore.Partial(install.Mods, ammo.Id, ammo.Hash);
+            check(first != second && Directory.Exists(first) && Directory.Exists(second), "Two attempts, two folders.");
+            CopyFiles(ammo, first);
+            using (var cancelled = new CancellationTokenSource())
+            {
+                cancelled.Cancel();
+                try { SyncedStore.Install(install.Mods, ammo, first, cancel: cancelled.Token); check(false, "A cancelled install went on."); }
+                catch (OperationCanceledException) { }
+            }
+            check(!Directory.Exists(first) && SyncedStore.Find(install.Mods, ammo.Id, ammo.Hash) == null, "A cancelled install is deleted, not stored.");
+            CopyFiles(ammo, second);
+            var stored = SyncedStore.Install(install.Mods, ammo, second);
+            var locator = new ModLocator(install.Mods);
+            check(SyncedStore.Find(install.Mods, ammo.Id, ammo.Hash) == stored && locator.Find(ammo.Id, ammo.Hash) == stored, "Stored and found.");
+            // the files changed after the store checked them; the record still names the hash
+            File.WriteAllText(Path.Combine(stored, ModCatalog.ManifestName), Ammo.Replace("\"bits\":14", "\"bits\":15"));
+            check(SyncedStore.Find(install.Mods, ammo.Id, ammo.Hash) == null && new ModLocator(install.Mods).Find(ammo.Id, ammo.Hash) == null,
+                "A stored mod whose files changed is not the host's any more.");
+            SyncedStore.Clean(install.Mods);
+            check(!Directory.Exists(Path.Combine(SyncedStore.Root(install.Mods), SyncedStore.PartialFolder)) && Directory.Exists(stored), "Clean empties the downloads' folder only.");
+        });
+
         test("Mod sync: only safe paths a digest would count can be written by a download", () =>
         {
             foreach (var good in new[] { "hellforge-mod.json", "data/9ba626afa44a3aa3.patch_0", "src/a b/c.cpp", "images/icon.png" })
                 check(SyncedStore.SafePath(good), "Refused a normal path: " + good);
             foreach (var bad in new[] { "", "../x", "a/../b", "/abs", "a\\b", "C:x", "a:stream", "con", "CON.txt", "data/nul.json", "lpt1", "a./b", "a /b",
-                         " a", ".git/config", "src/.hidden", "build/out.o", "x.user", "a//b", "tab\tname", new string('a', 241) })
+                         " a", ".git/config", "src/.hidden", "build/out.o", "x.user", "a//b", "tab\tname", new string('a', 241),
+                         "con .txt", "nul .json", "data/aux  .patch_0", "COM1 .x" })
                 check(!SyncedStore.SafePath(bad), "Accepted an unsafe path: " + bad);
             var partial = Path.Combine(root, "sync-target");
             check(SyncedStore.Target(partial, "data/x.patch_0") == Path.Combine(Path.GetFullPath(partial), "data", "x.patch_0"), "A safe target lands inside.");
