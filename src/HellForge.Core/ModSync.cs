@@ -393,6 +393,9 @@ public static class SyncedStore
     // Beside a synced mod's files; a dot file, so the digest and the content hash leave it out.
     public const string RecordName = ".hellforge-synced.json";
     public const int MaxFiles = 10000;
+    // How many synced mods the store keeps (Prune): the ones a session played or downloaded most recently.
+    public const int Keep = 20;
+    static readonly TimeSpan PartialAge = TimeSpan.FromDays(1);
 
     public static string Root(string modsFolder) => Path.Combine(modsFolder, FolderName);
     static string Name(string id, string hash) => id + "@" + hash[..16];
@@ -420,6 +423,59 @@ public static class SyncedStore
         if (!ModCatalog.IsModId(id) || !ModSets.Hex(hash, 64)) return;
         var folder = Path.Combine(Root(modsFolder), Name(id, hash));
         if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+    }
+
+    // A stored mod a session plays now: its record's "used", which Prune goes by.
+    public static void Touch(string folder)
+    {
+        var record = Path.Combine(folder, RecordName);
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(record)) is not JsonObject node) return;
+            node["used"] = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+            File.WriteAllText(record + ".tmp", node.ToJsonString());
+            File.Move(record + ".tmp", record, overwrite: true);
+        }
+        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException) { }
+    }
+
+    // Deletes the stored mods beyond the `keep` used most recently (a record's "used", else when it was downloaded), never
+    // one of `inUse` (the starting session's folders), and downloads left half-done for more than a day. Returns what it
+    // removed, by folder name.
+    public static List<string> Prune(string modsFolder, IEnumerable<string> inUse, int keep = Keep)
+    {
+        var store = Root(modsFolder);
+        var removed = new List<string>();
+        if (!Directory.Exists(store)) return removed;
+        var kept = inUse.Select(f => Path.GetFullPath(f).TrimEnd('\\', '/')).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var partials = Path.Combine(store, PartialFolder);
+        if (Directory.Exists(partials))
+            foreach (var partial in Directory.GetDirectories(partials).Where(d => DateTime.UtcNow - Directory.GetLastWriteTimeUtc(d) > PartialAge))
+                if (Delete(partial)) removed.Add(PartialFolder + "/" + Path.GetFileName(partial));
+        var stored = Directory.GetDirectories(store).Where(d => !Path.GetFileName(d).StartsWith('.'))
+            .Select(d => (Folder: d, Used: LastUsed(d))).OrderByDescending(m => m.Used).ToList();
+        foreach (var (folder, _) in stored.Skip(keep).Where(m => !kept.Contains(Path.GetFullPath(m.Folder).TrimEnd('\\', '/'))))
+            if (Delete(folder)) removed.Add(Path.GetFileName(folder));
+        return removed;
+
+        static bool Delete(string folder)
+        {
+            try { Directory.Delete(folder, recursive: true); return true; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return false; } // in use: the next start
+        }
+    }
+
+    static DateTime LastUsed(string folder)
+    {
+        try
+        {
+            var node = JsonNode.Parse(File.ReadAllText(Path.Combine(folder, RecordName)));
+            foreach (var key in new[] { "used", "synced" })
+                if (node?[key] is JsonValue value && value.TryGetValue<string>(out var text) &&
+                    DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var time)) return time;
+        }
+        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException) { }
+        return DateTime.MinValue; // no record: the first to go
     }
 
     public const string PartialFolder = ".partial";

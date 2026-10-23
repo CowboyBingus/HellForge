@@ -223,12 +223,17 @@ try
                     var (synced, syncProblem) = sync.Resolve(modInstall.Mods, mods);
                     if (synced != null) (loadOrder, syncedWith) = (synced, sync.HostName.Length > 0 ? sync.HostName : sync.Host);
                     else modProblems.Add("Mod sync: playing your own mods, because " + syncProblem);
+                    foreach (var mod in loadOrder.Where(m => m.Folder.StartsWith(SyncedStore.Root(modInstall.Mods), StringComparison.OrdinalIgnoreCase)))
+                        SyncedStore.Touch(mod.Folder);
                 }
                 catch (Exception error) when (error is InvalidDataException or IOException or System.Text.Json.JsonException)
                 {
                     modProblems.Add("Mod sync: playing your own mods, because the sync file could not be read (" + error.Message + ").");
                 }
             }
+            // The synced store keeps the mods used most recently (SyncedStore.Keep), this session's among them.
+            foreach (var pruned in SyncedStore.Prune(modInstall.Mods, loadOrder.Select(m => m.Folder)))
+                Console.Error.WriteLine("Mod sync: removed the downloaded mod " + pruned + ", used least recently.");
             // Mods with a data spec get their data built from the copy's game data first (once per game data and spec);
             // a mod whose data cannot be built is not loaded.
             var (active, dataProblems) = ModDataCache.Prepare(modInstall, loadOrder, Console.Error.WriteLine);
