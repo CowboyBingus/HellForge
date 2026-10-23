@@ -339,7 +339,8 @@ static class DirectoryTests
         var transport = network.Join(HostId);
         var listing = false;
         var related = new HashSet<ulong>();
-        var gate = new StrangerGate(transport, () => listing, peer => related.Contains(peer), _ => { });
+        // Play with strangers is on: the existing behavior.
+        var gate = new StrangerGate(transport, () => listing, peer => related.Contains(peer), () => true, _ => { });
         var join = new Frame("lobby.join").Add("op");
         check(gate.Admit(GuestId, new Frame("presence")) && gate.Admit(GuestId, new Frame("party.message")), "Friends: everything.");
         check(!gate.Admit(OtherId, new Frame("presence")) && !gate.Admit(OtherId, new Frame("party.message")) && !gate.Admit(OtherId, join) &&
@@ -350,5 +351,11 @@ static class DirectoryTests
         related.Add(OtherId);
         check(gate.Admit(OtherId, new Frame("party.message")) && gate.Admit(OtherId, new Frame("account.key")) && !gate.Admit(OtherId, new Frame("presence.hello")),
             "A stranger in a lobby here: its game's traffic, never presence.");
+
+        // Play with strangers is off: all strangers refused, friends still pass.
+        var closed = new StrangerGate(transport, () => true, _ => true, () => false, _ => { });
+        check(closed.Admit(GuestId, new Frame("presence")), "Friends still pass with strangers off.");
+        check(!closed.Admit(OtherId, join) && !closed.Admit(OtherId, new Frame("peer.ping")),
+            "Strangers refused entirely when Play with strangers is off.");
     }
 }

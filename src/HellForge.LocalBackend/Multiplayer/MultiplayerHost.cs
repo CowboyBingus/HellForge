@@ -35,6 +35,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
     // After a mod sync restart: this game is invited back into the host's lobby (null in any other session).
     public AutoRejoin? Rejoin { get; private set; }
     StrangerGate? gate;
+    string? modsFolder;
 
     readonly WarClock? warClock;
     AccountKeyExchange? keyExchange;
@@ -116,6 +117,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
             catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException) { host.Log("Stats sharing is off: " + error.Message); }
         }
         if (host.transport != null && modsFolder != null) host.StartSync(modsFolder, modSetFile, evidenceDirectory);
+        host.modsFolder = modsFolder;
         directory ??= host.transport != null && directoryFolder != null ? new FolderLobbyDirectory(directoryFolder, host.transport.LocalId) : null;
         host.StartDirectory(directory ?? (host.transport as SteamPeerTransport)?.Directory, modsFolder);
         // The transport knows this machine's SteamID only once started.
@@ -173,8 +175,10 @@ public sealed class MultiplayerHost : IAsyncDisposable
         if (directory != null && presence != null)
             Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.SharesEdited == true,
                 listPublic: modsFolder != null ? () => ModSettings.Read(modsFolder).ListPublic : null);
-        gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, Log, Lobby.Welcome);
-        if (transport is SteamPeerTransport steam) steam.AcceptStranger = peer => Directory?.Listing == true || Related(peer) || Lobby.Welcome(peer);
+        bool StrangersAllowed() => modsFolder != null && ModSettings.PlayWithStrangers(modsFolder);
+        gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, StrangersAllowed, Log, Lobby.Welcome);
+        if (transport is SteamPeerTransport steam)
+            steam.AcceptStranger = peer => StrangersAllowed() && (Directory?.Listing == true || Related(peer) || Lobby.Welcome(peer));
         Log(Directory != null ? "Directory: public lobbies are listed and searched." : "Directory: off (no lobby directory for this link).");
     }
 

@@ -709,6 +709,10 @@ public static class ModSettings
         public bool ShowEditedStats { get; set; }
         public bool ListPublic { get; set; } = true;
         public bool HostStats { get; set; }
+        // Off by default: a stranger's traffic only reaches this machine when the player turns this on. Friends are
+        // always accepted. The lobby directory still searches (the player can browse public lobbies), but strangers
+        // cannot join this machine's lobby or send it anything through the directory until this is on.
+        public bool PlayWithStrangers { get; set; }
     }
 
     public static State Read(string modsFolder)
@@ -732,6 +736,7 @@ public static class ModSettings
             if (root.TryGetProperty("showEditedStats", out var edited) && edited.ValueKind == JsonValueKind.True) state.ShowEditedStats = true;
             if (root.TryGetProperty("listPublic", out var listed) && listed.ValueKind == JsonValueKind.False) state.ListPublic = false;
             if (root.TryGetProperty("hostStats", out var hostStats) && hostStats.ValueKind == JsonValueKind.True) state.HostStats = true;
+            if (root.TryGetProperty("playWithStrangers", out var strangers) && strangers.ValueKind == JsonValueKind.True) state.PlayWithStrangers = true;
             if (root.TryGetProperty("order", out var order) && order.ValueKind == JsonValueKind.Array)
                 foreach (var e in order.EnumerateArray()) if (e.ValueKind == JsonValueKind.String && !state.Order.Contains(e.GetString()!)) state.Order.Add(e.GetString()!);
             if (root.TryGetProperty("packs", out var packs) && packs.ValueKind == JsonValueKind.Object)
@@ -791,6 +796,9 @@ public static class ModSettings
 
     // Hosting: whether this player's Public lobbies are listed on other HellForge players' Galactic Map.
     public static void SetListPublic(string modsFolder, bool list) => Change(modsFolder, state => state.ListPublic = list);
+    // Multiplayer: whether people who are not Steam friends can reach this machine through the lobby directory.
+    public static void SetPlayWithStrangers(string modsFolder, bool allow) => Change(modsFolder, state => state.PlayWithStrangers = allow);
+    public static bool PlayWithStrangers(string modsFolder) => Read(modsFolder).PlayWithStrangers;
 
     // Hosting: whether friends play with this player's editor changes instead of their own.
     public static void SetHostStats(string modsFolder, bool host) => Change(modsFolder, state => state.HostStats = host);
@@ -816,7 +824,8 @@ public static class ModSettings
             ["share"] = state.Share,
             ["showEditedStats"] = state.ShowEditedStats,
             ["listPublic"] = state.ListPublic,
-            ["hostStats"] = state.HostStats
+            ["hostStats"] = state.HostStats,
+            ["playWithStrangers"] = state.PlayWithStrangers
         };
         var text = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n";
         File.WriteAllText(path + ".tmp", text);

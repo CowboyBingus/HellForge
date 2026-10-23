@@ -180,6 +180,11 @@ static class ModSyncTests
             ModSettings.SetShare(mods, true);
             state = ModSettings.Read(mods);
             check(state.Blocked.Count == 0 && state.Share && state.Disabled.Count == 1, "Unblocked and sharing again.");
+            check(!ModSettings.PlayWithStrangers(mods), "Play with strangers is off by default.");
+            ModSettings.SetPlayWithStrangers(mods, true);
+            check(ModSettings.PlayWithStrangers(mods), "Play with strangers can be turned on.");
+            ModSettings.SetPlayWithStrangers(mods, false);
+            check(!ModSettings.PlayWithStrangers(mods), "Play with strangers can be turned back off.");
         });
 
         test("Mod sync: the plan finds what the joiner has, downloads content and verified code, and refuses blocked, unverified and other HellForge's mods", () =>
