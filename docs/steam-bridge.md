@@ -1,10 +1,10 @@
 # The Steam bridge: the game at low integrity
 
 **Status: in development** on `port/networking-0.2.0`. Built and tested with fixtures: the census, the broker and its
-channel (phase 2), and the session side of phase 4. Phase 3 (the generated proxies) is not started, so a sandboxed game
-still loads Valve's DLL for every interface call; the sandbox is not a boundary until it is. A session is sandboxed only
-when asked (`HellForge.Session play --sandbox`, or `HELLFORGE_SANDBOX=1`); nothing here ships yet, and none of it has
-run in game.
+channel (phase 2), the generated bridge with its first allow-list (phase 3), and the session side of phase 4. None of it
+has run in game: the allow-list covers the calls one census run saw, and the next census (a controller, a whole mission,
+the social tab) will show what it misses. A session is sandboxed only when asked (`HellForge.Session play --sandbox`, or
+`HELLFORGE_SANDBOX=1`), and only with an engine built with the Steamworks SDK; nothing here ships yet.
 
 ## Why
 
@@ -114,38 +114,62 @@ The proxies and the broker's dispatch are **generated** by `HellForge.SdkShimGen
 - **The ABI is MSVC x64.** `this` is in `RCX`. A method returning a class type (`CSteamID`, for example) returns it
   through a hidden pointer in `RDX`. The proxies are C functions written with that pointer explicit.
 
-### Phase 3: what the generated bridge does (design, 2026-10-23)
+### Phase 3: the generated bridge
 
 **Inputs:** the pinned `steam_api.json` and `steam_api64.dll`, and `native/steam-cloud/bridge-methods.json`, the
-reviewed table. A method that is not in the table is refused.
+reviewed table. A method that is not in the table is refused. `HellForge.SdkShimGen steam-bridge` writes, into the
+build's `gen` folder:
+- `bridge_gen.h`: the call-mode methods' numbers, every method's slot, and the prototypes of the hand-written methods
+  (so `bridge_local.c` fails to compile if one is wrong);
+- `bridge_proxies_gen.c`: the game's side, a vtable per bridged interface;
+- `broker_dispatch_gen.c`: the broker's side, each call-mode method's arguments read with bounds, checked, and passed to
+  Valve's flat export;
+- `bridge_exports_gen.c` and `steam_api64_bridge.def`: the **bridge build** of the stand-in (`steam_api64_bridge.dll`).
+  Every export it does not write itself is a stub that refuses: no export forwards, so Valve's DLL never loads in the
+  game. (A forwarder loads it as soon as anything resolves that export, whatever the session's mode, and the game's
+  protection resolves the flat exports itself.)
+
+Generation fails on anything it cannot marshal exactly, on an enum whose 0 may mean success without a refusal value
+(`EUserHasLicenseForAppResult` is 0 for "has a license"), and on a table entry the SDK does not declare.
 
 **Each method's mode, in the table:**
-- **local:** the stand-in answers in the game, without the broker. `ReadP2PPacket` and `IsP2PPacketAvailable` answer
-  "no packet": HellForge's co-op does not use Steam P2P. `GetAppID` is 553850.
-- **snapshot:** read from shared memory the broker fills at init and refreshes on the callbacks that change it:
-  `BLoggedOn`, `GetSteamID`, `GetPersonaName`, the language, the IP country, the DLC list (refreshed on 1005
-  `DlcInstalled`), the beta name, Steam Deck.
-- **call:** one pipe round trip. The broker checks the arguments as the table says (string lengths, buffer sizes, enum
-  ranges, lobbies the game made this session) before it calls the flat export.
-- **refuse:** answers as Steam does on failure (false, 0, `k_uAPICallInvalid`, an empty string), logged once.
+- **hand:** answered in the game by `bridge_local.c`, without the broker:
+  - fixed: `ReadP2PPacket` and `IsP2PPacketAvailable` answer "no packet" (HellForge's co-op does not use Steam P2P),
+    `GetAppID` is 553850, the overlay calls answer "no overlay" (it lives in the broker);
+  - from the **snapshot**, which the broker fills before the game connects and refreshes about once a second:
+    `BLoggedOn`, `GetSteamID`, `GetPersonaName`, the language, the IP country, the DLC list, `BIsSubscribedApp` for the
+    game and its DLC, the beta name, Steam Deck. A seqlock: the game copies what it needs and retries if the broker was
+    writing; no system call.
+- **interface:** `ISteamClient`'s `GetISteam*` methods hand out the bridge's own objects for the version asked.
+- **call:** one pipe round trip. The broker checks the arguments as the table says (string lengths, printable strings,
+  buffer sizes, integer ranges, lobbies the game made this session) before it calls the flat export.
+- **refuse:** answers as Steam does on failure (false, 0, `k_uAPICallInvalid`, an empty string, an invalid CSteamID),
+  logged once.
 
 **Kinds marshalled**, from the JSON's types (the table names what the JSON leaves out: which `void *` is an output buffer
 and which parameter is its size):
 - scalars and enums; `CSteamID` by value (64 bits), and returned through the hidden pointer in `RDX`;
 - input strings, bounded and NUL-terminated; output buffers with their size, at most what fits one message (larger is
   refused);
-- out scalars and fixed-size out structs (sizes from the JSON's struct table);
+- out scalars and out CSteamIDs (an out struct leaves the method refused until the table needs one);
 - a returned `const char *`: copied into a buffer of that method's in the stand-in, valid until its next call;
-- `SteamAPICall_t`: the broker records the call; when `SteamAPICallCompleted_t` arrives it takes `GetAPICallResult` and
-  pushes the result to the ring.
+- `SteamAPICall_t`: when Steam's `SteamAPICallCompleted_t` arrives, the broker takes `GetAPICallResult` and pushes the
+  result to the ring behind a call-result header (the call, the I/O failure flag). A `LobbyCreated_t` that succeeded
+  names a lobby the game may then use.
 
 **Callbacks:** the stand-in keeps the game's registrations itself (`RegisterCallback`, `RegisterCallResult` and their
-unregisters). `RunCallbacks` takes each ring entry and calls the registered `CCallbackBase` (`Run`, or the call-result
-`Run`, whose slots MSVC reverses), after checking the size against its `GetCallbackSizeBytes`. Only the callback ids in
-the table pass.
+unregisters), and marks the object registered with its id as Valve's DLL does. `RunCallbacks` takes each ring entry and
+calls slot 0 of each registered `CCallbackBase`. MSVC orders the two `Run` overloads in reverse, so slot 0 should be
+`Run(pvParam, bIOFailure, hSteamAPICall)`: a `CCallback`'s forwards to `Run(pvParam)` and a `CCallResult`'s checks the
+call. If the game's compiler did not reverse them, slot 0 is `Run(pvParam)` and only a call result's failure flag is lost.
+To confirm in game. The struct passed is at least `GetCallbackSizeBytes` long (zero-padded). The broker passes on only
+the callback ids in the table, and the game's side re-checks each object is still registered before calling it.
 
-**Objects that are not interfaces the game names** (`SteamInternal_CreateInterface`, the game-server interfaces): a
-null proxy whose every slot answers as refused, until a census shows them used.
+**The bridge build's own exports** (`bridge_exports.c`): `SteamInternal_ContextInit` (the game's inline accessors: a
+compare and a return on each of its 73,040 calls in the census), `SteamInternal_CreateInterface` (`SteamClient020`: a
+proxy), the game-server interfaces and any version the table does not know (a null object whose every slot answers 0,
+logged), and `SteamAPI_UnregisterCallResult`. The forwarding build refuses to start a session that asks for the bridge,
+rather than run on Valve's DLL.
 
 **The first table** is the census's named calls (step 2, below):
 
@@ -155,20 +179,22 @@ null proxy whose every slot answers as refused, until a census shows them used.
 | `STEAMAPPS_INTERFACE_VERSION008` | `GetDLCCount`, `BGetDLCDataByIndex`, `GetCurrentGameLanguage`, `GetCurrentBetaName` | snapshot | name buffers bounded |
 | `STEAMAPPS_INTERFACE_VERSION008` | `BIsSubscribedApp` | snapshot, else call | the DLC ids and the game from the snapshot |
 | `SteamUser021` | `BLoggedOn`, `GetSteamID` | snapshot | |
-| `SteamUser021` | `GetAuthSessionTicket` | call | ticket buffer at most 1024 bytes |
+| `SteamUser021` | `GetAuthSessionTicket`, `CancelAuthTicket` | call | ticket buffer at most 1024 bytes |
 | `SteamFriends017` | `GetPersonaName` | snapshot | |
 | `SteamFriends017` | `GetFriendCount`, `GetFriendByIndex`, `GetFriendRelationship`, `GetUserRestrictions` | call | read only |
-| `SteamFriends017` | `SetRichPresence` | call | **to review:** strings friends see; key at most 64, value at most 256 printable characters, every key logged |
+| `SteamFriends017` | `SetRichPresence`, `ClearRichPresence` | call | **to review:** strings friends see; key at most 64, value at most 256 printable characters, every key logged |
 | `SteamUtils010` | `GetAppID` | local | 553850 |
 | `SteamUtils010` | `GetIPCountry`, `IsSteamRunningOnSteamDeck` | snapshot | |
-| `SteamUtils010` | `SetOverlayNotificationPosition` | local | the overlay is in the broker: nothing to do |
+| `SteamUtils010` | `SetOverlayNotificationPosition`, `IsOverlayEnabled` | local | the overlay is in the broker: nothing to place, none shown |
 | `SteamUtils010` | `InitFilterText`, `FilterText` | call | input at most 4096 bytes, output buffer bounded |
 | `SteamMatchMaking009` | `CreateLobby` | call | **to review:** strangers can read a public lobby's data; at most 4 members |
 | `SteamMatchMaking009` | `SetLobbyData`, `SetLobbyJoinable`, `LeaveLobby`, `GetNumLobbyMembers`, `GetLobbyMemberByIndex`, `GetLobbyOwner` | call | only a lobby the game made this session; key at most 255, value at most 8192 bytes |
 | `STEAMUSERSTATS_INTERFACE_VERSION012` | `RequestCurrentStats`, `GetAchievement` | call | name at most 128 |
-| `SteamInput006` | `GetControllerForGamepadIndex` | call | per-frame use unknown until a controller census |
+| `SteamInput006` | `GetControllerForGamepadIndex` | call | index 0-15; per-frame use unknown until a controller census |
+| `SteamClient020` | `GetISteam*`; the pipe and user calls | interface; local | the bridge's own objects; one pipe, one user |
 
-Callbacks: the 16 ids the census saw.
+In the table, local and snapshot are both mode `hand`. Callbacks: the 16 ids the census saw. 20 methods are calls, 47
+are answered in the game, and the other 300 the nine interfaces declare are refused.
 
 **Cost per frame, from the census's rates (unmeasured in game):** `ReadP2PPacket` (1.00 per frame) is a return; the DLC
 answers (0.85) and `BLoggedOn` (0.024) are memory reads. None makes a system call, so an idle frame stays at the ring
@@ -331,11 +357,16 @@ Everything else was called 41 times or fewer:
 
 - **Idle frame** (`RunCallbacks`, about 400 a second in the census): one read of the ring's write position, compared
   with the stand-in's own. 0 system calls, 0 pipe messages, no allocation. Unmeasured in game.
+- **The calls the census saw every frame:** `ReadP2PPacket` (1.00 per frame) is a return; the DLC answers (0.85 per
+  frame) and `BLoggedOn` are a seqlocked read of the snapshot, a few dozen bytes copied. No system call. Unmeasured in
+  game.
+- **The inline accessors** (`SteamInternal_ContextInit`, about 340 a second in the census): a compare and a return.
 - **A frame with callbacks:** per callback, one slot copied (at most 1016 bytes) and two memory fences; no system call.
   Unmeasured in game.
 - **The broker's pumping** runs in its own process every 16 ms, not on the game's thread.
 - **A bridged call:** one pipe round trip (two system calls in the game). `SteamAPI_IsSteamRunning` is one: 2,014 in
-  the census's 214 s, about 9 a second. Unmeasured in game; most other calls happen once or on events.
+  the census's 214 s, about 9 a second; the lobby queries, about 7 a second each. Unmeasured in game; the rest happen once
+  or on events.
 - **Steam Input with a controller:** read from the snapshot, with no system call per call. The snapshot's per-frame
   cost is to be measured.
 
@@ -356,7 +387,12 @@ Every number here is unmeasured in game until phase 4.
    lying HELLO, malformed and oversized calls, a late broker, a dead broker, the game exiting, and the stand-in itself
    in bridge mode (Valve's DLL never loads; without a broker, init fails closed).
 3. **Generated proxies:** `SdkShimGen steam-bridge`, from the pinned SDK and the game's DLL, with the allow-list as a
-   reviewed table. Fixture tests per parameter kind (strings, buffers, structs, the `CSteamID` hidden pointer).
+   reviewed table (above). `bridge_test.c` (every engine build with the SDK) runs the broker's loop with a fake Valve
+   DLL behind the generated dispatch and calls the bridge build's interfaces as the game does: values, strings and the
+   printable check, buffers and their bounds, out values, a CSteamID argument and the hidden-pointer result, the
+   snapshot, a refused method that never reaches Steam, a lobby the game did not make, callbacks (and an id the table
+   does not list), a call result, `ContextInit`, `ISteamClient`, an unknown interface, and that Valve's DLL never loads.
+   Built 2026-10-23. Still to do: the next census, then the table's two review items (`SetRichPresence`, `CreateLobby`).
 4. **A low-integrity session:** the token and job, labelled folders, pipe labels, and the editor's saves through the
    backend. In game, solo then co-op on two PCs: no STEAM NOT DETECTED, login, a mission, a controller, an invite, and
    per-frame cost measured.
