@@ -20,7 +20,8 @@ namespace HellForge.Core;
 //            data specs with "replace" or other resource types, raw stats lines and componentWrites: only when
 //            VerifiedMods lists its exact content, as code;
 //   bundled  a mod HellForge ships (the in-game editor): never downloaded; a different one is another HellForge version.
-// Every host gets the same rule, a Steam friend too.
+// Every host gets the same rule, a Steam friend too; and code and raw mods come only from Steam friends (a host serves them
+// only to its friends: a stranger could not take them unverified anyway, and they may be a modder's unreleased sources).
 public enum ModClass { Content, Code, Bundled, Raw }
 
 // A file of a mod as the digest counts it: its path in the mod folder ('/'), size and SHA-256 (upper-case hex).
@@ -294,7 +295,8 @@ public sealed class ModLocator(string modsFolder, EntityProfile? profile = null)
 // What joining a host's lobby takes, mod by mod (each host mod in id order, then this machine's mods the host lacks).
 //   have      this machine has it (installed, on or off, or synced before): Folder;
 //   download  a content mod, or a verified code mod, the host shares;
-//   manual    the host does not share, or a code mod that is not verified: the player installs it themselves;
+//   manual    the host does not share, or a code or raw mod that is not verified or whose host is not a Steam friend:
+//             the player installs it themselves;
 //   blocked   on the player's blocklist;
 //   update    a mod HellForge ships differs: one of the two players runs another HellForge version;
 //   off       this machine's own gameplay mod the host does not run: left out of the synced session.
@@ -311,9 +313,10 @@ public sealed record ModSyncPlan(IReadOnlyList<SyncItem> Items)
 
     public long DownloadBytes => Items.Where(i => i.Action == SyncAction.Download).Sum(i => i.Mod.Bytes);
 
-    // own: this session's mod set (the joiner's); find: an installed or synced mod by id and hash (ModLocator.Find).
+    // own: this session's mod set (the joiner's); find: an installed or synced mod by id and hash (ModLocator.Find);
+    // hostIsFriend: the host is a Steam friend (only friends serve code and raw mods).
     public static ModSyncPlan Make(ModSet host, bool hostShares, ModSet own, Func<string, string, string?> find, IReadOnlySet<string> blocked,
-        Func<string, string, bool>? verified = null)
+        Func<string, string, bool>? verified = null, bool hostIsFriend = true)
     {
         verified ??= VerifiedMods.Contains;
         var items = new List<SyncItem>();
@@ -323,7 +326,7 @@ public sealed record ModSyncPlan(IReadOnlyList<SyncItem> Items)
             var folder = own.Find(mod.Id, mod.Hash)?.Folder ?? find(mod.Id, mod.Hash);
             var action = folder != null ? SyncAction.Have
                 : mod.Class == ModClass.Bundled ? SyncAction.Update
-                : !hostShares || ModSets.NeedsVerified(mod.Class) && !verified(mod.Id, mod.Hash) ? SyncAction.Manual
+                : !hostShares || ModSets.NeedsVerified(mod.Class) && (!hostIsFriend || !verified(mod.Id, mod.Hash)) ? SyncAction.Manual
                 : SyncAction.Download;
             items.Add(new(mod, action, folder));
         }

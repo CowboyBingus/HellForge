@@ -101,6 +101,13 @@ static class ModSyncTests
         return (ModSet.Of(ModCatalog.LoadOrder(ModCatalog.Load(host).Mods)), ModSet.Of(ModCatalog.LoadOrder(ModCatalog.Load(guest).Mods)));
     }
 
+    // No download folder of a mod is left (each attempt has its own: <id>@<hash>-<attempt>).
+    static bool NoPartial(string mods, string id)
+    {
+        var folder = Path.Combine(SyncedStore.Root(mods), SyncedStore.PartialFolder);
+        return !Directory.Exists(folder) || !Directory.GetDirectories(folder, id + "@*").Any();
+    }
+
     // The host creates a lobby; the guest joins and is refused for its mods: the offer it is shown.
     static SyncView Refused(Node host, Node guest, Action<bool, string> check, string op, params string[] states)
     {
@@ -189,7 +196,7 @@ static class ModSyncTests
             check(replies.TryTake(out var reply, TimeSpan.FromSeconds(5)), "The host answers " + request.Type);
             return reply!;
         }
-        check(Ask(stranger, new Frame("mods.files").Add("1").Add(texture.Id).Add(texture.Hash)).Text(1) == "refused", "No grant, no files.");
+        check(Ask(stranger, new Frame("mods.files").Add("1").Add(texture.Id).Add(texture.Hash).Add(0)).Text(1) == "refused", "No grant, no files.");
         host.Lobby.FromLocal(MultiplayerTests.Create("f-create", HostId));
         var lobby = host.Next("lobby.result", check).Text(4);
         stranger.Send(HostId, MultiplayerTests.Join("f-join", StrangerId, lobby).Add(new string('0', 32)).Add(LobbyService.Protocol).Encode(), reliable: true);
@@ -203,16 +210,17 @@ static class ModSyncTests
                      new Frame("mods.get").Add("2").Add(texture.Id).Add(texture.Hash).Add("hellforge-mod.json").Add(0).Add(ModSync.ChunkBytes + 1),
                      new Frame("mods.get").Add("3").Add(texture.Id).Add(texture.Hash).Add("../ammo/hellforge-mod.json").Add(0).Add(10),
                      new Frame("mods.get").Add("4").Add(texture.Id).Add(texture.Hash).Add("data/9ba626afa44a3aa3.patch_0").Add(599_990).Add(100),
-                     new Frame("mods.files").Add("5").Add("test.ammo").Add(new string('a', 64)) })
+                     new Frame("mods.files").Add("5").Add("test.ammo").Add(new string('a', 64)).Add(0) })
             check(Ask(stranger, bad).Text(1) == "refused", "Refused: " + bad.Text(3 < bad.Count ? 3 : 1));
-        var listed = Ask(stranger, new Frame("mods.files").Add("6").Add(texture.Id).Add(texture.Hash));
-        check(listed.Text(1) == "ok" && listed.Int(2) == texture.Files.Count, "A granted machine gets the file list.");
+        var listed = Ask(stranger, new Frame("mods.files").Add("6").Add(texture.Id).Add(texture.Hash).Add(0));
+        check(listed.Text(1) == "ok" && listed.Int(2) == texture.Files.Count && listed.Int(3) == 0 && listed.Count == 4 + 3 * texture.Files.Count, "A granted machine gets the file list.");
         // Pacing: about 1 MiB/s to one machine (600 KB in five chunks takes at least half a second).
         var clock = Stopwatch.StartNew();
         for (var offset = 0; offset < 600_000; offset += ModSync.ChunkBytes)
             check(Ask(stranger, new Frame("mods.get").Add("p" + offset).Add(texture.Id).Add(texture.Hash).Add("data/9ba626afa44a3aa3.patch_0")
                 .Add(offset).Add(Math.Min(ModSync.ChunkBytes, 600_000 - offset))).Text(1) == "ok", "A chunk is served.");
         check(clock.Elapsed > TimeSpan.FromSeconds(0.4), $"The host paced its upload ({clock.ElapsedMilliseconds} ms).");
+        await HostLimits(network, host, hostSet, stranger, replies, lobby, check);
 
         // A host whose copy changed (same size, other bytes): the download fails its check and nothing is stored.
         var patch = Path.Combine(host.Mods, "texture", "data", "9ba626afa44a3aa3.patch_0");
@@ -221,7 +229,7 @@ static class ModSyncTests
         guest.Sync.Answer(["syncanswer", changed.Version.ToString(), "accept"]);
         var failed = guest.Shown.Next(check, "failed");
         check(failed.Message.Contains("not the file the host listed") && SyncedStore.Find(guest.Mods, texture.Id, texture.Hash) == null &&
-            !Directory.Exists(Path.Combine(SyncedStore.Root(guest.Mods), ".partial", texture.Id + "@" + texture.Hash[..16])), "Tampered: " + failed.Message);
+            NoPartial(guest.Mods, texture.Id), "Tampered: " + failed.Message);
         Patch(patch, 600_000, 7);
 
         // A host that calls its code mod content: the joiner reads the manifest and stops before the DLL.
@@ -239,6 +247,7 @@ static class ModSyncTests
         var caught = guest.Shown.Next(check, "failed");
         check(caught.Message.Contains("runs code") && SyncedStore.Find(guest.Mods, code.Id, code.Hash) == null, "A lying host is caught: " + caught.Message);
         await Liars(network, guest, hostSet, root, check);
+        await Hostile(network, guest, root, check);
 
         await LiveDisplay(root, check);
         await liar.Sync.DisposeAsync();
@@ -274,11 +283,187 @@ static class ModSyncTests
             check(lied.Items.Single(i => i.Mod.Id == id).Action == SyncAction.Download, id + ": the joiner first believes the host's class.");
             guest.Sync.Answer(["syncanswer", lied.Version.ToString(), "accept"]);
             var caught = guest.Shown.Next(check, "failed");
-            var partial = Path.Combine(SyncedStore.Root(guest.Mods), ".partial", id + "@" + target.Hash[..16]);
             check(caught.Message.Contains("carries data HellForge cannot check") && caught.Done < target.Files.Single(f => f.Path == file).Size &&
-                SyncedStore.Find(guest.Mods, id, target.Hash) == null && !Directory.Exists(partial), $"{id}, called content, is caught before its bytes: {caught.Message} ({caught.Done} bytes)");
+                SyncedStore.Find(guest.Mods, id, target.Hash) == null && NoPartial(guest.Mods, id), $"{id}, called content, is caught before its bytes: {caught.Message} ({caught.Done} bytes)");
             await liar.Sync.DisposeAsync();
         }
+    }
+
+    static Frame Ask(IPeerTransport from, BlockingCollection<Frame> replies, Frame request, Action<bool, string> check)
+    {
+        from.Send(HostId, request.Encode(), reliable: true);
+        check(replies.TryTake(out var reply, TimeSpan.FromSeconds(5)), "The host answers " + request.Type);
+        return reply!;
+    }
+
+    // A machine of the test's own (raw frames) whose join to the host's lobby is refused for its mods: it gets a grant.
+    static (IPeerTransport Peer, BlockingCollection<Frame> Replies) Refusee(InMemoryNetwork network, ulong id, string lobby, string op)
+    {
+        var peer = network.Join(id);
+        var replies = new BlockingCollection<Frame>();
+        peer.Received += (_, bytes) => replies.Add(Frame.Decode(bytes));
+        JoinAgain(peer, replies, id, lobby, op);
+        return (peer, replies);
+    }
+
+    // The offer, the refusal and the join's result.
+    static void JoinAgain(IPeerTransport peer, BlockingCollection<Frame> replies, ulong id, string lobby, string op)
+    {
+        peer.Send(HostId, MultiplayerTests.Join(op, id, lobby).Add(new string('0', 32)).Add(LobbyService.Protocol).Encode(), reliable: true);
+        for (var i = 0; i < 3 && replies.TryTake(out _, TimeSpan.FromSeconds(5)); i++) { }
+    }
+
+    // The host's limits (the review of PR 17): a reply it cannot send does not stop its worker; a grant's bytes and time are
+    // capped, and joining again extends neither; code and raw mods go only to Steam friends.
+    static async Task HostLimits(InMemoryNetwork network, Node host, ModSet hostSet, IPeerTransport stranger, BlockingCollection<Frame> replies, string lobby,
+        Action<bool, string> check)
+    {
+        var texture = hostSet.Mods.Single(m => m.Id == "test.texture");
+        const string Patch = "data/9ba626afa44a3aa3.patch_0";
+        Frame Chunk(string req, long offset) => new Frame("mods.get").Add(req).Add(texture.Id).Add(texture.Hash).Add(Patch).Add(offset).Add(ModSync.ChunkBytes);
+
+        // A request id near a frame's size: its 128 KiB chunk cannot be sent. Logged, and the next request is served.
+        stranger.Send(HostId, new Frame("mods.get").Add(new string('r', 950_000)).Add(texture.Id).Add(texture.Hash).Add(Patch).Add(0).Add(ModSync.ChunkBytes).Encode(), reliable: true);
+        var after = Ask(stranger, replies, new Frame("mods.files").Add("after").Add(texture.Id).Add(texture.Hash).Add(0), check);
+        lock (host.Log)
+            check(after.Text(0) == "after" && after.Text(1) == "ok" && host.Log.Any(l => l.Contains("could not be answered")),
+                "The host's worker goes on after a reply it could not send: " + string.Join(" / ", host.Log.TakeLast(3)));
+
+        // The grant's budget: the set twice over and a little; then refused, and joining again does not refill it.
+        long served = 0;
+        Frame last = after;
+        for (var i = 0; i < 40 && last.Text(1) == "ok"; i++)
+        {
+            last = Ask(stranger, replies, Chunk("budget" + i, 0), check);
+            if (last.Text(1) == "ok") served += ModSync.ChunkBytes;
+        }
+        var budget = 2 * hostSet.Mods.Sum(m => m.Bytes) + ModSync.Window * ModSync.ChunkBytes;
+        check(last.Text(1) == "refused" && last.Text(2).Contains("all this offer allows") && served < budget, $"The grant's bytes are capped ({served} of {budget}): {last.Text(2)}");
+        JoinAgain(stranger, replies, StrangerId, lobby, "f2-join");
+        check(Ask(stranger, replies, Chunk("budget-again", 0), check).Text(1) == "refused", "Joining again does not refill the grant.");
+
+        // The grant's time: from the offer, never extended by downloading.
+        host.Sync.GrantFor = TimeSpan.FromSeconds(1.5);
+        var (timed, timedReplies) = Refusee(network, 0x110000100000026, lobby, "timed-join");
+        var granted = Stopwatch.StartNew();
+        check(Ask(timed, timedReplies, Chunk("t1", 0), check).Text(1) == "ok", "A fresh grant serves.");
+        await Task.Delay(TimeSpan.FromSeconds(0.6));
+        check(Ask(timed, timedReplies, Chunk("t2", 0), check).Text(1) == "ok", "Within its time, it still serves.");
+        while (granted.Elapsed < TimeSpan.FromSeconds(1.7)) await Task.Delay(50);
+        var expired = Ask(timed, timedReplies, Chunk("t3", 0), check);
+        check(expired.Text(1) == "refused" && expired.Text(2).Contains("time is up"), "The grant ends at its time, downloads or not: " + expired.Text(2));
+        host.Sync.GrantFor = ModSync.GrantTime;
+        timed.Dispose();
+
+        // Not a Steam friend: content is served, a code or raw mod's files are not.
+        const ulong NotFriend = 0x110000100000027;
+        lock (network.Strangers) network.Strangers.Add(NotFriend);
+        var (other, otherReplies) = Refusee(network, NotFriend, lobby, "stranger-join");
+        var stats = hostSet.Mods.Single(m => m.Id == "test.stats");
+        var code = hostSet.Mods.Single(m => m.Id == "test.code");
+        foreach (var mod in new[] { texture, code })
+        {
+            var refused = Ask(other, otherReplies, new Frame("mods.files").Add("x" + mod.Id).Add(mod.Id).Add(mod.Hash).Add(0), check);
+            check(refused.Text(1) == "refused" && refused.Text(2).Contains("Steam friends"), $"{mod.Id} is not served to a stranger: {refused.Text(2)}");
+        }
+        check(Ask(other, otherReplies, new Frame("mods.files").Add("s").Add(stats.Id).Add(stats.Hash).Add(0), check).Text(1) == "ok", "Content is served to a stranger.");
+        lock (network.Strangers) network.Strangers.Remove(NotFriend);
+        other.Dispose();
+    }
+
+    // A host whose set this test makes up: the mods given, each served from its folder as listed.
+    static ModSetEntry Made(string id, string folder, ModClass kind, string? hash = null, long? bytes = null, params ModFile[] extra)
+    {
+        var files = Directory.GetFiles(folder, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(folder, f).Replace('\\', '/')).Order(StringComparer.Ordinal)
+            .Select(p =>
+            {
+                var data = File.ReadAllBytes(Path.Combine(folder, p));
+                return new ModFile(p, data.Length, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data)));
+            }).Concat(extra).ToList();
+        return new ModSetEntry(id, id, "1", hash ?? new string('d', 64), bytes ?? files.Sum(f => f.Size), kind, 0) { Folder = folder, Files = files };
+    }
+
+    // The guest joins a host made of these mods (called content) and is refused: the offer it is shown.
+    static SyncView Offered(InMemoryNetwork network, Node guest, ulong id, string root, string op, Action<bool, string> check, params ModSetEntry[] mods)
+    {
+        var host = new Node(network, id, Path.Combine(root, "hostile-" + op), new ModSet(new string('c', 32), mods), (_, _) => false);
+        host.Lobby.FromLocal(MultiplayerTests.Create(op + "-create", id));
+        guest.Lobby.FromLocal(MultiplayerTests.Join(op + "-join", GuestId, host.Next("lobby.result", check).Text(4)));
+        guest.Next("lobby.result", check);
+        return guest.Shown.Next(check, "offer");
+    }
+
+    // Hosts whose bytes would have crashed or stalled the joiner's download (the review of PR 17): each ends in "failed"
+    // with a message and leaves no download folder. Then a mod of 2000 files (two file list pages), first on a full disk.
+    static async Task Hostile(InMemoryNetwork network, Node guest, string root, Action<bool, string> check)
+    {
+        var folder = Path.Combine(root, "hostile");
+        ulong next = 0x110000100000040;
+        void Fails(string op, string expect, Func<SyncView, bool>? also, params ModSetEntry[] mods)
+        {
+            var offer = Offered(network, guest, ++next, root, op, check, mods);
+            guest.Sync.Answer(["syncanswer", offer.Version.ToString(), "accept"]);
+            var failed = guest.Shown.Next(check, "failed");
+            check(failed.Message.Contains(expect) && (also?.Invoke(failed) ?? true) && mods.All(m => NoPartial(guest.Mods, m.Id) && SyncedStore.Find(guest.Mods, m.Id, m.Hash) == null),
+                $"{op}: {failed.Message} ({failed.Done} bytes)");
+        }
+
+        // Sizes near long.MaxValue (they overflowed the sum of the file list).
+        Write(Path.Combine(folder, "huge"), ModCatalog.ManifestName, Ammo.Replace("test.ammo", "test.huge"));
+        Fails("huge", "cannot be taken", null, Made("test.huge", Path.Combine(folder, "huge"), ModClass.Content, bytes: 1000,
+            extra: [new ModFile("big.bin", long.MaxValue - 10, new string('A', 64)), new ModFile("big2.bin", 20, new string('B', 64))]));
+        // A manifest of the wrong shape: "native": 1, and a network field type without "expect".
+        Write(Path.Combine(folder, "native"), ModCatalog.ManifestName, """{"format":1,"id":"test.native","name":"N","version":"1","native":1}""");
+        Fails("native", "native must be an object", null, Made("test.native", Path.Combine(folder, "native"), ModClass.Content));
+        Write(Path.Combine(folder, "expect"), ModCatalog.ManifestName,
+            """{"format":1,"id":"test.expect","name":"E","version":"1","native":{"networkFieldTypes":[{"name":"deposit_value","bits":14}]}}""");
+        Fails("expect", "expect is required", null, Made("test.expect", Path.Combine(folder, "expect"), ModClass.Content));
+        // Two manifests: the one the catalogue reads (hellforge-mod.json) is a code mod's, the legacy one a content mod's.
+        // The joiner reads the same one first and stops before the DLL.
+        var twin = Path.Combine(folder, "twin");
+        Write(twin, ModCatalog.LegacyManifestName, Ammo.Replace("test.ammo", "test.twin"));
+        Write(twin, ModCatalog.ManifestName, """{"format":1,"id":"test.twin","name":"Twin","version":"1","code":{"dll":"mod.dll","sdk":1}}""");
+        Write(twin, "mod.dll", new string('d', 300_000));
+        var twinMod = ModCatalog.Parse(twin, EntityProfile.Current);
+        check(ModSets.ClassOf(twinMod) == ModClass.Code, "The twin is a code mod by the manifest the catalogue reads.");
+        Fails("twin", "runs code", view => view.Done < 300_000, Made("test.twin", twin, ModClass.Content, ModSets.ContentHash(twinMod)) with { Version = twinMod.Version });
+
+        // 2000 files: more than a frame's fields in one list (4 + 3 per file), so the host pages it. First a disk too full.
+        var bulk = Path.Combine(folder, "bulk");
+        Write(bulk, ModCatalog.ManifestName,
+            """{"format":1,"id":"test.bulk","name":"Bulk","version":"1","native":{"networkFieldTypes":[{"name":"remaining","expect":{"kind":1,"bits":8,"min":0},"bits":9}]}}""");
+        for (var i = 0; i < 1999; i++) Write(bulk, $"files/f{i:D4}.txt", i.ToString());
+        var bulkSet = ModSet.Of(ModCatalog.Load(Path.GetDirectoryName(bulk)!).Mods.Where(m => m.Id == "test.bulk").ToList());
+        var bulkMod = bulkSet.Mods.Single();
+        check(bulkMod.Files.Count == 2000 && bulkMod.Class == ModClass.Content, $"The bulk mod counts {bulkMod.Files.Count} files.");
+        var bulkHost = new Node(network, ++next, Path.Combine(root, "hostile-bulk"), bulkSet, (_, _) => false);
+        bulkHost.Lobby.FromLocal(MultiplayerTests.Create("bulk-create", next));
+        var bulkLobby = bulkHost.Next("lobby.result", check).Text(4);
+        SyncView JoinBulk(string op)
+        {
+            guest.Lobby.FromLocal(MultiplayerTests.Join(op, GuestId, bulkLobby));
+            guest.Next("lobby.result", check);
+            return guest.Shown.Next(check, "offer");
+        }
+        guest.Sync.FreeSpace = _ => 1000;
+        var full = JoinBulk("bulk-full");
+        guest.Sync.Answer(["syncanswer", full.Version.ToString(), "accept"]);
+        var noRoom = guest.Shown.Next(check, "failed");
+        check(noRoom.Message.Contains("Not enough free disk space") && noRoom.Done == 0, "A full disk: " + noRoom.Message);
+        guest.Sync.FreeSpace = _ => null;
+        var offer = JoinBulk("bulk-join");
+        guest.Sync.Answer(["syncanswer", offer.Version.ToString(), "accept"]);
+        var ready = guest.Shown.Next(check, "ready", "failed");
+        check(ready.State == "ready" && SyncedStore.Find(guest.Mods, bulkMod.Id, bulkMod.Hash) != null && NoPartial(guest.Mods, bulkMod.Id),
+            $"A 2000-file mod downloads, page by page: {ready.State} {ready.Message}");
+        await bulkHost.Sync.DisposeAsync();
+
+        // More mods than the loader holds: the ones that need nothing are left out first, and the message says so.
+        var many = Enumerable.Range(0, 600).Select(i => new SyncItem(new ModSetEntry($"m.{i:D3}", "M", "1", new string('e', 64), 1, ModClass.Content, i),
+            i < 100 ? SyncAction.Download : SyncAction.Have, null)).ToList();
+        var (shown, message) = LiveSyncDisplay.Shown(new SyncView(1, "offer", "Host", 100, 0, "Download them.", many));
+        check(shown.Count == LiveSyncDisplay.MaxMods && shown.Count(i => i.Action == SyncAction.Download) == 100 && message.StartsWith("(88 more mods"),
+            $"An offer of 600 mods: {shown.Count} listed, {message}");
     }
 
     // The game's side over the live-edit pipe: the offer's lines, and its answer back.
