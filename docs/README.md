@@ -52,8 +52,9 @@ Reference and related pages:
 - [Co-op and public lobbies](multiplayer.md): how HellForge's co-op, mod sync and public lobbies work, and the research
   log from building them.
 - [Stratagem selection categories](stratagem-categories.md): the research behind SDK 8's selection headings.
+- [Roadmap](roadmap.md): what HellForge has, what is being built, and what comes next.
 - [Engine roadmap](engine-roadmap.md): planned engine work, starting with network isolation.
-- [SDK roadmap](sdk-roadmap.md): the modding SDK's design and what is planned.
+- [SDK roadmap](sdk-roadmap.md): what is left in the modding SDK.
 
 ## Your installation
 

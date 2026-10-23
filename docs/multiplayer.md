@@ -442,8 +442,8 @@ taken to be SteamID64s; unanswered ids are logged.
 
 ### Stats in co-op
 
-Everyone in a session plays with the host's Local Stats. The design is in [sdk-roadmap.md](sdk-roadmap.md), phase 3,
-"Runtime edits in multiplayer".
+Everyone in a session plays with the host's Local Stats. How it was built is under
+[step 5](#step-5-stats-in-co-op-the-hosts-values-everywhere-2026-10-17).
 
 - The Local Stats mod (`zz.local.stats`) is not part of the modlist digest, so friends with different saved changes can
   play together. Every other gameplay mod must still match.
@@ -479,7 +479,7 @@ friend can rejoin.
 
 What mods add (stratagems, entities, behaviours, abilities) is numbered alike on every machine whatever the load
 order, and HellForge's own logic runs where the game runs its own. What is done and what is still open is in
-[engine-roadmap.md](engine-roadmap.md#co-op-sync-for-mod-content) and [sdk-roadmap.md](sdk-roadmap.md) (phase 7).
+[engine-roadmap.md](engine-roadmap.md#co-op-sync-for-mod-content) and [sdk-roadmap.md](sdk-roadmap.md) (phase 6).
 
 Every session folder gets `coop-diagnostics.log` (`native/mod-loader/coop_diag.c`): what this machine's game sees of
 content mods added, each line with the co-op role, so two players' files can be laid side by side. It records added

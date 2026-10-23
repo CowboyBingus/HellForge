@@ -467,8 +467,8 @@ board's special missions use for levels 1 to 3, which may then not appear at tho
 
 This section explains where the SDK's field and content names come from and which files are generated from them.
 
-SDK 6 names the fields of component records, so a mod never writes an offset (the plan is in
-[sdk-roadmap.md](sdk-roadmap.md)). One source names them: `mappings/components.json` (per component: index, record
+SDK 6 names the fields of component records, so a mod never writes an offset (how they grow is in
+[sdk-roadmap.md](sdk-roadmap.md#mappings)). One source names them: `mappings/components.json` (per component: index, record
 size, the game build whose layout it is, and fields with offset, type, count, meaning, source and whether the game
 confirmed it) and `mappings/catalog.json` (vanilla content by name). `HellForge.Cli sdk-headers --repo .` generates
 these files from them:
@@ -859,7 +859,7 @@ for byte what the research scripts `artifacts/registry/build_gold_liberator.py` 
 ## Where to go next
 
 - [engine.md](engine.md): the engine's parts, building and tests.
-- [sdk-roadmap.md](sdk-roadmap.md): how the SDK got here and what is planned.
+- [sdk-roadmap.md](sdk-roadmap.md): what is planned for the SDK.
 - [engine-roadmap.md](engine-roadmap.md): network isolation and co-op sync plans.
 - [multiplayer.md](multiplayer.md): how co-op works.
 - [sdk-reference.md](sdk-reference.md): every SDK call, component, table and constant.
