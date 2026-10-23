@@ -4,7 +4,7 @@ This page is for contributors. It records the plan for the mod SDK, phase by pha
 planned. [modding/README.md](modding/README.md) and [sdk-reference.md](sdk-reference.md) document what exists today;
 [engine-roadmap.md](engine-roadmap.md) is the engine's side.
 
-Status (2026-10-23: mod SDK 14, engine 0.1.29, HellForge 0.3.0-beta):
+Status (2026-10-23: mod SDK 14, engine 0.1.29, HellForge 0.3.0-dev.1):
 
 | Phase | Status |
 |---|---|

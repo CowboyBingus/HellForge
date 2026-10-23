@@ -338,7 +338,7 @@ the window fills it.
 - Its chunks queue at once, so the window stays near 2.
 - A request it refuses as "too many requests at once" halves the window's ceiling, and that chunk is asked again.
 
-The speed comes from the host's end: an updated joiner downloads from a 0.3.0-beta host at its old speed.
+The speed comes from the host's end: an updated joiner downloads from a host on an earlier 0.3.0 test build at its old speed.
 
 **Expected.**
 - On a good connection, 8 MiB/s: about 5 s for the test's 38 MB.
