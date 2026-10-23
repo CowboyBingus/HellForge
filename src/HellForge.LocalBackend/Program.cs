@@ -100,6 +100,8 @@ try
         options.GetValueOrDefault("--fixture-override"), options.GetValueOrDefault("--capture-mission-bodies") == "true", warClock, accountKeys, liveWar, presence, registeredItems, openWar);
     await app.StartAsync(lifetime.Token);
     var pipeName = options.GetValueOrDefault("--pipe");
+    // --sandbox: the session's game runs at low integrity, so the pipes it opens carry a low label (PipeServer)
+    HellForge.Core.PipeServer.LowIntegrityClients = options.GetValueOrDefault("--sandbox") == "true";
     // --mod-list <file>: the digest's mods one by one (ModlistDiff's form), so a refused join can say which differ
     var modList = options.GetValueOrDefault("--mod-list") is { } modListFile ? File.ReadAllText(modListFile) : null;
     await using var multiplayer = pipeName != null

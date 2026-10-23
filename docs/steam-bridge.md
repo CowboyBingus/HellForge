@@ -1,6 +1,10 @@
 # The Steam bridge: the game at low integrity
 
-**Status: in development** on branch `research/steam-broker`. Nothing here ships yet.
+**Status: in development** on `port/networking-0.2.0`. Built and tested with fixtures: the census, the broker and its
+channel (phase 2), and the session side of phase 4. Phase 3 (the generated proxies) is not started, so a sandboxed game
+still loads Valve's DLL for every interface call; the sandbox is not a boundary until it is. A session is sandboxed only
+when asked (`HellForge.Session play --sandbox`, or `HELLFORGE_SANDBOX=1`); nothing here ships yet, and none of it has
+run in game.
 
 ## Why
 
@@ -30,28 +34,45 @@ client's IPC objects are at the player's normal integrity, so a low-integrity pr
  └────────────────────────────────────────────┘          └──────────────────────────────────────────┘
 ```
 
-- **The game's side** is the `steam_api64.dll` stand-in, in bridged mode (when the session names a broker).
-  - It never loads Valve's DLL in the game.
-  - It answers the flat API itself: init, shutdown, `RunCallbacks`, callback registration, the user and pipe handles,
-    and context init.
-  - It hands out generated proxy objects for each interface the game requests. Each vtable slot marshals its call to
-    the broker.
-  - An export with no bridged implementation logs once and fails, so nothing ever reaches Valve's code in the game.
-- **The broker** is native C and runs at the player's normal integrity: one process per session, started by the session
-  runner.
-  - It loads Valve's `steam_api64.dll` (the game's pinned copy) as app 553850, then calls `SteamAPI_Init` and manual
-    dispatch.
-  - It serves one client: the game process it was started for. It checks the pipe's client process id against the id
-    the runner gives it.
+- **The game's side** is the `steam_api64.dll` stand-in, in bridged mode (when the session sets
+  `HELLFORGE_BRIDGE_PIPE`).
+  - Its own functions never load Valve's DLL in that mode. Its `SteamAPI_Init` and `SteamAPI_InitSafe` (the pinned
+    build's init exports) connect to the broker on first use, never in `DllMain` (no wait under the loader lock).
+    It waits up to 10 s for the broker's pipe. Without a broker it **fails closed**: init returns false,
+    `IsSteamRunning` 0, and nothing falls back to Valve's DLL.
+  - It answers the flat API itself: init, shutdown, `RunCallbacks`, `IsSteamRunning` (asked of the broker), callback
+    registration, the user and pipe handles. `SteamInternal_ContextInit` is still to do.
+  - **Until phase 3**, the other exports are still loader forwarders to Valve's DLL, so a forwarded call would load it
+    in the game. Phase 3's generated exports and proxies replace them: an export with no bridged implementation logs
+    once and fails.
+  - It hands out generated proxy objects for each interface the game requests (phase 3). Each vtable slot marshals its
+    call to the broker.
+- **The broker** (`hellforge_steam_broker.exe`, beside the stand-ins) is native C and runs at the player's normal
+  integrity: one process per session, started by the session runner as `<pipe suffix> <game pid> <Valve's DLL>`.
+  - It creates the pipe and ring first, then loads Valve's `steam_api64.dll` (the game's pinned copy) as app 553850
+    (`SteamAppId` in its environment; it never calls `SteamAPI_RestartAppIfNecessary`, which may start the installed
+    game) and calls `SteamAPI_Init` (`SteamAPI_InitFlat` with a newer SDK) and manual dispatch.
+  - It serves one client: the game process it was started for. A client whose pipe process id differs from its own
+    HELLO or from the game's, or that says nothing for 5 s, is refused and disconnected, and the broker waits on.
+  - It watches the game's process, and exits when the game does, even while it waits for the connection.
+  - One thread makes every Steam call: it answers calls, and when none comes for 16 ms it runs manual dispatch.
   - It makes allowed calls through Valve's flat C API, so the broker itself needs no C++ ABI.
-- **Calls** go over a duplex pipe, one request then its reply, serialized by a lock in the stand-in.
-  - The pipe's security descriptor grants the player and carries a **low** mandatory label (no write up), so the game
-    can open it and nothing else at low integrity can.
-  - The pipe name is random per session.
+- **Calls** go over a duplex pipe, one request then its reply, serialized by a lock in the stand-in; each carries a
+  sequence number its reply must echo. A call too short or too large is answered as malformed; a broken pipe marks
+  the channel dead, and every later call fails at once.
+  - The pipe's security descriptor grants the player's own SID read and write only, and carries a **low** mandatory
+    label (no write up), so the game can open it. It is the first and only instance of its name and refuses remote
+    clients, so nothing that made the name first can stand in for the broker.
+  - The pipe name is the session's id. Any low-integrity process of the player could open it; the process id check
+    is what keeps them out.
 - **Callbacks** are pushed by the broker.
   - The broker writes every callback and call result (`SteamAPICallCompleted_t`, then `GetAPICallResult`) into a
-    shared-memory ring, labelled low as well.
-  - The stand-in's `RunCallbacks` reads the ring and calls the game's registered `CCallbackBase` objects.
+    shared-memory ring: an unnamed section the broker duplicates into the checked game process only.
+  - The game can write the ring, so each side keeps its own position and only publishes it there. The broker clamps
+    the game's read position before it uses it, and a slot index is always an unsigned position modulo 60. Callbacks
+    that find the ring full are counted and logged.
+  - The stand-in's `RunCallbacks` reads the ring and calls the game's registered `CCallbackBase` objects (phase 3:
+    until then they are read and dropped).
   - An idle frame is one read of the ring's sequence number: no system call.
 - **Steam Input,** which the game polls every frame, is answered from a shared snapshot the broker refreshes. This is
   done once the census shows which calls happen per frame; see "Cost".
@@ -93,16 +114,26 @@ The proxies and the broker's dispatch are **generated** by `HellForge.SdkShimGen
 - **The game process:** the session runner starts it with a lowered copy of its own token (`CreateProcessAsUser`; no
   admin needed). Its job adds an active-process limit of 1, so no child processes. That loses the crash handler, and
   NVIDIA's DLSS updater that Steam's overlay starts.
-- **Folders the game writes:**
-  - The runner **creates** them with a low label in their security descriptor. Labelling at creation, at or below one's
-    own integrity, needs no admin.
-  - They cover: the game's app data, temp and shader cache; the session's game logs (the mod loader's, the stand-in's,
-    the engine log); and the profile's user data and cloud folder.
-  - Data the runner keeps across sessions is copied in at the start and back at the end, and read back as untrusted.
-- **Pipes the game opens** carry a low label: the lobby and party stand-ins' pipe (backend) and the live pipe (backend).
-- **The in-game editor** writes into `mods/` (Local Stats, its settings). At low integrity it cannot. Its saves go to
-  the backend over the live pipe instead, which validates them (`StatsData.Parse`) and writes them. A low-writable
-  `mods/` would let a compromised game plant files for the next session.
+- **Folders the game writes** get a low label (`LowIntegrityHelper.LabelFoldersLow`; at or below one's own integrity
+  that needs no admin):
+  - the game's environment (`userdata/environment`: its AppData, temp and shader cache) and its profile's user data
+    (settings, saves, the cloud folder). They keep the label between sessions; HellForge reads nothing in them as
+    trusted. (The design copied them in and out per session instead; the shader cache makes that costly.)
+  - the session's `game/` folder inside its run folder: the mod loader's, the stand-ins' and the census's logs, the
+    stats snapshot, and the editor's saves. The rest of the run folder stays at the player's level: the runner's
+    result, the backend's evidence and the `steam_api64.dll` copy the backend loads for the peer link must stay out of
+    the game's reach.
+- **Pipes the game opens** carry a low label when the backend runs with `--sandbox` (`PipeServer`): the lobby and party
+  stand-ins' pipe and the live pipe. Only the player's account may open them, from this PC only.
+- **The in-game editor** cannot write into `mods/` (Local Stats, its settings, its presets); a low-writable `mods/`
+  would let a compromised game plant files for the next session. Sandboxed, each save writes the session's saved
+  changes as a list (`game/sandbox-stats/changes.json`), and its settings and exported presets beside it. Once the game
+  is gone the runner applies them (`SandboxStats`): Local Stats changes onto the file as it is then (the launcher may
+  have saved meanwhile), under the launcher's lock, each kept only if `StatsData.Parse` accepts it; mod content values,
+  settings and presets rebuilt by System.Text.Json within size limits. A save from the live pipe was the first design;
+  the loader's message buffer is 1 KiB and the editor has no API to it.
+- **The mods hold** (lockdown item 4) still applies: what appeared in `mods/` during the session is reported and the
+  mods it appeared in switched off, before the editor's saves are applied.
 
 ### What it does not stop
 
@@ -225,10 +256,13 @@ start and never again.
 
 ## Cost
 
-- **Idle frame:** the ring's sequence read in `RunCallbacks`. No system call; no Steam Input traffic without a
-  controller.
-- **A bridged call:** one pipe round trip, about 10-30 us. That is to be measured in game; most calls happen once or on
-  events.
+- **Idle frame** (`RunCallbacks`, about 400 a second in the census): one read of the ring's write position, compared
+  with the stand-in's own. 0 system calls, 0 pipe messages, no allocation. Unmeasured in game.
+- **A frame with callbacks:** per callback, one slot copied (at most 1016 bytes) and two memory fences; no system call.
+  Unmeasured in game.
+- **The broker's pumping** runs in its own process every 16 ms, not on the game's thread.
+- **A bridged call:** one pipe round trip (two system calls in the game). `SteamAPI_IsSteamRunning` is one: 2,014 in
+  the census's 214 s, about 9 a second. Unmeasured in game; most other calls happen once or on events.
 - **Steam Input with a controller:** read from the snapshot, with no system call per call. The snapshot's per-frame
   cost is to be measured.
 
@@ -244,7 +278,10 @@ Every number here is unmeasured in game until phase 4.
    - `SteamAPI_Init` in the broker;
    - manual dispatch into the ring, and the flat API in the stand-in.
 
-   Fixture tests use a fake Steam DLL.
+   Fixture tests use a fake Steam DLL: `broker_test.c` (every engine build) drives both ends. It covers the ring's
+   bounds against a game that writes its header, the pipe's label and grant, a second process with the wrong pid, a
+   lying HELLO, malformed and oversized calls, a late broker, a dead broker, the game exiting, and the stand-in itself
+   in bridge mode (Valve's DLL never loads; without a broker, init fails closed).
 3. **Generated proxies:** `SdkShimGen steam-bridge`, from the pinned SDK and the game's DLL, with the allow-list as a
    reviewed table. Fixture tests per parameter kind (strings, buffers, structs, the `CSteamID` hidden pointer).
 4. **A low-integrity session:** the token and job, labelled folders, pipe labels, and the editor's saves through the

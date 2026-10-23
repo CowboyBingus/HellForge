@@ -3,14 +3,15 @@ using HellForge.Session;
 // HellForge.Session.exe: the engine's session runner (docs/engine.md).
 //   play --install <installation> --profile <profile folder> [--template <name>] [--local-playfab] [--multiplayer]
 //        [--live-war <cache file> | --open-war] [--engine-log] [--game-options <the player's launch options>]
-//        [--mod-sync <the mod sync session file>]
+//        [--mod-sync <the mod sync session file>] [--sandbox]   (--sandbox, or HELLFORGE_SANDBOX=1: the game at low integrity
+//        with the Steam broker, docs/steam-bridge.md; in development)
 //   version
 //   census <network-census.jsonl>   (a session's network census, summarised as the session's result.json holds it)
 //   network-probe <backend port> <report>   (the network block's probe as a Linux session runs it, PlaySession.NetworkProbeInProcess)
 // A session reports through its run folder (logs/sessions/<run>: result.json and the rest, as the launcher reads them);
 // anything that stops it before that folder exists goes to logs/session-runner.log.
 const string Usage = "Usage: HellForge.Session play --install <installation> --profile <profile folder> [--template <name>] " +
-    "[--local-playfab] [--multiplayer] [--live-war <cache file> | --open-war] [--engine-log] [--game-options <options>] [--mod-sync <file>] | version | census <log>";
+    "[--local-playfab] [--multiplayer] [--live-war <cache file> | --open-war] [--engine-log] [--game-options <options>] [--mod-sync <file>] [--sandbox] | version | census <log>";
 
 if (args.Length == 1 && args[0] == "version")
 {
@@ -46,10 +47,13 @@ for (var i = 1; i < args.Length; i++)
         case "--engine-log": options.EngineLog = true; break;
         case "--game-options": gameOptions = Value(); break;
         case "--mod-sync": options.ModSync = Value(); break;
+        case "--sandbox": options.Sandbox = true; break;
         default: Console.Error.WriteLine(Usage); return 2;
     }
 }
 if (options.Install.Length == 0) { Console.Error.WriteLine(Usage); return 2; }
+// as the other HELLFORGE_ diagnostics: a session the launcher starts takes it from the environment
+if (Environment.GetEnvironmentVariable("HELLFORGE_SANDBOX") == "1") options.Sandbox = true;
 try
 {
     // checked as the launcher checks them (GameLaunchOptions): never a switch the session sets itself

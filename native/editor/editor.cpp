@@ -616,6 +616,9 @@ extern "C" HF_MOD_EXPORT int hellforge_mod_init(const HfApi* hf, HfMod* mod)
     std::string folder = hf->mod_folder(mod);
     size_t slash = folder.find_last_of("\\/");
     if (slash != std::string::npos) g_modsFolder = folder.substr(0, slash);
+    wchar_t sandboxStats[MAX_PATH];
+    DWORD sandboxLen = GetEnvironmentVariableW(L"HELLFORGE_SANDBOX_STATS", sandboxStats, MAX_PATH);
+    if (sandboxLen > 0 && sandboxLen < MAX_PATH) localstats::SetSandboxSaveFolder(sandboxStats);
     InitializeCriticalSection(&g_lock);
     editorapp::Host host = {hf, mod, folder, g_modsFolder, CloseEditor, SaveSoon, ShowModal};
     editorapp::Init(host);
