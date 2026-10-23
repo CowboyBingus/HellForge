@@ -194,7 +194,11 @@ sealed class PlaySession(PlayOptions options)
             ["digest"] = modDigest,
             ["syncedWith"] = plan["syncedWith"]?.DeepClone()
         };
-        if ((string?)plan["syncedWith"] is { } syncedWith) Say($"Playing with {syncedWith}'s mods (mod sync).");
+        if ((string?)plan["syncedWith"] is { } syncedWith)
+        {
+            Say($"Playing with {syncedWith}'s mods (mod sync).");
+            if (options.ModSync != null) rejoinFile = Path.GetFullPath(options.ModSync);
+        }
         foreach (var problem in plan["problems"] as JsonArray ?? []) Say("Mod not loaded: " + (string?)problem);
 
         // Every game file (the build's, and everything in data/: staged mods and the player's own patches) is held
@@ -238,6 +242,9 @@ sealed class PlaySession(PlayOptions options)
 
     string modDigest = "none", profileDirectoryUsed = "";
     string? modList;
+    // After a mod sync whose host's mods were all found: the sync file, which the backend uses to bring the game back into
+    // the host's lobby (--rejoin, AutoRejoin).
+    string? rejoinFile;
     // The session's mod set (mods-stage --modset), for the backend's mod sync.
     string ModSetFile => Path.Combine(run, "modset.json");
 
@@ -620,6 +627,13 @@ sealed class PlaySession(PlayOptions options)
                 File.WriteAllText(listFile, modList);
                 start.ArgumentList.Add("--mod-list");
                 start.ArgumentList.Add(listFile);
+            }
+            // --rejoin: after a mod sync, the game is invited back into the host's lobby once it is on the ship (AutoRejoin)
+            if (rejoinFile != null)
+            {
+                start.ArgumentList.Add("--rejoin");
+                start.ArgumentList.Add(rejoinFile);
+                result["rejoin"] = true;
             }
             // The game inherits this environment (HostBoundedProcess).
             Environment.SetEnvironmentVariable("HELLFORGE_PIPE", pipe);

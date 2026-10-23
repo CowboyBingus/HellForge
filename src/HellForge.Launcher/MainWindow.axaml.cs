@@ -295,7 +295,7 @@ public partial class MainWindow : Window
         if (runnerExited && runDirectory != null && !stopRequested && paths.InstallRoot != null &&
             SessionFiles.ReadJson(Path.Combine(runDirectory, "result.json")) is { } final && SessionFiles.Text(final, "restart") == "mod-sync")
         {
-            Append("Restarting with the host's mods (mod sync). Join their lobby again from the social tab or the map.", LauncherLine);
+            Append("Restarting with the host's mods (mod sync). Once the game is on the ship, the host's invitation to their lobby waits in game.", LauncherLine);
             Start(HellForge.Core.ModSyncSession.PathIn(new HellForge.Core.InstallLayout(paths.InstallRoot)));
             return;
         }
