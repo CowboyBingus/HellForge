@@ -228,6 +228,9 @@ int wmain(int argc, wchar_t** argv)
     typedef void* (*GetInterfaceFn)(void*, int32_t, int32_t, const char*);
     EXPECT(client && ((GetInterfaceFn)SLOT(client, SteamClient020_GetISteamUser))(client, 1, 1, "SteamUser021") == user,
         "ISteamClient::GetISteamUser hands out the same proxy");
+    typedef void* (*FindGameServerFn)(int32_t user, const char* version);
+    EXPECT(EXPORT(FindGameServerFn, "SteamInternal_FindOrCreateGameServerInterface")(0, "SteamGameServerUtils010") == NULL,
+        "a game-server interface is NULL, as Valve's without a game server (the game checks for it)");
     void* http = find(1, "STEAMHTTP_INTERFACE_VERSION003");
     EXPECT(http && ((uint64_t (*)(void*))(*(void* const* const*)http)[0])(http) == 0, "an interface the table does not know answers 0");
 

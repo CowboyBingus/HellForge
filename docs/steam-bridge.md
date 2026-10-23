@@ -167,8 +167,9 @@ the callback ids in the table, and the game's side re-checks each object is stil
 
 **The bridge build's own exports** (`bridge_exports.c`): `SteamInternal_ContextInit` (the game's inline accessors: a
 compare and a return on each of its 73,040 calls in the census), `SteamInternal_CreateInterface` (`SteamClient020`: a
-proxy), the game-server interfaces and any version the table does not know (a null object whose every slot answers 0,
-logged), and `SteamAPI_UnregisterCallResult`. The forwarding build refuses to start a session that asks for the bridge,
+proxy), the game-server interfaces (NULL, as Valve's answer without `SteamGameServer_Init`: the game checks for it, and
+a null object in their place crashed it on the title screen in the first sandboxed run), any version the table does not
+know (a null object whose every slot answers 0, logged), and `SteamAPI_UnregisterCallResult`. The forwarding build refuses to start a session that asks for the bridge,
 rather than run on Valve's DLL.
 
 **The first table** is the census's named calls (step 2, below):
@@ -206,15 +207,21 @@ game; the census saw them on events only.
 - **The game process:** the session runner starts it with a lowered copy of its own token (`CreateProcessAsUser`; no
   admin needed). Its job adds an active-process limit of 1, so no child processes. That loses the crash handler, and
   NVIDIA's DLSS updater that Steam's overlay starts.
-- **Folders the game writes** get a low label (`LowIntegrityHelper.LabelFoldersLow`; at or below one's own integrity
-  that needs no admin):
-  - the game's environment (`userdata/environment`: its AppData, temp and shader cache) and its profile's user data
-    (settings, saves, the cloud folder). They keep the label between sessions; HellForge reads nothing in them as
-    trusted. (The design copied them in and out per session instead; the shader cache makes that costly.)
-  - the session's `game/` folder inside its run folder: the mod loader's, the stand-ins' and the census's logs, the
-    stats snapshot, and the editor's saves. The rest of the run folder stays at the player's level: the runner's
-    result, the backend's evidence and the `steam_api64.dll` copy the backend loads for the peer link must stay out of
-    the game's reach.
+- **Folders the game writes** are all inside the session's `game/` folder in its run folder, which the runner **makes
+  new with a low label** (`LowIntegrityHelper.CreateLowFolder`); everything made in it later inherits the label.
+  Labelling at creation, at or below one's own integrity, needs no admin. Relabelling an existing folder needs
+  WRITE_OWNER, which a standard account seldom has on its own folders: the first in-game try stopped there
+  (2026-10-23). The folder holds:
+  - the mod loader's, the stand-ins' and the census's logs, the stats snapshot, and the editor's saves;
+  - `environment/`, a copy of `userdata/environment` (the game's AppData and temp);
+  - `userdata/`, the user-data root `data/settings.ini` points at for the session (`prepare-session --user-data`): a
+    copy of the profile's folder (settings, saves, the cloud folder), the shader cache (110 MB on the test PC) and the
+    ImGui settings. The game's logs, dumps and crash data land there too and stay with the session.
+
+  Both copies go back once the game is gone (`SandboxFolders`): regular files only, never through a link or junction
+  (a low process can make one in its own folder), at most 4 GiB and 100,000 files. The rest of the run folder stays at
+  the player's level: the runner's result, the backend's evidence and the `steam_api64.dll` copy the backend loads for
+  the peer link must stay out of the game's reach.
 - **Pipes the game opens** carry a low label when the backend runs with `--sandbox` (`PipeServer`): the lobby and party
   stand-ins' pipe and the live pipe. Only the player's account may open them, from this PC only.
 - **The in-game editor** cannot write into `mods/` (Local Stats, its settings, its presets); a low-writable `mods/`
@@ -396,3 +403,11 @@ Every number here is unmeasured in game until phase 4.
 4. **A low-integrity session:** the token and job, labelled folders, pipe labels, and the editor's saves through the
    backend. In game, solo then co-op on two PCs: no STEAM NOT DETECTED, login, a mission, a controller, an invite, and
    per-frame cost measured.
+
+   **First solo run (2026-10-23, engine 0.1.29, one PC):** the game ran at low integrity (`0x1000`; the broker, the
+   backend and the runner at `0x2000`), with no STEAM NOT DETECTED: `SteamAPI_Init` through the broker, Steam login and
+   the backend's login, the war and progression, the title screen, 209 s and a clean stop. Three refusals:
+   `ISteamClient::SetWarningMessageHook`, `SteamGameServer_GetHSteamUser` and the `SteamGameServer014` interface (NULL).
+   Two fixes it took, both above: the folders are made with their label (relabelling `userdata` needed WRITE_OWNER), and
+   game-server interfaces are NULL (a null object crashed the game on the title screen). Still to do: a mission, a
+   controller, co-op on two PCs, and the per-frame cost.

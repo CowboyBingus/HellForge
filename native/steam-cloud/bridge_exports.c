@@ -62,13 +62,20 @@ HELLFORGE_API void* SteamInternal_CreateInterface(const char* ver)
     return BridgeInterface(ver);
 }
 
-// The game is never a game server: those interfaces are null objects.
+// The game is never a game server: with no SteamGameServer_Init, Valve's answer is NULL (SteamGameServer_GetHSteamUser
+// is 0), and the game takes NULL to mean none. A null object instead looked like a running game server, and the game
+// crashed on the title screen calling it (2026-10-23).
 HELLFORGE_API void* SteamInternal_FindOrCreateGameServerInterface(int32_t user, const char* version)
 {
-    (void)user;
-    BridgeRefused("SteamInternal_FindOrCreateGameServerInterface");
-    (void)version;
-    return &g_nullObject;
+    static volatile LONG logged;
+    if (InterlockedIncrement(&logged) <= 8)
+    {
+        char line[96];
+        strncpy(line, version ? version : "(null)", sizeof line - 1);
+        line[sizeof line - 1] = 0;
+        BridgeLog("bridge: game-server interface %s (user %d) -> NULL: no game server", line, user);
+    }
+    return NULL;
 }
 
 HELLFORGE_API void SteamAPI_UnregisterCallResult(void* callback, uint64_t call) { BridgeUnregisterCallResult(callback, call); }
