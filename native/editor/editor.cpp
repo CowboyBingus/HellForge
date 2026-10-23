@@ -110,7 +110,7 @@ static DWORD WINAPI SaveThread(void*)
     bool saved = localstats::Save(g_modsFolder, &error);
     snprintf(g_saveStatus, sizeof g_saveStatus, saved ? "saved to Local Stats" : "Local Stats not saved: %s", error.c_str());
     g_api->log(g_mod, "editor: %s", g_saveStatus);
-    if (!saved) InterlockedExchange(&g_saveFailed, 1);
+    if (!saved) { InterlockedExchange(&g_saveFailed, 1); g_saveAt = GetTickCount64() + 1000; } /* tried again in a second */
     InterlockedExchange(&g_saving, 0);
     return 0;
 }
@@ -580,10 +580,11 @@ static void WaitOurFrame()
  * (the first hook, and one put in front of an overlay that hooked over it, when that overlay calls on into the first
  * after all); only the outermost draws. */
 static thread_local int g_depth;
+static volatile LONG g_presents; /* presents through the editor's detours (Watchdog) */
 
 static HRESULT Present_(PresentFn next, IDXGISwapChain3* swapChain, UINT interval, UINT flags)
 {
-    if (g_depth++ == 0) BeforePresent(swapChain, flags);
+    if (g_depth++ == 0) { InterlockedIncrement(&g_presents); BeforePresent(swapChain, flags); }
     HRESULT result = next(swapChain, interval, flags);
     g_depth--;
     return result;
@@ -591,7 +592,7 @@ static HRESULT Present_(PresentFn next, IDXGISwapChain3* swapChain, UINT interva
 
 static HRESULT Present1_(Present1Fn next, IDXGISwapChain3* swapChain, UINT interval, UINT flags, const DXGI_PRESENT_PARAMETERS* parameters)
 {
-    if (g_depth++ == 0) BeforePresent(swapChain, flags);
+    if (g_depth++ == 0) { InterlockedIncrement(&g_presents); BeforePresent(swapChain, flags); }
     HRESULT result = next(swapChain, interval, flags, parameters);
     g_depth--;
     return result;
@@ -692,44 +693,131 @@ static uint8_t* JumpTarget(const uint8_t* code)
  * way it was before, not the editor (RivaTuner does when it comes in late, after its 15 s delay where Steam's overlay
  * is loaded, or on the game's first frames: issue #5, F8 took the input and nothing was drawn). A thread watches the
  * first bytes of Present, Present1 and ResizeBuffers; when they change into a jump, the place it goes is hooked
- * (through the loader, as any hook), so the editor runs first again and then that overlay. The shared method table is
- * never patched: Steam's overlay hooks again whatever the table holds, keeping one original for the method, and a
- * table pointing at the editor made it call the editor from its own detour, the editor it, until the stack ran out
- * (ntdll RtlpCallVectoredHandlers, 0xc0000005, at the title screen). */
-struct Watched { const char* name; uint8_t* code; uint8_t bytes[16]; uint8_t* first; int again, saidOther, saidOurs; uint8_t* hooked[AGAIN]; void* const* detours; void** originals; };
+ * (through the loader, as any hook), so the editor runs first again and then that overlay; when presents stop reaching
+ * the editor and the code is as it was before it, the editor's own hook is put back (Watchdog, PutBack). The shared
+ * method table is never patched: Steam's overlay hooks again whatever the table holds, keeping one original for the
+ * method, and a table pointing at the editor made it call the editor from its own detour, the editor it, until the
+ * stack ran out (ntdll RtlpCallVectoredHandlers, 0xc0000005, at the title screen). */
+struct Watched { const char* name; uint8_t* code; uint8_t before[8], mine[8]; uint8_t* first; int again, saidOther, saidOurs, putBack; uint8_t* hooked[AGAIN];
+    void* const* detours; void** originals; };
 static Watched g_watched[3];
+
+/* A method's first eight bytes as its module's file has them (read from dxgi.dll on disk through its section headers;
+ * mapping it again as an image gives back the loaded one): the code as it is before anyone hooks it, the editor or an
+ * overlay that hooked it first. false: not found. */
+static bool Pristine(const void* code, uint8_t out[8])
+{
+    HMODULE module = NULL;
+    wchar_t path[MAX_PATH];
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)code, &module) ||
+        !GetModuleFileNameW(module, path, MAX_PATH)) return false;
+    /* the sections from the loaded image's own headers (the same as the file's) */
+    const uint8_t* base = (const uint8_t*)module;
+    const IMAGE_NT_HEADERS* nt = (const IMAGE_NT_HEADERS*)(base + ((const IMAGE_DOS_HEADER*)base)->e_lfanew);
+    const IMAGE_SECTION_HEADER* section = IMAGE_FIRST_SECTION(nt);
+    DWORD rva = (DWORD)((const uint8_t*)code - base), offset = 0;
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections && offset == 0; i++, section++)
+        if (rva >= section->VirtualAddress && rva + 8 <= section->VirtualAddress + section->SizeOfRawData)
+            offset = section->PointerToRawData + (rva - section->VirtualAddress);
+    if (offset == 0) return false;
+    HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    DWORD read = 0;
+    OVERLAPPED at = {};
+    at.Offset = offset;
+    bool found = ReadFile(file, out, 8, &read, &at) && read == 8;
+    CloseHandle(file);
+    return found;
+}
+
+/* The code put back as it was before the editor hooked it (RivaTuner does when it takes its own hook off, as on a
+ * resize, and hooks it again only seconds later): the editor's own hook put back, its first eight bytes written at once
+ * over the same eight (the loader's trampoline and stub are still there), so a thread running the code sees either.
+ * (Where an overlay had hooked the code before the editor, the editor's hook goes on to that overlay's stub, which stays
+ * where it was: RivaTuner hooks again to the same one.)
+ * false: not that case, or the code is not at an 8-byte boundary. */
+static bool PutBack(Watched& w)
+{
+    LONG64 before, mine;
+    memcpy(&before, w.before, 8);
+    memcpy(&mine, w.mine, 8);
+    DWORD protect;
+    if (before == mine || ((uintptr_t)w.code & 7) != 0 || memcmp(w.code, w.before, 8) != 0 || JumpTarget(w.mine) == NULL ||
+        !VirtualProtect(w.code, 8, PAGE_EXECUTE_READWRITE, &protect)) return false;
+    bool put = InterlockedCompareExchange64((volatile LONG64*)w.code, mine, before) == before;
+    VirtualProtect(w.code, 8, protect, &protect);
+    FlushInstructionCache(GetCurrentProcess(), w.code, 8);
+    return put;
+}
+
+/* Where a method's code jumps, read live: NULL not a jump, or not to code. */
+static uint8_t* LiveJump(const uint8_t* code)
+{
+    uint8_t* to = JumpTarget(code);
+    MEMORY_BASIC_INFORMATION memory;
+    const DWORD run = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    return to != NULL && VirtualQuery(to, &memory, sizeof memory) && memory.State == MEM_COMMIT && (memory.Protect & run) ? to : NULL;
+}
+
+/* The editor's hook in front of the place a method's code now jumps to (an overlay's), unless it is there already. */
+static void InFront(Watched& w, uint8_t* to)
+{
+    bool ours = to == w.first; /* a jump back to the editor's own hook, or to where it went in front already */
+    for (int i = 0; i < w.again && i < AGAIN; i++) ours |= w.hooked[i] == to;
+    if (ours) { if (!w.saidOurs++) g_api->log(g_mod, "editor: %s: its code jumps to %p again, where the editor is in front already (said once)", w.name, (void*)to); return; }
+    if (w.again >= AGAIN) { if (w.again++ == AGAIN) g_api->log(g_mod, "editor: %s was hooked over the editor's hook %d times; not again", w.name, AGAIN); return; }
+    std::string who = ModuleOf(to);
+    int failed = g_api->hook(g_mod, (uintptr_t)to, w.detours[w.again], &w.originals[w.again]);
+    g_api->log(g_mod, failed ? "editor: %s: another overlay (%s, %p) hooked its code over the editor's; hooking in front of it failed" :
+        "editor: %s: another overlay (%s, %p) hooked its code over the editor's; the editor runs first again", w.name,
+        who.empty() ? "allocated memory: an overlay's code?" : who.c_str(), (void*)to);
+    if (!failed) w.hooked[w.again++] = to;
+}
+
+/* Every 250 ms: a method whose code jumps somewhere new gets the editor in front of it. Code that is no jump at all is
+ * left alone while presents still reach the editor: RivaTuner takes its own hook off around each call it passes on (the
+ * code as it was for the length of the present) and puts it back after, so the code is mostly as it was, its jump only
+ * there between frames. When presents stop reaching the editor, the code is watched closely for up to 100 ms to catch
+ * that jump; none at all, and the code as it was before the editor, the editor's own hook is put back. */
 
 static DWORD WINAPI Watchdog(void*)
 {
+    LONG seen = 0;
     for (;;)
     {
         Sleep(250);
-        for (Watched& w : g_watched)
+        LONG presents = g_presents;
+        bool reached = presents != seen;
+        seen = presents;
+        for (int m = 0; m < 3; m++)
         {
-            if (w.code == NULL || !Readable(w.code, sizeof w.bytes) || memcmp(w.code, w.bytes, sizeof w.bytes) == 0) continue;
-            uint8_t now[sizeof w.bytes];
-            memcpy(now, w.code, sizeof now);
-            Sleep(50); /* written whole by now */
-            if (memcmp(w.code, now, sizeof now) != 0) continue;
-            memcpy(w.bytes, now, sizeof now);
-            uint8_t* to = JumpTarget(w.code);
-            std::string who = to != NULL && Readable(to, 16) ? ModuleOf(to) : "";
-            if (to == NULL || !Readable(to, 16))
+            Watched& w = g_watched[m];
+            if (w.code == NULL || !Readable(w.code, 8)) continue;
+            uint8_t* to = LiveJump(w.code);
+            if (to != NULL) { InFront(w, to); continue; }
+            if (reached || m == 2) continue; /* drawing still, or ResizeBuffers (no call every frame to tell by) */
+            LARGE_INTEGER now, end, frequency;
+            QueryPerformanceFrequency(&frequency);
+            QueryPerformanceCounter(&now);
+            end.QuadPart = now.QuadPart + frequency.QuadPart / 10;
+            while (to == NULL && now.QuadPart < end.QuadPart && g_presents == presents)
             {
-                if (!w.saidOther++) g_api->log(g_mod, "editor: %s's code was changed by another program, not into a jump the editor follows (%02x %02x %02x %02x %02x); "
-                    "the editor may no longer draw (said once)", w.name, now[0], now[1], now[2], now[3], now[4]);
+                SwitchToThread();
+                to = LiveJump(w.code);
+                QueryPerformanceCounter(&now);
+            }
+            if (to != NULL) { InFront(w, to); continue; }
+            if (g_presents != presents) continue;
+            if (w.putBack < 64 && PutBack(w))
+            {
+                if (w.putBack++ == 0) g_api->log(g_mod, "editor: %s's code was put back as it was before the editor (another overlay took its own hook "
+                    "off); the editor's hook is back in place (said once)", w.name);
                 continue;
             }
-            bool ours = to == w.first; /* a jump back to the editor's own hook, or to where it went in front already */
-            for (int i = 0; i < w.again && i < AGAIN; i++) ours |= w.hooked[i] == to;
-            if (ours) { if (!w.saidOurs++) g_api->log(g_mod, "editor: %s: its code jumps to %p again, where the editor is in front already (said once)", w.name, (void*)to); continue; }
-            if (w.again >= AGAIN) { if (w.again++ == AGAIN) g_api->log(g_mod, "editor: %s was hooked over the editor's hook %d times; not again", w.name, AGAIN); continue; }
-            int failed = g_api->hook(g_mod, (uintptr_t)to, w.detours[w.again], &w.originals[w.again]);
-            g_api->log(g_mod, failed ? "editor: %s: another overlay (%s, %p) hooked its code over the editor's; hooking in front of it failed" :
-                "editor: %s: another overlay (%s, %p) hooked its code over the editor's; the editor runs first again", w.name,
-                who.empty() ? "allocated memory: an overlay's code?" : who.c_str(), (void*)to);
-            if (!failed) w.hooked[w.again++] = to;
-            memcpy(w.bytes, w.code, sizeof w.bytes); /* the loader may have hooked at the jump itself */
+            uint8_t* code = w.code;
+            if (memcmp(code, w.before, 8) != 0 && !w.saidOther++)
+                g_api->log(g_mod, "editor: %s's code was changed by another program, not into a jump the editor follows (%02x %02x %02x %02x %02x); "
+                    "the editor may no longer draw (said once)", w.name, code[0], code[1], code[2], code[3], code[4]);
         }
     }
 }
@@ -741,7 +829,12 @@ static void Watch(int i, const char* name, void* code, void* const* detours, voi
     w.name = name;
     w.detours = detours;
     w.originals = originals;
-    if (Readable(code, sizeof w.bytes)) { memcpy(w.bytes, code, sizeof w.bytes); w.first = JumpTarget((uint8_t*)code); }
+    if (Readable(code, 8)) { memcpy(w.mine, code, 8); w.first = JumpTarget((uint8_t*)code); }
+    if (!Pristine(code, w.before))
+    {
+        memcpy(w.before, w.mine, 8); /* PutBack never matches */
+        g_api->log(g_mod, "editor: %s: its code as its module's file has it was not read; the editor's hook is not put back if an overlay puts the code back", name);
+    }
     w.code = (uint8_t*)code;
 }
 

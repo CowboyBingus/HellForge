@@ -268,8 +268,11 @@ bool Save(const std::string& modsFolder, std::string* error)
 
     if (document.members.size() == 1)
     {
-        /* Nothing left: the mod goes, as when the launcher's editor undoes every change. */
-        if (existed) { DeleteFileW(path.c_str()); DeleteFileW(manifest.c_str()); RemoveDirectoryW(folder.c_str()); }
+        /* Nothing left: the mod goes, as when the launcher's editor undoes every change. A file another program has open
+         * stays (Windows refuses the delete): tried again later, not taken as saved with the change still in it. */
+        if (existed && !DeleteFileW(path.c_str()) && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
+            return fail("the Local Stats file could not be removed (another program has it open?)");
+        if (existed) { DeleteFileW(manifest.c_str()); RemoveDirectoryW(folder.c_str()); }
     }
     else
     {
