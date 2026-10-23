@@ -5131,7 +5131,9 @@
       "record": 60,
       "component": 321,
       "offset": 162676,
-      "projectile": 276
+      "projectile": 276,
+      "damage": 108,
+      "optionalFor": []
     },
     {
       "weapon": "JAR-5 Dominator",
@@ -5140,7 +5142,9 @@
       "record": 91,
       "component": 321,
       "offset": 164784,
-      "projectile": 177
+      "projectile": 177,
+      "damage": 153,
+      "optionalFor": []
     },
     {
       "weapon": "P-19 Redeemer",
@@ -5149,7 +5153,11 @@
       "record": 50,
       "component": 321,
       "offset": 162124,
-      "projectile": 291
+      "projectile": 291,
+      "damage": 73,
+      "optionalFor": [
+        "MP-98 Knight"
+      ]
     },
     {
       "weapon": "P-2 Peacemaker",
@@ -5158,7 +5166,12 @@
       "record": 51,
       "component": 321,
       "offset": 162128,
-      "projectile": 337
+      "projectile": 337,
+      "damage": 75,
+      "optionalFor": [
+        "MP-98 Knight",
+        "P-19 Redeemer"
+      ]
     },
     {
       "weapon": "R-63 Diligence",
@@ -5167,7 +5180,9 @@
       "record": 80,
       "component": 321,
       "offset": 164036,
-      "projectile": 305
+      "projectile": 305,
+      "damage": 141,
+      "optionalFor": []
     },
     {
       "weapon": "SG-225 Breaker",
@@ -5176,7 +5191,9 @@
       "record": 125,
       "component": 321,
       "offset": 167032,
-      "projectile": 179
+      "projectile": 179,
+      "damage": 179,
+      "optionalFor": []
     }
   ],
   "hosts": {

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Security.Cryptography;
 using System.Text;
 using HellForge.Core;
@@ -7,6 +8,27 @@ static class ReportedIssuesTests
 {
     public static void Register(Action<string, Action> test, Action<bool, string> check, Action<Action> reject, string root)
     {
+        test("The Peacemaker's ammunition rows name the Knight and Redeemer only for when they equip it (bug-report-0035)", () =>
+        {
+            var objects = EditorCatalog.Build()["objects"]!.AsArray().Select(o => o!).ToList();
+            IEnumerable<JsonNode> RowsOf(JsonNode node) => node switch
+            {
+                JsonObject o when o["key"] != null && o["cat"] != null => [o],
+                JsonObject o => o.SelectMany(p => p.Value is null ? [] : RowsOf(p.Value)),
+                JsonArray a => a.SelectMany(n => n is null ? [] : RowsOf(n)),
+                _ => [],
+            };
+            JsonNode Row(string weapon, string key) => RowsOf(objects.Single(o => o["name"]!.GetValue<string>() == weapon)["page"]!)
+                .First(r => r["key"]!.GetValue<string>() == key);
+            var damage = Row("P-2 Peacemaker", "damage.standard_damage");
+            var also = damage["also"]?.AsArray().Select(a => a!.GetValue<string>()).ToList() ?? [];
+            var alsoIf = damage["alsoIf"]?.AsArray().Select(a => a!.GetValue<string>()).ToList() ?? [];
+            check(!also.Any(a => a.Contains("Knight") || a.Contains("Redeemer")) && alsoIf.Any(a => a.Contains("Knight")) && alsoIf.Any(a => a.Contains("Redeemer")) &&
+                damage["alsoAmmo"]!.GetValue<string>() == "PISTOL-SMG 9x20mm. HOLLOW POINT",
+                $"Peacemaker standard damage: also [{string.Join(", ", also)}], when equipped [{string.Join(", ", alsoIf)}]");
+            check(damage["shared"]!.GetValue<bool>(), "The row is still marked shared.");
+            check(Row("AR-23 Liberator", "damage.standard_damage")["alsoIf"] == null, "An ammunition no other weapon lists stays unconditional.");
+        });
         test("A drive that fills up while patching asks for space instead of Steam's download (hpatchz exit code 24)", () =>
         {
             var output = Path.Combine(root, "space", "bundles.00.nxa.partial");

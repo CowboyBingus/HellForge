@@ -467,16 +467,41 @@ public static class StatsCatalog
     public static IReadOnlyList<(string Category, string Target, string Key)> Linked(StatsField field) =>
         Links.Value.TryGetValue(LinkKey(field), out var list) ? list : [];
 
-    // The other items a change to this row reaches. A projectile or damage type's own entry is the record itself.
+    // The other items a change to this row reaches. A projectile or damage type's own entry is the record itself. Weapons
+    // that reach it only by equipping the same ammunition are AlsoIfEquipped's, not these.
     public static IReadOnlyList<string> AlsoChanges(StatsRow row, bool own)
     {
         if (own && row.Field.Kind == "component") return [];
+        var optional = AlsoIfEquipped(row).Names;
         var names = Linked(row.Field).Where(l => (l.Category, l.Target) != (row.Part.Category, row.Part.Target) &&
                 (row.Part.Category is "projectiles" or "damage" || l.Category is not ("projectiles" or "damage")))
             .Select(l => Find(l.Category, l.Target)?.Name ?? l.Target).Concat(row.Field.SharedConsumers.Where(c => c != row.Part.Target));
         var self = Find(row.Part.Category, row.Part.Target)?.Name;
-        return names.Where(n => n != self).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        return names.Where(n => n != self && !optional.Contains(n, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
     }
+
+    // A weapon's default ammunition's projectile and damage rows that other weapons reach only when they equip that
+    // ammunition (it is in their unlock list, not their default: the P-2 Peacemaker's 9x20mm HOLLOW POINT, which the Knight
+    // and Redeemer can equip; references.json ammunition optionalFor). The ammunition and those weapons, or none.
+    public static (string? Item, IReadOnlyList<string> Names) AlsoIfEquipped(StatsRow row) =>
+        row.Field.Kind is "ProjectileSettings" or "DamageInfo" && OptionalAmmunition.Value.TryGetValue((row.Field.Kind, row.Field.Record), out var a)
+            ? (a.Item, a.Weapons.Select(w => Find("weapons", w)?.Name ?? w).Where(n => n != Find(row.Part.Category, row.Part.Target)?.Name).ToList())
+            : (null, []);
+
+    static readonly Lazy<Dictionary<(string Kind, long Record), (string Item, string[] Weapons)>> OptionalAmmunition = new(() =>
+    {
+        using var stream = typeof(StatsCatalog).Assembly.GetManifestResourceStream("HellForge.Core.mappings.references.json")!;
+        var map = new Dictionary<(string, long), (string, string[])>();
+        foreach (var a in JsonNode.Parse(stream)!["ammunition"]!.AsArray())
+        {
+            var weapons = a!["optionalFor"]?.AsArray().Select(w => w!.GetValue<string>()).ToArray() ?? [];
+            if (weapons.Length == 0) continue;
+            map[("ProjectileSettings", a["projectile"]!.GetValue<long>())] = (a["item"]!.GetValue<string>(), weapons);
+            map[("DamageInfo", a["damage"]!.GetValue<long>())] = (a["item"]!.GetValue<string>(), weapons);
+        }
+        return map;
+    });
 
     // ---- Search ----
 

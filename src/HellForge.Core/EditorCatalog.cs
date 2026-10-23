@@ -650,6 +650,12 @@ public static class EditorCatalog
             ["also"] = also.Count > 0 ? new JsonArray(also.Select(a => (JsonNode)a).ToArray()) : null,
             ["link"] = StatsCatalog.LinkKey(f),
         };
+        // weapons this row reaches only when they equip the same ammunition (bug-report-0035), and that ammunition
+        if (StatsCatalog.AlsoIfEquipped(row) is { Item: { } ammo, Names.Count: > 0 } equipped)
+        {
+            json["alsoIf"] = new JsonArray(equipped.Names.Select(n => (JsonNode)n).ToArray());
+            json["alsoAmmo"] = ammo;
+        }
         // get_stat: a field get_live cannot read (entity deltas, say), by the address the session's stats snapshot reads
         if (!live) json["stat"] = new JsonArray(f.Kind, f.Component, f.Resource, f.Record);
         // a field with named values (a flag, an enum, a trait or fire mode slot): picked from them

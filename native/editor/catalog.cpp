@@ -114,6 +114,8 @@ Object* Catalog::AddCopy(const Object& like, const std::string& id, const std::s
                 row.target = target;
                 row.link = "mod|" + r->component + ":" + std::to_string(ref) + ":" + std::to_string(r->offset);
                 row.also.clear();
+                row.alsoIf.clear();
+                row.alsoAmmo.clear();
                 row.hd2r.clear();
                 row.hd2rAs.clear();
                 if (r->component.find("ComponentData") != std::string::npos) row.shared = false; /* the copy's own record */
@@ -208,6 +210,9 @@ bool Load(const std::wstring& path, Catalog* out, std::string* error)
                                     row.link = r.GetString("link");
                                     if (const Value* also = r.Find("also"); also != nullptr && also->kind == Value::Array)
                                         for (const Value& a : also->items) row.also.push_back(a.Str());
+                                    if (const Value* alsoIf = r.Find("alsoIf"); alsoIf != nullptr && alsoIf->kind == Value::Array)
+                                        for (const Value& a : alsoIf->items) row.alsoIf.push_back(a.Str());
+                                    row.alsoAmmo = r.GetString("alsoAmmo");
                                     row.choice = r.GetString("choice");
                                     row.size = (uint32_t)r.GetNumber("size", 0);
                                     row.note = r.GetString("note");

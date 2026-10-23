@@ -26,6 +26,8 @@ struct Row
     double min = 0, max = 0;
     std::string unit, applies, link;          /* applies: now, respawn, mission, boot */
     std::vector<std::string> also;            /* the other items a change reaches */
+    std::vector<std::string> alsoIf;          /* ... only when they equip the same ammunition (alsoAmmo) */
+    std::string alsoAmmo;
     /* A choice row (the armor perks): its choice ("armor", "second"), its note, and its options (value -1: the default). */
     /* target: a mount option's weapon (its stats target), whose rows show under the slot while it is swapped in */
     struct Option { double value; std::string label, icon, note, group; std::vector<std::string> warnings; uint64_t resource = 0; std::string target; };

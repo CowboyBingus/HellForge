@@ -3500,12 +3500,19 @@ void DrawStatus(float y, float h)
         if (!v.holder.empty())
             g_cv.Text(std::string(IsLuaHolder(v.holder) ? "Lua mod: " : "Mod: ") + v.holder + " = " + Format(row, v.base), x + 10, cy,
                 T(SZ_SMALL, IsLuaHolder(v.holder) ? LUA : MOD, ui::BODY, ui::LEFT, std::max(40.0f, maxw - x - 10)));
-        else if (!row->also.empty())
+        else if (!row->also.empty() || !row->alsoIf.empty())
         {
-            std::string names;
-            for (size_t i = 0; i < row->also.size() && i < 2; i++) names += (i ? ", " : "") + row->also[i];
-            if (row->also.size() > 2) names += " +" + std::to_string(row->also.size() - 2);
-            g_cv.Text("also changes " + names, x + 10, cy, T(SZ_SMALL, PENDING, ui::BODY, ui::LEFT, std::max(40.0f, maxw - x - 10)));
+            auto list = [](const std::vector<std::string>& of) {
+                std::string names;
+                for (size_t i = 0; i < of.size() && i < 2; i++) names += (i ? ", " : "") + of[i];
+                if (of.size() > 2) names += " +" + std::to_string(of.size() - 2);
+                return names;
+            };
+            /* weapons that reach the row only by equipping the same ammunition are named as such (bug-report-0035) */
+            std::string text = row->also.empty() ? "" : "also changes " + list(row->also);
+            if (!row->alsoIf.empty())
+                text += (text.empty() ? "also changes " : "; and ") + list(row->alsoIf) + " when they use " + row->alsoAmmo;
+            g_cv.Text(text, x + 10, cy, T(SZ_SMALL, PENDING, ui::BODY, ui::LEFT, std::max(40.0f, maxw - x - 10)));
         }
         else if (!row->note.empty())
             g_cv.Text(row->note, x + 10, cy, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, std::max(40.0f, maxw - x - 10)));

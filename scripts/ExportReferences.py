@@ -206,12 +206,22 @@ def main(runtime, out_json, out_header):
         walk(read_table(domains / f'{name}.lua'), [])
 
     # Ammunition: the six weapons whose shot is their default ammunition's (an entity delta), not ProjectileWeapon +0.
+    # Its rows reach other weapons only when those equip the same ammunition (research/ammunition-projectiles: the item's
+    # defaultOf against unlockListedBy): "optionalFor", which the editor names as conditional (bug-report-0035).
+    research = json.loads((Path(runtime) / 'research' / 'ammunition-projectiles-F5FEE03DCFDB.json').read_text(encoding='utf-8'))
+    rows = {w['weapon']: w for w in research['weapons']}
     ammunition = []
     for weapon, a in sorted(outputs['ammunition'].items()):
         if a['backing']['kind'] != 'entity_delta' or a['backing']['offset'] != 0:
             raise ValueError(f'ammunition {weapon}: not a projectile entity delta')
+        r = rows[weapon]
+        if r['ammunitionItem'] != a['item'] or r['projectileType'] != a['currentDefault']['projectileType']:
+            raise ValueError(f'ammunition {weapon}: the research names another item or projectile')
+        item = next(i for i in r['ammunitionItems'] if i['item'] == a['item'])
         ammunition.append({'weapon': weapon, 'item': a['item'], 'resource': a['resource'], 'record': a['settingsIndex'],
-                           'component': a['component'], 'offset': a['dataOffset'], 'projectile': a['currentDefault']['projectileType']})
+                           'component': a['component'], 'offset': a['dataOffset'], 'projectile': a['currentDefault']['projectileType'],
+                           'damage': r['damageInfo']['recordType'],
+                           'optionalFor': sorted(set(item['unlockListedBy']) - set(item['defaultOf']))})
 
     # Weapons whose shot can be swapped (HD2R Editor's hosts): ProjectileWeapon +0 ("component"), or their default
     # ammunition's delta ("ammunition"); the others' reasons, for the editor's "not offered" note.
