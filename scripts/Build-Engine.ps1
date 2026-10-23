@@ -2,8 +2,9 @@
 # EngineVersion in Directory.Build.props), which scripts/Publish-HellForge.ps1 puts into an installation's app folder:
 #   session/     HellForge.Session.exe, the session runner (NativeAOT)
 #   backend/     HellForge.LocalBackend.exe, the local backend (NativeAOT)
-#   sdk-shims/   the PlayFab SDK stand-ins (PartyWin.dll, PlayFabMultiplayerWin.dll), the steam_api64.dll stand-in, the mod
-#                loader (hellforge_modloader.dll, with MinHook 1.3.4: BSD-2, MinHook-LICENSE.txt) and build.json (their pins)
+#   sdk-shims/   the PlayFab SDK stand-ins (PartyWin.dll, PlayFabMultiplayerWin.dll), the steam_api64.dll stand-in, the Steam
+#                broker for low-integrity sessions (hellforge_steam_broker.exe, docs/steam-bridge.md), the mod loader
+#                (hellforge_modloader.dll, with MinHook 1.3.4: BSD-2, MinHook-LICENSE.txt) and build.json (their pins)
 #   scripts/     the network block (Windows Firewall rules) and Steam ownership check, readable as they run
 #   engine.json  the version, the game build and every file's SHA-256; LICENSE (GPL-3.0) and LICENSE-EXCEPTION
 # Built in this repository, against its Core library, mod SDK headers and mappings (the loader's field table is
@@ -12,7 +13,9 @@
 # are byte-identical to the ones HD2 ships, so their headers give the exact signatures (nothing from them is committed or
 # shipped). The steam_api64.dll stand-in's export table is generated from the game's own steam_api64.dll (-SteamApi, by
 # default the one in the Steam library), pinned below and never shipped. NativeAOT needs Visual Studio's C++ build tools.
-param([switch]$SkipSmoke,[string]$SteamApi)
+# -SteamCensus packages the Steam census build of that stand-in instead (docs/steam-bridge.md, census step 2), as
+# hellforge-engine-<version>-census.zip: for a census session only, never for release.
+param([switch]$SkipSmoke,[string]$SteamApi,[switch]$SteamCensus)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $ProgressPreference='SilentlyContinue'
@@ -25,6 +28,7 @@ $sdk=Join-Path $open 'native/mod-sdk'
 $sources=Join-Path $project 'native/sdk-shims'
 $gen=Join-Path $project 'artifacts/sdk-shims/gen'
 $out=Join-Path $project 'artifacts/sdk-shims/out'
+$census=Join-Path $project 'artifacts/sdk-shims/census'
 $version=([xml](Get-Content -LiteralPath (Join-Path $project 'Directory.Build.props') -Raw)).Project.PropertyGroup.EngineVersion
 $gameBuild=(Get-Content -LiteralPath (Join-Path $open 'src/HellForge.Core/supported-build.json') -Raw|ConvertFrom-Json).buildId
 
@@ -91,7 +95,7 @@ if($LASTEXITCODE){throw 'HellForge.SdkShimGen build failed.'}
 $generator=Join-Path $project 'src/HellForge.SdkShimGen/bin/Debug/net10.0/HellForge.SdkShimGen.dll'
 function Invoke-Generator{& dotnet $generator @args;if($LASTEXITCODE){throw ('HellForge.SdkShimGen '+$args[0]+' failed.')}}
 
-foreach($directory in @($gen,$out)){if(Test-Path -LiteralPath $directory){Remove-Item -LiteralPath $directory -Recurse -Force};New-Item -ItemType Directory $directory|Out-Null}
+foreach($directory in @($gen,$out,$census)){if(Test-Path -LiteralPath $directory){Remove-Item -LiteralPath $directory -Recurse -Force};New-Item -ItemType Directory $directory|Out-Null}
 Invoke-Generator generate party $partyOriginal (Join-Path $sources 'party_shim.cpp') $gen (Join-Path $partyInclude 'Party_c.h')
 Invoke-Generator generate lobby $lobbyOriginal (Join-Path $sources 'lobby_shim.cpp') $gen (Join-Path $lobbyInclude 'PFMultiplayer.h') (Join-Path $lobbyInclude 'PFLobby.h') (Join-Path $lobbyInclude 'PFMatchmaking.h')
 $flags=@('c++','-target','x86_64-windows-gnu','-shared','-O2','-std=c++17','-fno-exceptions','-fno-rtti','-Wall','-Werror','-Wno-unused-parameter','-I',$sources,'-I',$gen)
@@ -109,11 +113,26 @@ if($LASTEXITCODE){throw 'Compiling hellforge_modloader.dll failed.'}
 Copy-Item -LiteralPath (Join-Path $minHook 'LICENSE.txt') -Destination (Join-Path $out 'MinHook-LICENSE.txt')
 $cloudSource=Join-Path $project 'native/steam-cloud/steam_cloud.c'
 Invoke-Generator forward $SteamApi steam_api64_hellforge $cloudSource (Join-Path $gen 'steam_api64.def')
-# with the network gate (net_gate.c, MinHook), hooked in its DllMain before the game's own code runs
+# with the network gate (net_gate.c, MinHook), hooked in its DllMain before the game's own code runs, the Steam census
+# (steam_census.c, off unless asked for) and the bridge's game side (bridge_channel.c, used when a session names a broker)
 $minHookSources=@('src/buffer.c','src/hook.c','src/trampoline.c','src/hde/hde64.c')|ForEach-Object {Join-Path $minHook $_}
+$cloudSources=@('net_gate.c','steam_census.c','bridge_channel.c')|ForEach-Object {Join-Path $project ('native/steam-cloud/'+$_)}
 & $zig cc -target x86_64-windows-gnu -shared -O2 -std=c11 -Wall -Werror -Wno-unused-parameter -s -I (Join-Path $minHook 'include') $cloudSource `
-    (Join-Path $project 'native/steam-cloud/net_gate.c') @minHookSources (Join-Path $gen 'steam_api64.def') -o (Join-Path $out 'steam_api64.dll')
+    @cloudSources @minHookSources (Join-Path $gen 'steam_api64.def') -ladvapi32 -o (Join-Path $out 'steam_api64.dll')
 if($LASTEXITCODE){throw 'Compiling steam_api64.dll failed.'}
+# The Steam census build: the same stand-in, but every function export it does not write itself is a counting thunk to
+# Valve's, and the interfaces the game gets are counting proxies (HELLFORGE_STEAM_CENSUS_THUNKS). Built and tested every
+# time, so it keeps working; packaged only with -SteamCensus.
+Invoke-Generator census-thunks $SteamApi steam_api64_hellforge $cloudSource (Join-Path $gen 'steam_api64_census.def') (Join-Path $gen 'census_thunks.g.c')
+& $zig cc -target x86_64-windows-gnu -shared -O2 -std=c11 -Wall -Werror -Wno-unused-parameter -s -DHELLFORGE_STEAM_CENSUS_THUNKS -I (Join-Path $minHook 'include') $cloudSource `
+    @cloudSources (Join-Path $gen 'census_thunks.g.c') @minHookSources (Join-Path $gen 'steam_api64_census.def') -ladvapi32 -o (Join-Path $census 'steam_api64.dll')
+if($LASTEXITCODE){throw 'Compiling the Steam census build of steam_api64.dll failed.'}
+Get-ChildItem -LiteralPath $census -Filter '*.lib'|Remove-Item
+# The Steam broker (docs/steam-bridge.md): Valve's DLL at the player's normal integrity, for a low-integrity game.
+$bridgeSources=@('bridge_broker.c','bridge_channel.c')|ForEach-Object {Join-Path $project ('native/steam-cloud/'+$_)}
+& $zig cc -target x86_64-windows-gnu -municode -O2 -std=c11 -Wall -Werror -Wno-unused-parameter -s (Join-Path $project 'native/steam-cloud/hellforge_steam_broker.c') `
+    @bridgeSources -ladvapi32 -o (Join-Path $out 'hellforge_steam_broker.exe')
+if($LASTEXITCODE){throw 'Compiling hellforge_steam_broker.exe failed.'}
 # The network block tool: puts the copy's egress block straight into the Windows Filtering Platform (WFP), so the
 # block holds with Windows Firewall off and a security suite's own permit sublayer cannot override our BLOCK. It
 # installs/removes/reads persistent WFP filters (elevated), doing the firewall rules' old job (NetworkBlock.Common.ps1).
@@ -145,6 +164,30 @@ if(-not $SkipSmoke){
     # need administrator rights, so the round trip is tested by hand, not here).
     & (Join-Path $out 'hellforge_wfp.exe')|Out-Null;if($LASTEXITCODE -ne 2){throw 'Network block tool did not start.'}
 }
+# The census build next to a fake Steam DLL in its place (steam_api64_hellforge.dll), then its test.
+$censusTest=Join-Path $testOut 'census'
+if(Test-Path -LiteralPath $censusTest){Remove-Item -LiteralPath $censusTest -Recurse -Force}
+New-Item -ItemType Directory $censusTest|Out-Null
+Copy-Item -LiteralPath (Join-Path $census 'steam_api64.dll') -Destination $censusTest
+& $zig cc -target x86_64-windows-gnu -shared -O1 -std=c11 -Wall -Werror -Wno-unused-parameter -s (Join-Path $project 'native/steam-cloud/test/fake_steam.c') `
+    -o (Join-Path $censusTest 'steam_api64_hellforge.dll')
+if($LASTEXITCODE){throw 'Compiling the fake Steam DLL failed.'}
+& $zig cc -target x86_64-windows-gnu -O1 -std=c11 -municode -Wall -Werror -Wno-unused-parameter (Join-Path $project 'native/steam-cloud/test/census_test.c') `
+    -o (Join-Path $testOut 'census_test.exe')
+if($LASTEXITCODE){throw 'Compiling the Steam census test failed.'}
+Get-ChildItem -LiteralPath $censusTest -Filter '*.lib'|Remove-Item
+if(-not $SkipSmoke){& (Join-Path $testOut 'census_test.exe') (Join-Path $censusTest 'steam_api64.dll') (Join-Path $testOut 'steam-census.jsonl');if($LASTEXITCODE){throw 'Steam census test failed.'}}
+# The bridge's channel and serving loop, both ends in one test (a second process plays a client the broker must refuse).
+& $zig cc -target x86_64-windows-gnu -O1 -std=c11 -municode -Wall -Werror -Wno-unused-parameter (Join-Path $project 'native/steam-cloud/test/broker_test.c') `
+    @bridgeSources -ladvapi32 -o (Join-Path $testOut 'broker_test.exe')
+if($LASTEXITCODE){throw 'Compiling the Steam broker test failed.'}
+# and the stand-in in bridge mode, with the fake Steam DLL beside it as Valve's, which must never load
+$bridgeTest=Join-Path $testOut 'bridge'
+if(Test-Path -LiteralPath $bridgeTest){Remove-Item -LiteralPath $bridgeTest -Recurse -Force}
+New-Item -ItemType Directory $bridgeTest|Out-Null
+Copy-Item -LiteralPath (Join-Path $out 'steam_api64.dll') -Destination $bridgeTest
+Copy-Item -LiteralPath (Join-Path $censusTest 'steam_api64_hellforge.dll') -Destination $bridgeTest
+if(-not $SkipSmoke){& (Join-Path $testOut 'broker_test.exe') (Join-Path $bridgeTest 'steam_api64.dll');if($LASTEXITCODE){throw 'Steam broker test failed.'}}
 & $zig cc -target x86_64-windows-gnu -shared -O1 -std=c11 -Wall -Werror -Wno-unused-parameter -s (Join-Path $project 'native/mod-loader/test/fake_game.c') -o (Join-Path $testOut 'fake_game.dll')
 if($LASTEXITCODE){throw 'Compiling the fake game failed.'}
 & $zig cc -target x86_64-windows-gnu -shared -O2 -std=c11 -Wall -Werror -Wno-unused-parameter -s -I $sdk `
@@ -159,8 +202,9 @@ if(-not $SkipSmoke){Invoke-Generator smoke $out;Invoke-Generator smoke-cloud (Jo
 $receipt=[ordered]@{builtUtc=[DateTime]::UtcNow.ToString('o');zig='0.17.0';
     originals=[ordered]@{'PartyWin.dll'=(Get-FileHash $partyOriginal).Hash;'PlayFabMultiplayerWin.dll'=(Get-FileHash $lobbyOriginal).Hash;'steam_api64.dll'=$steamApiPin};
     standIns=[ordered]@{'PartyWin.dll'=(Get-FileHash (Join-Path $out 'PartyWin.dll')).Hash;'PlayFabMultiplayerWin.dll'=(Get-FileHash (Join-Path $out 'PlayFabMultiplayerWin.dll')).Hash;
-        'steam_api64.dll'=(Get-FileHash (Join-Path $out 'steam_api64.dll')).Hash};
+        'steam_api64.dll'=(Get-FileHash (Join-Path $(if($SteamCensus){$census}else{$out}) 'steam_api64.dll')).Hash};
     modLoader=(Get-FileHash (Join-Path $out 'hellforge_modloader.dll')).Hash;
+    steamBroker=(Get-FileHash (Join-Path $out 'hellforge_steam_broker.exe')).Hash;
     networkBlock=(Get-FileHash (Join-Path $out 'hellforge_wfp.exe')).Hash}
 $receipt|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $out 'build.json') -Encoding UTF8
 
@@ -179,7 +223,9 @@ foreach($app in @(@{folder='session';project='src/HellForge.Session/HellForge.Se
 }
 if(-not $SkipSmoke){& (Join-Path $PSScriptRoot 'Test-BackendAot.ps1') -Aot (Join-Path $staging 'backend/HellForge.LocalBackend.exe')|Select-Object -Last 1}
 $shimTarget=New-Item -ItemType Directory (Join-Path $staging 'sdk-shims')
-foreach($name in @('build.json','PartyWin.dll','PlayFabMultiplayerWin.dll','steam_api64.dll','hellforge_modloader.dll','MinHook-LICENSE.txt')){Copy-Item -LiteralPath (Join-Path $out $name) -Destination $shimTarget}
+foreach($name in @('build.json','PartyWin.dll','PlayFabMultiplayerWin.dll','steam_api64.dll','hellforge_steam_broker.exe','hellforge_modloader.dll','MinHook-LICENSE.txt')){Copy-Item -LiteralPath (Join-Path $out $name) -Destination $shimTarget}
+# build.json's standIns pin names this one with -SteamCensus, since the session checks the stand-in it swaps in against it.
+if($SteamCensus){Copy-Item -LiteralPath (Join-Path $census 'steam_api64.dll') -Destination $shimTarget -Force}
 $scriptTarget=New-Item -ItemType Directory (Join-Path $staging 'scripts')
 foreach($name in @('NetworkBlock.Common.ps1','Install-NetworkBlock.ps1','Install-WfpBlock.ps1','Test-SteamOwnership.ps1','OfflineControlNetworkProbe.cs')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scriptTarget}
 # The WFP block tool ships beside the block scripts that drive it.
@@ -195,9 +241,9 @@ foreach($file in Get-ChildItem -LiteralPath $staging -Recurse -File){
 $files=[ordered]@{}
 foreach($file in Get-ChildItem -LiteralPath $staging -Recurse -File|Sort-Object FullName){$files[$file.FullName.Substring($staging.Length+1).Replace('\','/')]=(Get-FileHash -LiteralPath $file.FullName).Hash}
 $commit=(git -C $project rev-parse --short HEAD 2>$null)
-[ordered]@{version=$version;build=$gameBuild;commit=$commit;builtUtc=[DateTime]::UtcNow.ToString('o');files=$files}|ConvertTo-Json -Depth 4|
+[ordered]@{version=$version;build=$gameBuild;commit=$commit;steamCensus=[bool]$SteamCensus;builtUtc=[DateTime]::UtcNow.ToString('o');files=$files}|ConvertTo-Json -Depth 4|
     Set-Content -LiteralPath (Join-Path $staging 'engine.json') -Encoding UTF8
-$zip=Join-Path $package ('hellforge-engine-'+$version+'.zip')
+$zip=Join-Path $package ('hellforge-engine-'+$version+$(if($SteamCensus){'-census'}else{''})+'.zip')
 if(Test-Path -LiteralPath $zip){Remove-Item -LiteralPath $zip}
 # Entry names with forward slashes, as zips name folders (Windows PowerShell's CreateFromDirectory writes backslashes).
 $archive=[IO.Compression.ZipFile]::Open($zip,[IO.Compression.ZipArchiveMode]::Create)

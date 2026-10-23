@@ -27,7 +27,7 @@ typedef int32_t (*GetUserFn)(void);
 typedef bool (*AvgRateFn)(void *self, const char *name, float count, double session);
 typedef void (*VibrationFn)(void *self, uint64_t handle, unsigned short left, unsigned short right, unsigned short leftTrigger,
     unsigned short rightTrigger);
-typedef bool (*RunningFn)(void);
+typedef int32_t (*RunningFn)(void); /* SteamGameServer_GetHSteamPipe, which the fake lacks */
 typedef uint32_t (*SlotAppIdFn)(void *self);
 typedef uint64_t *(*SlotSteamIdFn)(void *self, uint64_t *result);
 typedef uint64_t (*SlotSixFn)(void *self, uint64_t a, uint64_t b, uint64_t c, uint64_t d, uint64_t e);
@@ -118,7 +118,7 @@ int wmain(int argc, wchar_t **argv)
     Check(((SlotIntFn)slots[191])(proxy) == 191, "slot 191, the last proxied slot");
     Check(Unwinds(slots[0]) && Unwinds(slots[191]), "slot thunks have unwind data");
 
-    GetUserFn user = (GetUserFn)(void *)GetProcAddress(census, "SteamAPI_GetHSteamUser");
+    GetUserFn user = (GetUserFn)(void *)GetProcAddress(census, "SteamGameServer_GetHSteamUser");
     Check(user != NULL && user() == 7 && user() == 7, "an export thunk: the real function's result");
     Check(Unwinds((void *)user), "export thunks have unwind data");
     AvgRateFn rate = (AvgRateFn)(void *)GetProcAddress(census, "SteamAPI_ISteamUserStats_UpdateAvgRateStat");
@@ -128,7 +128,7 @@ int wmain(int argc, wchar_t **argv)
     if (vibrate) vibrate(utils, 0x1122334455667788ull, 11, 22, 33, 44);
     Check(vibrate != NULL && state->vibration[0] == 0x1122334455667788ull && state->vibration[1] == 11 && state->vibration[2] == 22 &&
         state->vibration[3] == 33 && state->vibration[4] == 44, "an export thunk: six arguments, two of them on the stack");
-    RunningFn running = (RunningFn)(void *)GetProcAddress(census, "SteamAPI_IsSteamRunning");
+    RunningFn running = (RunningFn)(void *)GetProcAddress(census, "SteamGameServer_GetHSteamPipe");
     Check(running != NULL && !running(), "an export the real DLL lacks returns 0");
 
     RegisterCallbackFn registerCallback = (RegisterCallbackFn)(void *)GetProcAddress(census, "SteamAPI_RegisterCallback");
@@ -141,12 +141,12 @@ int wmain(int argc, wchar_t **argv)
     Check(log != NULL && Has(log, "\"kind\":\"census\"", "census build", NULL), "the census log says it is the census build");
     Check(log && Has(log, "\"kind\":\"interface\"", "\"name\":\"SteamUtils010\"", "\"number\":1}"), "the interface request is logged");
     Check(log && Has(log, "\"kind\":\"slot\"", "\"name\":\"SteamUtils010\"", "\"number\":2}"), "a slot's first call is logged");
-    Check(log && Has(log, "\"kind\":\"export\"", "\"name\":\"SteamAPI_GetHSteamUser\"", NULL), "an export's first call is logged");
-    Check(log && Has(log, "\"kind\":\"function\"", "\"name\":\"SteamAPI_GetHSteamUser\"", NULL), "a lookup by name is logged");
-    Check(log && Has(log, "\"kind\":\"missing\"", "\"name\":\"SteamAPI_IsSteamRunning\"", NULL), "an export the real DLL lacks is logged");
+    Check(log && Has(log, "\"kind\":\"export\"", "\"name\":\"SteamGameServer_GetHSteamUser\"", NULL), "an export's first call is logged");
+    Check(log && Has(log, "\"kind\":\"function\"", "\"name\":\"SteamGameServer_GetHSteamUser\"", NULL), "a lookup by name is logged");
+    Check(log && Has(log, "\"kind\":\"missing\"", "\"name\":\"SteamGameServer_GetHSteamPipe\"", NULL), "an export the real DLL lacks is logged");
     Check(log && Has(log, "\"kind\":\"callbacksize\"", "\"name\":\"1005\"", "\"number\":24}"), "a callback's struct size is logged");
     Check(log && Has(log, "\"kind\":\"calls\"", "\"name\":\"SteamUtils010#2\"", "\"number\":3}"), "the report counts a slot's calls");
-    Check(log && Has(log, "\"kind\":\"calls\"", "\"name\":\"SteamAPI_GetHSteamUser\"", "\"number\":2}"), "the report counts an export's calls");
+    Check(log && Has(log, "\"kind\":\"calls\"", "\"name\":\"SteamGameServer_GetHSteamUser\"", "\"number\":2}"), "the report counts an export's calls");
     printf("%s\n", g_failed ? "Steam census build: FAILED" : "PASS Steam census build: export and slot thunks, proxies, sizes, counts");
     return g_failed ? 1 : 0;
 }

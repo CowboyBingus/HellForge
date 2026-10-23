@@ -1,81 +1,94 @@
 /* HellForge's Steam broker (docs/steam-bridge.md, phase 2): a process at normal integrity that loads Valve's
- * steam_api64.dll, accepts one game client over a named pipe with a low mandatory label, dispatches the calls the
- * allow-list permits, and pushes callbacks into a shared-memory ring.
+ * steam_api64.dll as app 553850, accepts the session's game over a named pipe with a low mandatory label, answers the
+ * calls the allow-list permits, and pushes callbacks into a shared-memory ring.
  *
- * Usage: hellforge_steam_broker.exe <pipe-suffix> <expected-pid> <valve-dll-path>
+ * Usage: hellforge_steam_broker.exe <pipe-suffix> <game-pid> [valve-dll-path]
  *
- * The session runner starts one broker per session, passes the suffix to the game's stand-in through an environment
- * variable, and gives the game's PID so the broker can verify it. The broker exits when the pipe closes or when it
- * receives BRIDGE_SHUTDOWN.
+ * The session runner starts one broker per session; the game's stand-in finds the pipe by HELLFORGE_BRIDGE_PIPE. The
+ * broker serves only the process with <game-pid>, and exits when that process exits, when it says BRIDGE_SHUTDOWN, or
+ * when its pipe breaks. Its log is its standard error.
  *
- * Phase 2: the channel (pipe, ring, PID check) and a minimal dispatch loop. The full generated dispatch table and
- * allow-list are phase 3 (SdkShimGen steam-bridge). */
+ * Phase 2: the channel, the client check and the flat functions. The generated dispatch table and allow-list are
+ * phase 3 (SdkShimGen steam-bridge). */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "bridge_channel.h"
+#include "bridge_broker.h"
+
+#define GAME_APP_ID "553850"
 
 /* --- Valve's DLL (loaded at runtime) --- */
 
-typedef int  (__cdecl *PFN_SteamAPI_Init)(void);
+/* The pinned build's SDK exports SteamAPI_Init (bool). Newer SDKs have SteamAPI_InitFlat instead, which returns an
+ * ESteamAPIInitResult (0: OK) with a reason in a 1024-character SteamErrMsg: used only when SteamAPI_Init is missing. */
+typedef bool (__cdecl *PFN_SteamAPI_Init)(void);
+typedef int  (__cdecl *PFN_SteamAPI_InitFlat)(char* error);
 typedef void (__cdecl *PFN_SteamAPI_Shutdown)(void);
-typedef int  (__cdecl *PFN_SteamAPI_RestartAppIfNecessary)(uint32_t appId);
 typedef void (__cdecl *PFN_SteamAPI_ManualDispatch_Init)(void);
 typedef void (__cdecl *PFN_SteamAPI_ManualDispatch_RunFrame)(int hPipe);
 typedef int  (__cdecl *PFN_SteamAPI_ManualDispatch_GetNextCallback)(int hPipe, void* msg);
 typedef void (__cdecl *PFN_SteamAPI_ManualDispatch_FreeLastCallback)(int hPipe);
-typedef int  (__cdecl *PFN_SteamAPI_ManualDispatch_GetAPICallResult)(int hPipe, uint64_t call, void* buf, int bufSize, int expected, int* failed);
 typedef int  (__cdecl *PFN_SteamAPI_GetHSteamPipe)(void);
 typedef int  (__cdecl *PFN_SteamAPI_IsSteamRunning)(void);
 
 static struct {
     HMODULE module;
-    PFN_SteamAPI_Init                           Init;
-    PFN_SteamAPI_Shutdown                       Shutdown;
-    PFN_SteamAPI_RestartAppIfNecessary          RestartAppIfNecessary;
-    PFN_SteamAPI_ManualDispatch_Init            ManualDispatch_Init;
-    PFN_SteamAPI_ManualDispatch_RunFrame        ManualDispatch_RunFrame;
-    PFN_SteamAPI_ManualDispatch_GetNextCallback ManualDispatch_GetNextCallback;
+    PFN_SteamAPI_Init                            Init;
+    PFN_SteamAPI_InitFlat                        InitFlat;
+    PFN_SteamAPI_Shutdown                        Shutdown;
+    PFN_SteamAPI_ManualDispatch_Init             ManualDispatch_Init;
+    PFN_SteamAPI_ManualDispatch_RunFrame         ManualDispatch_RunFrame;
+    PFN_SteamAPI_ManualDispatch_GetNextCallback  ManualDispatch_GetNextCallback;
     PFN_SteamAPI_ManualDispatch_FreeLastCallback ManualDispatch_FreeLastCallback;
-    PFN_SteamAPI_ManualDispatch_GetAPICallResult ManualDispatch_GetAPICallResult;
-    PFN_SteamAPI_GetHSteamPipe                  GetHSteamPipe;
-    PFN_SteamAPI_IsSteamRunning                 IsSteamRunning;
+    PFN_SteamAPI_GetHSteamPipe                   GetHSteamPipe;
+    PFN_SteamAPI_IsSteamRunning                  IsSteamRunning;
     int hPipe;
 } g_steam;
 
-static int LoadValveDll(const char* path)
+static int LoadValveDll(const wchar_t* path)
 {
-    g_steam.module = LoadLibraryA(path);
+    g_steam.module = LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
     if (!g_steam.module) return 0;
-#define LOAD(name) g_steam.name = (PFN_SteamAPI_##name)GetProcAddress(g_steam.module, "SteamAPI_" #name); if (!g_steam.name) return 0
-    LOAD(Init);
+#define LOAD(name) g_steam.name = (PFN_SteamAPI_##name)(void*)GetProcAddress(g_steam.module, "SteamAPI_" #name); if (!g_steam.name) return 0
+    g_steam.Init = (PFN_SteamAPI_Init)(void*)GetProcAddress(g_steam.module, "SteamAPI_Init");
+    g_steam.InitFlat = (PFN_SteamAPI_InitFlat)(void*)GetProcAddress(g_steam.module, "SteamAPI_InitFlat");
+    if (!g_steam.Init && !g_steam.InitFlat) return 0;
     LOAD(Shutdown);
-    LOAD(RestartAppIfNecessary);
     LOAD(ManualDispatch_Init);
     LOAD(ManualDispatch_RunFrame);
     LOAD(ManualDispatch_GetNextCallback);
     LOAD(ManualDispatch_FreeLastCallback);
-    LOAD(ManualDispatch_GetAPICallResult);
     LOAD(GetHSteamPipe);
     LOAD(IsSteamRunning);
 #undef LOAD
     return 1;
 }
 
+/* SteamAPI_RestartAppIfNecessary is never called: it may start the installed game through Steam. The app id comes from
+ * the environment instead, which Steam's init reads when there is no steam_appid.txt. */
 static int InitSteam(void)
 {
-    g_steam.RestartAppIfNecessary(553850);
-    if (!g_steam.Init()) return 0;
+    if (!SetEnvironmentVariableA("SteamAppId", GAME_APP_ID) || !SetEnvironmentVariableA("SteamGameId", GAME_APP_ID)) return 0;
+    if (g_steam.Init)
+    {
+        if (!g_steam.Init()) { fprintf(stderr, "broker: SteamAPI_Init -> false\n"); return 0; }
+    }
+    else
+    {
+        char error[1024] = "";
+        int result = g_steam.InitFlat(error);
+        error[sizeof error - 1] = 0;
+        if (result != 0) { fprintf(stderr, "broker: SteamAPI_InitFlat -> %d (%s)\n", result, error); return 0; }
+    }
     g_steam.ManualDispatch_Init();
     g_steam.hPipe = g_steam.GetHSteamPipe();
     return g_steam.hPipe != 0;
 }
 
-/* --- Phase 2 dispatch: a handful of calls for testing the channel --- */
-
-/* CallbackMsg_t from isteamclient.h (the struct ManualDispatch_GetNextCallback fills). */
+/* CallbackMsg_t from steam_api_common.h (what ManualDispatch_GetNextCallback fills). */
 #pragma pack(push, 8)
 typedef struct CallbackMsg {
     int32_t  steamUser;
@@ -85,113 +98,80 @@ typedef struct CallbackMsg {
 } CallbackMsg;
 #pragma pack(pop)
 
-enum {
-    BROKER_CALL_IS_STEAM_RUNNING = 0,
-    BROKER_CALL_RUN_FRAME        = 1,
-    BROKER_CALL_SHUTDOWN         = 2,
-};
-
-/* Pump Valve's callbacks into the ring. */
-static void PumpCallbacks(BrokerChannel* ch)
+static void Pump(void* context, BrokerChannel* ch)
 {
-    if (!g_steam.module) return;
+    (void)context;
+    static uint32_t reportedDrops;
     g_steam.ManualDispatch_RunFrame(g_steam.hPipe);
     CallbackMsg msg;
     while (g_steam.ManualDispatch_GetNextCallback(g_steam.hPipe, &msg))
     {
-        BrokerChannelPushCallback(ch, (uint32_t)msg.callbackId, msg.data, msg.dataSize > 0 ? (uint32_t)msg.dataSize : 0);
+        uint32_t size = msg.dataSize > 0 ? (uint32_t)msg.dataSize : 0;
+        if (!BrokerChannelPushCallback(ch, (uint32_t)msg.callbackId, msg.data, size) && size > BRIDGE_RING_DATA_SIZE)
+            fprintf(stderr, "broker: callback %d of %u bytes does not fit a ring slot; dropped\n", msg.callbackId, size);
         g_steam.ManualDispatch_FreeLastCallback(g_steam.hPipe);
     }
+    /* a full ring: the game stopped reading. Said once, then counted at exit. */
+    if (ch->dropped > 0 && reportedDrops == 0) { fprintf(stderr, "broker: the ring is full; callbacks are being dropped\n"); reportedDrops = 1; }
 }
 
-static int HandleCall(BrokerChannel* ch, uint32_t callId, const uint8_t* args, uint32_t argsSize,
-                      uint8_t* result, uint32_t resultCapacity, uint32_t* resultSize, uint32_t* status)
+static int IsSteamRunning(void* context) { (void)context; return g_steam.IsSteamRunning(); }
+
+int wmain(int argc, wchar_t* argv[])
 {
-    *resultSize = 0;
-    *status = 0;
-    switch (callId)
+    if (argc < 3 || wcslen(argv[1]) == 0 || wcslen(argv[1]) > 64)
     {
-    case BROKER_CALL_IS_STEAM_RUNNING:
-    {
-        uint8_t running = g_steam.module ? (uint8_t)g_steam.IsSteamRunning() : 1;
-        if (resultCapacity >= 1) { result[0] = running; *resultSize = 1; }
-        return 1;
+        fprintf(stderr, "Usage: hellforge_steam_broker <pipe-suffix> <game-pid> [valve-dll-path]\n");
+        return 2;
     }
-    case BROKER_CALL_RUN_FRAME:
-        PumpCallbacks(ch);
-        return 1;
-    case BROKER_CALL_SHUTDOWN:
-        return 0;
-    default:
-        *status = 1;
-        return 1;
-    }
-}
+    wchar_t* end = NULL;
+    DWORD gamePid = (DWORD)wcstoul(argv[2], &end, 10);
+    if (gamePid == 0 || end == argv[2] || *end != L'\0') { fprintf(stderr, "broker: bad game pid\n"); return 2; }
 
-/* --- Main loop --- */
+    /* the broker lives only as long as the game: watched while it waits and while it serves */
+    HANDLE game = OpenProcess(SYNCHRONIZE, FALSE, gamePid);
+    if (!game) { fprintf(stderr, "broker: game process %lu not found (%lu)\n", gamePid, GetLastError()); return 1; }
 
-static void Serve(BrokerChannel* ch)
-{
-    uint8_t body[BRIDGE_MSG_BUF];
-    for (;;)
+    /* the channel before Steam, so the game's wait starts as soon as possible */
+    BrokerChannel* ch = (BrokerChannel*)calloc(1, sizeof *ch);
+    if (!ch || !BrokerChannelCreate(ch, argv[1]))
     {
-        uint32_t bodySize = 0;
-        uint32_t type = BridgePipeRecv(ch->pipe, body, sizeof body, &bodySize);
-        if (type == 0 || type == BRIDGE_SHUTDOWN) break;
-
-        if (type == BRIDGE_CALL && bodySize >= 4)
-        {
-            uint32_t callId;
-            memcpy(&callId, body, 4);
-            const uint8_t* args = body + 4;
-            uint32_t argsSize = bodySize - 4;
-
-            uint8_t resultBuf[4096];
-            uint32_t resultSize = 0, status = 0;
-            int cont = HandleCall(ch, callId, args, argsSize, resultBuf, sizeof resultBuf, &resultSize, &status);
-
-            uint8_t reply[4096 + 8];
-            uint32_t replyCallId = callId;
-            memcpy(reply, &replyCallId, 4);
-            memcpy(reply + 4, &status, 4);
-            if (resultSize > 0) memcpy(reply + 8, resultBuf, resultSize);
-            BridgePipeSend(ch->pipe, status == 0 ? BRIDGE_RESULT : (uint32_t)BRIDGE_RESULT, reply, 8 + resultSize);
-
-            if (!cont) break;
-        }
-    }
-}
-
-int main(int argc, char* argv[])
-{
-    if (argc < 3)
-    {
-        fprintf(stderr, "Usage: hellforge_steam_broker <pipe-suffix> <expected-pid> [valve-dll-path]\n");
+        fprintf(stderr, "broker: cannot create the channel (%lu)\n", GetLastError());
+        CloseHandle(game);
         return 1;
     }
 
-    wchar_t suffix[64];
-    MultiByteToWideChar(CP_UTF8, 0, argv[1], -1, suffix, 64);
-    DWORD expectedPid = (DWORD)strtoul(argv[2], NULL, 10);
-
-    if (argc >= 4 && argv[3][0] != '\0')
+    if (argc >= 4 && argv[3][0] != L'\0')
     {
-        if (!LoadValveDll(argv[3])) { fprintf(stderr, "broker: cannot load %s\n", argv[3]); return 1; }
-        if (!InitSteam()) { fprintf(stderr, "broker: SteamAPI_Init failed\n"); return 1; }
-        fprintf(stderr, "broker: Valve DLL loaded, pipe %d\n", g_steam.hPipe);
+        if (!LoadValveDll(argv[3])) { fprintf(stderr, "broker: cannot load Valve's steam_api64.dll (%lu)\n", GetLastError()); goto fail; }
+        if (!InitSteam()) { fprintf(stderr, "broker: Steam did not start\n"); goto fail; }
+        fprintf(stderr, "broker: Steam ready (pipe %d)\n", g_steam.hPipe);
     }
+    BrokerSteam steam = { NULL, g_steam.module ? Pump : NULL, g_steam.module ? IsSteamRunning : NULL };
 
-    BrokerChannel ch;
-    if (!BrokerChannelCreate(&ch, suffix)) { fprintf(stderr, "broker: cannot create channel\n"); return 1; }
-    fprintf(stderr, "broker: waiting for client on %ls\n", ch.pipeName);
+    fprintf(stderr, "broker: waiting for the game (%lu)\n", gamePid);
+    int accepted = BrokerChannelAccept(ch, gamePid, game, 5000);
+    if (ch->refused) fprintf(stderr, "broker: refused %u other client(s)\n", ch->refused);
+    if (accepted != BROKER_ACCEPTED)
+    {
+        fprintf(stderr, accepted == BROKER_GAME_GONE ? "broker: the game exited before connecting\n" : "broker: accept failed (%lu)\n", GetLastError());
+        goto fail;
+    }
+    fprintf(stderr, "broker: game connected\n");
 
-    if (!BrokerChannelAccept(&ch, expectedPid)) { fprintf(stderr, "broker: client rejected\n"); BrokerChannelClose(&ch); return 1; }
-    fprintf(stderr, "broker: client %lu accepted\n", ch.clientPid);
+    int why = BrokerServe(ch, &steam, game);
+    fprintf(stderr, "broker: %s; %u callback(s) dropped\n",
+        why == BROKER_END_SHUTDOWN ? "shutdown" : why == BROKER_END_GAME_GONE ? "the game exited" : "the pipe closed", ch->dropped);
 
-    Serve(&ch);
-    fprintf(stderr, "broker: shutting down\n");
-
-    BrokerChannelClose(&ch);
-    if (g_steam.module) { g_steam.Shutdown(); FreeLibrary(g_steam.module); }
+    BrokerChannelClose(ch);
+    free(ch);
+    CloseHandle(game);
+    if (g_steam.module) g_steam.Shutdown();
     return 0;
+fail:
+    BrokerChannelClose(ch);
+    free(ch);
+    CloseHandle(game);
+    if (g_steam.hPipe) g_steam.Shutdown();
+    return 1;
 }
