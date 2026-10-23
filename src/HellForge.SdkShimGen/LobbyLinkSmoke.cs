@@ -11,7 +11,9 @@ namespace HellForge.SdkShimGen;
 // the PlayFab C APIs; the "friend" copies join the lobby with its connection string, update their member data, connect
 // to the network with its descriptor, create an endpoint, and exchange messages with the host, exactly as two games on
 // two machines would, except that Steam networking is replaced by loopback UDP. Then the host invites the friend (who
-// listens for invitations) and kicks it: the kicked game is removed and disconnected, and its join back is refused.
+// listens for invitations) and kicks it: the kicked game is removed and disconnected, and its join back is refused. Last,
+// the friend comes back as after a mod sync: a new backend given --rejoin and a new stand-in copy, whose game is invited
+// back into the host's new lobby once it has one of its own, and joins.
 public static unsafe class LobbyLinkSmoke
 {
     const string HostId = "110000100000001", FriendId = "110000100000002";
@@ -33,12 +35,14 @@ public static unsafe class LobbyLinkSmoke
         public delegate* unmanaged<nint, uint*, nint*, int> Start;
         public delegate* unmanaged<nint, uint, nint, int> Finish;
         public readonly List<string> Seen = [];
+        // The connection strings of the invitations received (InviteReceived).
+        public readonly List<string> Invitations = [];
 
         // Delivers state changes until one matches (type, or type:hresult for completions), for at most five seconds.
-        public bool WaitFor(string wanted)
+        public bool WaitFor(string wanted, int milliseconds = 5000)
         {
             var clock = Stopwatch.StartNew();
-            while (clock.ElapsedMilliseconds < 5000)
+            while (clock.ElapsedMilliseconds < milliseconds)
             {
                 uint count;
                 nint changes;
@@ -47,6 +51,8 @@ public static unsafe class LobbyLinkSmoke
                 {
                     var change = (uint*)((nint*)changes)[i];
                     Seen.Add(change[0] is 0 or 1 or 5 or 8 or 12 or 15 ? $"{change[0]}:{change[1]:x}" : $"{change[0]}");
+                    // PFLobbyInviteReceivedStateChange: the connection string after the listening and inviting entities
+                    if (change[0] == 13) Invitations.Add(Marshal.PtrToStringUTF8(*(nint*)((byte*)change + 40)) ?? "");
                 }
                 Finish(Handle, count, changes);
                 var at = Seen.IndexOf(wanted);
@@ -160,6 +166,49 @@ public static unsafe class LobbyLinkSmoke
                 Expect(hostMembers(hostLobby, &count, &list) == 0 && count == 1, "The host's lobby keeps one member");
                 _ = friendLeave;
                 Expect(hostLeave(hostLobby, &hostKey, 0x55) == 0 && host.Player.WaitFor("10"), "The host leaves its lobby");
+
+                // Rejoining after a mod sync: the friend's next session (a new backend on the friend's port, given the sync
+                // file naming the host's new lobby, and a new copy of the stand-in) is invited back once its game has a
+                // lobby of its own, and joins with the invitation's connection string.
+                nint secondLobby = 0, ownLobby = 0, back = 0;
+                Expect(create(host.Player.Handle, &hostKey, &configuration, &hostJoin, 0x91, &secondLobby) == 0 && host.Player.WaitFor("0:0"), "The host opens a new lobby");
+                Expect(connection(secondLobby, &text) == 0, "The new lobby has a connection string");
+                var secondConnection = Marshal.PtrToStringUTF8(text) ?? "";
+                processes[1].Kill(true);
+                processes[1].WaitForExit(10000);
+                var syncFile = Path.Combine(root, "mod-sync", "session.json");
+                new HellForge.Core.ModSyncSession(HostId, "Host", secondConnection, "smoke", []).Write(syncFile);
+                var againPipe = $"hellforge-link-again-{Guid.NewGuid():N}";
+                processes.Add(StartBackend(backend, Path.Combine(root, "friend-again"), againPipe, $"udp:{FriendId}:{ports.Item2}:{HostId}={ports.Item1}", ["--rejoin", syncFile]));
+                var againReady = Path.Combine(root, "friend-again", "ready.json");
+                var readyClock = Stopwatch.StartNew();
+                while (!File.Exists(againReady) && readyClock.ElapsedMilliseconds < 20000) Thread.Sleep(50);
+                Expect(File.Exists(againReady), "The friend's next session's backend starts with --rejoin");
+                var again = Load(Path.Combine(standIns, "PlayFabMultiplayerWin.dll"), Path.Combine(root, "lobby-friend-again.dll"), againPipe, "friend again");
+                var againCreate = (delegate* unmanaged<nint, EntityKey*, CreateConfiguration*, JoinConfiguration*, nint, nint*, int>)NativeLibrary.GetExport(again.Library, "PFMultiplayerCreateAndJoinLobby");
+                var againListen = (delegate* unmanaged<nint, EntityKey*, int>)NativeLibrary.GetExport(again.Library, "PFMultiplayerStartListeningForLobbyInvites");
+                var againJoin = (delegate* unmanaged<nint, EntityKey*, byte*, JoinConfiguration*, nint, nint*, int>)NativeLibrary.GetExport(again.Library, "PFMultiplayerJoinLobby");
+                var againMembers = (delegate* unmanaged<nint, uint*, nint*, int>)NativeLibrary.GetExport(again.Library, "PFLobbyGetMembers");
+                Expect(againListen(again.Player.Handle, &friendKey) == 0 && again.Player.WaitFor("14"), "The friend's next game listens for invitations from the start");
+                var friendOwnJoin = new JoinConfiguration { Count = 0 };
+                Expect(againCreate(again.Player.Handle, &friendKey, &configuration, &friendOwnJoin, 0x92, &ownLobby) == 0 && again.Player.WaitFor("0:0"),
+                    "The friend's next game reaches the ship (its own lobby)");
+                Expect(again.Player.WaitFor("13", 20000) && again.Player.Invitations.LastOrDefault() == secondConnection,
+                    "The friend's next game receives the host's invitation into its new lobby");
+                fixed (byte* connectionBytes = Encoding.UTF8.GetBytes(secondConnection + "\0"))
+                    Expect(againJoin(again.Player.Handle, &friendKey, connectionBytes, &friendJoin, 0x93, &back) == 0 && again.Player.WaitFor("1:0"),
+                        "The friend's next game takes the invitation and joins");
+                Expect(againMembers(back, &count, &list) == 0 && count == 2 && host.Player.WaitFor("2") && hostMembers(secondLobby, &count, &list) == 0 && count == 2,
+                    "Both games see the friend back in the host's lobby");
+                // the backend keeps its log open
+                string FriendLog()
+                {
+                    using var stream = new FileStream(Path.Combine(root, "friend-again", "multiplayer.log"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    return new StreamReader(stream).ReadToEnd();
+                }
+                var logClock = Stopwatch.StartNew();
+                while (!FriendLog().Contains("Rejoin: back in Host's lobby", StringComparison.Ordinal) && logClock.ElapsedMilliseconds < 5000) Thread.Sleep(50);
+                Expect(FriendLog().Contains("Rejoin: back in Host's lobby", StringComparison.Ordinal), "The friend's backend logs the rejoin");
             }
             return Report(problems, root);
         }
