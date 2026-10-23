@@ -364,6 +364,27 @@ On the 2 MiB/s link, a small frame the host sends every 50 ms down the same link
 most 360 ms (40 ms of that is the one-way delay). A fixed window of 16 chunks would queue 2 MiB there, a second.
 
 `DownloadWindow`'s growth, cuts, floor and ceiling are checked on their own as well.
+### Trust: what another player's mods can reach
+
+Mod sync and public lobbies bring mods from people a player may not know. What limits them:
+- **What downloads by itself** is only what HellForge checks itself (data specs, schema stats, network field types),
+  read from the bytes received, with the same rule for every host. Code and raw data need the verified list, or,
+  from a Steam friend, the player's own trust after a warning ([Mod sync](#mod-sync)).
+- **Synced mods load only in the synced session.** They sit in `mods/.synced`, which normal sessions never load, and
+  the player's own Mods page never changes.
+- **The copy is off the internet.** The network block lets the copied game reach only this PC (loopback).
+- **The game cannot start other programs.** The session runner puts the game in a job whose active-process limit is 1
+  (`HostBoundedProcess`). That costs the game's crash reporter, already blocked from the network, and the DLSS updater
+  Steam's overlay starts. The Crash dump setting lifts the limit, because the loader starts `HellForge.Cli` to write
+  the dump; so does `HELLFORGE_ALLOW_CHILD_PROCESSES=1`, for diagnosing. The session's `result.json` says which
+  (`childProcesses`).
+- **HellForge's own programs stay as they are.** For the session, every file of the installation's `app` folder is held
+  read-only, as the game copy's are: nothing the game runs can replace the launcher, the session runner, the backend
+  or the stand-ins for the next start (`appFilesHeld` in `result.json`).
+
+What this does not stop: code in the game runs with the player's own Windows permissions. It can read their files,
+write those outside HellForge's held folders, and reach other programs of the same user. That is why code from
+another player downloads only when HellForge has verified it, or when the player trusts the friend it comes from.
 
 ### Public lobbies (the lobby directory)
 

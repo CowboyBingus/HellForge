@@ -14,13 +14,15 @@ using System.Threading;
 public sealed class HostBoundedProcess : IDisposable {
     IntPtr job, thread; Timer deadline; public Process Process {get;private set;}
     public bool DeadlineExpired {get;private set;}
-    public HostBoundedProcess(string executable,string arguments,string workingDirectory,string profile,int seconds) {
+    // singleProcess: the job holds the game alone (an active-process limit of 1), so it cannot start other programs.
+    public HostBoundedProcess(string executable,string arguments,string workingDirectory,string profile,int seconds,bool singleProcess=false) {
         // 0 means no deadline (play sessions); the job still kills the game when its owner exits.
         if(seconds<0||seconds>330)throw new ArgumentOutOfRangeException("seconds");
         var pi=new PI();IntPtr env=IntPtr.Zero;
         try {
             job=CreateJobObjectW(IntPtr.Zero,null);if(job==IntPtr.Zero)Fail("CreateJobObject");
             var limits=new LIMIT();limits.Basic.Flags=0x2000;
+            if(singleProcess){limits.Basic.Flags|=0x8;limits.Basic.ActiveLimit=1;}
             if(!SetInformationJobObject(job,9,ref limits,Marshal.SizeOf(typeof(LIMIT))))Fail("Job limits");
             var variables=new SortedDictionary<string,string>(StringComparer.OrdinalIgnoreCase);
             foreach(DictionaryEntry item in Environment.GetEnvironmentVariables())variables[(string)item.Key]=(string)item.Value;

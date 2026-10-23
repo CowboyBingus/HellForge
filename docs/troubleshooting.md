@@ -156,6 +156,7 @@ the cryo pod." Press STOP, then PLAY again: the next launch goes through.
 | "The launch options cannot be used." | Fix or clear Settings > Launch options; the reason shows under the box. |
 | "The session runner exited before starting." | The launcher points to `logs\session-runner.log`, which says why. |
 | "Mod left out of this session: ..." (in the Console) | The session still runs without that mod. The Mods page shows why on the mod's row ([using mods](mods.md)). |
+| "HellForge's file ... could not be held read-only for the session ..." | Another program has that file of the installation's `app` folder open for writing. Close it (or restart the PC), then press PLAY. |
 | "Cleanup failed." | Check the session logs before playing again. |
 
 ### The game could not be prepared or connected
