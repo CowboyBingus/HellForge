@@ -632,6 +632,13 @@ static class ModSyncTests
             var installed = SyncedStore.Install(install.Mods, texture, partial, TextureVerified);
             check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == installed && !Directory.Exists(partial), "Installed and found by hash.");
             check(new ModLocator(install.Mods).Find(texture.Id, texture.Hash) == installed, "The locator finds the store's copy.");
+            // the store stays writable during sessions: a file the mod does not count makes the copy another mod
+            var planted = Path.Combine(installed, "data", "planted.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(planted)!);
+            File.WriteAllText(planted, "code");
+            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == null, "A stored copy with a file added is not found.");
+            File.Delete(planted);
+            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == installed, "Found again once the file is gone.");
             check(ModCatalog.Load(install.Mods).Mods.Count == 0, "Normal sessions never load the store.");
             check(ModSets.ContentHash(ModCatalog.Parse(installed, EntityProfile.Current)) == texture.Hash, "The stored mod rehashes to the host's.");
 

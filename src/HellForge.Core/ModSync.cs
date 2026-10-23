@@ -412,7 +412,12 @@ public static class SyncedStore
             var record = Path.Combine(folder, RecordName);
             if (!File.Exists(record) || (string?)JsonNode.Parse(File.ReadAllText(record))?["hash"] != hash) return null;
             var mod = ModCatalog.Parse(folder, profile ?? EntityProfile.Current);
-            return mod.Id == id && ModSets.ContentHash(mod) == hash ? folder : null;
+            if (mod.Id != id || ModSets.ContentHash(mod) != hash) return null;
+            // The store stays writable while a session runs (the backend downloads into it): a file the mod does not count
+            // would load without being compared, so a copy with one is not this mod.
+            var counted = ModSets.Files(mod).Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
+            return Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(folder, f).Replace('\\', '/'))
+                .All(f => f == RecordName || counted.Contains(f)) ? folder : null;
         }
         catch (Exception error) when (error is JsonException or InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException) { return null; }
     }
