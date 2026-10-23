@@ -1,4 +1,4 @@
-/* Mod sync over the live pipe (live.c, SDK 13): the backend's syncmod and syncstate lines, held until their syncstate
+/* Mod sync over the live pipe (live.c, SDK 14): the backend's syncmod and syncstate lines, held until their syncstate
  * publishes them; progress keeping the mods; malformed and incomplete offers refused; long text cut on a whole
  * character; answers queued only for the current offer. Then the real pipe: LiveWatch connected to a server here, an
  * offer sent, and an answer written while LiveWatch waits on its read (a synchronous pipe would hold it until the next

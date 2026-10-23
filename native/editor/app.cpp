@@ -2464,7 +2464,7 @@ void DrawMods(float y0, float h)
 /* ---- keys ---- */
 bool Pressed(ImGuiKey key) { return ImGui::IsKeyPressed(key, true); }
 
-/* ---- mod sync (SDK 13): a lobby whose host plays with other gameplay mods ----
+/* ---- mod sync (SDK 14): a lobby whose host plays with other gameplay mods ----
  * The session's backend offers to download the host's mods and restart the session with them (docs/mods.md "Playing
  * with other mods"); the loader hands the offer over (sync_state, sync_mod) and the player's answer back (sync_answer).
  * Tick reads it every 30 frames. An offer that needs the player (new, ready, blocked, failed) shows this dialog by itself:

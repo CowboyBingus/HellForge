@@ -14,7 +14,7 @@
  *             syncmod <seq> <version> <index> <have|download|manual|blocked|update|off> <content|code|bundled> <bytes>
  *                     <id> <name> <mod version>
  *             syncstate <seq> <version> <none|offer|blocked|downloading|ready|failed> <host name> <bytes> <done> <mods>
- *                       <message>                                      (syncmod, syncstate: SDK 13, mod sync)
+ *                       <message>                                      (syncmod, syncstate: SDK 14, mod sync)
  *   loader:   <seq> ok <now|respawn|mission> [<value hex>]     or     <seq> refused <reason>
  *             syncanswer <version> <accept|decline|restart|block> <mod id or ->   (unasked: the player's answer to an offer)
  * A request names a field as the stats schema does (kind "component" and a component record, or a settings kind and
@@ -85,7 +85,7 @@ static void SetNotice(char** f, int n)
     ReleaseSRWLockExclusive(&g_sessionLock);
 }
 
-/* SDK 13, mod sync: the backend's offer to download the host's mods and restart with them (docs/mods.md "Playing with
+/* SDK 14, mod sync: the backend's offer to download the host's mods and restart with them (docs/mods.md "Playing with
  * other mods"), for an editor to show (sync_state, sync_mod) and answer (sync_answer). A version's syncmod lines come
  * first and wait in g_syncNext (the pipe's thread alone touches it); its syncstate line publishes them with the state. A
  * syncstate of the version already published is progress (state, done, message): its mods stay. Answers are queued
@@ -228,7 +228,7 @@ static void SyncClear(void)
     ReleaseSRWLockExclusive(&g_syncLock);
 }
 
-/* SDK 13, sync_state: the current offer (state HF_SYNC_NONE, and 0, without one). At most out->size bytes are written. */
+/* SDK 14, sync_state: the current offer (state HF_SYNC_NONE, and 0, without one). At most out->size bytes are written. */
 static int ApiSyncState(HfMod* mod, HfSyncState* out)
 {
     (void)mod;
@@ -242,7 +242,7 @@ static int ApiSyncState(HfMod* mod, HfSyncState* out)
     return now.state != HF_SYNC_NONE;
 }
 
-/* SDK 13, sync_mod: the index-th mod of the current offer. At most out->size bytes are written. */
+/* SDK 14, sync_mod: the index-th mod of the current offer. At most out->size bytes are written. */
 static int ApiSyncMod(HfMod* mod, uint32_t index, HfSyncMod* out)
 {
     (void)mod;
@@ -259,7 +259,7 @@ static int ApiSyncMod(HfMod* mod, uint32_t index, HfSyncMod* out)
     return 1;
 }
 
-/* SDK 13, sync_answer: the player's answer to the offer of that version, queued for the backend. 0 when another offer
+/* SDK 14, sync_answer: the player's answer to the offer of that version, queued for the backend. 0 when another offer
  * came since, none stands, or no backend is connected. */
 static int ApiSyncAnswer(HfMod* mod, uint32_t version, uint32_t answer, const char* modId)
 {

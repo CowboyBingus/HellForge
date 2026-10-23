@@ -453,7 +453,7 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
   - `"share": false` in `hellforge-mods.json` stops it.
 - **Joiner:**
   - The offer becomes the game's (`ModSyncPlan` in HellForge.Core). The loader's live pipe gets
-    `syncmod` lines and then `syncstate` (`native/mod-loader/live.c`, SDK 13 `sync_state`/`sync_mod`), and the in-game
+    `syncmod` lines and then `syncstate` (`native/mod-loader/live.c`, SDK 14 `sync_state`/`sync_mod`), and the in-game
     editor shows its MOD SYNC prompt over the game, the editor window closed. The answer comes back as
   `syncanswer <version> <answer> [<mod id>]`.
   - The offer is also written to `<run>/backend/mod-sync.json`.

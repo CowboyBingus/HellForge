@@ -27,7 +27,7 @@ static HfSession g_sessionNow; /* the co-op role the stand-in loader reports */
 static void Session(HfMod*, HfSession* out) { *out = g_sessionNow; }
 static HfNotice g_noticeNow; /* HellForge's message for the player, as the stand-in loader reports it */
 static void Notice(HfMod*, HfNotice* out) { *out = g_noticeNow; }
-/* SDK 13, mod sync: the offer the stand-in loader reports, how often the editor read it, and the answers it sent */
+/* SDK 14, mod sync: the offer the stand-in loader reports, how often the editor read it, and the answers it sent */
 static HfSyncState g_syncNow;
 static HfSyncMod g_syncList[3];
 static int g_syncReads, g_syncOpens, g_syncAnswers[5], g_syncAlone, g_syncGone, g_editorOpens;
@@ -659,7 +659,7 @@ int main(int argc, char** argv)
                 if (joined != 90 || g_modCooldown != 150) { puts("FAIL the mod content values did not follow the co-op role"); failures++; }
             }
         }
-        /* mod sync (SDK 13): the offer is read at most once every 30 frames; one shows its dialog alone over the game, the
+        /* mod sync (SDK 14): the offer is read at most once every 30 frames; one shows its dialog alone over the game, the
          * editor window staying closed. Esc answers no; Enter downloads, and once ready (the prompt back by itself after
          * Esc hid the download) restarts; B blocks the selected mod; a blocked lobby's OK answers no. The keys reaching
          * the prompt show it holds the game's input. */
