@@ -3673,6 +3673,133 @@ HF_ASSERT_OFFSET(HfEnemyComposition, minimum_players, 244);
 HF_ASSERT_OFFSET(HfEnemyComposition, maximum_players, 248);
 #define HF_TYPE_EnemyComposition_maximum_players HF_TYPE_U32
 
+/* UnitComponentData (component 88, 136-byte records): UnitComponentData (fields from the stats schema) */
+#define HfUnit_INFO "UnitComponentData", 25480438u
+typedef struct HfUnit
+{
+    uint8_t _unknown_00[8];
+    float scale_min;                             /* +0x08 Scale min (unverified) [respawn?] */
+    uint8_t _unknown_0C[4];
+    float radius;                                /* +0x10 Radius (unverified) [respawn?] */
+    uint8_t _unknown_14[116];
+} HfUnit;
+HF_ASSERT_SIZE(HfUnit, 136);
+HF_ASSERT_OFFSET(HfUnit, scale_min, 8);
+#define HF_TYPE_Unit_scale_min HF_TYPE_F32
+HF_ASSERT_OFFSET(HfUnit, radius, 16);
+#define HF_TYPE_Unit_radius HF_TYPE_F32
+
+/* SquadTransportFormationComponentData (component 122, 48-byte records): SquadTransportFormationComponentData (fields from the stats schema) */
+#define HfSquadTransportFormation_INFO "SquadTransportFormationComponentData", 25480438u
+typedef struct HfSquadTransportFormation
+{
+    uint8_t _unknown_00[4];
+    uint32_t passenger_formation_0_dimension_0;  /* +0x04 Passenger formation 0 dimension 0 (unverified) [respawn?] */
+    uint32_t passenger_formation_0_dimension_1;  /* +0x08 Passenger formation 0 dimension 1 (unverified) [respawn?] */
+    uint8_t _unknown_0C[16];
+    uint32_t passenger_formation_1_dimension_0;  /* +0x1C Passenger formation 1 dimension 0 (unverified) [respawn?] */
+    uint32_t passenger_formation_1_dimension_1;  /* +0x20 Passenger formation 1 dimension 1 (unverified) [respawn?] */
+    uint8_t _unknown_24[12];
+} HfSquadTransportFormation;
+HF_ASSERT_SIZE(HfSquadTransportFormation, 48);
+HF_ASSERT_OFFSET(HfSquadTransportFormation, passenger_formation_0_dimension_0, 4);
+#define HF_TYPE_SquadTransportFormation_passenger_formation_0_dimension_0 HF_TYPE_U32
+HF_ASSERT_OFFSET(HfSquadTransportFormation, passenger_formation_0_dimension_1, 8);
+#define HF_TYPE_SquadTransportFormation_passenger_formation_0_dimension_1 HF_TYPE_U32
+HF_ASSERT_OFFSET(HfSquadTransportFormation, passenger_formation_1_dimension_0, 28);
+#define HF_TYPE_SquadTransportFormation_passenger_formation_1_dimension_0 HF_TYPE_U32
+HF_ASSERT_OFFSET(HfSquadTransportFormation, passenger_formation_1_dimension_1, 32);
+#define HF_TYPE_SquadTransportFormation_passenger_formation_1_dimension_1 HF_TYPE_U32
+
+/* SquadTransportComponentData (component 97, 136-byte records): SquadTransportComponentData (fields from the stats schema) */
+#define HfSquadTransport_INFO "SquadTransportComponentData", 25480438u
+typedef struct HfSquadTransport
+{
+    uint32_t grid_dimension_0;                   /* +0x00 Grid dimension 0 (unverified) [respawn?] */
+    uint32_t grid_dimension_1;                   /* +0x04 Grid dimension 1 (unverified) [respawn?] */
+    uint8_t _unknown_08[128];
+} HfSquadTransport;
+HF_ASSERT_SIZE(HfSquadTransport, 136);
+HF_ASSERT_OFFSET(HfSquadTransport, grid_dimension_0, 0);
+#define HF_TYPE_SquadTransport_grid_dimension_0 HF_TYPE_U32
+HF_ASSERT_OFFSET(HfSquadTransport, grid_dimension_1, 4);
+#define HF_TYPE_SquadTransport_grid_dimension_1 HF_TYPE_U32
+
+/* GoreComponentData (component 230, 33488-byte records): GoreComponentData (fields from the stats schema) */
+#define HfGore_INFO "GoreComponentData", 25480438u
+typedef struct HfGore
+{
+    float whole_body_gib_damage;                 /* +0x00 Whole body gib damage (unverified) [respawn?] */
+    uint8_t _unknown_04[33484];
+} HfGore;
+HF_ASSERT_SIZE(HfGore, 33488);
+HF_ASSERT_OFFSET(HfGore, whole_body_gib_damage, 0);
+#define HF_TYPE_Gore_whole_body_gib_damage HF_TYPE_F32
+
+/* AiSpawnerComponentData (component 182, 196-byte records): AiSpawnerComponentData (fields from the stats schema) */
+#define HfAiSpawner_INFO "AiSpawnerComponentData", 25480438u
+typedef struct HfAiSpawner
+{
+    uint8_t _unknown_00[28];
+    float initial_release_delay;                 /* +0x1C Initial release delay (unverified) [respawn?] */
+    uint8_t _unknown_20[104];
+    uint32_t queue_limit;                        /* +0x88 Queue limit (unverified) [respawn?] */
+    uint32_t batch_size;                         /* +0x8C Batch size (unverified) [respawn?] */
+    uint32_t minimum_batch_size;                 /* +0x90 Minimum batch size (unverified) [respawn?] */
+    float refill_delay;                          /* +0x94 Refill delay (unverified) [respawn?] */
+    float release_delay;                         /* +0x98 Release delay (unverified) [respawn?] */
+    float serialized_release_delay;              /* +0x9C Serialized release delay (unverified) [respawn?] */
+    float delay_variance;                        /* +0xA0 Delay variance (unverified) [respawn?] */
+    uint8_t alternate_roster;                    /* +0xA4 Alternate roster (unverified) [respawn?] */
+    uint8_t _unknown_A5[31];
+} HfAiSpawner;
+HF_ASSERT_SIZE(HfAiSpawner, 196);
+HF_ASSERT_OFFSET(HfAiSpawner, initial_release_delay, 28);
+#define HF_TYPE_AiSpawner_initial_release_delay HF_TYPE_F32
+HF_ASSERT_OFFSET(HfAiSpawner, queue_limit, 136);
+#define HF_TYPE_AiSpawner_queue_limit HF_TYPE_U32
+HF_ASSERT_OFFSET(HfAiSpawner, batch_size, 140);
+#define HF_TYPE_AiSpawner_batch_size HF_TYPE_U32
+HF_ASSERT_OFFSET(HfAiSpawner, minimum_batch_size, 144);
+#define HF_TYPE_AiSpawner_minimum_batch_size HF_TYPE_U32
+HF_ASSERT_OFFSET(HfAiSpawner, refill_delay, 148);
+#define HF_TYPE_AiSpawner_refill_delay HF_TYPE_F32
+HF_ASSERT_OFFSET(HfAiSpawner, release_delay, 152);
+#define HF_TYPE_AiSpawner_release_delay HF_TYPE_F32
+HF_ASSERT_OFFSET(HfAiSpawner, serialized_release_delay, 156);
+#define HF_TYPE_AiSpawner_serialized_release_delay HF_TYPE_F32
+HF_ASSERT_OFFSET(HfAiSpawner, delay_variance, 160);
+#define HF_TYPE_AiSpawner_delay_variance HF_TYPE_F32
+HF_ASSERT_OFFSET(HfAiSpawner, alternate_roster, 164);
+#define HF_TYPE_AiSpawner_alternate_roster HF_TYPE_U8
+
+/* StratagemBlockerComponentData (component 25, 20-byte records): StratagemBlockerComponentData (fields from the stats schema) */
+#define HfStratagemBlocker_INFO "StratagemBlockerComponentData", 25480438u
+typedef struct HfStratagemBlocker
+{
+    uint8_t _unknown_00[12];
+    float radius;                                /* +0x0C Radius (unverified) [respawn?] */
+    uint8_t initially_enabled;                   /* +0x10 Initially enabled (unverified) [respawn?] */
+    uint8_t _unknown_11[3];
+} HfStratagemBlocker;
+HF_ASSERT_SIZE(HfStratagemBlocker, 20);
+HF_ASSERT_OFFSET(HfStratagemBlocker, radius, 12);
+#define HF_TYPE_StratagemBlocker_radius HF_TYPE_F32
+HF_ASSERT_OFFSET(HfStratagemBlocker, initially_enabled, 16);
+#define HF_TYPE_StratagemBlocker_initially_enabled HF_TYPE_U8
+
+/* BugholeComponentData (component 216, 40-byte records): BugholeComponentData (fields from the stats schema) */
+#define HfBughole_INFO "BugholeComponentData", 25480438u
+typedef struct HfBughole
+{
+    uint8_t _unknown_00[12];
+    float emission_radius;                       /* +0x0C Emission radius (unverified) [respawn?] */
+    uint8_t _unknown_10[24];
+} HfBughole;
+HF_ASSERT_SIZE(HfBughole, 40);
+HF_ASSERT_OFFSET(HfBughole, emission_radius, 12);
+#define HF_TYPE_Bughole_emission_radius HF_TYPE_F32
+
 #pragma pack(pop)
 
 #endif

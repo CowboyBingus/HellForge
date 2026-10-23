@@ -15,7 +15,7 @@ there) and `mappings/` (fields and content); do not edit it by hand. To change i
 ## Contents
 
 - [API](#api): [SDK 1](#sdk-1), [SDK 2](#sdk-2), [SDK 3](#sdk-3), [SDK 4](#sdk-4), [SDK 5](#sdk-5), [SDK 6](#sdk-6), [SDK 7](#sdk-7), [SDK 9](#sdk-9), [SDK 10](#sdk-10), [SDK 11](#sdk-11-actions-hf_act_-check-hf-size-before-calling), [SDK 12](#sdk-12), [SDK 13](#sdk-13), [SDK 14](#sdk-14-mod-sync-hfsyncstate-check-hf-size-before-calling)
-- [Components](#components): [HfProjectileWeapon](#hfprojectileweapon), [HfWeaponData](#hfweapondata), [HfWeaponMagazine](#hfweaponmagazine), [HfTag](#hftag), [HfMount](#hfmount), [HfBehavior](#hfbehavior), [HfLoadoutPackage](#hfloadoutpackage), [HfDeposit](#hfdeposit), [HfHealth](#hfhealth), [HfJumppack](#hfjumppack), [HfRecharge](#hfrecharge), [HfShield](#hfshield), [HfHellpodPayload](#hfhellpodpayload), [HfSensorEye](#hfsensoreye), [HfTurret](#hfturret), [HfWeaponWindUp](#hfweaponwindup), [HfBeamWeapon](#hfbeamweapon), [HfWeaponHeat](#hfweaponheat), [HfEagle](#hfeagle), [HfThrower](#hfthrower), [HfBombardment](#hfbombardment), [HfExplosive](#hfexplosive), [HfThrowable](#hfthrowable), [HfVehicleMotion](#hfvehiclemotion), [HfWeaponCharge](#hfweaponcharge), [HfWeaponReload](#hfweaponreload), [HfWeaponRounds](#hfweaponrounds), [HfArcWeapon](#hfarcweapon), [HfHiveMind](#hfhivemind), [HfOrbitalAbility](#hforbitalability), [HfRotation](#hfrotation), [HfDisplacement](#hfdisplacement), [HfSeekingMissile](#hfseekingmissile), [HfLoadoutEntry](#hfloadoutentry), [HfHellpodRack](#hfhellpodrack), [HfAvatar](#hfavatar), [HfInventory](#hfinventory), [HfMeleeWeapon](#hfmeleeweapon), [HfAbilityWeapon](#hfabilityweapon)
+- [Components](#components): [HfProjectileWeapon](#hfprojectileweapon), [HfWeaponData](#hfweapondata), [HfWeaponMagazine](#hfweaponmagazine), [HfTag](#hftag), [HfMount](#hfmount), [HfBehavior](#hfbehavior), [HfLoadoutPackage](#hfloadoutpackage), [HfDeposit](#hfdeposit), [HfHealth](#hfhealth), [HfJumppack](#hfjumppack), [HfRecharge](#hfrecharge), [HfShield](#hfshield), [HfHellpodPayload](#hfhellpodpayload), [HfSensorEye](#hfsensoreye), [HfTurret](#hfturret), [HfWeaponWindUp](#hfweaponwindup), [HfBeamWeapon](#hfbeamweapon), [HfWeaponHeat](#hfweaponheat), [HfEagle](#hfeagle), [HfThrower](#hfthrower), [HfBombardment](#hfbombardment), [HfExplosive](#hfexplosive), [HfThrowable](#hfthrowable), [HfVehicleMotion](#hfvehiclemotion), [HfWeaponCharge](#hfweaponcharge), [HfWeaponReload](#hfweaponreload), [HfWeaponRounds](#hfweaponrounds), [HfArcWeapon](#hfarcweapon), [HfHiveMind](#hfhivemind), [HfOrbitalAbility](#hforbitalability), [HfRotation](#hfrotation), [HfDisplacement](#hfdisplacement), [HfSeekingMissile](#hfseekingmissile), [HfLoadoutEntry](#hfloadoutentry), [HfHellpodRack](#hfhellpodrack), [HfAvatar](#hfavatar), [HfInventory](#hfinventory), [HfMeleeWeapon](#hfmeleeweapon), [HfAbilityWeapon](#hfabilityweapon), [HfUnit](#hfunit), [HfSquadTransportFormation](#hfsquadtransportformation), [HfSquadTransport](#hfsquadtransport), [HfGore](#hfgore), [HfAiSpawner](#hfaispawner), [HfStratagemBlocker](#hfstratagemblocker), [HfBughole](#hfbughole)
 - [Settings tables](#settings-tables): [HfDifficultySettings](#hfdifficultysettings), [HfDamageInfo](#hfdamageinfo), [HfProjectileSettings](#hfprojectilesettings), [HfStratagemSettings](#hfstratagemsettings), [HfExplosionSettings](#hfexplosionsettings), [HfArcSettings](#hfarcsettings), [HfBeamSettings](#hfbeamsettings), [HfStatusEffectSettings](#hfstatuseffectsettings), [HfBoosterSettings](#hfboostersettings), [HfPassiveModifier](#hfpassivemodifier), [HfPassiveStat](#hfpassivestat), [HfMeleeHitVolume](#hfmeleehitvolume), [HfEnemyRoster](#hfenemyroster), [HfEnemyRosterLevel11](#hfenemyrosterlevel11), [HfEnemyComposition](#hfenemycomposition)
 - [Content](#content): [HF_ITEM_...](#hf_item_-168-hf_kind_item), [HF_PROJECTILE_...](#hf_projectile_-61-hf_kind_projectile), [HF_STRATAGEM_...](#hf_stratagem_-149-hf_kind_stratagem), [HF_BEHAVIOUR_...](#hf_behaviour_-2-hf_kind_behaviour), [HF_ENTITY_...](#hf_entity_-369-hf_kind_entity), [HF_DAMAGE_...](#hf_damage_-1-hf_kind_damage), [HF_PACKAGE_...](#hf_package_-1-hf_kind_package), [HF_TAG_...](#hf_tag_-1-hf_kind_tag), [HF_TRAIT_...](#hf_trait_-29-hf_kind_trait), [HF_CATEGORY_...](#hf_category_-5-hf_kind_category), [HF_BEAM_...](#hf_beam_-3-hf_kind_beam), [HF_BOOSTER_...](#hf_booster_-20-hf_kind_booster)
 
@@ -1249,6 +1249,76 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | `mode1_ability` | +0x28 | u32 | respawn? | fire mode 1: the ability it starts on the weapon when it fires (0: none) |
 | `mode1_spends_round` | +0x48 | u8 | respawn? | fire mode 1: 1, starting it spends a round (unverified) |
 | `mode1_always` | +0x49 | u8 | respawn? | fire mode 1: 1, it starts whenever the weapon fires (else after a check) (unverified) |
+
+### HfUnit
+
+`UnitComponentData`: component 88, 136-byte records. UnitComponentData (fields from the stats schema).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `scale_min` | +0x08 | f32 | respawn? | Scale min (unverified) |
+| `radius` | +0x10 | f32 | respawn? | Radius (unverified) |
+
+### HfSquadTransportFormation
+
+`SquadTransportFormationComponentData`: component 122, 48-byte records. SquadTransportFormationComponentData (fields from the stats schema).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `passenger_formation_0_dimension_0` | +0x04 | u32 | respawn? | Passenger formation 0 dimension 0 (unverified) |
+| `passenger_formation_0_dimension_1` | +0x08 | u32 | respawn? | Passenger formation 0 dimension 1 (unverified) |
+| `passenger_formation_1_dimension_0` | +0x1C | u32 | respawn? | Passenger formation 1 dimension 0 (unverified) |
+| `passenger_formation_1_dimension_1` | +0x20 | u32 | respawn? | Passenger formation 1 dimension 1 (unverified) |
+
+### HfSquadTransport
+
+`SquadTransportComponentData`: component 97, 136-byte records. SquadTransportComponentData (fields from the stats schema).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `grid_dimension_0` | +0x00 | u32 | respawn? | Grid dimension 0 (unverified) |
+| `grid_dimension_1` | +0x04 | u32 | respawn? | Grid dimension 1 (unverified) |
+
+### HfGore
+
+`GoreComponentData`: component 230, 33488-byte records. GoreComponentData (fields from the stats schema).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `whole_body_gib_damage` | +0x00 | f32 | respawn? | Whole body gib damage (unverified) |
+
+### HfAiSpawner
+
+`AiSpawnerComponentData`: component 182, 196-byte records. AiSpawnerComponentData (fields from the stats schema).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `initial_release_delay` | +0x1C | f32 | respawn? | Initial release delay (unverified) |
+| `queue_limit` | +0x88 | u32 | respawn? | Queue limit (unverified) |
+| `batch_size` | +0x8C | u32 | respawn? | Batch size (unverified) |
+| `minimum_batch_size` | +0x90 | u32 | respawn? | Minimum batch size (unverified) |
+| `refill_delay` | +0x94 | f32 | respawn? | Refill delay (unverified) |
+| `release_delay` | +0x98 | f32 | respawn? | Release delay (unverified) |
+| `serialized_release_delay` | +0x9C | f32 | respawn? | Serialized release delay (unverified) |
+| `delay_variance` | +0xA0 | f32 | respawn? | Delay variance (unverified) |
+| `alternate_roster` | +0xA4 | u8 | respawn? | Alternate roster (unverified) |
+
+### HfStratagemBlocker
+
+`StratagemBlockerComponentData`: component 25, 20-byte records. StratagemBlockerComponentData (fields from the stats schema).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `radius` | +0x0C | f32 | respawn? | Radius (unverified) |
+| `initially_enabled` | +0x10 | u8 | respawn? | Initially enabled (unverified) |
+
+### HfBughole
+
+`BugholeComponentData`: component 216, 40-byte records. BugholeComponentData (fields from the stats schema).
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `emission_radius` | +0x0C | f32 | respawn? | Emission radius (unverified) |
 
 ## Settings tables
 

@@ -65,15 +65,14 @@ Full parity with the HD2R Editor, in three steps:
 
 1. The player's kit, mostly ported. Left: beam conversion, the HD2R rows with no HellForge field yet (a coverage count
    says which), and armor perks in co-op (solo only today).
-2. Enemies: stats, damage zones, attacks, spawn rosters and compositions. Started: every entity's page with the fields
-   the engine maps (`mappings/entities.json`, `scripts/ExportEntities.py`; about 35,800 of the HD2R Editor's editable
-   rows, the HealthComponent's zones and HiveMind's multipliers named by `scripts/ImportSchemaMappings.py <HD2Runtime>`).
-   Spawn rosters, compositions and the difficulty rows are done (`native/mod-loader/director.c`, `mappings/director.json`;
-   level 11's weights too). Left: components the engine has no mapping for (UnitComponentData, AiSpawnerComponentData,
-   SquadTransportFormationComponentData, Gore, SquadTransport, StratagemBlocker, Bughole; the exporter lists their rows
-   with a third path), adding roster rows or compositions (their counts are in the game's code), and in co-op, enemy
-   edits that follow the host even when every player keeps their own.
-3. Structures (demolition and destruction settings) and mission settings.
+2. Enemies and structures: stats, damage zones, attacks, spawn rosters and compositions. Every entity's page with the
+   fields the engine maps (`mappings/entities.json`, `scripts/ExportEntities.py`; about 38,800 rows, every editable row of
+   the HD2R Editor's Enemies pages but one, named by `scripts/ImportSchemaMappings.py <HD2Runtime>`, the Unit, AiSpawner,
+   SquadTransportFormation, SquadTransport, Gore, StratagemBlocker and Bughole components included). Spawn rosters,
+   compositions and the difficulty rows are done (`native/mod-loader/director.c`, `mappings/director.json`; level 11's
+   weights too). Left: adding roster rows or compositions (their counts are in the game's code). Enemies are the host's
+   in co-op, so their edits need no per-player handling.
+3. Demolition templates, destruction models and mission settings.
 
 ### Events, hooks and registries (phase 5b)
 

@@ -148,13 +148,13 @@ static class EditorTests
                 "An attachment's field is read through get_stat: kind, component, resource, record.");
             var targets = StatsSchema.Current.Targets;
             var helldiver = targets["helldiver"]["Helldiver"].Fields;
-            check(helldiver.Count == 64 && helldiver["entity.health"] is { Component: "HealthComponentData", Record: 76, Offset: 0 } &&
+            check(helldiver.Count == 66 && helldiver["unit.scale_min"].Component == "UnitComponentData" && helldiver["entity.health"] is { Component: "HealthComponentData", Record: 76, Offset: 0 } &&
                 helldiver["helldiver.stamina.cost_jump"] is { Component: "AvatarComponentData", Offset: 76 } &&
                 helldiver["arm_left:zone.health"] is { Component: "HealthComponentData", Record: 76, Offset: 1856, Storage: "i32", Section: "Left arm" } &&
                 helldiver["head:zone.damage_multiplier"].Choices.Any(c => c.Label == "Critical") &&
                 helldiver["helldiver.supply.stims_from_supply"].Component == "InventoryComponentData", "HD2R Editor's Helldiver page.");
             check(StatsCatalog.Sections(StatsCatalog.Items.Single(i => i.Nav == "helldiver")).Select(s => s.Title)
-                .SequenceEqual(["Health", "Speed", "Stamina", "Player refill", "Damage", "Damage Zones"]), "Its sections (main health first).");
+                .SequenceEqual(["Health", "Speed", "Stamina", "Player refill", "Damage", "Size & Geometry", "Damage Zones"]), "Its sections (main health first).");
             check(targets["stratagems"]["LIFT-850 Jump Pack"].Fields["payload.spawn_count"] is { Component: "HellpodRackComponentData", Offset: 556, Max: 4 } &&
                 targets["stratagems"]["Orbital Laser"].Fields["orbital.duration"] is { Component: "OrbitalAbilityComponentData", Resource: "0xEC3575E7A93793BB", Offset: 460 } &&
                 targets["boosters"]["Experimental Infusion"].Fields["status.incoming_damage_scale"] is { Kind: "StatusMultiplier", Component: "2", Offset: 4 },

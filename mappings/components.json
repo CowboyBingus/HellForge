@@ -7318,6 +7318,237 @@
           "source": "HD2Runtime 0.40.1 domains/enemy_director.lua, enemy_director_writes.lua; native/mod-loader/director.c"
         }
       }
+    },
+    "Unit": {
+      "component": "UnitComponentData",
+      "index": 88,
+      "stride": 136,
+      "layout": "25480438",
+      "meaning": "UnitComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "scale_min": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "Scale min",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue unit.scale_min"
+        },
+        "radius": {
+          "offset": 16,
+          "type": "f32",
+          "meaning": "Radius",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue unit.radius"
+        }
+      }
+    },
+    "SquadTransportFormation": {
+      "component": "SquadTransportFormationComponentData",
+      "index": 122,
+      "stride": 48,
+      "layout": "25480438",
+      "meaning": "SquadTransportFormationComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "passenger_formation_0_dimension_0": {
+          "offset": 4,
+          "type": "u32",
+          "meaning": "Passenger formation 0 dimension 0",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue transport.passenger_formation_0_dimension_0"
+        },
+        "passenger_formation_0_dimension_1": {
+          "offset": 8,
+          "type": "u32",
+          "meaning": "Passenger formation 0 dimension 1",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue transport.passenger_formation_0_dimension_1"
+        },
+        "passenger_formation_1_dimension_0": {
+          "offset": 28,
+          "type": "u32",
+          "meaning": "Passenger formation 1 dimension 0",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue transport.passenger_formation_1_dimension_0"
+        },
+        "passenger_formation_1_dimension_1": {
+          "offset": 32,
+          "type": "u32",
+          "meaning": "Passenger formation 1 dimension 1",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue transport.passenger_formation_1_dimension_1"
+        }
+      }
+    },
+    "SquadTransport": {
+      "component": "SquadTransportComponentData",
+      "index": 97,
+      "stride": 136,
+      "layout": "25480438",
+      "meaning": "SquadTransportComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "grid_dimension_0": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "Grid dimension 0",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue transport.grid_dimension_0"
+        },
+        "grid_dimension_1": {
+          "offset": 4,
+          "type": "u32",
+          "meaning": "Grid dimension 1",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue transport.grid_dimension_1"
+        }
+      }
+    },
+    "Gore": {
+      "component": "GoreComponentData",
+      "index": 230,
+      "stride": 33488,
+      "layout": "25480438",
+      "meaning": "GoreComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "whole_body_gib_damage": {
+          "offset": 0,
+          "type": "f32",
+          "meaning": "Whole body gib damage",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue gore.whole_body_gib_damage"
+        }
+      }
+    },
+    "AiSpawner": {
+      "component": "AiSpawnerComponentData",
+      "index": 182,
+      "stride": 196,
+      "layout": "25480438",
+      "meaning": "AiSpawnerComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "initial_release_delay": {
+          "offset": 28,
+          "type": "f32",
+          "meaning": "Initial release delay",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue spawner.initial_release_delay"
+        },
+        "queue_limit": {
+          "offset": 136,
+          "type": "u32",
+          "meaning": "Queue limit",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue spawner.queue_limit"
+        },
+        "batch_size": {
+          "offset": 140,
+          "type": "u32",
+          "meaning": "Batch size",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue spawner.batch_size"
+        },
+        "minimum_batch_size": {
+          "offset": 144,
+          "type": "u32",
+          "meaning": "Minimum batch size",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue spawner.minimum_batch_size"
+        },
+        "refill_delay": {
+          "offset": 148,
+          "type": "f32",
+          "meaning": "Refill delay",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue spawner.refill_delay"
+        },
+        "release_delay": {
+          "offset": 152,
+          "type": "f32",
+          "meaning": "Release delay",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue spawner.release_delay"
+        },
+        "serialized_release_delay": {
+          "offset": 156,
+          "type": "f32",
+          "meaning": "Serialized release delay",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue spawner.serialized_release_delay"
+        },
+        "delay_variance": {
+          "offset": 160,
+          "type": "f32",
+          "meaning": "Delay variance",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue spawner.delay_variance"
+        },
+        "alternate_roster": {
+          "offset": 164,
+          "type": "u8",
+          "meaning": "Alternate roster",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue spawner.alternate_roster"
+        }
+      }
+    },
+    "StratagemBlocker": {
+      "component": "StratagemBlockerComponentData",
+      "index": 25,
+      "stride": 20,
+      "layout": "25480438",
+      "meaning": "StratagemBlockerComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "radius": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "Radius",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue jammer.radius"
+        },
+        "initially_enabled": {
+          "offset": 16,
+          "type": "u8",
+          "meaning": "Initially enabled",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue jammer.initially_enabled"
+        }
+      }
+    },
+    "Bughole": {
+      "component": "BugholeComponentData",
+      "index": 216,
+      "stride": 40,
+      "layout": "25480438",
+      "meaning": "BugholeComponentData (fields from the stats schema)",
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made",
+      "fields": {
+        "emission_radius": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "Emission radius",
+          "verified": false,
+          "source": "HD2Runtime enemy catalogue breach.emission_radius"
+        }
+      }
     }
   }
 }

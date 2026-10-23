@@ -242,7 +242,7 @@ public static class StatsCatalog
             if (path == "attack") return ("attacks", heading, 0);
             return heading == "Health & Armor" ? ("health", heading, 0) : ("other:" + heading, heading, 0);
         }
-        // HD2R Editor's Helldiver page: Health, Speed, Stamina, Player refill, Damage, then the six body zones
+        // HD2R Editor's Helldiver page: Health, Speed, Stamina, Player refill, Damage, Size & Geometry, then the six body zones
         if (partCategory == "helldiver")
         {
             if (section != null)
@@ -253,6 +253,7 @@ public static class StatsCatalog
                 [_, "speed", ..] => ("identity:speed", "Speed", 0),
                 [_, "stamina", ..] => ("identity:stamina", "Stamina", 1),
                 [_, "supply", ..] => ("identity:refill", "Player refill", 2),
+                ["unit", ..] => ("identity:size", "Size & Geometry", 4), // its UnitComponent (scale, radius)
                 _ => ("identity:damage", "Damage", 3),
             };
         }

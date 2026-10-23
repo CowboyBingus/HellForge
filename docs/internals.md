@@ -714,11 +714,15 @@ These are the 1,170-odd entities HD2Runtime's enemy catalogue lists, from `mappi
 (`scripts/ExportEntities.py`, which reads HD2Runtime's `domains/enemy_authoring.lua` and `enemy_controls.lua` as
 literals). Each entity's page has Health & Armor, a group per damage zone, a group per attack, and its other sections
 (Spawning, Director Multipliers, Shield, Size & Geometry...), with only the fields whose exact bytes the engine maps
-(`mappings/components.json`): about 35,800 of the HD2R Editor's rows. `scripts/ImportSchemaMappings.py <HD2Runtime>`
-names the fields of components the mappings have (each damage zone's, the HiveMind's director multipliers) into them;
-`HellForge.Cli sdk-headers` then regenerates the engine's tables and `ExportEntities.py` offers them. With a third path,
-the exporter writes the rest by entity and reason: components the engine has no mapping for yet (Unit, AiSpawner,
-SquadTransport...) and rows the HD2R Editor only shows. Rows are keyed as the HD2R Editor's are
+(`mappings/components.json`): about 38,800 rows, every row the HD2R Editor lets you edit there but one (its authored
+value lies outside its own write range). `scripts/ImportSchemaMappings.py <HD2Runtime>` names the fields of components
+the mappings have (each damage zone's, the HiveMind's director multipliers), and adds the components the entity profile
+locates (`src/HellForge.Core/entity-profile.json`: Unit, AiSpawner, SquadTransportFormation, SquadTransport, Gore,
+StratagemBlocker, Bughole); `HellForge.Cli sdk-headers` then regenerates the engine's tables and `ExportEntities.py`
+offers them. The profile's entries for those come from the entity file's own frames (`scripts/ExportEntityProfile.py`
+EXTRA: each frame found by the component index the u32 before it holds, as the game's loader 0xFDB440 reads it; the
+method reproduces every other entry). With a third path, the exporter writes the rest by entity and reason: rows the
+HD2R Editor only shows. Rows are keyed as the HD2R Editor's are
 (`en|<entity>|<path>:<zone or attack>:<field>`), so its presets import and export them, and a stats file saves them under
 `"enemies"`. The Helldiver's own entity adds its main fields (health, armor, constitution, regeneration) to the Helldiver
 page, and the MS-11 Solo Silo's rack and missile are parts of its stratagem's page (`StatsSchema.EntityParts`), each

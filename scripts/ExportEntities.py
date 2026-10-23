@@ -193,6 +193,7 @@ def export(runtime):
     database = merged(runtime)
     units = {f['id']: f.get('unit') for f in json.loads((runtime / 'schemas' / 'enemy_fields.json').read_text(encoding='utf-8'))['fields']}
     engine = mapped()
+    profile = json.loads((REPO / 'src' / 'HellForge.Core' / 'entity-profile.json').read_text(encoding='utf-8'))['components']
     entities, editable, blocked_count, unmapped = {}, 0, 0, []
     for name, entry in sorted(database['enemies'].items()):
         zones = {z['id']: z for z in lst(entry.get('zones'))}
@@ -238,6 +239,10 @@ def export(runtime):
                 reason = 'Its authored value lies outside the write range'
             elif (component or kind) not in engine:
                 reason = "HellForge's engine has no %s mapping yet" % (component or kind)
+                # a component the entity profile locates (src/HellForge.Core/entity-profile.json): the import adds it
+                if kind == 'component' and component in profile:
+                    unmapped.append({'kind': kind, 'component': component, 'offset': backing['offset'], 'storage': storage,
+                                     'key': f['id'], 'zone': f.get('zone') if f['path'] == 'damage_zone' else None, 'label': human(f['id'])})
             elif (backing['offset'], storage) not in engine[component or kind]:
                 reason = "HellForge's engine does not map %s +%d yet" % (component or kind, backing['offset'])
                 # a field of a component the engine knows: scripts/ImportSchemaMappings.py names it from this

@@ -1044,6 +1044,41 @@ static const SdkField kSdkFieldsEnemyComposition[] = {
     {"minimum_players", 244, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
     {"maximum_players", 248, 4, HF_TYPE_U32, HF_APPLIES_MISSION, REF_NONE},
 };
+static const SdkField kSdkFieldsUnit[] = {
+    {"scale_min", 8, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"radius", 16, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+};
+static const SdkField kSdkFieldsSquadTransportFormation[] = {
+    {"passenger_formation_0_dimension_0", 4, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"passenger_formation_0_dimension_1", 8, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"passenger_formation_1_dimension_0", 28, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"passenger_formation_1_dimension_1", 32, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+};
+static const SdkField kSdkFieldsSquadTransport[] = {
+    {"grid_dimension_0", 0, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"grid_dimension_1", 4, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+};
+static const SdkField kSdkFieldsGore[] = {
+    {"whole_body_gib_damage", 0, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+};
+static const SdkField kSdkFieldsAiSpawner[] = {
+    {"initial_release_delay", 28, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"queue_limit", 136, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"batch_size", 140, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"minimum_batch_size", 144, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"refill_delay", 148, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"release_delay", 152, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"serialized_release_delay", 156, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"delay_variance", 160, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"alternate_roster", 164, 1, HF_TYPE_U8, HF_APPLIES_RESPAWN, REF_NONE},
+};
+static const SdkField kSdkFieldsStratagemBlocker[] = {
+    {"radius", 12, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"initially_enabled", 16, 1, HF_TYPE_U8, HF_APPLIES_RESPAWN, REF_NONE},
+};
+static const SdkField kSdkFieldsBughole[] = {
+    {"emission_radius", 12, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+};
 static const SdkComponent kSdkComponents[] = {
     {"ProjectileWeapon", "ProjectileWeaponComponentData", 25480438u, 616u, kSdkFieldsProjectileWeapon, 45, 0, 321},
     {"WeaponData", "WeaponDataComponentData", 25480438u, 1232u, kSdkFieldsWeaponData, 20, 0, 236},
@@ -1099,4 +1134,11 @@ static const SdkComponent kSdkComponents[] = {
     {"EnemyRoster", "EnemyRoster", 25480438u, 40u, kSdkFieldsEnemyRoster, 1, 1, -1},
     {"EnemyRosterLevel11", "EnemyRosterLevel11", 25480438u, 4u, kSdkFieldsEnemyRosterLevel11, 1, 1, -1},
     {"EnemyComposition", "EnemyComposition", 25480438u, 280u, kSdkFieldsEnemyComposition, 31, 1, -1},
+    {"Unit", "UnitComponentData", 25480438u, 136u, kSdkFieldsUnit, 2, 0, 88},
+    {"SquadTransportFormation", "SquadTransportFormationComponentData", 25480438u, 48u, kSdkFieldsSquadTransportFormation, 4, 0, 122},
+    {"SquadTransport", "SquadTransportComponentData", 25480438u, 136u, kSdkFieldsSquadTransport, 2, 0, 97},
+    {"Gore", "GoreComponentData", 25480438u, 33488u, kSdkFieldsGore, 1, 0, 230},
+    {"AiSpawner", "AiSpawnerComponentData", 25480438u, 196u, kSdkFieldsAiSpawner, 9, 0, 182},
+    {"StratagemBlocker", "StratagemBlockerComponentData", 25480438u, 20u, kSdkFieldsStratagemBlocker, 2, 0, 25},
+    {"Bughole", "BugholeComponentData", 25480438u, 40u, kSdkFieldsBughole, 1, 0, 216},
 };

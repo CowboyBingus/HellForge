@@ -12,7 +12,7 @@ Nothing here has a date, and stability comes first.
 | [Mod SDK](sdk-roadmap.md) | Done | SDK 14; some events and registries left |
 | Build patches for newer Steam builds | Done | Each new Steam build needs a new patch |
 | Open source | Done | GPL-3 |
-| In-game editor | Mostly done | Player's kit mostly ported; enemies, structures and missions left |
+| In-game editor | Mostly done | Player's kit mostly ported; enemies and structures built; missions left |
 | Difficulty 11 (Hell Forge) | Mostly done | Needs its own enemy mix |
 | Linux | Experimental | Runs under Proton; co-op and Steam Deck untested |
 | Public lobbies, privacy, invites, kicking | Testing | Built for 0.3.0; needs two-PC tests |
@@ -199,11 +199,11 @@ The in-game editor should eventually edit every field the HD2R Editor does
    count will show which), and checking in game when each field takes effect.
 2. Enemies: their stats, damage zones and attacks, spawn rosters and compositions. Being built on the `editor-content`
    branch: the in-game editor now has the HD2R Editor's Enemies pages (Terminids, Automatons, Illuminate, Structures,
-   Other Entities) with health, armor, damage zones, attacks and the bug hives' director multipliers for about 1,170
-   entities, about 35,800 fields. Next: unit size, spawners and transports (parts of the game the engine doesn't map
-   yet), then spawn rosters and compositions. The Helldiver's main health and the Solo Silo's health come with it.
-3. Structures, with their demolition and destruction settings, and mission settings (the other Spawning & Destruction
-   pages).
+   Other Entities) with health, armor, damage zones, attacks, the bug hives' director multipliers, unit size,
+   spawners, drop-ship transports, stratagem jammers, bug holes and gore for about 1,170 entities: about 38,800 fields,
+   every one the HD2R Editor lets you edit there. Spawn rosters and compositions are built too. The Helldiver's main
+   health and size and the Solo Silo's health come with it.
+3. Demolition templates, destruction models and mission settings (the other Spawning & Destruction pages).
 
 For custom models, the OBJ mesh importer works in game (the cube gun proved it). Copied units still need working
 physics and AI (the blue sentry has neither yet), along with animation events and PNG textures.
