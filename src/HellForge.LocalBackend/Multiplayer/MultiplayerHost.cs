@@ -30,6 +30,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
     // answered.
     public DirectoryService? Directory { get; private set; }
     StrangerGate? gate;
+    string? modsFolder;
 
     readonly WarClock? warClock;
     AccountKeyExchange? keyExchange;
@@ -99,6 +100,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
             catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException) { host.Log("Stats sharing is off: " + error.Message); }
         }
         if (host.transport != null && modsFolder != null) host.StartSync(modsFolder, modSetFile, evidenceDirectory);
+        host.modsFolder = modsFolder;
         directory ??= host.transport != null && directoryFolder != null ? new FolderLobbyDirectory(directoryFolder, host.transport.LocalId) : null;
         host.StartDirectory(directory ?? (host.transport as SteamPeerTransport)?.Directory);
         // The transport knows this machine's SteamID only once started.
@@ -136,8 +138,9 @@ public sealed class MultiplayerHost : IAsyncDisposable
         if (transport == null) return;
         if (directory != null && presence != null)
             Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.Edited == true);
-        gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, Log);
-        if (transport is SteamPeerTransport steam) steam.AcceptStranger = peer => Directory?.Listing == true || Related(peer);
+        bool StrangersAllowed() => modsFolder != null && ModSettings.PlayWithStrangers(modsFolder);
+        gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, StrangersAllowed, Log);
+        if (transport is SteamPeerTransport steam) steam.AcceptStranger = peer => StrangersAllowed() && (Directory?.Listing == true || Related(peer));
         Log(Directory != null ? "Directory: public lobbies are listed and searched." : "Directory: off (no lobby directory for this link).");
     }
 

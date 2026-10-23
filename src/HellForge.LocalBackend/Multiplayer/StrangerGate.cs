@@ -1,14 +1,14 @@
 namespace HellForge.LocalBackend.Multiplayer;
 
 // What a backend takes from someone who is not a Steam friend (docs/multiplayer.md step 7). Strangers only come through
-// the lobby directory:
+// the lobby directory, and only when the player has turned on "Play with strangers" (off by default):
 //   - a join to the public lobby listed here (lobby.join), at most JoinsPerPeer a minute from one machine and JoinsInAll
 //     from everyone;
 //   - everything that follows once this machine deals with them (Related: a member of a lobby hosted here, the host of a
 //     lobby joined or being joined from here, a machine downloading this one's mods or this one theirs);
 //   - pings.
 // Presence (the social tab) stays between friends.
-public sealed class StrangerGate(IPeerTransport transport, Func<bool> listing, Func<ulong, bool> related, Action<string> log)
+public sealed class StrangerGate(IPeerTransport transport, Func<bool> listing, Func<ulong, bool> related, Func<bool> strangersAllowed, Action<string> log)
 {
     public const int JoinsPerPeer = 6, JoinsInAll = 60;
     static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
@@ -20,6 +20,7 @@ public sealed class StrangerGate(IPeerTransport transport, Func<bool> listing, F
     public bool Admit(ulong peer, Frame frame)
     {
         if (transport.IsFriend(peer)) return true;
+        if (!strangersAllowed()) return Refuse(peer, frame.Type + " (Play with strangers is off)");
         if (frame.Type is "presence" or "presence.hello") return Refuse(peer, frame.Type);
         if (frame.Type == "peer.ping" || related(peer)) return true;
         if (frame.Type != "lobby.join") return Refuse(peer, frame.Type);
