@@ -86,8 +86,11 @@ RivaTuner closed.
 
 In co-op, every player will keep their own in-game editor changes, and joiners can edit too. HellForge loads what each
 player's changes need on every machine, so a friend's swapped vehicle weapon or hellpod payload shows up instead of a
-purple question mark. A host can still have everyone play with their changes, with a switch on the Mods page. This is
-built on the `lobby-asset-sync` branch and needs a two-PC test
+purple question mark. A host can still have everyone play with their changes, with a switch on the Mods page. A
+player's projectile swaps fire as theirs on every screen, and everyone else's guns keep their own: hand-held weapons,
+the ones whose round comes from their ammunition or rounds feed (the Liberator, the shotguns), underbarrels (the
+One-Two's grenade) and programmable rounds ([multiplayer.md, shots in co-op](multiplayer.md#shots-in-co-op)). Vehicle
+weapons are next. This is built on the `lobby-asset-sync` branch and needs a two-PC test
 ([multiplayer.md, step 10](multiplayer.md#step-10-every-players-own-stats-and-the-lobbys-assets-2026-10-23)).
 
 When the host goes back to the ship in the middle of a mission, everyone else gets dropped to the main menu. The fix
@@ -199,7 +202,8 @@ The in-game editor should eventually edit every field the HD2R Editor does
 ([SDK roadmap, phase 5a](sdk-roadmap.md#the-in-game-editor-phase-5a)). That happens in three steps:
 
 1. Weapons and the rest of the player's kit. Weapons, stratagems, backpacks, vehicles, boosters, the Helldiver and
-   armor are mostly ported. Still to do: beam conversion, the HD2R rows that have no HellForge field yet (a coverage
+   armor are mostly ported. The GL-15 Evictor, M90A, P-11, P-4, P-69, R-6 and SG-97, blocked before, now have their
+   Projectile row, and so do the One-Two's and Arbitrator's underbarrels. Still to do: beam conversion, the HD2R rows that have no HellForge field yet (a coverage
    count will show which), and checking in game when each field takes effect.
 2. Enemies: their stats, damage zones and attacks, spawn rosters and compositions. More than half of the HD2R Editor's
    roughly 20,700 fields are in this step.

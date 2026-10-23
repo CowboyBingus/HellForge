@@ -121,7 +121,10 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
                     else if (mechanism == "rounds" && fields.Values.Where(f => f.Kind == "component" && f.Component == "WeaponRoundsComponentData")
                                  .OrderBy(f => f.Order).FirstOrDefault() is { } rounds)
                     {
-                        Add(swap = "attack.feed_primary.projectile", new StatsField("Projectile", "component", rounds.Component, rounds.Resource, rounds.Record, 64, "u32",
+                        // by the name the exported schema blocked it under (a rounds feed's, or the weapon's primary attack)
+                        swap = target.Blocked.ContainsKey("attack.primary.projectile") && !target.Blocked.ContainsKey("attack.feed_primary.projectile")
+                            ? "attack.primary.projectile" : "attack.feed_primary.projectile";
+                        Add(swap, new StatsField("Projectile", "component", rounds.Component, rounds.Resource, rounds.Record, 64, "u32",
                             null, null, null, rounds.Shared, true) { Order = order });
                         native = "/r";
                     }

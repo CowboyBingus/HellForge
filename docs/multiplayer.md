@@ -531,9 +531,12 @@ screens, and on the swapping player's screen the others' guns fired the swap too
   host shares its stats (`shots -`): then every machine already plays with the same. The weapon is the one firing
   (`StatsSchema.ProjectileSwaps` maps each Projectile row to it), and the suffix says where its round is:
   - none: ProjectileWeapon +0 (most weapons);
-  - `/r`: WeaponRounds +64, a rounds feed (the DBS-2, R-2124, SG-22, SG-451 and SG-8S, and the One-Two's and Arbitrator's
-    underbarrels, weapons of their own). The type resolver (0x7456D0) takes WeaponRounds +0x40 for a weapon whose flags
-    have bit 8, as a live SG-8 Punisher's do in the snapshot; +0x44, a second mode's round, is left alone;
+  - `/r`: WeaponRounds +64, a rounds feed (the DBS-2, R-2124, SG-22, SG-451 and SG-8S; the GL-15 Evictor, M90A, P-11
+    Stim Pistol, P-4 Senator, P-69 Veto, R-6 Deadeye and SG-97 Sweeper, whose ProjectileWeapon +0 holds the same round;
+    and the One-Two's and Arbitrator's underbarrels, weapons of their own). The type resolver (0x7456D0) checks heat
+    (flag bit 9), then a magazine (bit 7), then rounds (bit 8, WeaponRounds +0x40); every live WeaponRounds weapon in
+    the decoded snapshots (SG-8 Punisher, SG-88 Break-Action Shotgun) has bit 8, and these have no magazine or heat.
+    +0x44, a second mode's round, is left alone;
   - `/<stock>`: the round comes from the weapon's ammunition, an entity delta the six weapons' magazines chamber (the
     AR-23 Liberator, JAR-5 Dominator, P-19 Redeemer, P-2 Peacemaker, R-63 Diligence, SG-225 Breaker), with its stock
     type. The loader does not tie the delta to the weapon, so this machine's own swap of one is its own rule;
