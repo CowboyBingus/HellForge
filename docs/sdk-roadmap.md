@@ -4,7 +4,7 @@ For contributors: what is left in the mod SDK. [modding/README.md](modding/READM
 [sdk-reference.md](sdk-reference.md) document what exists, [engine-roadmap.md](engine-roadmap.md) is the engine's side,
 and [roadmap.md](roadmap.md) is the overview.
 
-Mod SDK 15, engine 0.1.30, HellForge 0.3.0-dev.2 (2026-10-23).
+Mod SDK 15, engine 0.1.31, HellForge 0.3.0-dev.3 (2026-10-24).
 
 | Phase | Status |
 |---|---|
