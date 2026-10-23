@@ -502,6 +502,7 @@ EditorTests.Register(Test, Check, Reject, root);
 SessionLaunchTests.Register(Test, Check, Reject, root);
 PrivacyTests.Register(Test, Check, Reject, root);
 DownpatchTests.Register(Test, Check, Reject, root);
+SessionJobTests.Register(Test, Check, Reject, root);
 ModSyncTests.Register(Test, Check, Reject, root);
 
 Console.WriteLine($"{passed} passed; {failed} failed. Synthetic fixtures: {root}");

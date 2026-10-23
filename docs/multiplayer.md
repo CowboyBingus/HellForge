@@ -145,6 +145,28 @@ field types) downloads from any host. Code and raw data (binary data patches, ra
 download only when `data/verified-mods.json` names their exact content hash. Bundled mods never download. The host side is `src/HellForge.LocalBackend/Multiplayer/ModSync.cs`; the protocol and limits are in
 [Step 6](#step-6-mod-sync-a-joiner-takes-the-hosts-mods-2026-10-22) below.
 
+### Trust: what another player's mods can reach
+
+Mod sync and public lobbies bring mods from people a player may not know. What limits them:
+- **What downloads by itself** is only what HellForge checks itself (data specs, schema stats, network field types),
+  read from the bytes received, with the same rule for every host. Code and raw data need the verified list
+  ([Mod sync](#mod-sync)).
+- **Synced mods load only in the synced session.** They sit in `mods/.synced`, which normal sessions never load, and
+  the player's own Mods page never changes.
+- **The copy is off the internet.** The network block lets the copied game reach only this PC (loopback).
+- **The game cannot start other programs.** The session runner puts the game in a job whose active-process limit is 1
+  (`HostBoundedProcess`). That costs the game's crash reporter, already blocked from the network, and the DLSS updater
+  Steam's overlay starts. The Crash dump setting lifts the limit, because the loader starts `HellForge.Cli` to write
+  the dump; so does `HELLFORGE_ALLOW_CHILD_PROCESSES=1`, for diagnosing. The session's `result.json` says which
+  (`childProcesses`).
+- **HellForge's own programs stay as they are.** For the session, every file of the installation's `app` folder is held
+  read-only, as the game copy's are: nothing the game runs can replace the launcher, the session runner, the backend
+  or the stand-ins for the next start (`appFilesHeld` in `result.json`).
+
+What this does not stop: code in the game runs with the player's own Windows permissions. It can read their files,
+write those outside HellForge's held folders, and reach other programs of the same user. That is why code from
+another player downloads only when HellForge has verified it.
+
 ### Public lobbies (the lobby directory)
 
 Each backend lists the public lobby its game hosts as an Invisible Steam lobby of the game's app, held beside the game's

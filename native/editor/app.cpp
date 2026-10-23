@@ -1977,6 +1977,8 @@ void OpenPresetFolder()
     STARTUPINFOW si = {sizeof si};
     PROCESS_INFORMATION pi;
     if (CreateProcessW(nullptr, &command[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); }
+    /* a session's game may not start other programs (its job holds it alone): the folder is said instead */
+    else Toast("The presets are in " + Narrow(folder), PENDING);
 }
 
 /* ---- the errors list, the confirmation, the logs (HD2R Editor's errors popup, its RESET ITEM confirmation, LOGS) ---- */
@@ -2117,12 +2119,16 @@ void LogRead(bool force)
     LogFilter();
 }
 
-void OpenWith(const std::wstring& arguments)
+// Explorer on a path; false when Windows refused (a session's game may not start other programs: its job holds it alone).
+bool OpenWith(const std::wstring& arguments)
 {
     std::wstring command = L"explorer.exe " + arguments;
     STARTUPINFOW si = {sizeof si};
     PROCESS_INFORMATION pi;
-    if (CreateProcessW(nullptr, &command[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); }
+    if (!CreateProcessW(nullptr, &command[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) return false;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return true;
 }
 
 /* ---- navigation ---- */
@@ -3547,9 +3553,9 @@ void DrawLogs(float y0, float h)
     g_cv.Text(g_logs.path.empty() ? "This HellForge does not say where its logs are (update HellForge)." : Narrow(g_logs.path),
         20, y0 + 47, T(SZ_SMALL, g_logs.path.empty() ? ERROR_ : FAINT, ui::BODY, ui::LEFT, W - 480));
     if (Button("OPEN LOG FILE", W - 216, y0 + 16, 196, 34, g_logs.path.empty() ? DISABLED : NORMAL, ui::Id("logfile")) && !g_logs.path.empty())
-        OpenWith(L"\"" + g_logs.path + L"\"");
+        if (!OpenWith(L"\"" + g_logs.path + L"\"")) Toast("Open it yourself: " + Narrow(g_logs.path), PENDING);
     if (Button("SHOW IN FOLDER", W - 424, y0 + 16, 196, 34, g_logs.path.empty() ? DISABLED : NORMAL, ui::Id("logfolder")) && !g_logs.path.empty())
-        OpenWith(L"/select,\"" + g_logs.path + L"\"");
+        if (!OpenWith(L"/select,\"" + g_logs.path + L"\"")) Toast("Open it yourself: " + Narrow(g_logs.path), PENDING);
     /* the source (HellForge's log or the editor's), the filters, following the end */
     float fx = 20, fy = y0 + 68;
     auto chip = [&](const std::string& label, bool on, ImU32 tone, uint64_t id) {

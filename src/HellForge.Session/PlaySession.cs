@@ -206,6 +206,7 @@ sealed class PlaySession(PlayOptions options)
             throw new SessionFailure($"The game copy is not the supported build ({(string?)problems[0]}); repair it from the launcher.");
         locks.Add(new FileStream(settingsPath, FileMode.Open, FileAccess.Read, FileShare.Read));
         result["verifiedFiles"] = (prepared["gameFiles"] as JsonArray)?.Count ?? 0;
+        result["appFilesHeld"] = HoldAppFiles();
         result["userData"] = prepared["profileData"]?.DeepClone();
         result["userDataSeeded"] = prepared["profileSeeded"]?.DeepClone();
         result["gameExeSha256"] = Tools.Sha256(exe);
@@ -231,6 +232,28 @@ sealed class PlaySession(PlayOptions options)
     }
     bool modNative;
     List<string>? nativeFolders; // mods-stage's mods with network type edits (null: a mods-stage from before it)
+
+    // HellForge's own programs (the installation's app folder: the launcher, this runner, the backend, the stand-ins the
+    // copy loads, the scripts) are held read-only for the session like the game's files, so nothing the game runs can
+    // replace them for the next start. A file that cannot be held stops the session. Only an installed runner does it
+    // (a development build runs from elsewhere).
+    int HoldAppFiles()
+    {
+        if (!Path.GetFullPath(app).TrimEnd('\\').Equals(Path.GetFullPath(install.App).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) return 0;
+        var held = 0;
+        foreach (var file in Directory.EnumerateFiles(install.App, "*", SearchOption.AllDirectories))
+        {
+            var full = Path.GetFullPath(file);
+            Tools.NoLinks(full);
+            try { locks.Add(new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read)); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                throw new SessionFailure($"HellForge's file {Path.GetRelativePath(install.App, full)} could not be held read-only for the session ({error.Message}). Close what has it open and start again.");
+            }
+            held++;
+        }
+        return held;
+    }
 
     // Network block (the readable scripts in app/scripts): $HellForgeInstallRoot names the installation's rule group.
     string BlockScript(string body) =>
@@ -486,8 +509,14 @@ sealed class PlaySession(PlayOptions options)
         // then the player's launch options (Steam's Launch Options, such as --use-d3d11), after the session's own
         var gameOptions = HellForge.Core.GameLaunchOptions.CommandLine(options.GameOptions);
         result["gameOptions"] = gameOptions;
+        // The game may not start other programs: its job holds it alone. That costs the game's crash reporter (already
+        // blocked from the network) and the DLSS updater Steam's overlay starts. The Crash dump diagnostic needs a child
+        // (the loader starts HellForge.Cli to write the dump), and HELLFORGE_ALLOW_CHILD_PROCESSES=1 lifts it to diagnose.
+        var childReason = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HELLFORGE_CRASH_DUMP")) ? "crash dump"
+            : Environment.GetEnvironmentVariable("HELLFORGE_ALLOW_CHILD_PROCESSES") == "1" ? "HELLFORGE_ALLOW_CHILD_PROCESSES" : null;
+        result["childProcesses"] = childReason == null ? "blocked" : "allowed (" + childReason + ")";
         job = new HostBoundedProcess(exe, $"--bundle-dir \"{bundle}\" --release" + (options.EngineLog ? " --log-to-file" : "") + (gameOptions.Length > 0 ? " " + gameOptions : ""),
-            Path.Combine(copy, "bin"), profileFolder, 0);
+            Path.Combine(copy, "bin"), profileFolder, 0, singleProcess: childReason == null);
         result["gamePid"] = job.Process.Id;
         result["gameLaunched"] = true;
         result["status"] = "patching";
