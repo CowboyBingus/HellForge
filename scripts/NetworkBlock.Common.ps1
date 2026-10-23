@@ -17,11 +17,13 @@ if($hellforgeInstall){
     $HellForgeBlockRoot=Join-Path $hellforgeInstall 'network-block'
     # The WFP block (hellforge_wfp) identifies this installation's filters by a provider GUID made from the same hash.
     $HellForgeWfpProvider=[Guid]::new([byte[]]($hash[0..15])).ToString('B')
+    $HellForgeBackendPort=49152+([BitConverter]::ToUInt16($hash,16)%16384)
 }else{
     $HellForgeBlockGroup='HellForge-NetworkBlock'
     $HellForgeLegacyBlockGroup='BTS-NetworkBlock'
     $HellForgeBlockRoot=Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts/host-startup/network-block'
     $HellForgeWfpProvider='{00000000-0000-0000-0000-000000000000}'
+    $HellForgeBackendPort=0
 }
 $HellForgeBlockRemote=@('0.0.0.0-126.255.255.255','128.0.0.0-255.255.255.255','::2-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff')
 $HellForgeBlockProbe=Join-Path $HellForgeBlockRoot 'NetworkProbe.exe'
