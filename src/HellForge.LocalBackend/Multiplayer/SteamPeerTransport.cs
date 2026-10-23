@@ -26,10 +26,22 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
     const int FriendFlagImmediate = 4;
     const string PresenceKey = "hellforge";
     static readonly TimeSpan FriendScanInterval = TimeSpan.FromSeconds(5);
+    // Steam networking estimates no bandwidth: a connection sends at SendRateMin..Max, 256 KiB/s each by default
+    // (GameNetworkingSockets' steamnetworkingtypes.h and csteamnetworkingsockets.cpp), which held the first two-PC mod
+    // sync to 0.24 MB/s. Min = Max: with Min below Max a connection starts at about four packets a round trip and stays
+    // there or at Min. SendRate is a ceiling, not a load: game traffic is far below it, and mod sync's own window keeps
+    // its queue short (DownloadWindow). The buffers hold a download's whole window (ModSync.MaxWindow chunks, 2 MiB) with
+    // room to spare: a message past the send buffer is refused (k_EResultLimitExceeded), and received messages past the
+    // receive buffer are dropped. Docs: multiplayer.md "Mod sync speed".
+    public const int SendRate = 8 << 20, SendBuffer = 8 << 20, ReceiveBuffer = 8 << 20;
+    const int ConfigSendBufferSize = 9, ConfigSendRateMin = 10, ConfigSendRateMax = 11, ConfigRecvBufferSize = 47; // ESteamNetworkingConfigValue
+    const int ResultOk = 1, ResultLimitExceeded = 25; // EResult
 
     readonly string library;
     readonly Action<string> log;
     readonly ConcurrentQueue<(ulong Peer, byte[] Frame, bool Reliable)> outbox = new();
+    // Set by Send: the link's thread sends at once instead of at its next turn (a turn waits up to a timer tick, 15.6 ms).
+    readonly AutoResetEvent wake = new(false);
     readonly ManualResetEventSlim started = new();
     readonly CancellationTokenSource stop = new();
     Thread? thread;
@@ -47,7 +59,7 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
     // Whether a session from someone who is not a Steam friend is accepted (asked on the Steam thread; must be quick).
     public Func<ulong, bool>? AcceptStranger { get; set; }
     public SteamLobbyDirectory Directory { get; }
-    DateTime strangerLogged = DateTime.MinValue;
+    DateTime strangerLogged = DateTime.MinValue, sendFailureLogged = DateTime.MinValue;
 
     public SteamPeerTransport(string steamApiLibrary, Action<string> log)
     {
@@ -64,7 +76,11 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
         if (failure != null) throw new IOException(failure);
     }
 
-    public void Send(ulong peer, byte[] frame, bool reliable) => outbox.Enqueue((peer, frame, reliable));
+    public void Send(ulong peer, byte[] frame, bool reliable)
+    {
+        outbox.Enqueue((peer, frame, reliable));
+        wake.Set();
+    }
 
     void Run()
     {
@@ -95,6 +111,12 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
             var receive = (delegate* unmanaged[Cdecl]<nint, int, nint*, int, int>)E("SteamAPI_ISteamNetworkingMessages_ReceiveMessagesOnChannel");
             var accept = (delegate* unmanaged[Cdecl]<nint, byte*, byte>)E("SteamAPI_ISteamNetworkingMessages_AcceptSessionWithUser");
             var release = (delegate* unmanaged[Cdecl]<nint, void>)E("SteamAPI_SteamNetworkingMessage_t_Release");
+            // Global: every session this process opens takes them (before any is opened, so none keeps Steam's defaults).
+            var setGlobal = (delegate* unmanaged[Cdecl]<nint, int, int, byte>)E("SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32");
+            var configured = setGlobal(utils, ConfigSendRateMin, SendRate) != 0 & setGlobal(utils, ConfigSendRateMax, SendRate) != 0 &
+                setGlobal(utils, ConfigSendBufferSize, SendBuffer) != 0 & setGlobal(utils, ConfigRecvBufferSize, ReceiveBuffer) != 0;
+            log(configured ? $"Steam link: send rate {SendRate >> 20} MiB/s, send and receive buffers {SendBuffer >> 20} MiB."
+                : "Steam link: Steam did not take the link's send rate and buffers; mod downloads stay at Steam's default 256 KiB/s.");
             ((delegate* unmanaged[Cdecl]<nint, void>)E("SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess"))(utils);
             var setPresence = (delegate* unmanaged[Cdecl]<nint, byte*, byte*, byte>)E("SteamAPI_ISteamFriends_SetRichPresence");
             var friendCount = (delegate* unmanaged[Cdecl]<nint, int, int>)E("SteamAPI_ISteamFriends_GetFriendCount");
@@ -165,17 +187,27 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
                     else if (id == CallCompleted) Directory.CallCompleted(parameter);
                     freeCallback(pipe);
                 }
+                var busy = false;
                 while (outbox.TryDequeue(out var outgoing))
                 {
+                    busy = true;
                     new Span<byte>(identity, IdentitySize).Clear();
                     setSteamId(identity, outgoing.Peer);
+                    int result;
                     fixed (byte* data = outgoing.Frame)
-                        send(messages, identity, data, (uint)outgoing.Frame.Length, outgoing.Reliable ? SendReliable : SendUnreliable, Channel);
+                        result = send(messages, identity, data, (uint)outgoing.Frame.Length, outgoing.Reliable ? SendReliable : SendUnreliable, Channel);
+                    if (result != ResultOk && DateTime.UtcNow - sendFailureLogged > TimeSpan.FromMinutes(1))
+                    {
+                        sendFailureLogged = DateTime.UtcNow;
+                        log($"Steam did not take a message to {LobbyService.EntityId(outgoing.Peer)} ({outgoing.Frame.Length} bytes): EResult {result}" +
+                            (result == ResultLimitExceeded ? ", its send buffer is full." : "."));
+                    }
                 }
                 int count;
                 while ((count = receive(messages, Channel, inbox, 32)) > 0)
                     for (var i = 0; i < count; i++)
                     {
+                        busy = true;
                         var message = inbox[i];
                         var peerIdentity = (byte*)message + 16; // SteamNetworkingMessage_t.m_identityPeer
                         if (*(int*)peerIdentity == IdentitySteamId)
@@ -193,7 +225,9 @@ public sealed unsafe class SteamPeerTransport : IPeerTransport, IFriendSource
                     lastScan = DateTime.UtcNow;
                     ScanFriends();
                 }
-                Thread.Sleep(2);
+                // While messages flow, the next turn comes at once (a reply's handler may have queued a send already);
+                // otherwise at the next send or after a short wait, for what arrives.
+                if (!busy) wake.WaitOne(2);
             }
             Directory.Shutdown();
             // The tag goes when the backend does (an empty value deletes the key, leaving the game's own keys alone).

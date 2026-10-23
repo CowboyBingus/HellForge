@@ -7,7 +7,7 @@ using HellForge.LocalBackend.Multiplayer;
 
 // Mod sync end to end: a host's and a joiner's lobby services and mod sync over the in-memory network, the joiner's game
 // a display that records each offer. Every mod is synthetic.
-static class ModSyncTests
+static partial class ModSyncTests
 {
     const ulong HostId = 0x110000100000021, GuestId = 0x110000100000022, StrangerId = 0x110000100000023;
 
@@ -39,13 +39,15 @@ static class ModSyncTests
         public readonly ulong Id;
 
         public Node(InMemoryNetwork network, ulong id, string folder, ModSet own, Func<string, string, bool> verified)
+            : this(network.Join(id), folder, own, verified) { }
+
+        public Node(IPeerTransport transport, string folder, ModSet own, Func<string, string, bool> verified)
         {
-            Id = id;
+            Id = transport.LocalId;
             Mods = Path.Combine(folder, "mods");
             Run = Directory.CreateDirectory(Path.Combine(folder, "run")).FullName;
             var evidence = Directory.CreateDirectory(Path.Combine(Run, "backend")).FullName;
             SessionFile = ModSyncSession.PathIn(new InstallLayout(folder));
-            var transport = network.Join(id);
             void Note(string line) { lock (Log) Log.Add(line); }
             Lobby = new LobbyService(transport, Inbox.Add, Note, own.Digest);
             Sync = new ModSync(transport, Mods, own, Run, evidence, SessionFile, peer => "Player " + LobbyService.EntityId(peer), Note, verified) { Display = Shown };
@@ -217,12 +219,14 @@ static class ModSyncTests
             check(Ask(stranger, bad).Text(1) == "refused", "Refused: " + bad.Text(3 < bad.Count ? 3 : 1));
         var listed = Ask(stranger, new Frame("mods.files").Add("6").Add(texture.Id).Add(texture.Hash).Add(0));
         check(listed.Text(1) == "ok" && listed.Int(2) == texture.Files.Count && listed.Int(3) == 0 && listed.Count == 4 + 3 * texture.Files.Count, "A granted machine gets the file list.");
-        // Pacing: about 1 MiB/s to one machine (600 KB in five chunks takes at least half a second).
+        // Pacing: at most PeerRate to one machine (600 KB in five chunks: the last waits for the first four's bytes, less
+        // the PaceBurst a pacing clock may lag; ModSyncSpeedTests times a whole download against it).
         var clock = Stopwatch.StartNew();
         for (var offset = 0; offset < 600_000; offset += ModSync.ChunkBytes)
             check(Ask(stranger, new Frame("mods.get").Add("p" + offset).Add(texture.Id).Add(texture.Hash).Add("data/9ba626afa44a3aa3.patch_0")
                 .Add(offset).Add(Math.Min(ModSync.ChunkBytes, 600_000 - offset))).Text(1) == "ok", "A chunk is served.");
-        check(clock.Elapsed > TimeSpan.FromSeconds(0.4), $"The host paced its upload ({clock.ElapsedMilliseconds} ms).");
+        var paced = TimeSpan.FromSeconds(4.0 * ModSync.ChunkBytes / ModSync.PeerRate) - ModSync.PaceBurst - TimeSpan.FromMilliseconds(2);
+        check(clock.Elapsed >= paced, $"The host paced its upload ({clock.ElapsedMilliseconds} ms, at least {paced.TotalMilliseconds:0} ms).");
         await HostLimits(network, host, hostSet, stranger, replies, lobby, check);
 
         // A host whose copy changed (same size, other bytes): the download fails its check and nothing is stored.
@@ -254,6 +258,8 @@ static class ModSyncTests
         await Trusting(network, guest, hostSet, root, check);
 
         await LiveDisplay(root, check);
+        Window(check);
+        await Speed(root, check);
         await liar.Sync.DisposeAsync();
         await guest.Sync.DisposeAsync();
         await host.Sync.DisposeAsync();
@@ -341,7 +347,7 @@ static class ModSyncTests
             last = Ask(stranger, replies, Chunk("budget" + i, 0), check);
             if (last.Text(1) == "ok") served += ModSync.ChunkBytes;
         }
-        var budget = 2 * hostSet.Mods.Sum(m => m.Bytes) + ModSync.Window * ModSync.ChunkBytes;
+        var budget = 2 * hostSet.Mods.Sum(m => m.Bytes) + ModSync.MaxWindow * ModSync.ChunkBytes;
         check(last.Text(1) == "refused" && last.Text(2).Contains("all this offer allows") && served < budget, $"The grant's bytes are capped ({served} of {budget}): {last.Text(2)}");
         JoinAgain(stranger, replies, StrangerId, lobby, "f2-join");
         check(Ask(stranger, replies, Chunk("budget-again", 0), check).Text(1) == "refused", "Joining again does not refill the grant.");

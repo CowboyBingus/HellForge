@@ -201,6 +201,9 @@ public sealed class AutoRejoin : IDisposable
     {
         lock (gate)
         {
+            // The answer may come before the start: LobbyService runs each thread's after-lock work on that thread, so the
+            // host's answer (the peer link's thread) can overtake the game's join (the pipe's thread). Then it starts here.
+            if (owner == target.Host && stage is not (Stage.Joining or Stage.Done or Stage.GaveUp)) JoinStarted(owner, lobbyId);
             if (stage != Stage.Joining || owner != target.Host) return;
             stage = Stage.Done;
             log(result == 0 ? $"Rejoin: back in {target.HostName}'s lobby {lobbyId}." : $"Rejoin: joining {target.HostName}'s lobby {lobbyId} failed (0x{result:X8}); nothing more is tried.");
