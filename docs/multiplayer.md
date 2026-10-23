@@ -17,7 +17,8 @@ reaches PlayFab, Arrowhead's services or vanilla players' sessions.
    up to each player, and cosmetic mods, packs and Lua mods are each player's own. The Mods page shows the code.
    [mods.md](mods.md#playing-with-friends) describes what each player sees when a join is refused. When the host shares
    their mods, the joiner can download them and restart with them instead
-   ([mods.md](mods.md#playing-with-other-mods)).
+   ([mods.md](mods.md#playing-with-other-mods)). Once the restarted game is on the ship, the host's invitation to their
+   lobby waits in game: accept it to join.
 3. Start a session. In the game's social menu, the friends list shows Steam friends who are playing HELLDIVERS 2 with
    HellForge running, and you join their game from there. Steam sign-in, Steam friends and Steam lobbies are the real
    ones.
@@ -127,7 +128,7 @@ values in `stats.set`. A backend with another protocol is refused.
 | Pipe (stand-in to backend) | `hello` |
 | Lobby | `lobby.create`, `lobby.join`, `lobby.update`, `lobby.leave`, `lobby.kick`, `lobby.invite`, `lobby.find`, `lobby.result`, `lobby.memberAdded`, `lobby.memberRemoved`, `lobby.updated`, `lobby.disconnected`, `lobby.found`, `lobby.inviteReceived`, `lobby.refused` |
 | Party | `party.host`, `party.connect`, `party.endpoint`, `party.endpointGone`, `party.leave`, `party.message`, `party.kick`, `party.connected`, `party.endpointCreated`, `party.endpointDestroyed`, `party.deviceJoined`, `party.deviceLeft`, `party.networkGone` |
-| Between backends only | `peer.ping`, `account.key`, `presence`, `presence.hello`, `stats.set`, `war.clock`, `lobby.invited` |
+| Between backends only | `peer.ping`, `account.key`, `presence`, `presence.hello`, `stats.set`, `war.clock`, `lobby.invited`, `lobby.rejoin`, `lobby.rejoined` |
 | Live-edit pipe (backend to game) | `session`, `notice`, `set`, `reset`, `base`, `get` |
 
 ### Joining and the modlist gate
@@ -187,7 +188,9 @@ The game's own join gate still applies the same rules once a member is in. The b
 modlist check and before the game sees a member join.
 
 **Who is always let back.** Under every setting, a machine already in the lobby, or one that was admitted to it before
-(its game crashed, say), may join again. So changing the privacy never removes anyone. A lobby that turns Friends only
+(its game crashed, say), may join again. So changing the privacy never removes anyone. A machine refused only for its
+gameplay mods passed the privacy check, so it is expected back for 15 minutes with the host's mods
+([Mod sync](#mod-sync)), whatever the privacy then; a kick ends that too. A lobby that turns Friends only
 or Invite only stops being listed within a second, and its members stay.
 
 **Invitations.** The game calls `PFLobbySendInvite` from its social menu (seen in the stand-in logs).
@@ -238,6 +241,34 @@ download only when `data/verified-mods.json` names their exact content hash, and
 serves them to friends alone. Bundled mods never download. The host side is
 `src/HellForge.LocalBackend/Multiplayer/ModSync.cs`; the protocol and limits are in
 [Step 6](#step-6-mod-sync-a-joiner-takes-the-hosts-mods-2026-10-22) below.
+
+**Rejoining after the restart** (`Multiplayer/AutoRejoin.cs`; the research is
+[Step 9](#step-9-rejoining-after-a-mod-sync-2026-10-23)). The restarted game is brought back into the host's lobby
+through the game's own invitation path, the one a friend's invitation takes. HellForge does not make the game join.
+- The session runner passes the sync file to the backend (`--rejoin <install>/temp/mod-sync/session.json`), but only
+  when mods-stage found all of the host's mods.
+- The backend takes the file only while it is less than 15 minutes old, when its connection string names the host's
+  lobby (and not this player's own), and when the session's modlist digest is the host's.
+- It waits until the game creates its own lobby, which means the game is on the ship (`LobbyService.LocalLobbyCreated`).
+  It waits at most 3 minutes, then 5 s more for the ship's screens.
+- It then asks the host: `lobby.rejoin [lobby id, modlist digest, protocol]`.
+- The host answers for the lobby asked. If that lobby has closed, it answers for the one lobby its own game owns now.
+  It checks the answer as it would a join: kicked, privacy, version, mods, lock, room.
+- The answer is `lobby.rejoined [lobby asked, "ok", lobby id, connection string]`, or
+  `[lobby asked, gone|full|locked|refused|mods|version, line...]`.
+- On "ok" the lobby stand-in hands the game `InviteReceived` from the host (`LobbyService.InviteLocal`), and the in-game
+  editor shows "Rejoining <host>".
+- Any other answer, no answer within 10 s, or no ship within 3 minutes gives up once. The game shows "Couldn't rejoin
+  <host>" with the reason and, where it helps, how to join by hand. Nothing is tried again.
+- A join the game starts by itself ends the rejoin. Into the host's lobby, the player is rejoining; into another
+  lobby, the player chose that one.
+- **Admission.** The host keeps a machine refused only for its gameplay mods expected back in that lobby for 15 minutes
+  (`LobbyService.ExpectedBack`), and an "ok" keeps it expected for 3 minutes more (`RejoinGrace`). Its join is then
+  admitted whatever the lobby's privacy, and a stranger's Steam session and join pass the stranger gate
+  (`LobbyService.Welcome`). An invited player stays invited, as a refusal never removes an invitation. A kick removes
+  the expectation.
+- **Older hosts.** A host from before `lobby.rejoin` does not answer, and the joiner's game says the host did not
+  answer. The protocol stays `hellforge-mp-7`.
 
 ### Public lobbies (the lobby directory)
 
@@ -357,13 +388,16 @@ one HellForge runs (25480438) use Easy Anti-Cheat instead.
 
 ### Tests
 
-`tests/HellForge.LocalBackend.Tests` holds the multiplayer, stats sharing, mod sync and directory checks
-(`MultiplayerTests.cs`, `StatsShareTests.cs`, `ModSyncTests.cs`, `DirectoryTests.cs`); `tests/HellForge.Tests` has
-Core's mod sync checks (`ModSyncTests.cs`). `HellForge.SdkShimGen smoke-lobby-link` runs two backend processes over
-loopback UDP and two copies of each stand-in through the PlayFab C APIs: create, join, member data, Party connect,
-endpoints, a 1,200-byte message and a broadcast, and leaving. `HellForge.SdkShimGen smoke-lobby-search` runs two
-backends sharing a folder directory and two lobby stand-ins, as friends and again as strangers: the friend's search
-finds the host's lobby, joins it, and stops finding it after the host leaves.
+`tests/HellForge.LocalBackend.Tests` holds the multiplayer, stats sharing, mod sync, rejoin and directory checks
+(`MultiplayerTests.cs`, `StatsShareTests.cs`, `ModSyncTests.cs`, `RejoinTests.cs`, `DirectoryTests.cs`);
+`tests/HellForge.Tests` has Core's mod sync checks (`ModSyncTests.cs`). `HellForge.SdkShimGen smoke-lobby-link` runs
+two backend processes over loopback UDP and two copies of each stand-in through the PlayFab C APIs: create, join,
+member data, Party connect, endpoints, a 1,200-byte message and a broadcast, an invitation, a kick, and leaving. Last,
+the friend comes back as after a mod sync: a new backend started with `--rejoin` and a new copy of the lobby stand-in,
+whose game receives the host's invitation once it has its own lobby, and joins with it.
+`HellForge.SdkShimGen smoke-lobby-search` runs two backends sharing a folder directory and two lobby stand-ins, as
+friends and again as strangers: the friend's search finds the host's lobby, joins it, and stops finding it after the
+host leaves.
 
 ## History: research and build log (2026-10-14 to 2026-10-22)
 
@@ -623,9 +657,8 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
     session with `--mod-sync <file>` (`mods-stage --sync`).
   - That session plays the host's mods, each found by id and content hash, in the host's order. If they do not make
     the host's modlist digest, it plays the player's own mods and reports why.
-- **Still to do:**
-  - rejoining by itself after the restart (the player joins again from the social tab or the map);
-  - a launcher prompt for sessions without the in-game editor.
+- **Still to do:** a launcher prompt for sessions without the in-game editor. Now: rejoining by itself after the
+  restart, the other item, is built ([Step 9](#step-9-rejoining-after-a-mod-sync-2026-10-23)).
 
 **To test on two PCs:**
 1. The host enables a content mod (a data patch or stats mod) and a code mod; the friend has neither.
@@ -634,7 +667,8 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
 3. The host turns the code mod off and starts a new session. The friend joins again, then DOWNLOAD AND RESTART:
    - check the progress bar and that the files land in `mods/.synced`;
    - check that the session restarts with "Playing with <host>'s mods" in the launcher;
-   - check that joining again from the social tab works.
+   - check that joining again from the social tab works. Now: the restarted game is invited back by itself (step 9's
+     test).
 4. Time how long a large download takes, and whether the host notices it in game (it is paced to 1 MiB/s).
 5. BLOCK a mod from the dialog: the next join to that lobby shows it blocked; unblock it on the Mods page.
 6. Collect both sessions' `multiplayer.log` ("Mod sync:" lines), `backend/mod-sync.json` and `modloader.log`
@@ -757,6 +791,74 @@ kick through both stand-ins). What it does is in [Lobby privacy, invitations and
 5. A turns off "List my Public lobbies ..." and hosts a Public lobby: it is not on B's map (as a stranger), and A's log
    says "Directory: this player's public lobbies are not listed".
 6. Collect both sessions' logs (launcher Console > "Save logs to Desktop").
+
+### Step 9: rejoining after a mod sync (2026-10-23)
+
+Built 2026-10-23 and tested on one PC only (`RejoinTests.cs`; `smoke-lobby-link` through the real lobby stand-in). What
+it does is in [Mod sync](#mod-sync). The research was static, on the supported build's unpacked `helldivers2.exe` and
+`game.dll` images (the research repo's snapshots), and on the stand-in and backend logs of earlier sessions.
+
+**How the game joins a lobby, as far as known:**
+- **Invitations (PlayFab).** Every session calls `PFMultiplayerStartListeningForLobbyInvites` at boot, about 9 s in.
+  The engine logs a received invitation: `Lobby: InviteReceived (sender=%s, receiver=%s, connection_string=%s)` (exe
+  strings beside the other lobby state changes). game.dll has the input actions `InvitePopupAccept`, `InvitePopupDecline`
+  and `InvitePopupModifier`, so an invitation is most likely a popup the player accepts. No session log has an
+  `InviteReceived` yet, because HellForge delivers invitations only since step 8.
+- **Steam.** The engine's Steam friends module (`stingray/runtime/steam/steam_friends.cpp`) reads `+connect_lobby <id>`
+  and `+connect <address>` from the command line ("Invalid command line connect lobby `%s`"). Its script API has
+  `boot_invite` and `next_invite`, which return `INVITE_LOBBY`, `INVITE_SERVER` or `NO_INVITE`. game.dll's title screen
+  (`state_title_screen.cpp`) names `friends_handle_boot_invites`, and there is a deep-link state (`StateDeepLink`,
+  `deeplink_temporary_hosting`, `ship_teleporter_deeplink_join`, `TimedOut_CantJoinLobby`). A game started with a
+  Steam lobby id therefore joins through a path of its own, by way of the title screen and the ship. That path was not
+  decoded. The title screen's update is game.dll 0xAD7CB0 and its deep-link step 0xAD8760.
+- **What the logs show.** A joining game posts the host's Steam lobby as its own `platform_lobby` after the PlayFab join.
+  The order seen is PlayFab first, then Steam; whether a Steam lobby leads the game to a PlayFab lobby is not known. The
+  social tab's join is `/lobby/accounts` and then `PFMultiplayerJoinLobby` with the connection string. A game creates its
+  own lobby on reaching the ship, 28 to 34 s after the stand-in loads in sessions that reached the ship. One host log
+  shows `PFMultiplayerJoinLobby` repeated on a closed lobby's connection string every 20 s. Whether the game or the
+  player did that is not known.
+
+**The path chosen: an invitation from the host, handed to the game by its own backend.**
+- It is the game's own path, and the stand-in already delivers it for friends' invitations. No game code or data
+  changes.
+- It reaches strangers too: the rejoining machine's own backend hands the invitation to its own game, after the host
+  answered.
+- It waits for a state the backend can see: the game's own lobby, which it creates on the ship.
+- The Steam boot invite (`+connect_lobby`) was set aside. It would need the host's Steam lobby id, the game would join a
+  real Steam lobby of possibly another privacy (a stranger may not get in), and how the game goes from a Steam lobby to
+  the PlayFab lobby is not known. It remains a candidate if the invitation proves to need more than one press.
+
+**Not yet known (the two-PC test answers it):**
+- whether the game shows a popup for the invitation or joins at once, and whether it names the host (a stranger host
+  too);
+- whether an invitation 5 s after the game's lobby is made comes too early for the ship's screens.
+
+**To test on two PCs** (A hosts, B joins; for the stranger case set `HELLFORGE_TEST_STRANGERS=1` on both and use a
+Public lobby; B turns on the launcher's engine log for the last step):
+1. A enables a content mod that B lacks, hosts a Friends only lobby, and keeps sharing on. B joins from the social tab:
+   the MOD SYNC prompt shows. B chooses DOWNLOAD AND RESTART, then RESTART TO JOIN.
+2. Before B is back, A sets Privacy to Invite only.
+3. B's launcher says "Once the game is on the ship, the host's invitation to their lobby waits in game." Check that
+   B's `result.json` has `"rejoin": true`.
+4. On B's ship, check that:
+   - the in-game editor shows "Rejoining <A>";
+   - the game shows A's invitation. Note whether it is a popup, whether it names A, and whether it joins without a
+     press;
+   - accepting it puts B in A's lobby, although the lobby is now Invite only;
+   - B's `multiplayer.log` reads "Rejoin: ... on the ship", "asking", "lets this player back", then "back in <A>'s
+     lobby", and A's reads "may rejoin lobby ... after a mod sync".
+5. Repeat, each time with a different change before B is back. Each should give one "Couldn't rejoin <A>" notice with
+   the reason, and no retries:
+   - A leaves the lobby without hosting another;
+   - A fills the lobby;
+   - A closes the game ("did not answer", after about 10 s).
+6. Repeat with A leaving and hosting a new lobby. Check that B is invited into the new one ("their lobby now").
+7. B leaves the invitation alone for 2 minutes. Check that nothing more happens. Then check that a session B starts
+   with PLAY has no "Rejoin:" lines.
+8. Collect both sessions' logs:
+   - `multiplayer.log` ("Rejoin:" lines on B, "rejoin" lines on A);
+   - B's `PlayFabMultiplayerWin.dll` log ("invited to lobby", `InviteReceived`, `PFMultiplayerJoinLobby`);
+   - B's engine log (`Lobby: InviteReceived`).
 
 ### Co-op diagnostics (engine 0.1.19, the 0.1.11 diagnostics beta)
 

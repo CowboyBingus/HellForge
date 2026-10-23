@@ -1,13 +1,15 @@
 namespace HellForge.LocalBackend.Multiplayer;
 
 // What a backend takes from someone who is not a Steam friend (docs/multiplayer.md step 7). Strangers only come through
-// the lobby directory:
+// the lobby directory, or come back to a lobby here after a mod sync:
 //   - a join (lobby.join) while a public lobby is listed here, from a machine this one deals with already (below), or
-//     from one a lobby here expects back (welcome: admitted before or invited, LobbyService.Welcome),
+//     from one a lobby here expects back (welcome: admitted before, invited, or back after a mod sync, LobbyService.Welcome),
+//     and a rejoin request after a mod sync (lobby.rejoin) by the same rule,
 //     at most JoinsPerPeer a minute from one machine and JoinsInAll from everyone, whoever they are: a member rejoining
 //     counts too. Whether the join is taken is the lobby's own rule (LobbyService: privacy, kicked players);
 //   - everything else that follows once this machine deals with them (Related: a member of a lobby hosted here, the host
-//     of a lobby joined or being joined from here, a machine downloading this one's mods or this one theirs);
+//     of a lobby joined or being joined from here, a machine downloading this one's mods or this one theirs, the host this
+//     machine is rejoining after a mod sync);
 //   - pings.
 // Presence (the social tab) and invitations stay between friends. The tables of strangers forget a machine after
 // Window of silence, and are pruned at most every PruneInterval.
@@ -32,7 +34,7 @@ public sealed class StrangerGate(IPeerTransport transport, Func<bool> listing, F
         Prune(now);
         if (frame.Type is "presence" or "presence.hello" or "lobby.invite" or "lobby.invited") return Refuse(peer, frame.Type, now);
         if (frame.Type == "peer.ping") return true;
-        if (frame.Type == "lobby.join")
+        if (frame.Type is "lobby.join" or "lobby.rejoin")
         {
             if (!listing() && !related(peer) && welcome?.Invoke(peer) != true) return Refuse(peer, "a join with no public lobby listed here", now);
             lock (joins)

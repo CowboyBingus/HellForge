@@ -31,6 +31,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
     // The Galactic Map's public lobbies (null without a peer link): this machine's public lobby listed, the game's searches
     // answered.
     public DirectoryService? Directory { get; private set; }
+    // After a mod sync restart: this game is invited back into the host's lobby (null in any other session).
+    public AutoRejoin? Rejoin { get; private set; }
     StrangerGate? gate;
 
     readonly WarClock? warClock;
@@ -91,9 +93,10 @@ public sealed class MultiplayerHost : IAsyncDisposable
 
     // modSetFile: the session's mod set (mods-stage --modset), which joiners lacking its mods may download. directory: the
     // lobby directory (by default Steam's for a Steam link; directoryFolder a folder's, for the loopback harness; none otherwise).
+    // rejoinFile: the session after a mod sync (ModSyncSession), whose host's lobby the game is invited back into.
     public static MultiplayerHost Start(string pipeName, string link, string modDigest, string evidenceDirectory, WarClock? warClock = null,
         AccountKeys? accountKeys = null, FriendPresence? presence = null, string? modsFolder = null, string? modList = null, string? modSetFile = null,
-        ILobbyDirectory? directory = null, string? directoryFolder = null)
+        ILobbyDirectory? directory = null, string? directoryFolder = null, string? rejoinFile = null)
     {
         var host = new MultiplayerHost(pipeName, link, modDigest, evidenceDirectory, warClock, accountKeys, presence, modList);
         host.transport?.Start();
@@ -112,6 +115,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
         host.StartDirectory(directory ?? (host.transport as SteamPeerTransport)?.Directory, modsFolder);
         // The transport knows this machine's SteamID only once started.
         if (host.transport != null && accountKeys != null) host.keyExchange = new AccountKeyExchange(host.transport, accountKeys, host.Log);
+        // before the pipes: the game's first lobby must not be missed
+        if (host.transport != null && rejoinFile != null) host.StartRejoin(rejoinFile, modDigest);
         host.pipes.Start();
         if (host.transport != null) host.heartbeat = new Timer(_ => host.Beat(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
         host.Log($"Multiplayer ready: pipe {pipeName}, link {(host.transport == null ? "none" : link.Split(':')[0])}" +
@@ -139,6 +144,21 @@ public sealed class MultiplayerHost : IAsyncDisposable
         Log($"Mod sync: {(own != null ? own.Mods.Count + " gameplay mods to share" : "nothing to share")}; offers go to {(Sync.Display != null ? "the game" : "the session log only")}.");
     }
 
+    // After a mod sync restart (--rejoin): the game is invited back into the host's lobby once it is on the ship (AutoRejoin).
+    void StartRejoin(string file, string modDigest)
+    {
+        var (target, reason) = AutoRejoin.Read(file, transport!.LocalId, modDigest, DateTime.UtcNow);
+        if (target == null) { Log("Rejoin: not rejoining, because " + reason); return; }
+        var rejoin = Rejoin = new AutoRejoin(target, modDigest, (peer, frame) => transport.Send(peer, frame.Encode(), reliable: true), Lobby.InviteLocal,
+            (kind, title, lines) =>
+            {
+                if (Stats != null) Stats.Notice(kind, title, lines);
+                else Log($"Notice not shown, no live-edit pipe: {title}");
+            }, Log);
+        rejoin.Attach(Lobby);
+        rejoin.Start();
+    }
+
     // The lobby directory and the gate for strangers, who reach this machine through it only.
     // modsFolder: where the Mods page keeps the switch that lists this player's public lobbies (ModSettings.ListPublic; on
     // without one).
@@ -153,8 +173,10 @@ public sealed class MultiplayerHost : IAsyncDisposable
         Log(Directory != null ? "Directory: public lobbies are listed and searched." : "Directory: off (no lobby directory for this link).");
     }
 
-    // A machine this one deals with: in a lobby hosted here, hosting one joined (or being joined) from here, or a mod download.
-    bool Related(ulong peer) => Lobby.InHostedLobby(peer) || Lobby.HostsJoinedLobby(peer) || Lobby.Joining(peer) || Sync?.Related(peer) == true;
+    // A machine this one deals with: in a lobby hosted here, hosting one joined (or being joined) from here, a mod download,
+    // or the host this game is rejoining after a mod sync.
+    bool Related(ulong peer) => Lobby.InHostedLobby(peer) || Lobby.HostsJoinedLobby(peer) || Lobby.Joining(peer) || Sync?.Related(peer) == true ||
+        Rejoin?.Related(peer) == true;
 
     // A friend's name as Steam shows it, for the joiner's editor ("Host: <name>").
     // A stranger's is the host's player name in the lobby record their listing carried.
@@ -291,6 +313,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (heartbeat != null) await heartbeat.DisposeAsync();
+        Rejoin?.Dispose();
         if (Directory != null) await Directory.DisposeAsync();
         if (Sync != null) await Sync.DisposeAsync();
         if (Stats != null) await Stats.DisposeAsync();

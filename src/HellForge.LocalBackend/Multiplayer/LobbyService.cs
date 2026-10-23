@@ -42,6 +42,15 @@ namespace HellForge.LocalBackend.Multiplayer;
 //   Unknown (no "19" nor number_key6): Friends Only.
 // Under every setting a player already in the lobby, or admitted to it before (rejoining after a crash), stays welcome,
 // so a privacy change never throws anyone out; a machine kicked from the lobby (lobby.kick) never comes back while it lasts.
+// A machine refused only for its gameplay mods (mod sync) is expected back for ExpectedBack, whatever the privacy then.
+//
+// Rejoining after a mod sync (AutoRejoin, on the joiner's machine): the joiner's next session asks the host, once its
+// game is on the ship, whether it may come back, then invites its own game into the lobby the answer names:
+//   lobby.rejoin   [lobbyId, modDigest, Protocol]                        joiner -> host
+//   lobby.rejoined [lobbyId asked, "ok", lobbyId, connectionString]      host -> joiner, or
+//                  [lobbyId asked, "gone"|"full"|"locked"|"refused"|"mods"|"version", line...] (the lines its game shows)
+// The host answers for the lobby asked, or, when that one has closed, the one lobby its own game hosts now; an "ok"
+// keeps the machine expected there for RejoinGrace, so the join that follows is admitted.
 public sealed class LobbyService
 {
     public const ulong LocalNode = 0;
@@ -68,6 +77,11 @@ public sealed class LobbyService
     public const int MaxProperties = 30, MaxKeyLength = 64, MaxValueLength = 1024;
     // Invitations a lobby remembers, and those this machine passes on to its game from one friend in a minute.
     const int MaxInvited = 64, InvitesPerMinute = 10;
+    // A machine refused only for its gameplay mods is expected back for ExpectedBack (a download of up to ModSync.GrantTime,
+    // then the restart); one the host told it may rejoin, for RejoinGrace (its player accepting the invitation). At most
+    // MaxExpected per lobby, the oldest dropped.
+    public static readonly TimeSpan ExpectedBack = TimeSpan.FromMinutes(15), RejoinGrace = TimeSpan.FromMinutes(3);
+    const int MaxExpected = 64;
 
     public enum Privacy { Public = 0, FriendsOnly = 1, InviteOnly = 2, FriendsAndClan = 3 }
     static readonly HashSet<string> Events = ["lobby.result", "lobby.memberAdded", "lobby.memberRemoved", "lobby.updated", "lobby.disconnected"];
@@ -134,6 +148,17 @@ public sealed class LobbyService
     public event Action<ulong>? Kicked;
     public event Action<ulong>? KickedByHost;
 
+    // For rejoining after a mod sync (AutoRejoin), raised after the service's lock is released: this machine's game created
+    // a lobby (it is on the ship), asked to join a friend's lobby (owner, lobby id) and heard the answer (owner, lobby id,
+    // HRESULT), and a host answered lobby.rejoin (the host, the frame).
+    public event Action? LocalLobbyCreated;
+    public event Action<ulong, string>? LocalJoinStarted;
+    public event Action<ulong, string, uint>? LocalJoinFinished;
+    public event Action<ulong, Frame>? RejoinAnswered;
+
+    // The time Expected entries are held to (tests set their own).
+    public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
+
     // The privacy a lobby advertises (see the top of this file): search property number_key6, else lobby property "19";
     // Friends Only when neither holds a known value.
     public static Privacy PrivacyOf(IReadOnlyDictionary<string, string> searchProperties, IReadOnlyDictionary<string, string> lobbyProperties)
@@ -196,6 +221,8 @@ public sealed class LobbyService
                     Refused?.Invoke(peer, lines);
                 }
                 else if (frame.Type == "lobby.invited") Invited(peer, frame);
+                else if (frame.Type == "lobby.rejoin") RejoinAsked(peer, frame);
+                else if (frame.Type == "lobby.rejoined") afterLock.Add(() => RejoinAnswered?.Invoke(peer, frame));
             }
             catch (InvalidDataException error) { log($"Bad {frame.Type} from a peer: {error.Message}"); }
         }
@@ -288,11 +315,34 @@ public sealed class LobbyService
         lock (gate) return hosted.Values.SelectMany(l => l.Nodes()).Where(n => n != LocalNode).ToHashSet();
     }
 
-    // Whether a lobby hosted here expects this machine (back): admitted before or invited, and not kicked. A stranger it
-    // expects may open a Steam session and send a join although no lobby is listed (StrangerGate).
+    // Whether a lobby hosted here expects this machine (back): admitted before, invited, or back after a mod sync, and not
+    // kicked. A stranger it expects may open a Steam session and send a join although no lobby is listed (StrangerGate).
     public bool Welcome(ulong node)
     {
-        lock (gate) return hosted.Values.Any(l => !l.Kicked.Contains(node) && (l.Admitted.Contains(node) || l.Invited.Contains(node)));
+        lock (gate) return hosted.Values.Any(l => !l.Kicked.Contains(node) && (l.Admitted.Contains(node) || l.Invited.Contains(node) || ExpectedIn(l, node)));
+    }
+
+    // Whether a machine refused for its gameplay mods (or told it may rejoin) is still expected back in a lobby.
+    bool ExpectedIn(HostedLobby lobby, ulong node) => lobby.Expected.TryGetValue(node, out var until) && Clock() < until;
+
+    void Expect(HostedLobby lobby, ulong node, TimeSpan time)
+    {
+        var until = Clock() + time;
+        foreach (var gone in lobby.Expected.Where(e => e.Value <= Clock()).Select(e => e.Key).ToList()) lobby.Expected.Remove(gone);
+        if (lobby.Expected.TryGetValue(node, out var already) && already >= until) return;
+        if (!lobby.Expected.ContainsKey(node) && lobby.Expected.Count >= MaxExpected) lobby.Expected.Remove(lobby.Expected.MinBy(e => e.Value).Key);
+        lobby.Expected[node] = until;
+    }
+
+    // This machine's game invites itself into a lobby (AutoRejoin: the host said it may come back): the lobby stand-in hands
+    // its invitation listeners InviteReceived, as for a friend's invitation.
+    public void InviteLocal(string lobbyId, string connectionString, string inviterId)
+    {
+        lock (gate)
+        {
+            log($"Passed {inviterId}'s lobby {lobbyId} to this player's game as an invitation (rejoining after a mod sync).");
+            toLocal(new Frame("lobby.inviteReceived").Add(lobbyId).Add(connectionString).Add(inviterId));
+        }
     }
 
     // Whether a friend's machine is a member of a lobby hosted here (the Party network admits only them).
@@ -345,6 +395,8 @@ public sealed class LobbyService
                 joining[owner] = DateTime.UtcNow;
                 foreach (var old in joins.Where(j => DateTime.UtcNow - j.Value.At > JoinMemory).Select(j => j.Key).ToList()) joins.Remove(old);
                 joins[lobbyId] = (owner, DateTime.UtcNow);
+                var (joinOwner, joinLobby) = (owner, lobbyId);
+                afterLock.Add(() => LocalJoinStarted?.Invoke(joinOwner, joinLobby));
                 frame.Add(modDigest);
                 frame.Add(Protocol);
                 if (modList != null) frame.Add(modList);
@@ -391,6 +443,8 @@ public sealed class LobbyService
             if (!forwarded.Remove(op, out var request) || request.Owner != peer) return;
             if (frame.Text(1) == "join" && frame.Text(2) != "0") remote.Remove(request.LobbyId);
             if (frame.Text(1) == "join" && frame.Text(2) == "0") joining.Remove(peer); /* in: no refusal to wait for */
+            if (frame.Text(1) == "join" && uint.TryParse(frame.Text(2), NumberStyles.None, CultureInfo.InvariantCulture, out var joinResult))
+                afterLock.Add(() => LocalJoinFinished?.Invoke(peer, request.LobbyId, joinResult));
             if (invitesSent.Remove(op, out var invite) && frame.Text(1) == "invite" && frame.Text(2) == "0" && ConnectionStringFor(invite.LobbyId) is { } connection)
                 Deliver(invite.Invitee, invite.LobbyId, connection, invite.Inviter);
         }
@@ -442,6 +496,7 @@ public sealed class LobbyService
                 log($"Lobby {lobby.Id} created, at most {lobby.MaxMembers} members.");
                 HostedChanged?.Invoke();
                 Send(LocalNode, Snapshot(new Frame("lobby.result").Add(op).Add("create").Add(0), lobby));
+                afterLock.Add(() => LocalLobbyCreated?.Invoke());
                 return;
             }
             case "lobby.join":
@@ -476,6 +531,8 @@ public sealed class LobbyService
                     var mine = modList != null ? ModlistDiff.Decode(modList) : null;
                     // mod sync: the joiner's backend gets this host's mod set first; when it may download it, its game is told so
                     var offered = node != LocalNode && ModsRefused?.Invoke(node, lobby.Id) == true;
+                    // it passed the privacy check, so it may come back with this host's mods (AutoRejoin), invited or not
+                    if (node != LocalNode) Expect(lobby, node, ExpectedBack);
                     Refuse(node, op, lobby.Id, "different gameplay mods; enable the same gameplay mods (see the launcher's MODS page) and start a new session.",
                         ["Your gameplay mods don't match the host's.", .. Differences(theirs, mine, asHost: false),
                             offered ? "HellForge's MOD SYNC prompt shows which of the host's mods it can download for you."
@@ -594,7 +651,7 @@ public sealed class LobbyService
     {
         if (lobby.Kicked.Contains(node))
             return ("the host removed this player from the lobby.", ["The host removed you from this lobby.", "You can't join it again while it lasts."], null);
-        if (lobby.Admitted.Contains(node) || lobby.Members.Any(m => m.Node == node) || lobby.Invited.Contains(node)) return null;
+        if (lobby.Admitted.Contains(node) || lobby.Members.Any(m => m.Node == node) || lobby.Invited.Contains(node) || ExpectedIn(lobby, node)) return null;
         var privacy = PrivacyOf(lobby.SearchProperties, lobby.LobbyProperties);
         var friend = transport?.IsFriend(node) == true;
         if (privacy == Privacy.Public || privacy is Privacy.FriendsOnly or Privacy.FriendsAndClan && friend) return null;
@@ -603,6 +660,35 @@ public sealed class LobbyService
             ? ("the lobby is Invite only and this player was not invited.", ["The host's lobby is Invite only.", "Ask the host to invite you from the game's social menu."],
                 friend ? ["Your lobby is Invite only: invite them from the game's social menu."] : null)
             : ("the lobby is Friends only and this player is not the host's Steam friend.", ["The host's lobby is Friends only.", "Only the host's Steam friends, or players they invite, can join."], null);
+    }
+
+    // A machine back after a mod sync asks whether it may rejoin (lobby.rejoin, see the top of this file): the lobby asked,
+    // or the one lobby this machine's game owns now when that one has closed, checked as a join would be (kicked, privacy
+    // with the machine expected back, version, mods, lock, room). An "ok" keeps it expected there for RejoinGrace.
+    void RejoinAsked(ulong node, Frame frame)
+    {
+        var asked = frame.Text(0);
+        var (digest, protocol) = (frame.Count > 1 ? frame.Text(1) : "", frame.Count > 2 ? frame.Text(2) : "");
+        var owned = hosted.Values.Where(l => l.Members.Any(m => m.Node == LocalNode && SameEntity(m.Id, l.OwnerId))).ToList();
+        var lobby = hosted.TryGetValue(asked, out var same) && owned.Contains(same) ? same : owned.Count == 1 ? owned[0] : null;
+        void Tell(string status, IReadOnlyList<string> lines)
+        {
+            log($"{EntityId(node)} asked to rejoin lobby {asked} after a mod sync: {status}" + (lobby != null && lobby.Id != asked ? $" (this host's lobby is now {lobby.Id})" : "") +
+                (lines.Count > 0 ? " | " + string.Join(" | ", lines) : "") + ".");
+            var answer = new Frame("lobby.rejoined").Add(asked).Add(status);
+            foreach (var line in lines) answer.Add(line);
+            Send(node, answer);
+        }
+        if (asked.Length is 0 or > 100) return;
+        if (lobby == null) { Tell("gone", ["The host's lobby has closed."]); return; }
+        if (Admission(lobby, node) is { } refusal) { Tell("refused", refusal.JoinerLines); return; }
+        if (protocol != Protocol) { Tell("version", ["Your HellForge version is not the host's.", "Both players need the same HellForge installer."]); return; }
+        if (digest != modDigest) { Tell("mods", ["The host's gameplay mods changed after your restart.", "Join them again to see which differ."]); return; }
+        if (lobby.Lock == 1) { Tell("locked", ["The host's lobby is locked."]); return; }
+        if (lobby.Members.Count(m => m.Node != node) >= lobby.MaxMembers) { Tell("full", ["The host's lobby is full."]); return; }
+        Expect(lobby, node, RejoinGrace);
+        log($"{EntityId(node)} may rejoin lobby {lobby.Id} after a mod sync" + (lobby.Id != asked ? $" (it asked for {asked}, which has closed)" : "") + ".");
+        Send(node, new Frame("lobby.rejoined").Add(asked).Add("ok").Add(lobby.Id).Add(lobby.ConnectionString));
     }
 
     // The host kicks a machine from one of its lobbies: the kicked machine's game hears that its member was removed by the
@@ -616,6 +702,7 @@ public sealed class LobbyService
         lobby.Kicked.Add(node);
         lobby.Admitted.Remove(node);
         lobby.Invited.Remove(node);
+        lobby.Expected.Remove(node);
         log($"Kicked {EntityId(node)} from lobby {lobby.Id} (the game asked {(preventRejoin ? "to" : "not to")} prevent a rejoin; it is prevented either way).");
         foreach (var member in leaving) Send(node, new Frame("lobby.memberRemoved").Add(lobby.Id).Add(member.Id).Add(MemberRemovedForcibly));
         Send(node, new Frame("lobby.disconnected").Add(lobby.Id).Add(DisconnectingNoLocalMembers));
@@ -757,6 +844,8 @@ public sealed class LobbyService
         // Machines admitted before (welcome back whatever the privacy), invited by a member, and kicked (never back): for
         // the lobby's lifetime, not stored anywhere.
         public HashSet<ulong> Admitted = [], Invited = [], Kicked = [];
+        // Machines expected back after a mod sync, until when (Expect).
+        public Dictionary<ulong, DateTime> Expected = [];
         public IEnumerable<ulong> Nodes() => Members.Select(m => m.Node).Distinct();
     }
 
