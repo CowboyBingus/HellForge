@@ -16,7 +16,7 @@ there) and `mappings/` (fields and content); do not edit it by hand. To change i
 
 - [API](#api): [SDK 1](#sdk-1), [SDK 2](#sdk-2), [SDK 3](#sdk-3), [SDK 4](#sdk-4), [SDK 5](#sdk-5), [SDK 6](#sdk-6), [SDK 7](#sdk-7), [SDK 9](#sdk-9), [SDK 10](#sdk-10), [SDK 11](#sdk-11-actions-hf_act_-check-hf-size-before-calling), [SDK 12](#sdk-12), [SDK 13](#sdk-13), [SDK 14](#sdk-14-mod-sync-hfsyncstate-check-hf-size-before-calling)
 - [Components](#components): [HfProjectileWeapon](#hfprojectileweapon), [HfWeaponData](#hfweapondata), [HfWeaponMagazine](#hfweaponmagazine), [HfTag](#hftag), [HfMount](#hfmount), [HfBehavior](#hfbehavior), [HfLoadoutPackage](#hfloadoutpackage), [HfDeposit](#hfdeposit), [HfHealth](#hfhealth), [HfJumppack](#hfjumppack), [HfRecharge](#hfrecharge), [HfShield](#hfshield), [HfHellpodPayload](#hfhellpodpayload), [HfSensorEye](#hfsensoreye), [HfTurret](#hfturret), [HfWeaponWindUp](#hfweaponwindup), [HfBeamWeapon](#hfbeamweapon), [HfWeaponHeat](#hfweaponheat), [HfEagle](#hfeagle), [HfThrower](#hfthrower), [HfBombardment](#hfbombardment), [HfExplosive](#hfexplosive), [HfThrowable](#hfthrowable), [HfVehicleMotion](#hfvehiclemotion), [HfWeaponCharge](#hfweaponcharge), [HfWeaponReload](#hfweaponreload), [HfWeaponRounds](#hfweaponrounds), [HfArcWeapon](#hfarcweapon), [HfHiveMind](#hfhivemind), [HfOrbitalAbility](#hforbitalability), [HfRotation](#hfrotation), [HfDisplacement](#hfdisplacement), [HfSeekingMissile](#hfseekingmissile), [HfLoadoutEntry](#hfloadoutentry), [HfHellpodRack](#hfhellpodrack), [HfAvatar](#hfavatar), [HfInventory](#hfinventory), [HfMeleeWeapon](#hfmeleeweapon), [HfAbilityWeapon](#hfabilityweapon), [HfUnit](#hfunit), [HfSquadTransportFormation](#hfsquadtransportformation), [HfSquadTransport](#hfsquadtransport), [HfGore](#hfgore), [HfAiSpawner](#hfaispawner), [HfStratagemBlocker](#hfstratagemblocker), [HfBughole](#hfbughole)
-- [Settings tables](#settings-tables): [HfDifficultySettings](#hfdifficultysettings), [HfDamageInfo](#hfdamageinfo), [HfProjectileSettings](#hfprojectilesettings), [HfStratagemSettings](#hfstratagemsettings), [HfExplosionSettings](#hfexplosionsettings), [HfArcSettings](#hfarcsettings), [HfBeamSettings](#hfbeamsettings), [HfStatusEffectSettings](#hfstatuseffectsettings), [HfBoosterSettings](#hfboostersettings), [HfPassiveModifier](#hfpassivemodifier), [HfPassiveStat](#hfpassivestat), [HfMeleeHitVolume](#hfmeleehitvolume), [HfEnemyRoster](#hfenemyroster), [HfEnemyRosterLevel11](#hfenemyrosterlevel11), [HfEnemyComposition](#hfenemycomposition)
+- [Settings tables](#settings-tables): [HfDifficultySettings](#hfdifficultysettings), [HfDamageInfo](#hfdamageinfo), [HfProjectileSettings](#hfprojectilesettings), [HfStratagemSettings](#hfstratagemsettings), [HfExplosionSettings](#hfexplosionsettings), [HfArcSettings](#hfarcsettings), [HfBeamSettings](#hfbeamsettings), [HfStatusEffectSettings](#hfstatuseffectsettings), [HfBoosterSettings](#hfboostersettings), [HfPassiveModifier](#hfpassivemodifier), [HfPassiveStat](#hfpassivestat), [HfMeleeHitVolume](#hfmeleehitvolume), [HfEnemyRoster](#hfenemyroster), [HfEnemyRosterLevel11](#hfenemyrosterlevel11), [HfEnemyComposition](#hfenemycomposition), [HfDemolitionTemplate](#hfdemolitiontemplate)
 - [Content](#content): [HF_ITEM_...](#hf_item_-168-hf_kind_item), [HF_PROJECTILE_...](#hf_projectile_-61-hf_kind_projectile), [HF_STRATAGEM_...](#hf_stratagem_-149-hf_kind_stratagem), [HF_BEHAVIOUR_...](#hf_behaviour_-2-hf_kind_behaviour), [HF_ENTITY_...](#hf_entity_-369-hf_kind_entity), [HF_DAMAGE_...](#hf_damage_-1-hf_kind_damage), [HF_PACKAGE_...](#hf_package_-1-hf_kind_package), [HF_TAG_...](#hf_tag_-1-hf_kind_tag), [HF_TRAIT_...](#hf_trait_-29-hf_kind_trait), [HF_CATEGORY_...](#hf_category_-5-hf_kind_category), [HF_BEAM_...](#hf_beam_-3-hf_kind_beam), [HF_BOOSTER_...](#hf_booster_-20-hf_kind_booster)
 
 ## API
@@ -1569,6 +1569,15 @@ and statuses without code.
 | `maximum_tech_level` | +0xF0 | u32 | mission? | highest tech level (difficulty) (unverified) |
 | `minimum_players` | +0xF4 | u32 | mission? | fewest players (unverified) |
 | `maximum_players` | +0xF8 | u32 | mission? | most players (unverified) |
+
+### HfDemolitionTemplate
+
+`DemolitionTemplate`: 16-byte rows found by id. a demolition template (a row by its index, 1 to 9): the force a destruction stage that names it requires, shared by every such stage.
+
+| Field | Offset | Type | Applies | Meaning |
+|---|---|---|---|---|
+| `index` | +0x00 | u32 | now? | its index (not edited) (unverified) |
+| `force` | +0x04 | u32 | now? | the force a stage naming it requires, 1 to 255 (the incoming force is narrowed to a byte) (unverified) |
 
 ## Content
 

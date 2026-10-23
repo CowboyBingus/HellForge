@@ -78,13 +78,14 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
 
     // The HD2R Editor's Spawning pages (mappings/director.json, scripts/ExportDirector.py; native/mod-loader/director.c):
     // "difficulty" (a level's DifficultySettings row, 1 to 11), "rosters" (an enemy's spawn weights by difficulty) and
-    // "compositions" (a squad: its groups' counts, weight, cost and the difficulties and player counts it is drawn at).
+    // "compositions" (a squad: its groups' counts, weight, cost and the difficulties and player counts it is drawn at) and
+    // "demolition" (a demolition template: the force a destruction stage naming it requires).
     // Family is a faction; Class a composition's role (patrol, map, reinforcement).
     static void Director(StatsSchema schema)
     {
         using var stream = typeof(StatsSchema).Assembly.GetManifestResourceStream("HellForge.Core.mappings.director.json")!;
         using var json = JsonDocument.Parse(stream);
-        foreach (var category in new[] { "difficulty", "rosters", "compositions" })
+        foreach (var category in new[] { "difficulty", "rosters", "compositions", "demolition" })
         {
             var targets = new Dictionary<string, StatsTarget>(StringComparer.Ordinal);
             foreach (var t in json.RootElement.GetProperty(category).EnumerateObject())

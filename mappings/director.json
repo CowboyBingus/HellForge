@@ -88911,5 +88911,169 @@
     }
    ]
   }
+ },
+ "demolition": {
+  "Autocannon_Charger_Recoilless_LAV": {
+   "label": "Autocannon Charger Recoilless LAV",
+   "fields": [
+    {
+     "key": "demolition.force",
+     "label": "Force required",
+     "section": "Demolition",
+     "kind": "DemolitionTemplate",
+     "record": 3,
+     "offset": 4,
+     "storage": "u32",
+     "min": 1,
+     "max": 255,
+     "hd2r": "ed|demolition_template/Autocannon_Charger_Recoilless_LAV|demolition.force",
+     "note": "Shared by every destruction stage that names this template. Stages are passed in order: an earlier unmet stage can keep a later one from being reached."
+    }
+   ]
+  },
+  "ExplodingBarrel": {
+   "label": "ExplodingBarrel",
+   "fields": [
+    {
+     "key": "demolition.force",
+     "label": "Force required",
+     "section": "Demolition",
+     "kind": "DemolitionTemplate",
+     "record": 8,
+     "offset": 4,
+     "storage": "u32",
+     "min": 1,
+     "max": 255,
+     "hd2r": "ed|demolition_template/ExplodingBarrel|demolition.force",
+     "note": "Shared by every destruction stage that names this template. Stages are passed in order: an earlier unmet stage can keep a later one from being reached."
+    }
+   ]
+  },
+  "ForceDestroyTrees": {
+   "label": "ForceDestroyTrees",
+   "fields": [
+    {
+     "key": "demolition.force",
+     "label": "Force required",
+     "section": "Demolition",
+     "kind": "DemolitionTemplate",
+     "record": 7,
+     "offset": 4,
+     "storage": "u32",
+     "min": 1,
+     "max": 255,
+     "hd2r": "ed|demolition_template/ForceDestroyTrees|demolition.force",
+     "note": "Shared by every destruction stage that names this template. Stages are passed in order: an earlier unmet stage can keep a later one from being reached."
+    }
+   ]
+  },
+  "FragGrenade_HeavyMachinegun_Sniper_Car_Mech": {
+   "label": "FragGrenade HeavyMachinegun Sniper Car Mech",
+   "fields": [
+    {
+     "key": "demolition.force",
+     "label": "Force required",
+     "section": "Demolition",
+     "kind": "DemolitionTemplate",
+     "record": 2,
+     "offset": 4,
+     "storage": "u32",
+     "min": 1,
+     "max": 255,
+     "hd2r": "ed|demolition_template/FragGrenade_HeavyMachinegun_Sniper_Car_Mech|demolition.force",
+     "note": "Shared by every destruction stage that names this template. Stages are passed in order: an earlier unmet stage can keep a later one from being reached."
+    }
+   ]
+  },
+  "Hellbomb": {
+   "label": "Hellbomb",
+   "fields": [
+    {
+     "key": "demolition.force",
+     "label": "Force required",
+     "section": "Demolition",
+     "kind": "DemolitionTemplate",
+     "record": 6,
+     "offset": 4,
+     "storage": "u32",
+     "min": 1,
+     "max": 255,
+     "hd2r": "ed|demolition_template/Hellbomb|demolition.force",
+     "note": "Shared by every destruction stage that names this template. Stages are passed in order: an earlier unmet stage can keep a later one from being reached."
+    }
+   ]
+  },
+  "OrbitalBombardment": {
+   "label": "OrbitalBombardment",
+   "fields": [
+    {
+     "key": "demolition.force",
+     "label": "Force required",
+     "section": "Demolition",
+     "kind": "DemolitionTemplate",
+     "record": 5,
+     "offset": 4,
+     "storage": "u32",
+     "min": 1,
+     "max": 255,
+     "hd2r": "ed|demolition_template/OrbitalBombardment|demolition.force",
+     "note": "Shared by every destruction stage that names this template. Stages are passed in order: an earlier unmet stage can keep a later one from being reached."
+    }
+   ]
+  },
+  "Script": {
+   "label": "Script",
+   "fields": [
+    {
+     "key": "demolition.force",
+     "label": "Force required",
+     "section": "Demolition",
+     "kind": "DemolitionTemplate",
+     "record": 9,
+     "offset": 4,
+     "storage": "u32",
+     "min": 1,
+     "max": 255,
+     "hd2r": "ed|demolition_template/Script|demolition.force",
+     "note": "Shared by every destruction stage that names this template. Stages are passed in order: an earlier unmet stage can keep a later one from being reached."
+    }
+   ]
+  },
+  "SmallArms": {
+   "label": "SmallArms",
+   "fields": [
+    {
+     "key": "demolition.force",
+     "label": "Force required",
+     "section": "Demolition",
+     "kind": "DemolitionTemplate",
+     "record": 1,
+     "offset": 4,
+     "storage": "u32",
+     "min": 1,
+     "max": 255,
+     "hd2r": "ed|demolition_template/SmallArms|demolition.force",
+     "note": "Shared by every destruction stage that names this template. Stages are passed in order: an earlier unmet stage can keep a later one from being reached."
+    }
+   ]
+  },
+  "Strider_EagleRockets": {
+   "label": "Strider EagleRockets",
+   "fields": [
+    {
+     "key": "demolition.force",
+     "label": "Force required",
+     "section": "Demolition",
+     "kind": "DemolitionTemplate",
+     "record": 4,
+     "offset": 4,
+     "storage": "u32",
+     "min": 1,
+     "max": 255,
+     "hd2r": "ed|demolition_template/Strider_EagleRockets|demolition.force",
+     "note": "Shared by every destruction stage that names this template. Stages are passed in order: an earlier unmet stage can keep a later one from being reached."
+    }
+   ]
+  }
  }
 }

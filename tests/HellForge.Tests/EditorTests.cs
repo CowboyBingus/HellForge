@@ -12,7 +12,7 @@ static class EditorTests
             check(catalog["format"]!.GetValue<int>() == EditorCatalog.Format && catalog["build"]!.GetValue<string>() == StatsSchema.Current.Build, "Format and build.");
             var navs = catalog["categories"]!.AsArray().Select(c => c!["id"]!.GetValue<string>()).ToList();
             check(navs.SequenceEqual(["primary", "secondary", "throwables", "offensive", "defensive", "support", "backpacks", "vehicles", "mission", "boosters", "helldiver", "perks",
-                    "terminids", "automatons", "illuminate", "structures", "entities", "difficulty", "rosters", "compositions", "statuses", "explosions",
+                    "terminids", "automatons", "illuminate", "structures", "entities", "difficulty", "rosters", "compositions", "demolition", "statuses", "explosions",
                     "projectiles", "damage"]),
                 "Weapons, stratagems, boosters, the Helldiver, the enemies, spawning: " + string.Join(", ", navs));
             var objects = catalog["objects"]!.AsArray().Select(o => o!.AsObject()).ToList();
@@ -210,7 +210,11 @@ static class EditorTests
             check(patrol.Class == "patrol" && patrol.Fields["composition.weight"] is { Kind: "EnemyComposition", Record: 2 << 16, Offset: 0xE0 } &&
                   targets["compositions"]["terminids/family_3/row_2"].Fields["composition.weight"].Record == (0 << 16 | 2 << 12 | 2),
                 "A composition by (roster << 16) | (family - 1 << 12) | row.");
-            check(targets.Where(t => t.Key is "difficulty" or "rosters" or "compositions").SelectMany(t => t.Value.Values).SelectMany(t => t.Fields.Values)
+            var hellbomb = targets["demolition"]["Hellbomb"];
+            check(targets["demolition"].Count == 9 && hellbomb.Fields["demolition.force"] is { Kind: "DemolitionTemplate", Record: 6, Offset: 4, Storage: "u32", Min: 1, Max: 255 } &&
+                  !targets["demolition"].ContainsKey("none") && !targets["demolition"].ContainsKey("Count"),
+                "A demolition template by its index, its force 1 to 255; none and Count are not offered.");
+            check(targets.Where(t => t.Key is "difficulty" or "rosters" or "compositions" or "demolition").SelectMany(t => t.Value.Values).SelectMany(t => t.Fields.Values)
                     .All(f => SdkMappings.Current.FieldAt(f.Kind, f.Offset, f.Storage) != null),
                 "Every field is one the engine maps (mappings/components.json).");
             var saved = StatsData.Parse("""{"format":1,"compositions":{"automatons/family_1/row_0":{"composition.group_0_count":4}},"rosters":{"terminids/row_0":{"spawn.weight_11":2}},"difficulty":{"7":{"difficulty.encounter_points":500}}}""",

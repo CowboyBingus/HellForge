@@ -42,7 +42,7 @@ public static class StatsCatalog
         new("illuminate", "Illuminate", "Enemies", null), new("structures", "Structures", "Enemies", null),
         new("entities", "Other entities", "Enemies", null),
         new("difficulty", "Mission difficulty", "Spawning", null), new("rosters", "Spawn rosters", "Spawning", null),
-        new("compositions", "Spawn compositions", "Spawning", null)
+        new("compositions", "Spawn compositions", "Spawning", null), new("demolition", "Demolition templates", "Spawning", null)
     ];
 
     // The armory's own group order; groups it does not list follow alphabetically.
@@ -117,7 +117,8 @@ public static class StatsCatalog
             items.Add(new("enemies/" + name, target.Label ?? name, nav, unnamed ? "Unnamed" : null, unnamed ? name : null, [Part("enemies", name, "Entity")])
                 { Search = name });
         }
-        // The HD2R Editor's Spawning pages: a difficulty's budgets, an enemy's spawn weights, a squad composition; by faction.
+        // The HD2R Editor's Spawning pages: a difficulty's budgets, an enemy's spawn weights, a squad composition (by faction),
+        // a demolition template's force.
         foreach (var (name, target) in Section("difficulty"))
             items.Add(new("difficulty/" + name, target.Label ?? name, "difficulty", null, null, [Part("difficulty", name, "Difficulty")]));
         foreach (var (name, target) in Section("rosters"))
@@ -126,6 +127,9 @@ public static class StatsCatalog
         foreach (var (name, target) in Section("compositions"))
             items.Add(new("compositions/" + name, target.Label ?? name, "compositions", Humanize(target.Family ?? "other"), Humanize(target.Class ?? ""),
                 [Part("compositions", name, "Composition")]) { Search = name + " " + target.Class });
+        foreach (var (name, target) in Section("demolition"))
+            items.Add(new("demolition/" + name, target.Label ?? name, "demolition", null, null, [Part("demolition", name, "Demolition template")])
+                { Search = name });
 
         // Rows reached by type id are named by the items that use them.
         var users = new Dictionary<(string, long), SortedSet<string>>();
@@ -227,7 +231,7 @@ public static class StatsCatalog
         }
         // The Spawning pages: their sections in the order of their fields (Budgets, Objectives, Patrols; Spawn weights; a
         // composition's groups, Selection, Eligibility).
-        if (partCategory is "difficulty" or "rosters" or "compositions") return ("spawn:" + (section ?? "Other"), section ?? "Other", 0);
+        if (partCategory is "difficulty" or "rosters" or "compositions" or "demolition") return ("spawn:" + (section ?? "Other"), section ?? "Other", 0);
         // An entity's page, in the HD2R Editor's sections (its row ids: "<path>:<zone or attack>:<field>"): Health & Armor,
         // a group per damage zone in slot order, a group per attack, then the rest (Spawning, Shield, Size & Geometry...).
         if (partCategory == "enemies")

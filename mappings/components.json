@@ -7549,6 +7549,32 @@
           "source": "HD2Runtime enemy catalogue breach.emission_radius"
         }
       }
+    },
+    "DemolitionTemplate": {
+      "component": "DemolitionTemplate",
+      "table": true,
+      "stride": 16,
+      "layout": "25480438",
+      "meaning": "a demolition template (a row by its index, 1 to 9): the force a destruction stage that names it requires, shared by every such stage",
+      "applies": "now",
+      "appliesVerified": false,
+      "appliesSource": "read when a destruction stage is hit (HD2Runtime enemy-controls.md: structure destruction); not tested on structures already standing",
+      "fields": {
+        "index": {
+          "offset": 0,
+          "type": "u32",
+          "meaning": "its index (not edited)",
+          "verified": false,
+          "source": "HD2Runtime enemy_director.lua demolition_template rows"
+        },
+        "force": {
+          "offset": 4,
+          "type": "u32",
+          "meaning": "the force a stage naming it requires, 1 to 255 (the incoming force is narrowed to a byte)",
+          "verified": false,
+          "source": "HD2Runtime enemy_director.lua demolition.force"
+        }
+      }
     }
   }
 }

@@ -79,6 +79,31 @@ static void DirectorFixture(void)
     f = 2.5f; assert(DirectorRefuses("EnemyRoster", 0, 0, &f, 4) == NULL);
     assert(DirectorRefuses("EnemyComposition", (uintptr_t)second, 0, &key, 4) != NULL); /* a group's key is not edited */
 
+    /* demolition templates: waiting for the destruction system, then a row by index once all eleven read as reviewed;
+     * "none" and "Count" stay, and only a force of 1 to 255 is written */
+    uint8_t* system = (uint8_t*)calloc(1, 0x40);
+    uint8_t* templates = (uint8_t*)calloc(DIR_DEMOLITION_ROWS, DIR_DEMOLITION_ROW);
+    for (uint32_t i = 0; i < DIR_DEMOLITION_ROWS; i++)
+    {
+        memcpy(templates + i * DIR_DEMOLITION_ROW, &i, 4);
+        memcpy(templates + i * DIR_DEMOLITION_ROW + 8, kDemolitionTail[i], 8);
+    }
+    assert(DirectorRow("DemolitionTemplate", 3, &ready) == 0 && !ready);
+    uint64_t pointer = (uint64_t)(uintptr_t)system;
+    memcpy(g_dirGame + DIR_DESTRUCTION, &pointer, 8);
+    assert(DirectorRow("DemolitionTemplate", 3, &ready) == 0 && !ready);
+    pointer = (uint64_t)(uintptr_t)templates;
+    memcpy(system + 0x30, &pointer, 8);
+    assert(DirectorRow("DemolitionTemplate", 3, &ready) == (uintptr_t)templates + 3 * DIR_DEMOLITION_ROW && ready);
+    assert(DirectorRow("DemolitionTemplate", 0, &ready) == 0 && DirectorRow("DemolitionTemplate", 10, &ready) == 0 && ready);
+    templates[7 * DIR_DEMOLITION_ROW + 12] = 0; /* not as reviewed: nothing */
+    assert(DirectorRow("DemolitionTemplate", 3, &ready) == 0 && ready);
+    templates[7 * DIR_DEMOLITION_ROW + 12] = 1;
+    v = 45; assert(DirectorRefuses("DemolitionTemplate", (uintptr_t)templates + 3 * DIR_DEMOLITION_ROW, 4, &v, 4) == NULL);
+    v = 256; assert(strstr(DirectorRefuses("DemolitionTemplate", (uintptr_t)templates + 3 * DIR_DEMOLITION_ROW, 4, &v, 4), "255"));
+    v = 0; assert(DirectorRefuses("DemolitionTemplate", (uintptr_t)templates + 3 * DIR_DEMOLITION_ROW, 4, &v, 4) != NULL);
+    v = 45; assert(DirectorRefuses("DemolitionTemplate", (uintptr_t)templates + 3 * DIR_DEMOLITION_ROW, 8, &v, 4) != NULL);
+
     /* live: the editor's writes go through the same checks */
     HfMod* mod = &g_mods[0];
     HfField count = HF_FIELD(EnemyComposition, group_0_count), weight = HF_FIELD_AT(EnemyRoster, weights, 4);
@@ -90,6 +115,11 @@ static void DirectorFixture(void)
     memcpy(&v, second + 4, 4); assert(v == 5);
     assert(ApiSetLive(mod, (1u << 16) | 2, &weight, &half, HF_LIVE_SHARED) != 0);
     memcpy(&f, rows[1] + 2 * DIR_ROSTER_ROW + 0x30 + 16, 4); assert(f == 0.5f);
+    HfField force = HF_FIELD(DemolitionTemplate, force);
+    HfValue strong = HF_U32(45), crushing = HF_U32(300);
+    assert(ApiSetLive(mod, 3, &force, &strong, HF_LIVE_SHARED) != 0);
+    memcpy(&v, templates + 3 * DIR_DEMOLITION_ROW + 4, 4); assert(v == 45);
+    assert(ApiSetLive(mod, 3, &force, &crushing, HF_LIVE_SHARED) == 0 && ApiSetLive(mod, 10, &force, &strong, HF_LIVE_SHARED) == 0);
 
     /* the game's own difficulty table: level 3's encounter points in its copy and in every copy that held the same */
     float budget = 100, other = 999;

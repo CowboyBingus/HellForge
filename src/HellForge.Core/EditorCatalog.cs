@@ -31,7 +31,7 @@ public static class EditorCatalog
         ("terminids", "Terminids", "ENEMIES", null), ("automatons", "Automatons", "ENEMIES", null), ("illuminate", "Illuminate", "ENEMIES", null),
         ("structures", "Structures", "ENEMIES", null), ("entities", "Other Entities", "ENEMIES", null),
         ("difficulty", "Mission Difficulty", "SPAWNING", null), ("rosters", "Spawn Rosters", "SPAWNING", null),
-        ("compositions", "Spawn Compositions", "SPAWNING", null),
+        ("compositions", "Spawn Compositions", "SPAWNING", null), ("demolition", "Demolition Templates", "SPAWNING", null),
         ("statuses", "Status Effects", "EFFECTS", null),
         ("explosions", "Explosions", "ADVANCED", null), ("projectiles", "Projectiles", "ADVANCED", null), ("damage", "Damage Types", "ADVANCED", null),
     ];

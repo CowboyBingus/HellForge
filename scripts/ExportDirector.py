@@ -1,4 +1,4 @@
-"""Export the HD2R Editor's Spawning pages (Mission Difficulty, Spawn Rosters, Spawn Compositions) for HellForge's editor:
+"""Export the HD2R Editor's Spawning pages (Mission Difficulty, Spawn Rosters, Spawn Compositions, Demolition Templates) for HellForge's editor:
 the enemy spawn director's rows with the fields HellForge's engine writes (native/mod-loader/director.c). Metadata only:
 names, labels, row ids, offsets, storage and ranges; no game values.
 
@@ -12,6 +12,8 @@ composition's faction, family, role and groups). Rows are named as the engine fi
   compositions  (roster << 16) | (family - 1 << 12) | row, family being HD2Runtime's (1 to 8)
   difficulty    its level (1 to 10; 11 with a mod that adds it), as DifficultySettings rows: the HD2R Editor's three
                 budgets and HellForge's own objective and patrol fields
+  demolition    a demolition template's index (1 to 9; "none" and "Count" have no field), its force as a DemolitionTemplate
+                row's +4
 A field the HD2R Editor locks (an authored value outside its write range) is left out; authored values are read only to
 decide that. The HD2R Editor's preset key of each field is kept ("ed|composition/<key>|<field>").
 Credit: HD2R Editor, copyright 2026 SkyeShade (https://github.com/SkyeShade/HD2Runtime-Editor), whose pages this follows.
@@ -48,6 +50,8 @@ LABELS = {'difficulty.encounter_points': 'Encounter points', 'difficulty.guardfo
 UNITS = {'difficulty.shared_spawner_cooldown': 'seconds', 'composition.post_schedule_duration': 'seconds',
          'composition.group_emission': 'seconds'}
 DIFFICULTY_NOTE = 'Applies from the next mission; only the host\'s values decide what spawns.'
+DEMOLITION_NOTE = ('Shared by every destruction stage that names this template. Stages are passed in order: an earlier '
+                   'unmet stage can keep a later one from being reached.')
 
 
 def rows(runtime):
@@ -66,7 +70,7 @@ def field(key, label, kind, record, offset, storage, low, high, section, hd2r=No
 
 
 def export(runtime):
-    difficulty, rosters, compositions = {}, {}, {}
+    difficulty, rosters, compositions, demolition = {}, {}, {}, {}
     for name, r in rows(runtime).items():
         kind = r['kind']
         meta = r.get('metadata') or {}
@@ -111,6 +115,10 @@ def export(runtime):
                                     'ed|composition/%s|%s' % (r['key'], f['id']), note, unit))
             compositions[r['key']] = {'label': '%s \u00b7 Family %d \u00b7 Row %d' % (human(meta['faction']), family, row),
                                       'faction': meta['faction'], 'family': family, 'role': meta.get('role'), 'fields': fields}
+        elif kind == 'demolition_template' and editable:
+            fields = [field(f['id'], 'Force required', 'DemolitionTemplate', r['index'], f['offset'], f['storage'], f['min'], f['max'],
+                            'Demolition', 'ed|demolition_template/%s|%s' % (r['key'], f['id']), DEMOLITION_NOTE) for f in editable]
+            demolition[r['key']] = {'label': human(r['key'].replace('_', ' ')), 'fields': fields}
     # level 11: the moved table's row, with a mod that adds it (its fields as level 10's, the HD2R Editor having none)
     if '10' in difficulty:
         difficulty['11'] = {'label': 'Difficulty 11 \u00b7 with a mod that adds it',
@@ -118,21 +126,22 @@ def export(runtime):
         for f in difficulty['11']['fields']:
             f.pop('hd2r', None)
             f['note'] = 'Only with a mod that adds difficulty 11. ' + DIFFICULTY_NOTE
-    return difficulty, rosters, compositions
+    return difficulty, rosters, compositions, demolition
 
 
 def main(runtime, out):
     runtime = Path(runtime)
     source = hashlib.sha256((runtime / 'domains' / 'enemy_director.lua').read_bytes().replace(b'\r\n', b'\n')).hexdigest().upper()
-    difficulty, rosters, compositions = export(runtime)
+    difficulty, rosters, compositions, demolition = export(runtime)
     order = lambda d: dict(sorted(d.items(), key=lambda kv: [int(p) if p.isdigit() else p for p in re.split(r'(\d+)', kv[0])]))
     document = {'format': 1, 'build': '25480438', 'source': source,
                 'note': "The HD2R Editor's Spawning pages: the spawn director's rows and the fields HellForge's engine writes "
                         '(scripts/ExportDirector.py, native/mod-loader/director.c).',
-                'difficulty': order(difficulty), 'rosters': order(rosters), 'compositions': order(compositions)}
+                'difficulty': order(difficulty), 'rosters': order(rosters), 'compositions': order(compositions),
+                'demolition': order(demolition)}
     Path(out).write_text(json.dumps(document, ensure_ascii=False, indent=1) + '\n', encoding='utf-8', newline='\n')
-    print('%d difficulties, %d roster rows, %d compositions: %d fields' % (len(difficulty), len(rosters), len(compositions),
-          sum(len(t['fields']) for d in (difficulty, rosters, compositions) for t in d.values())))
+    print('%d difficulties, %d roster rows, %d compositions, %d demolition templates: %d fields' % (len(difficulty), len(rosters),
+          len(compositions), len(demolition), sum(len(t['fields']) for d in (difficulty, rosters, compositions, demolition) for t in d.values())))
 
 
 if __name__ == '__main__':

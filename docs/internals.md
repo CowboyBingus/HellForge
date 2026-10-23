@@ -744,6 +744,10 @@ The SPAWNING group is the HD2R Editor's Mission Difficulty, Spawn Rosters and Sp
 - **Spawn Compositions:** a squad (`EnemyComposition`, `(roster << 16) | (family - 1 << 12) | row`). It holds its groups'
   counts and emission times, its weight, cost multiplier and post-schedule duration, and the tech levels and player
   counts it is drawn at.
+- **Demolition Templates:** the force a destruction stage requires (`DemolitionTemplate`, a row by its index, 1 to 9;
+  "none" and "Count" are not offered), 1 to 255, shared by every stage that names it. The templates are 16-byte rows at
+  `[[game.dll + 0x346D928] + 0x30]` (HD2Runtime's destructionGlobal); all eleven must hold their index and the bytes
+  HD2Runtime read before anything is written, and edits wait until the destruction system exists. Untested in game.
 
 Every write, live or from Local Stats at boot (`StatsDirectorReady`), is checked against the row as it is: a squad's
 groups total at most 32 (the AI squad queue's capacity; a 33rd entry crashed the game in HD2Runtime's research), a group

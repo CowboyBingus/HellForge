@@ -3800,6 +3800,20 @@ HF_ASSERT_SIZE(HfBughole, 40);
 HF_ASSERT_OFFSET(HfBughole, emission_radius, 12);
 #define HF_TYPE_Bughole_emission_radius HF_TYPE_F32
 
+/* DemolitionTemplate (16-byte table rows, found by id): a demolition template (a row by its index, 1 to 9): the force a destruction stage that names it requires, shared by every such stage */
+#define HfDemolitionTemplate_INFO "DemolitionTemplate", 25480438u
+typedef struct HfDemolitionTemplate
+{
+    uint32_t index;                              /* +0x00 its index (not edited) (unverified) [now?] */
+    uint32_t force;                              /* +0x04 the force a stage naming it requires, 1 to 255 (the incoming force is narrowed to a byte) (unverified) [now?] */
+    uint8_t _unknown_08[8];
+} HfDemolitionTemplate;
+HF_ASSERT_SIZE(HfDemolitionTemplate, 16);
+HF_ASSERT_OFFSET(HfDemolitionTemplate, index, 0);
+#define HF_TYPE_DemolitionTemplate_index HF_TYPE_U32
+HF_ASSERT_OFFSET(HfDemolitionTemplate, force, 4);
+#define HF_TYPE_DemolitionTemplate_force HF_TYPE_U32
+
 #pragma pack(pop)
 
 #endif

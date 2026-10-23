@@ -11,6 +11,12 @@
  *   EnemyComposition    (roster << 16) | (family << 12) | row: a composition row (0x118): eight groups of {key, count,
  *                       emission time} from +0, weight +0xE0, cost multiplier +0xE4, post-schedule duration +0xE8, tech
  *                       levels +0xEC..+0xF0, players +0xF4..+0xF8.
+ *   DemolitionTemplate  a demolition template's index, 1 to 9 (0 "none" and 10 "Count" stay): the force a destruction
+ *                       stage that names it requires (+4, u32, 1 to 255: the incoming force is narrowed to a byte), shared
+ *                       by every stage that names it. The templates are 16-byte rows at [[game+0x346D928] + 0x30]
+ *                       (HD2Runtime enemy_director.lua destructionGlobal, templateCount 11); each row holds its index at +0
+ *                       and the bytes HD2Runtime read at +8, checked before anything is written. Whether a change reaches
+ *                       structures already standing is not tested.
  * The director reads them when a mission is set up, so a change applies from the next mission; only the host's tables
  * decide what spawns. A composition's group counts may total at most 32 (the AI squad queue's capacity: a 33rd entry
  * overwrote its count and crashed the game, HD2Runtime research spawn-capacity), and its lowest tech level and player
@@ -25,6 +31,12 @@
 #define DIR_SQUAD_CAPACITY 32u
 #define DIR_DIFFICULTY_COPY 4 /* kDifficultyCopies[4], 0x328D2A0 */
 #define DIR_IMAGE 0x4744000u   /* game.dll's image size (HD2Runtime enemy_director.lua imageSize) */
+#define DIR_DESTRUCTION 0x346D928u /* the destruction system; its +0x30 the demolition templates */
+#define DIR_DEMOLITION_ROW 16u
+#define DIR_DEMOLITION_ROWS 11u
+/* each template's +8..+15 as HD2Runtime read them (enemy_director.lua rows' hex): only ForceDestroyTrees sets +12 */
+static const uint32_t kDemolitionTail[DIR_DEMOLITION_ROWS][2] = {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 1}, {0, 0},
+    {0, 0}, {0, 0}};
 
 static uintptr_t DirectorGame(size_t* size) { return ApiModuleBase("game.dll", size); }
 /* game.dll's image; the native fixture replaces it. */
@@ -57,6 +69,19 @@ static uintptr_t DirectorRow(const char* kind, uint64_t id, int* ready)
     size_t size = 0;
     uintptr_t game = g_directorImage(&size);
     if (game == 0 || size != DIR_IMAGE || strcmp(g_build, "25480438")) { *ready = game == 0; return 0; }
+    if (!strcmp(kind, "DemolitionTemplate"))
+    {
+        uint64_t system = 0, table = 0;
+        if (SafeRead(game + DIR_DESTRUCTION, &system, 8) || system == 0 || SafeRead((uintptr_t)system + 0x30, &table, 8) || table == 0)
+        { *ready = 0; return 0; } /* the destruction system is not made yet */
+        for (uint32_t i = 0; i < DIR_DEMOLITION_ROWS; i++)
+        {
+            uint32_t row[4];
+            if (SafeRead((uintptr_t)table + i * DIR_DEMOLITION_ROW, row, sizeof row) || row[0] != i ||
+                row[2] != kDemolitionTail[i][0] || row[3] != kDemolitionTail[i][1]) return 0;
+        }
+        return id >= 1 && id < DIR_DEMOLITION_ROWS - 1 ? (uintptr_t)table + (uintptr_t)id * DIR_DEMOLITION_ROW : 0;
+    }
     if (g_difficultyAdded && g_difficultyState == 0) { *ready = 0; return 0; } /* the weights are about to move */
     uint32_t roster = (uint32_t)(id >> 16), row = (uint32_t)(id & 0xFFFF);
     uint64_t count = 0;
@@ -84,7 +109,8 @@ static uintptr_t DirectorRow(const char* kind, uint64_t id, int* ready)
 
 static int DirectorKind(const char* kind)
 {
-    return !strcmp(kind, "EnemyRoster") || !strcmp(kind, "EnemyRosterLevel11") || !strcmp(kind, "EnemyComposition");
+    return !strcmp(kind, "EnemyRoster") || !strcmp(kind, "EnemyRosterLevel11") || !strcmp(kind, "EnemyComposition") ||
+        !strcmp(kind, "DemolitionTemplate");
 }
 
 /* Why a write of `bytes` at row + offset is refused (NULL: allowed), judged against the row as it is now. */
@@ -96,6 +122,8 @@ static const char* DirectorRefuses(const char* kind, uintptr_t row, uint32_t off
     if (size != 4) return "a director field is 4 bytes";
     memcpy(&bits, bytes, 4);
     memcpy(&value, bytes, 4);
+    if (!strcmp(kind, "DemolitionTemplate"))
+        return offset != 4 ? "only a demolition template's force is edited" : bits < 1 || bits > 255 ? "a demolition force is 1 to 255" : NULL;
     if (strcmp(kind, "EnemyComposition"))
         return !isfinite(value) || value < 0 || value > 10000 ? "a spawn weight is 0 to 10000" : NULL;
     uint8_t now[DIR_COMPOSITION_ROW];
@@ -161,5 +189,5 @@ static void DifficultyMirror(uintptr_t row, uint32_t offset, const void* before,
 static uint32_t DirectorStride(const char* kind)
 {
     return !strcmp(kind, "EnemyRoster") ? 40u : !strcmp(kind, "EnemyRosterLevel11") ? 4u : !strcmp(kind, "EnemyComposition") ? DIR_COMPOSITION_ROW :
-        !strcmp(kind, "DifficultySettings") ? DIF_ROW : 0u;
+        !strcmp(kind, "DemolitionTemplate") ? DIR_DEMOLITION_ROW : !strcmp(kind, "DifficultySettings") ? DIF_ROW : 0u;
 }

@@ -1079,6 +1079,10 @@ static const SdkField kSdkFieldsStratagemBlocker[] = {
 static const SdkField kSdkFieldsBughole[] = {
     {"emission_radius", 12, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
 };
+static const SdkField kSdkFieldsDemolitionTemplate[] = {
+    {"index", 0, 4, HF_TYPE_U32, HF_APPLIES_NOW, REF_NONE},
+    {"force", 4, 4, HF_TYPE_U32, HF_APPLIES_NOW, REF_NONE},
+};
 static const SdkComponent kSdkComponents[] = {
     {"ProjectileWeapon", "ProjectileWeaponComponentData", 25480438u, 616u, kSdkFieldsProjectileWeapon, 45, 0, 321},
     {"WeaponData", "WeaponDataComponentData", 25480438u, 1232u, kSdkFieldsWeaponData, 20, 0, 236},
@@ -1141,4 +1145,5 @@ static const SdkComponent kSdkComponents[] = {
     {"AiSpawner", "AiSpawnerComponentData", 25480438u, 196u, kSdkFieldsAiSpawner, 9, 0, 182},
     {"StratagemBlocker", "StratagemBlockerComponentData", 25480438u, 20u, kSdkFieldsStratagemBlocker, 2, 0, 25},
     {"Bughole", "BugholeComponentData", 25480438u, 40u, kSdkFieldsBughole, 1, 0, 216},
+    {"DemolitionTemplate", "DemolitionTemplate", 25480438u, 16u, kSdkFieldsDemolitionTemplate, 2, 1, -1},
 };
