@@ -332,6 +332,11 @@
                 <CheckBox x:Name="SdkShimsBox" Content="Lobby and session through Steam friends" />
                 <TextBlock Classes="muted" TextWrapping="Wrap"
                            Text="Replaces the copy's PlayFab Party and Lobby DLLs with HellForge stand-ins for the session; they never reach PlayFab and talk to friends' backends through Steam networking. Every call is logged to the session folder." />
+                <CheckBox x:Name="StrangersBox" Content="Play with strangers" />
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="Off: only Steam friends reach your backend. On: your public lobby is listed on the Galactic Map for HellForge players who are not your friends, and you can join theirs." />
+                <TextBlock x:Name="StrangersWarning" Foreground="#FFA235" TextWrapping="Wrap"
+                           Text="Strangers' games send yours data you cannot check: a modified game can lie about its mods, and a flaw in the game's network code could let it run code on your PC. Turn this on only if you accept that risk. It applies within a few seconds, also during a session." />
               </StackPanel>
             </Border>
 

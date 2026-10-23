@@ -6,6 +6,8 @@ using System.Text.RegularExpressions;
 namespace HellForge.LocalBackend.Multiplayer;
 
 // The Galactic Map's public lobbies through the lobby directory (LobbyDirectory.cs; docs/multiplayer.md step 7).
+// Both only while the player has turned on "Play with strangers" (ModSettings.PlayWithStrangers, off by default): off, nothing
+// is listed and a search shows friends' listings only (a stranger's lobby could not be joined: StrangerGate).
 //   publish: the public lobby this machine's game hosts is listed while it can be joined (privacy Public: lobby
 //            property "19" / number_key6 0, LobbyService.PrivacyOf; not locked, not full) and the player lists it (the
 //            Mods page's "listPublic", on by default), with its search properties, the game's lobby record (PUT /lobby,
@@ -43,7 +45,9 @@ public sealed partial class DirectoryService : IAsyncDisposable
     readonly Func<bool> editedStats;
     readonly Func<bool>? listPublic;
     bool unlistedLogged;
+    readonly Func<bool>? strangersAllowed;
     readonly object gate = new();
+    bool loggedOff;
     readonly Timer timer;
     readonly CancellationTokenSource stop = new();
     Dictionary<string, string>? published;
@@ -55,9 +59,11 @@ public sealed partial class DirectoryService : IAsyncDisposable
 
     // autoPublish: the listing follows the lobby by itself (every second, and soon after a change); tests call Publish.
     public DirectoryService(ILobbyDirectory directory, LobbyService lobby, FriendPresence presence, ulong localId, Action<Frame> toLocal, Action<string> log,
-        ModSync? sync, Func<bool> editedStats, bool autoPublish = true, Func<bool>? listPublic = null)
+        ModSync? sync, Func<bool> editedStats, bool autoPublish = true, Func<bool>? listPublic = null,
+        Func<bool>? strangersAllowed = null)
     {
         this.listPublic = listPublic;
+        this.strangersAllowed = strangersAllowed;
         this.directory = directory;
         this.lobby = lobby;
         this.presence = presence;
@@ -89,6 +95,17 @@ public sealed partial class DirectoryService : IAsyncDisposable
     public void Publish(DateTime now)
     {
         var desired = Desired();
+        if (desired != null && strangersAllowed?.Invoke() == false)
+        {
+            desired = null;
+            lock (gate)
+                if (!loggedOff)
+                {
+                    loggedOff = true;
+                    log("Directory: this machine's public lobby is not listed: Play with strangers is off (the launcher's Multiplayer settings).");
+                }
+        }
+        else if (desired != null) lock (gate) loggedOff = false;
         lock (gate)
         {
             if (desired == null && published == null) return;
@@ -180,11 +197,14 @@ public sealed partial class DirectoryService : IAsyncDisposable
         var answer = new Frame("lobby.found").Add(op).Add(0);
         var kept = new List<DirectoryListing>();
         var refused = new Dictionary<string, int>(StringComparer.Ordinal);
+        var strangers = strangersAllowed?.Invoke() != false;
+        var friends = strangers ? [] : presence.Friends.Select(f => f.SteamId).ToHashSet();
         foreach (var listing in listings)
         {
             // (Steam's search finds this machine's own listing too: counted, so "1 listed, 0 shown" never hides why)
             if (listing.Host == localId) { Count(refused, "this machine's own lobby"); continue; }
             if (!Valid(listing, out var props, out var members, out var max, out var locked, out var malformed)) { Count(refused, "malformed (" + malformed + ")"); continue; }
+            if (!strangers && !friends.Contains(listing.Host)) { Count(refused, "a stranger's (Play with strangers is off)"); continue; }
             if (!filter.Matches(props, members, max, locked)) { Count(refused, "the game's filter"); continue; }
             if (sync != null && !sync.Joinable(listing, out var why)) { Count(refused, why); continue; }
             kept.Add(listing);
@@ -254,11 +274,14 @@ public sealed partial class DirectoryService : IAsyncDisposable
         return why.Length == 0;
     }
 
+    // A record is a few KB: a stranger's is not unpacked or parsed past RecordUnpackBytes.
+    public const int RecordUnpackBytes = 64 << 10;
+
     // A packed JSON object, or (null, true) when the listing has none; (null, false) when it is not one.
     static (JsonObject? Value, bool Ok) Json(IReadOnlyDictionary<string, string> data, string key)
     {
         if (!data.ContainsKey(key)) return (null, true);
-        try { return DirectoryData.Unpack(DirectoryData.Get(data, key)) is { } text && JsonNode.Parse(text) is JsonObject value ? (value, true) : (null, false); }
+        try { return DirectoryData.Unpack(DirectoryData.Get(data, key), RecordUnpackBytes) is { } text && JsonNode.Parse(text) is JsonObject value ? (value, true) : (null, false); }
         catch (JsonException) { return (null, false); }
     }
 

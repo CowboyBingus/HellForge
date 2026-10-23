@@ -411,6 +411,8 @@ static class Launch
             _ = GameLaunchOptions.Parse(typed); // refused as play refuses it: never a switch the session sets itself
             ProfileStore.SaveLaunchOptions(paths, typed);
         }
+        // Play with strangers is the mods settings' (hellforge-mods.json), which the backend reads, even during a session.
+        if (options.ContainsKey("--strangers")) ModSettings.SetPlayWithStrangers(install.Mods, Yes(options, "--strangers", false));
         return new
         {
             profile = ProfileStore.LoadSelected(paths),
@@ -420,6 +422,7 @@ static class Launch
             engineLog = ProfileStore.LoadEngineLog(paths),
             crashDump = ProfileStore.LoadCrashDump(paths),
             gameOptions = ProfileStore.LoadLaunchOptions(paths),
+            playWithStrangers = ModSettings.PlayWithStrangers(install.Mods),
             file = paths.SettingsFile
         };
     }

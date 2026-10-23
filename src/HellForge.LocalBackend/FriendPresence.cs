@@ -160,12 +160,18 @@ public sealed class FriendPresence
         get { lock (gate) return (localLobbyId, localBody?.DeepClone().AsObject(), localObjects.DeepClone().AsObject(), localVersion); }
     }
 
-    // This player's PlayFab profile objects (Object/SetObjects), shared with friends.
+    // This player's PlayFab profile objects (Object/SetObjects), shared with friends: bounded as a friend's are when they
+    // arrive (Multiplayer/RecordGuard.cs), so friends are never sent a set they would drop.
     public void SetLocalObjects(JsonObject objects)
     {
+        if (Multiplayer.RecordGuard.Objects(objects) is not { } copy)
+        {
+            Log?.Invoke("The game's profile objects are too large to share; friends keep the last ones.");
+            return;
+        }
         lock (gate)
         {
-            localObjects = objects.DeepClone().AsObject();
+            localObjects = copy;
             localVersion++;
         }
     }

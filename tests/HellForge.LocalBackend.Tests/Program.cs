@@ -37,13 +37,21 @@ try
                 Check(response.StatusCode == HttpStatusCode.Forbidden && (await response.Content.ReadAsStringAsync()).Contains("HELLFORGE_NOT_FROM_THIS_PC"),
                     $"A request with {header}: {value} was served.");
             }
-            foreach (var host in new[] { address.Authority, "localhost:" + address.Port })
+            foreach (var host in new[] { address.Authority, "localhost:" + address.Port, "[::1]:" + address.Port })
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, "/config/locator.json") { Headers = { Host = host } };
                 using var response = await client.SendAsync(request);
                 Check(response.StatusCode == HttpStatusCode.OK, $"A request to {host} was refused.");
             }
-            Console.WriteLine("PASS web pages: another Host, Origin, Referer and Sec-Fetch-Site refused; 127.0.0.1 and localhost served");
+            // A browser's mark with this PC's own Host (a page served from loopback itself) is refused too.
+            foreach (var (header, value) in new[] { ("Referer", "http://127.0.0.1/"), ("Sec-Fetch-Mode", "no-cors") })
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, "/config/locator.json") { Headers = { Host = address.Authority } };
+                request.Headers.TryAddWithoutValidation(header, value);
+                using var response = await client.SendAsync(request);
+                Check(response.StatusCode == HttpStatusCode.Forbidden, $"A request to {address.Authority} with {header} was served.");
+            }
+            Console.WriteLine("PASS web pages: another Host, Origin, Referer and Sec-Fetch-* refused; 127.0.0.1, localhost and [::1] served");
         }
         finally { await app.StopAsync(); }
     }
@@ -300,6 +308,22 @@ try
             listed[1]!["Objects"]!.AsObject().Count == 0, "Profile objects lack the escaped form the client reads.");
         Check(listed.All(profile => profile!["Lineage"]!["MasterPlayerAccountId"]!.GetValue<string>().Length <= 20 &&
             profile["Lineage"]!["TitlePlayerAccountId"]!.GetValue<string>().Length <= 20), "Lineage ids exceed the client's 21-byte buffers.");
+        // Bounded: what the game sets is shared with friends (FriendPresence.SetLocalObjects).
+        static string Objects(string id, IEnumerable<string> items) =>
+            "{\"Entity\":{\"Id\":\"" + id + "\",\"Type\":\"title_player_account\"},\"Objects\":[" + string.Join(",", items) + "]}";
+        using var many = JsonDocument.Parse(Objects("110000100000001", Enumerable.Range(0, 40).Select(i => $"{{\"DataObject\":{i},\"ObjectName\":\"o{i}\"}}")));
+        var manyResults = playFab.Handle("/playfab/Object/SetObjects", many.RootElement).Reply["data"]!["SetResults"]!.AsArray();
+        using var big = JsonDocument.Parse(Objects("110000100000001", [$"{{\"DataObject\":\"{new string('x', PlayFabService.MaxObjectBytes)}\",\"ObjectName\":\"testament_platform_user_name\"}}"]));
+        var bigResult = playFab.Handle("/playfab/Object/SetObjects", big.RootElement).Reply["data"]!["SetResults"]![0]!;
+        Check(manyResults.Count(r => r!["SetResult"]!.GetValue<string>() == "Updated") == PlayFabService.MaxObjectsPerEntity - 2 &&
+            manyResults.Count(r => r!["SetResult"]!.GetValue<string>() == "None") == 40 - (PlayFabService.MaxObjectsPerEntity - 2) &&
+            bigResult["SetResult"]!.GetValue<string>() == "None", "Profile objects are not bounded per entity and in size.");
+        var entities = Enumerable.Range(0, PlayFabService.MaxEntities + 1).Select(i =>
+        {
+            using var one = JsonDocument.Parse(Objects((0x110000100000100 + i).ToString("X"), ["{\"DataObject\":1,\"ObjectName\":\"a\"}"]));
+            return playFab.Handle("/playfab/Object/SetObjects", one.RootElement).Status;
+        }).ToList();
+        Check(entities.Count(s => s == 200) == PlayFabService.MaxEntities - 1 && entities.Last() == 400, "Profile objects are not bounded in entities: " + string.Join(",", entities));
         using var unknown = JsonDocument.Parse("{}");
         Check(playFab.Handle("/playfab/Client/Unknown", unknown.RootElement).Status == 400, "Unknown PlayFab call succeeded.");
     }
@@ -551,7 +575,7 @@ try
     await AssetShareTests.Run(root, Check);
     results.Add(new { mode = "asset-share", outcome = "passed" });
     Console.WriteLine("PASS asset share: every game loads the lobby's packages less its own, a joiner's new package reaches the others, malformed lists dropped, each player's projectile swaps reach every game");
-    RecordGuardTests.Run(Check);
+    RecordGuardTests.Run(root, Check);
     await DirectoryTests.Run(root, Check);
     results.Add(new { mode = "directory", outcome = "passed" });
     Console.WriteLine("PASS lobby directory: the map's filter, listing values, publishing rules, search and records, edited stats, blocked and unjoinable mods, hostile listings, the listing switch, strangers");

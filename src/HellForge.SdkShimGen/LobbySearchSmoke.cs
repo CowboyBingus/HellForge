@@ -10,6 +10,7 @@ namespace HellForge.SdkShimGen;
 // joins with the connection string it found. A filter for another planet finds nothing; a lobby the host leaves goes.
 // It runs twice: as friends, then with HELLFORGE_TEST_STRANGERS=1 on both backends, where the join passes the directory's
 // gate for strangers and the map's record for the host comes from the listing (names kept, other account ids 0).
+// Both backends have Play with strangers on (their --mods folder's hellforge-mods.json): off, nothing is listed.
 public static unsafe class LobbySearchSmoke
 {
     const string HostId = "110000100000001", FriendId = "110000100000002";
@@ -47,6 +48,14 @@ public static unsafe class LobbySearchSmoke
         return Report(problems, root);
     }
 
+    // A mods folder with Play with strangers on, as the launcher's switch writes it.
+    static string StrangersOn(string folder)
+    {
+        Directory.CreateDirectory(folder);
+        HellForge.Core.ModSettings.SetPlayWithStrangers(folder, true);
+        return folder;
+    }
+
     static List<string> Mode(string standIns, string backend, string root, bool strangers)
     {
         Directory.CreateDirectory(root);
@@ -61,9 +70,9 @@ public static unsafe class LobbySearchSmoke
         {
             Dictionary<string, string>? environment = strangers ? new() { ["HELLFORGE_TEST_STRANGERS"] = "1" } : null;
             processes.Add(LobbyLinkSmoke.StartBackend(backend, Path.Combine(root, "host"), pipes.Item1, $"udp:{HostId}:{ports.Item1}:{FriendId}={ports.Item2}",
-                ["--directory", directory], environment));
+                ["--directory", directory, "--mods", StrangersOn(Path.Combine(root, "host-mods"))], environment));
             processes.Add(LobbyLinkSmoke.StartBackend(backend, Path.Combine(root, "friend"), pipes.Item2, $"udp:{FriendId}:{ports.Item2}:{HostId}={ports.Item1}",
-                ["--directory", directory], environment));
+                ["--directory", directory, "--mods", StrangersOn(Path.Combine(root, "friend-mods"))], environment));
             foreach (var name in new[] { "host", "friend" })
             {
                 var ready = Path.Combine(root, name, "ready.json");

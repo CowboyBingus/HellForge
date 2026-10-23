@@ -172,14 +172,19 @@ public sealed class MultiplayerHost : IAsyncDisposable
     void StartDirectory(ILobbyDirectory? directory, string? modsFolder)
     {
         if (transport == null) return;
+        var setting = new StrangerSetting(modsFolder);
+        bool StrangersAllowed() => setting.Allowed;
         if (directory != null && presence != null)
             Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.SharesEdited == true,
-                listPublic: modsFolder != null ? () => ModSettings.Read(modsFolder).ListPublic : null);
-        bool StrangersAllowed() => modsFolder != null && ModSettings.PlayWithStrangers(modsFolder);
+                listPublic: modsFolder != null ? () => ModSettings.Read(modsFolder).ListPublic : null, strangersAllowed: StrangersAllowed);
         gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, StrangersAllowed, Log, Lobby.Welcome);
         if (transport is SteamPeerTransport steam)
             steam.AcceptStranger = peer => StrangersAllowed() && (Directory?.Listing == true || Related(peer) || Lobby.Welcome(peer));
-        Log(Directory != null ? "Directory: public lobbies are listed and searched." : "Directory: off (no lobby directory for this link).");
+        var link = transport;
+        Lobby.JoinRefusal = peer => link.IsFriend(peer) || StrangersAllowed() ? null :
+            ["This player is not a Steam friend, and Play with strangers is off.", "Turn it on in the launcher's Multiplayer settings to join public lobbies."];
+        Log((Directory != null ? "Directory: public lobbies are listed and searched" : "Directory: off (no lobby directory for this link)") +
+            (StrangersAllowed() ? "; Play with strangers is on." : "; Play with strangers is off: friends only."));
     }
 
     // A machine this one deals with: in a lobby hosted here, hosting one joined (or being joined) from here, a mod download,

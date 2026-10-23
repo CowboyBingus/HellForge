@@ -522,7 +522,7 @@ public static class LocalBackend
             // Paths are retained to identify the next missing local endpoint.
             var record = new JsonObject
             {
-                ["timeUtc"] = DateTimeOffset.UtcNow, ["method"] = request.Method, ["path"] = request.Path.Value, ["host"] = request.Host.Host,
+                ["timeUtc"] = DateTimeOffset.UtcNow, ["method"] = request.Method, ["path"] = request.Path.Value,
                 ["status"] = status, ["outcome"] = outcome, ["gmiState"] = gmiState, ["authorization"] = authorization, ["mode"] = mode.ToString(),
                 ["startupFixtures"] = startupFixtures
             }.ToJsonString();
