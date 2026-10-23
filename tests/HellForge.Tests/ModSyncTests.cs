@@ -307,6 +307,32 @@ static class ModSyncTests
             }
         });
 
+        test("Mod sync: the store keeps the 20 mods used most recently, never one the starting session plays, and old partial downloads go", () =>
+        {
+            var mods = Path.Combine(root, "sync-prune", "mods");
+            var store = SyncedStore.Root(mods);
+            var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            string Stored(int i)
+            {
+                var folder = Directory.CreateDirectory(Path.Combine(store, $"test.m{i:00}@{i:x16}")).FullName;
+                File.WriteAllText(Path.Combine(folder, SyncedStore.RecordName), new JsonObject { ["hash"] = new string('a', 64), ["id"] = $"test.m{i:00}",
+                    ["synced"] = start.AddHours(i).ToString("o", System.Globalization.CultureInfo.InvariantCulture) }.ToJsonString());
+                return folder;
+            }
+            var folders = Enumerable.Range(0, 23).Select(Stored).ToList();
+            var old = Directory.CreateDirectory(Path.Combine(store, ".partial", "test.old@0000000000000000")).FullName;
+            Directory.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddDays(-2));
+            var fresh = Directory.CreateDirectory(Path.Combine(store, ".partial", "test.fresh@0000000000000000")).FullName;
+            SyncedStore.Touch(folders[5]); // played just now: the newest
+            var removed = SyncedStore.Prune(mods, [folders[0]]);
+            check(removed.Order(StringComparer.Ordinal).SequenceEqual([".partial/test.old@0000000000000000", Path.GetFileName(folders[1]), Path.GetFileName(folders[2])]),
+                "Removed: " + string.Join(", ", removed));
+            check(Directory.Exists(folders[0]) && Directory.Exists(folders[5]) && !Directory.Exists(folders[1]) && !Directory.Exists(folders[2]) && Directory.Exists(fresh) &&
+                Directory.GetDirectories(store).Count(d => !Path.GetFileName(d).StartsWith('.')) == 21, "The 20 newest stay, and the one in use.");
+            check(SyncedStore.Prune(mods, [folders[0]]).Count == 0, "A second pass removes nothing.");
+            check(SyncedStore.Prune(Path.Combine(root, "sync-prune", "none"), []).Count == 0, "No store, nothing to do.");
+        });
+
         test("Mod sync: only safe paths a digest would count can be written by a download", () =>
         {
             foreach (var good in new[] { "hellforge-mod.json", "data/9ba626afa44a3aa3.patch_0", "src/a b/c.cpp", "images/icon.png" })

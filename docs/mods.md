@@ -133,8 +133,9 @@ offered again. Unblock it on the launcher's Mods page (MOD SYNC card).
 refused. Your backend serves them at most 1 MB/s per player and 2 MB/s in total, so your own game keeps its link. Turn
 it off with "Let players who join me download my gameplay mods" on the Mods page.
 
-**Downloaded mods.** The Mods page shows how many there are and how much space they take, with a button that deletes
-them all.
+**Downloaded mods.** HellForge keeps the 20 used most recently (played, or downloaded) and removes older ones when a
+session starts, never one that session plays. The Mods page shows how many there are and how much space they take,
+with a button that deletes them all.
 
 **What mod sync does not cover.**
 - Settings a mod keeps outside its own folder are neither compared nor downloaded, so they can differ between host and
