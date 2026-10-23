@@ -170,6 +170,12 @@ Mods page.
 **Downloaded mods.** The Mods page shows how many there are and how much space they take, with a button that deletes
 them all.
 
+**What mod sync does not cover.**
+- Settings a mod keeps outside its own folder are neither compared nor downloaded, so they can differ between host and
+  joiner.
+- A mod that writes into its own folder while it runs changes its own files, and with them its content hash. A synced
+  copy that does so no longer matches the host's, and the next sync falls back to your own mods.
+
 **Public lobbies on the Galactic Map.** The map lists other HellForge players' public lobbies, except the ones you could
 not join:
 - lobbies running a blocked mod;

@@ -167,7 +167,10 @@ before it is written, and anything that is not as expected is logged and left al
   the same edit, and the modlist code makes sure they do. In code, the same edit is `set_network_field_bits`
   (`machine-gun-10k-code`).
 - `componentWrites` sets u32 fields of an entity's record, only over the expected value. It predates named fields; new
-  mods use a [definition block](content.md#changing-existing-content) or a [stats mod](stats-mods.md).
+  mods use a [definition block](content.md#changing-existing-content) or a [stats mod](stats-mods.md). A mod with
+  `componentWrites`, like one with binary patch files, downloads through mod sync only when it is on the verified list
+  ([tools.md](tools.md#the-verified-list)); `networkFieldTypes` and the data specs HellForge checks whole download by
+  themselves.
 
 `examples/mods/machine-gun-10k` is the Maxigun mod made this way, with no code.
 
