@@ -116,13 +116,21 @@ static int ReadStrangers(const wchar_t* path)
     return ok ? BrokerStrangersIn(text, read) : 0;
 }
 
+/* HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY=1 (a two-PC test, docs/multiplayer.md step 7): Friends only with strangers on too. */
+static int AlwaysFriendsOnly(void)
+{
+    char value[8];
+    DWORD n = GetEnvironmentVariableA("HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY", value, sizeof value);
+    return n == 1 && value[0] == '1';
+}
+
 /* The game's lobbies it asked to be Public get Friends only or Public again, as the setting now says. */
 static void ApplyLobbyTypes(BrokerBridge* b)
 {
     typedef bool (*SetTypeFn)(void*, uint64_t, int);
     SetTypeFn setType = (SetTypeFn)(void*)GetProcAddress(b->valve, "SteamAPI_ISteamMatchmaking_SetLobbyType");
     void* matchmaking = Self(&b->api, "SteamAPI_SteamMatchmaking_v009");
-    int type = b->strangers ? LOBBY_PUBLIC : LOBBY_FRIENDS_ONLY;
+    int type = b->strangers && !AlwaysFriendsOnly() ? LOBBY_PUBLIC : LOBBY_FRIENDS_ONLY;
     for (int i = 0; i < b->lobbyCount; i++)
         if (b->lobbyAsked[i] == LOBBY_PUBLIC)
         {
@@ -165,7 +173,7 @@ static int64_t Adjust(const BrokerApi* api, uint32_t method, const char* argumen
     BrokerBridge* b = Of(api);
     if (method != BRIDGE_M_SteamMatchMaking009_CreateLobby || strcmp(argument, "eLobbyType") != 0) return value;
     CheckStrangers(b, 0);
-    int64_t given = value == LOBBY_PUBLIC && !b->strangers ? LOBBY_FRIENDS_ONLY : value;
+    int64_t given = value == LOBBY_PUBLIC && (!b->strangers || AlwaysFriendsOnly()) ? LOBBY_FRIENDS_ONLY : value;
     if (b->pendingCount == BROKER_PENDING_LOBBIES)
     {
         memmove(b->pendingAsked, b->pendingAsked + 1, sizeof b->pendingAsked[0] * (BROKER_PENDING_LOBBIES - 1));

@@ -251,12 +251,16 @@ int wmain(int argc, wchar_t** argv)
     EXPECT(fake->createLobbyType == 2, "Strangers on: a Public lobby stays Public");
     createLobby(matchmaking, 0, 4);
     EXPECT(fake->createLobbyType == 0, "a private lobby (0) is left as asked");
-    for (int i = 0; i < 400 && g_bridge.lobbyCount < 3; i++) Sleep(10);
+    SetEnvironmentVariableW(L"HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY", L"1");
+    createLobby(matchmaking, 2, 4);
+    EXPECT(fake->createLobbyType == 1, "HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY=1 (a two-PC test): Friends only with strangers on too");
+    SetEnvironmentVariableW(L"HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY", NULL);
+    for (int i = 0; i < 400 && g_bridge.lobbyCount < 4; i++) Sleep(10);
     Strangers("{\"playWithStrangers\":false}");
-    for (int i = 0; i < 400 && fake->setLobbyTypeCalls < 3; i++) Sleep(10);
+    for (int i = 0; i < 400 && fake->setLobbyTypeCalls < 4; i++) Sleep(10);
     Sleep(BROKER_STRANGERS_MS + 300);
-    EXPECT(g_bridge.lobbyCount == 3 && fake->setLobbyTypeCalls == 3 && fake->setLobbyType == 1,
-        "Strangers off again: the two lobbies asked to be Public are made Friends only, the private one is not touched");
+    EXPECT(g_bridge.lobbyCount == 4 && fake->setLobbyTypeCalls == 4 && fake->setLobbyType == 1,
+        "Strangers off again: the three lobbies asked to be Public are made Friends only, the private one is not touched");
 
     // the inline accessors' context, ISteamClient, and an interface the table does not know
     ContextInitFn contextInit = EXPORT(ContextInitFn, "SteamInternal_ContextInit");

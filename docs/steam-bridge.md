@@ -221,14 +221,15 @@ lobby's type is the one asked for at creation. The table marks `eLobbyType` for 
   can still join it, and it is in no search. Strangers could reach no one anyway, so nothing is lost.
 - **Play with strangers on:** the type is left as the game asked. A stranger joining through the directory may join
   the host's Steam lobby too (a joiner posts it as its `platform_lobby`), which Friends only would refuse. To settle
-  in the two-PC test: if a stranger's join still works with the host's lobby Friends only, it can be Friends only
-  always.
+  in the two-PC test (docs/multiplayer.md step 7, item 7, with `HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY=1` on the host,
+  which keeps it Friends only with strangers on): if a stranger's join still works, it can be Friends only always.
 - Every other type is left as asked, and every request is logged: `broker: CreateLobby asks lobby type 2; Steam gets
   1 (Play with strangers off)`.
 - The broker reads the setting as the backend does (`mods/hellforge-mods.json` `playWithStrangers`, top level only, off
   without the file). It looks at the file's time stamp every 2 s, in the broker's process. When the setting changes,
   each lobby the game asked to be Public gets `SetLobbyType`, Public or Friends only.
-- `bridge_test.c` checks the clamp, a nested key that is not the setting, both changes and a private lobby left alone.
+- `bridge_test.c` checks the clamp, a nested key that is not the setting, both changes, the test switch and a private
+  lobby left alone.
 
 Sessions that are not sandboxed load Valve's DLL in the game, so this does not apply to them; there the game's Public
 lobby stays listed.
@@ -430,7 +431,7 @@ Every number here is unmeasured in game until phase 4.
    printable check, buffers and their bounds, out values, a CSteamID argument and the hidden-pointer result, the
    snapshot, a refused method that never reaches Steam, a lobby the game did not make, callbacks (and an id the table
    does not list), a call result, `ContextInit`, `ISteamClient`, an unknown interface, the game's lobby type and Play
-   with strangers, a NULL game-server interface, and that Valve's DLL never loads (42 checks).
+   with strangers, a NULL game-server interface, and that Valve's DLL never loads (43 checks).
    Built 2026-10-23. Still to do: the next census, then the table's two review items (`SetRichPresence`, `CreateLobby`;
    `CreateLobby`'s type is now the broker's, above).
 4. **A low-integrity session:** the token and job, labelled folders, pipe labels, and the editor's saves through the

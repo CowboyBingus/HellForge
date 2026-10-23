@@ -1012,7 +1012,8 @@ Built 2026-10-22 and tested on one PC only.
   - The game's two searches per scan (about 30 ms apart) share one directory search; nothing older than 500 ms is
     reused.
 - **Listings' hosts** (since 2026-10-23). Steam does not say who made a lobby to someone who
-  is not in it, so a listing's host is its own `hf.host`: anyone can list under another player's id, with that
+  is not in it (`GetLobbyOwner` gave 0 for all 50 of the app's public lobbies in a search, 2026-10-23), so a listing's
+  host is its own `hf.host`: anyone can list under another player's id, with that
   player's lobby id too (the game's own Steam lobby shows it). What holds anyway:
   - a join goes to the host a listing names, over Steam's authenticated link, and that host refuses a lobby it does not
     hold (`LobbyNotFound`); whoever made the listing hears nothing;
@@ -1087,6 +1088,11 @@ Built 2026-10-22 and tested on one PC only.
 6. The host turns Play with strangers off: within a few seconds the listing goes ("not listed: Play with strangers is
    off"). The other player turns it off: the map shows no stranger's lobby, and a join already on screen is refused
    with "Couldn't join".
+7. The game's own Steam lobby ([steam-bridge.md](steam-bridge.md#the-games-own-steam-lobby)). Both PCs sandboxed
+   (`--sandbox`), Play with strangers on, and on the host `HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY=1`, which makes the
+   broker keep the game's Public Steam lobby Friends only anyway (`steam-broker.log`: "Steam gets 1"). The other
+   player joins from the map. If the join and the mission work, the broker can keep the lobby Friends only with
+   strangers on too.
 
 ### Step 8: privacy, invitations and kicks (2026-10-23)
 
