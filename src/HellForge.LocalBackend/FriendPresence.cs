@@ -65,7 +65,12 @@ public sealed class FriendPresence
     public void SetLocalLobby(JsonElement body)
     {
         if (body.ValueKind != JsonValueKind.Object) return;
-        var copy = JsonNode.Parse(body.GetRawText())!.AsObject();
+        // bounded before friends or the directory get it (Multiplayer/RecordGuard.cs)
+        if (Multiplayer.RecordGuard.Lobby(JsonNode.Parse(body.GetRawText())!.AsObject()) is not { } copy)
+        {
+            Log?.Invoke("The game's lobby upload is too large to share; friends and the directory keep the last one.");
+            return;
+        }
         bool first;
         lock (gate)
         {
@@ -106,7 +111,11 @@ public sealed class FriendPresence
     public void SetLocalLive(string lobbyId, JsonElement body)
     {
         if (body.ValueKind != JsonValueKind.Object) return;
-        var copy = JsonNode.Parse(body.GetRawText())!.AsObject();
+        if (Multiplayer.RecordGuard.Live(JsonNode.Parse(body.GetRawText())!.AsObject()) is not { } copy)
+        {
+            Log?.Invoke("The game's live lobby state is too large to share.");
+            return;
+        }
         bool first;
         lock (gate)
         {
