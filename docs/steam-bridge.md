@@ -85,7 +85,8 @@ as one of:
 - **allowed with checks** (sizes, ranges, the strings a key may carry);
 - **refused** (the broker answers as Steam would on failure).
 
-Interfaces the game never requests are refused whole: `ISteamHTTP`, `ISteamUGC`, `ISteamMatchmaking` and so on.
+Interfaces the game never requests are refused whole: `ISteamHTTP`, `ISteamUGC` and so on. `ISteamMatchmaking` is
+not: the game makes a Steam lobby of its own (census step 2).
 
 Methods that carry data to other people or out of the PC, which are refused unless the census shows the game needs them,
 and then checked:
@@ -101,13 +102,78 @@ The broker logs every refusal.
 
 The proxies and the broker's dispatch are **generated** by `HellForge.SdkShimGen`, as the PlayFab stand-ins are:
 - **Methods and parameter kinds** come from Valve's Steamworks SDK (`steam_api.json`), a version whose
-  `redistributable_bin/win64/steam_api64.dll` matches the game's pinned copy byte for byte. It is pinned by SHA-256 in
-  the gitignored `tools/`; nothing from it is committed or shipped.
+  `redistributable_bin/win64/steam_api64.dll` matches the game's pinned copy byte for byte: **SDK 1.55** (1.57's does
+  not match). It is pinned by SHA-256 in the gitignored `tools/steamworks-sdk-1.55`; nothing from it is committed or
+  shipped. Its 921 flat method names are exactly the pinned DLL's 921 `SteamAPI_ISteam*` exports, and its interface
+  versions are the ones the census saw.
 - **Vtable slots** come from the game's `steam_api64.dll` itself. Each flat export is a thunk through its interface's
-  vtable, and the generator reads the slot from its code. The table must match the SDK's declaration order, or
-  generation fails: MSVC orders overloads in reverse, which the binary settles.
+  vtable (`jmp [rax+d]`, `mov r10,[rax+d]; jmp r10`, or `mov r10,[rcx]; jmp [r10+d]`), and the generator reads the
+  slot from its code. Generation fails when a thunk does not decode or two methods share a slot. The slots are not the
+  declaration order everywhere: `ISteamUtils` has two private virtual methods the flat API leaves out (slots 7 and 14),
+  and MSVC orders overloads in reverse (`ISteamUserStats`' six overload pairs).
 - **The ABI is MSVC x64.** `this` is in `RCX`. A method returning a class type (`CSteamID`, for example) returns it
   through a hidden pointer in `RDX`. The proxies are C functions written with that pointer explicit.
+
+### Phase 3: what the generated bridge does (design, 2026-10-23)
+
+**Inputs:** the pinned `steam_api.json` and `steam_api64.dll`, and `native/steam-cloud/bridge-methods.json`, the
+reviewed table. A method that is not in the table is refused.
+
+**Each method's mode, in the table:**
+- **local:** the stand-in answers in the game, without the broker. `ReadP2PPacket` and `IsP2PPacketAvailable` answer
+  "no packet": HellForge's co-op does not use Steam P2P. `GetAppID` is 553850.
+- **snapshot:** read from shared memory the broker fills at init and refreshes on the callbacks that change it:
+  `BLoggedOn`, `GetSteamID`, `GetPersonaName`, the language, the IP country, the DLC list (refreshed on 1005
+  `DlcInstalled`), the beta name, Steam Deck.
+- **call:** one pipe round trip. The broker checks the arguments as the table says (string lengths, buffer sizes, enum
+  ranges, lobbies the game made this session) before it calls the flat export.
+- **refuse:** answers as Steam does on failure (false, 0, `k_uAPICallInvalid`, an empty string), logged once.
+
+**Kinds marshalled**, from the JSON's types (the table names what the JSON leaves out: which `void *` is an output buffer
+and which parameter is its size):
+- scalars and enums; `CSteamID` by value (64 bits), and returned through the hidden pointer in `RDX`;
+- input strings, bounded and NUL-terminated; output buffers with their size, at most what fits one message (larger is
+  refused);
+- out scalars and fixed-size out structs (sizes from the JSON's struct table);
+- a returned `const char *`: copied into a buffer of that method's in the stand-in, valid until its next call;
+- `SteamAPICall_t`: the broker records the call; when `SteamAPICallCompleted_t` arrives it takes `GetAPICallResult` and
+  pushes the result to the ring.
+
+**Callbacks:** the stand-in keeps the game's registrations itself (`RegisterCallback`, `RegisterCallResult` and their
+unregisters). `RunCallbacks` takes each ring entry and calls the registered `CCallbackBase` (`Run`, or the call-result
+`Run`, whose slots MSVC reverses), after checking the size against its `GetCallbackSizeBytes`. Only the callback ids in
+the table pass.
+
+**Objects that are not interfaces the game names** (`SteamInternal_CreateInterface`, the game-server interfaces): a
+null proxy whose every slot answers as refused, until a census shows them used.
+
+**The first table** is the census's named calls (step 2, below):
+
+| Interface | Method | Mode | Checks, and why |
+| --- | --- | --- | --- |
+| `SteamNetworking006` | `ReadP2PPacket`, `IsP2PPacketAvailable` | local | no packets; `SendP2PPacket` refused |
+| `STEAMAPPS_INTERFACE_VERSION008` | `GetDLCCount`, `BGetDLCDataByIndex`, `GetCurrentGameLanguage`, `GetCurrentBetaName` | snapshot | name buffers bounded |
+| `STEAMAPPS_INTERFACE_VERSION008` | `BIsSubscribedApp` | snapshot, else call | the DLC ids and the game from the snapshot |
+| `SteamUser021` | `BLoggedOn`, `GetSteamID` | snapshot | |
+| `SteamUser021` | `GetAuthSessionTicket` | call | ticket buffer at most 1024 bytes |
+| `SteamFriends017` | `GetPersonaName` | snapshot | |
+| `SteamFriends017` | `GetFriendCount`, `GetFriendByIndex`, `GetFriendRelationship`, `GetUserRestrictions` | call | read only |
+| `SteamFriends017` | `SetRichPresence` | call | **to review:** strings friends see; key at most 64, value at most 256 printable characters, every key logged |
+| `SteamUtils010` | `GetAppID` | local | 553850 |
+| `SteamUtils010` | `GetIPCountry`, `IsSteamRunningOnSteamDeck` | snapshot | |
+| `SteamUtils010` | `SetOverlayNotificationPosition` | local | the overlay is in the broker: nothing to do |
+| `SteamUtils010` | `InitFilterText`, `FilterText` | call | input at most 4096 bytes, output buffer bounded |
+| `SteamMatchMaking009` | `CreateLobby` | call | **to review:** strangers can read a public lobby's data; at most 4 members |
+| `SteamMatchMaking009` | `SetLobbyData`, `SetLobbyJoinable`, `LeaveLobby`, `GetNumLobbyMembers`, `GetLobbyMemberByIndex`, `GetLobbyOwner` | call | only a lobby the game made this session; key at most 255, value at most 8192 bytes |
+| `STEAMUSERSTATS_INTERFACE_VERSION012` | `RequestCurrentStats`, `GetAchievement` | call | name at most 128 |
+| `SteamInput006` | `GetControllerForGamepadIndex` | call | per-frame use unknown until a controller census |
+
+Callbacks: the 16 ids the census saw.
+
+**Cost per frame, from the census's rates (unmeasured in game):** `ReadP2PPacket` (1.00 per frame) is a return; the DLC
+answers (0.85) and `BLoggedOn` (0.024) are memory reads. None makes a system call, so an idle frame stays at the ring
+read. The lobby queries (about 0.02 per frame each) and everything else are a round trip each, two system calls in the
+game; the census saw them on events only.
 
 ### The rest of a low-integrity session
 
@@ -204,8 +270,7 @@ Run it while someone plays: the menus, the social tab, a mission, a controller.
 
 ### Step 2 results (2026-10-23, run `e0b8d508`, PC A, 214 s: the ship and the start of a mission)
 
-Slot names below follow each interface's declaration order in the Steamworks headers as remembered; they are likely,
-not checked, until phase 3 reads the SDK.
+Slot names below are read from the pinned DLL's thunks and SDK 1.55's `steam_api.json` (phase 3's slot reader).
 
 **Flat exports: 11 called**, besides the stand-in's own 4. Even with the hook on `GetProcAddressForCaller`, the game
 looked none of them up by name, so its protection does resolve them itself.
@@ -220,20 +285,28 @@ lobby of its own (call result 513, likely `LobbyCreated_t`). `ISteamMatchmaking`
 
 **Calls per `RunCallbacks`** (the methods called more than a few times):
 
-| Slot | Calls | Per `RunCallbacks` | Likely method |
+| Slot | Calls | Per `RunCallbacks` | Method (checked against SDK 1.55) |
 | --- | --- | --- | --- |
-| `SteamNetworking006` #2 | 82,438 | 1.00 | `ReadP2PPacket` or `IsP2PPacketAvailable` (P2P polling) |
+| `SteamNetworking006` #2 | 82,438 | 1.00 | `ReadP2PPacket` (P2P polling) |
 | `STEAMAPPS_INTERFACE_VERSION008` #11 | 46,894 | 0.57 | `BGetDLCDataByIndex` |
 | `STEAMAPPS_INTERFACE_VERSION008` #10 | 11,718 | 0.14 | `GetDLCCount` |
 | `STEAMAPPS_INTERFACE_VERSION008` #6 | 11,716 | 0.14 | `BIsSubscribedApp` |
 | `SteamUser021` #1 | 2,013 | 0.024 | `BLoggedOn`, beside each `SteamAPI_IsSteamRunning` |
-| `SteamMatchMaking009` #17, #18 | 1,534 each | 0.019 | lobby data or members |
-| `SteamFriends017` #4 | 228 | | |
+| `SteamMatchMaking009` #17, #18 | 1,534 each | 0.019 | `GetNumLobbyMembers`, `GetLobbyMemberByIndex` |
+| `SteamFriends017` #4 | 228 | | `GetFriendByIndex` |
 
-Everything else was called 41 times or fewer: `SteamFriends017` #0, #3, #5, #42, #43; `SteamUtils010` #4, #9, #10,
-#31, #32, #34; `STEAMAPPS_INTERFACE_VERSION008` #4, #15; `STEAMUSERSTATS_INTERFACE_VERSION012` #0, #6;
-`SteamUser021` #2, #13; `SteamMatchMaking009` #13, #15, #20, #34, #35. `SteamInput006` #38 was called 4 times at
-start and never again.
+Everything else was called 41 times or fewer:
+- `SteamFriends017`: #0 `GetPersonaName`, #3 `GetFriendCount`, #5 `GetFriendRelationship`, #42 `GetUserRestrictions`,
+  #43 `SetRichPresence`;
+- `SteamUtils010`: #4 `GetIPCountry`, #9 `GetAppID`, #10 `SetOverlayNotificationPosition`, #31 `InitFilterText`,
+  #32 `FilterText`, #34 `IsSteamRunningOnSteamDeck`;
+- `STEAMAPPS_INTERFACE_VERSION008`: #4 `GetCurrentGameLanguage`, #15 `GetCurrentBetaName`;
+- `STEAMUSERSTATS_INTERFACE_VERSION012`: #0 `RequestCurrentStats`, #6 `GetAchievement`;
+- `SteamUser021`: #2 `GetSteamID`, #13 `GetAuthSessionTicket`;
+- `SteamMatchMaking009`: #13 `CreateLobby`, #15 `LeaveLobby`, #20 `SetLobbyData`, #34 `SetLobbyJoinable`,
+  #35 `GetLobbyOwner`.
+
+`SteamInput006` #38 `GetControllerForGamepadIndex` was called 4 times at start and never again.
 
 **Callbacks: 16 ids, with their sizes** (bytes): 143 (20), 152 (24), 163 (8), 331 (1), 333 (16), 337 (264), 505 (24),
 714 (8), 1005 (4), 1101 (24), 1102 (16), 1103 (152), 1202 (8), 1203 (9), 1221 (712), and the call result 513 (16).
