@@ -4075,7 +4075,9 @@ void Init(const Host& host)
     ui::SetFontFolder(host.modFolder);
     sounds::SetEnabled(g_soundsOn);
     std::wstring folder = hfjson::Wide(host.modFolder);
+    ULONGLONG loading = GetTickCount64();
     g_catalogOk = catalog::Load(folder + L"\\editor-catalog.json", &g_catalog, &g_catalogError);
+    loading = GetTickCount64() - loading;
     g_layout = (uint32_t)strtoul(g_catalog.build.c_str(), nullptr, 10);
     if (g_catalogOk && g_catalog.build != host.api->build_id())
     { g_catalogOk = false; g_catalogError = "editor-catalog.json is for game build " + g_catalog.build + ", the game runs " + host.api->build_id(); }
@@ -4095,7 +4097,7 @@ void Init(const Host& host)
     for (const Row* row : g_choiceRows) /* the arm swaps, pods and row copies kept from last time (a row several pages show is sent for each: the same value) */
         if (IsMount(row) && g_mounts.count(MountKey(row))) SendMount(row);
     host.api->log(host.mod, "editor: %s; %d game icons%s", g_catalogOk ? (std::to_string(g_catalog.objects.size()) + " objects, " +
-        std::to_string(g_catalog.rows.size()) + " fields").c_str() : g_catalogError.c_str(), iconCount,
+        std::to_string(g_catalog.rows.size()) + " fields (read in " + std::to_string(loading) + " ms)").c_str() : g_catalogError.c_str(), iconCount,
         HasGetLive() ? "" : "; this HellForge has no get_live (values are not shown)");
 }
 

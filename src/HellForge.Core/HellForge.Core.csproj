@@ -12,6 +12,8 @@
     <EmbeddedResource Include="../../mappings/armor-perks.json" LogicalName="HellForge.Core.mappings.armor-perks.json" />
     <EmbeddedResource Include="../../mappings/hd2r-keys.json" LogicalName="HellForge.Core.mappings.hd2r-keys.json" />
     <EmbeddedResource Include="../../mappings/vehicles.json" LogicalName="HellForge.Core.mappings.vehicles.json" />
+    <EmbeddedResource Include="../../mappings/entities.json" LogicalName="HellForge.Core.mappings.entities.json" />
+    <EmbeddedResource Include="../../mappings/director.json" LogicalName="HellForge.Core.mappings.director.json" />
     <EmbeddedResource Include="../../mappings/attachments.json" LogicalName="HellForge.Core.mappings.attachments.json" />
     <EmbeddedResource Include="../../mappings/melee.json" LogicalName="HellForge.Core.mappings.melee.json" />
     <EmbeddedResource Include="../../mappings/fired-entities.json" LogicalName="HellForge.Core.mappings.fired-entities.json" />

@@ -12,7 +12,7 @@ Nothing here has a date, and stability comes first.
 | [Mod SDK](sdk-roadmap.md) | Done | SDK 14; some events and registries left |
 | Build patches for newer Steam builds | Done | Each new Steam build needs a new patch |
 | Open source | Done | GPL-3 |
-| In-game editor | Mostly done | Player's kit mostly ported; enemies, structures and missions left |
+| In-game editor | Mostly done | Player's kit mostly ported; enemies and structures built; missions left |
 | Difficulty 11 (Hell Forge) | Mostly done | Needs its own enemy mix |
 | Linux | Experimental | Runs under Proton; co-op and Steam Deck untested |
 | Public lobbies, privacy, invites, kicking | Testing | Built for 0.3.0; needs two-PC tests |
@@ -148,9 +148,11 @@ moves planets from one enemy to another but leaves their effects as they were. T
 
 ### Difficulty 11 and custom missions
 
-Difficulty 11 ("Hell Forge") is done apart from its enemy mix. For now every enemy's chance of spawning at level 11 is
-a copy of its chance at level 10, so the mix is Super Helldive's with bigger budgets. It needs a way to set its own,
-which is an SDK registry for its enemy weights.
+Difficulty 11 ("Hell Forge") is done apart from its enemy mix. Every enemy's chance of spawning at level 11 starts as
+a copy of its chance at level 10, so the mix is Super Helldive's with bigger budgets. On the `editor-content` branch the
+in-game editor's Spawn Rosters can now set each enemy's weight at level 11, and Spawn Compositions which squads are drawn
+up to it. Next: a default mix shipped with the mod, and an SDK registry for it. Adding new enemies or new squad types to
+the mix still needs research.
 
 Custom missions would come in steps. First, a Missions category in the editor for timers and per-difficulty settings.
 Second, remixed missions through a mission registry like the stratagem one, once we've studied the mission definition
@@ -195,10 +197,13 @@ The in-game editor should eventually edit every field the HD2R Editor does
 1. Weapons and the rest of the player's kit. Weapons, stratagems, backpacks, vehicles, boosters, the Helldiver and
    armor are mostly ported. Still to do: beam conversion, the HD2R rows that have no HellForge field yet (a coverage
    count will show which), and checking in game when each field takes effect.
-2. Enemies: their stats, damage zones and attacks, spawn rosters and compositions. More than half of the HD2R Editor's
-   roughly 20,700 fields are in this step.
-3. Structures, with their demolition and destruction settings, and mission settings (the other Spawning & Destruction
-   pages).
+2. Enemies: their stats, damage zones and attacks, spawn rosters and compositions. Being built on the `editor-content`
+   branch: the in-game editor now has the HD2R Editor's Enemies pages (Terminids, Automatons, Illuminate, Structures,
+   Other Entities) with health, armor, damage zones, attacks, the bug hives' director multipliers, unit size,
+   spawners, drop-ship transports, stratagem jammers, bug holes and gore for about 1,170 entities: about 38,800 fields,
+   every one the HD2R Editor lets you edit there. Spawn rosters and compositions are built too. The Helldiver's main
+   health and size and the Solo Silo's health come with it.
+3. Demolition templates, destruction models and mission settings (the other Spawning & Destruction pages).
 
 For custom models, the OBJ mesh importer works in game (the cube gun proved it). Copied units still need working
 physics and AI (the blue sentry has neither yet), along with animation events and PNG textures.

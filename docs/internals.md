@@ -711,6 +711,51 @@ its text is in the game's own FS Sinclair, both extracted from the installation'
 (`game-icons.bin`, `fs-sinclair*.ttf`; never published). Its buttons play the game's menu sounds through the game's own
 UI sound path (checked byte for byte; silent on another build).
 
+The ENEMIES group is the HD2R Editor's Enemies pages: Terminids, Automatons, Illuminate, Structures and Other Entities.
+These are the 1,170-odd entities HD2Runtime's enemy catalogue lists, from `mappings/entities.json`
+(`scripts/ExportEntities.py`, which reads HD2Runtime's `domains/enemy_authoring.lua` and `enemy_controls.lua` as
+literals). Each entity's page has Health & Armor, a group per damage zone, a group per attack, and its other sections
+(Spawning, Director Multipliers, Shield, Size & Geometry...), with only the fields whose exact bytes the engine maps
+(`mappings/components.json`): about 38,800 rows, every row the HD2R Editor lets you edit there but one (its authored
+value lies outside its own write range). `scripts/ImportSchemaMappings.py <HD2Runtime>` names the fields of components
+the mappings have (each damage zone's, the HiveMind's director multipliers), and adds the components the entity profile
+locates (`src/HellForge.Core/entity-profile.json`: Unit, AiSpawner, SquadTransportFormation, SquadTransport, Gore,
+StratagemBlocker, Bughole); `HellForge.Cli sdk-headers` then regenerates the engine's tables and `ExportEntities.py`
+offers them. The profile's entries for those come from the entity file's own frames (`scripts/ExportEntityProfile.py`
+EXTRA: each frame found by the component index the u32 before it holds, as the game's loader 0xFDB440 reads it; the
+method reproduces every other entry). With a third path, the exporter writes the rest by entity and reason: rows the
+HD2R Editor only shows. Rows are keyed as the HD2R Editor's are
+(`en|<entity>|<path>:<zone or attack>:<field>`), so its presets import and export them, and a stats file saves them under
+`"enemies"`. The Helldiver's own entity adds its main fields (health, armor, constitution, regeneration) to the Helldiver
+page, and the MS-11 Solo Silo's rack and missile are parts of its stratagem's page (`StatsSchema.EntityParts`), each
+leaving out bytes the page shows already. Only an enemy class's main health and zone armor are proven in game
+(HD2Runtime's evidence); the rest are marked unverified.
+
+The SPAWNING group is the HD2R Editor's Mission Difficulty, Spawn Rosters and Spawn Compositions, from
+`mappings/director.json` (`scripts/ExportDirector.py`, from HD2Runtime's `domains/enemy_director.lua`), written by
+`native/mod-loader/director.c`:
+
+- **Mission Difficulty:** a level's `DifficultySettings` row (1 to 10, and 11 with a mod that adds it). It holds the HD2R
+  Editor's three budgets, plus the objectives and per-faction patrol interval and cap. Without level 11 the game's own
+  table is written: the copy HD2Runtime edits, and every other of its 19 copies that held the same bytes.
+- **Spawn Rosters:** an enemy's spawn weight at each difficulty (`EnemyRoster`, a row by `(roster << 16) | row` in
+  `difficulty.c`'s roster order). The weights sit at +0x30, or at +0x2C once level 11 gave every row an 11th, which is
+  then `EnemyRosterLevel11`.
+- **Spawn Compositions:** a squad (`EnemyComposition`, `(roster << 16) | (family - 1 << 12) | row`). It holds its groups'
+  counts and emission times, its weight, cost multiplier and post-schedule duration, and the tech levels and player
+  counts it is drawn at.
+- **Demolition Templates:** the force a destruction stage requires (`DemolitionTemplate`, a row by its index, 1 to 9;
+  "none" and "Count" are not offered), 1 to 255, shared by every stage that names it. The templates are 16-byte rows at
+  `[[game.dll + 0x346D928] + 0x30]` (HD2Runtime's destructionGlobal); all eleven must hold their index and the bytes
+  HD2Runtime read before anything is written, and edits wait until the destruction system exists. Untested in game.
+
+Every write, live or from Local Stats at boot (`StatsDirectorReady`), is checked against the row as it is: a squad's
+groups total at most 32 (the AI squad queue's capacity; a 33rd entry crashed the game in HD2Runtime's research), a group
+with no roster key takes no count, the lowest tech level and player count may not exceed the highest, tech levels go to
+11 only with level 11, and weights are finite. The director reads these tables when a mission is set up, so a change
+applies from the next mission. Only the host's tables decide what spawns. None of it is proven in game yet (HD2Runtime's
+director research is offline). Demolition templates and destruction models are not here yet.
+
 Every change and reset is staged until APPLY (F9), so DISCARD takes any of them back. Once applied, a change goes
 through `set_live` and into Local Stats, so it comes back at every boot.
 

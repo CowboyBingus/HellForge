@@ -642,6 +642,7 @@ static int ApiSubscribe(HfMod* mod, uint32_t kind, HfListener listener, void* us
 #include "projectiles.c"
 #include "stratagems.c"
 #include "difficulty.c"
+#include "director.c" /* after difficulty.c: its rosters and the difficulty copies */
 #include "behaviours.c"
 #include "packages.c"
 #include "loadout_preview.c"
@@ -810,7 +811,7 @@ static DWORD WINAPI Watch(void* parameter)
         if ((g_statCount || g_statsProbeCount) && !(g_statsTablesDone[0] && g_statsTablesDone[1] && g_statsTablesDone[2]) && g_fired[HF_EVENT_GAME_LOADED])
             StatsTablesReady(ApiModuleBase("game.dll", NULL));
         if (g_fired[HF_EVENT_PROJECTILES_READY]) StatsExtraReady();
-        if (g_fired[HF_EVENT_GAME_LOADED]) { StatsBoostersReady(); StatsMeleeReady(); }
+        if (g_fired[HF_EVENT_GAME_LOADED]) { StatsBoostersReady(); StatsMeleeReady(); StatsDirectorReady(); }
         if (g_fired[HF_EVENT_GAME_LOADED] && g_tickState == 0) TickInstall();
         if (g_fired[HF_EVENT_GAME_LOADED]) InstallLoadoutPreview();
         if (g_fired[HF_EVENT_GAME_LOADED]) EventsInstall();

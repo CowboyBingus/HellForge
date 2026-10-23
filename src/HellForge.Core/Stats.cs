@@ -22,6 +22,8 @@ public sealed record StatsField(string Name, string Kind, string Component, stri
         ? Options.EnumerateArray().Select(o => (o[0].GetDouble(), o[1].GetString() ?? "")) : [];
     // What the editor says about it under the page (when it applies, what a sentinel value means), or null.
     public string? Note { get; init; }
+    // The HD2R Editor's preset key for it, where the mapping names one itself (the Spawning pages: "ed|composition/...").
+    [System.Text.Json.Serialization.JsonIgnore] public string? Hd2rKey { get; init; }
     // The bytes as HD2R Editor's preset keys name them (mappings/hd2r-keys.json, scripts/ExportHd2rKeys.py).
     public string Hd2rAddress => Kind switch
     {
@@ -41,6 +43,8 @@ public sealed record StatsTarget(Dictionary<string, StatsField> Fields, Dictiona
     public string? Host { get; init; }
     public string? Mount { get; init; }
     public string? Family { get; init; }
+    // The name the editor shows, where the target's key is not one (an entity's: "Bile Titan - Strider").
+    [System.Text.Json.Serialization.JsonIgnore] public string? Label { get; init; }
     // Fields it no longer offers because they never reached the game (a fired entity's unused projectile row): a stats
     // file naming one still loads, and that edit is skipped.
     [System.Text.Json.Serialization.JsonIgnore] public Dictionary<string, string> Retired { get; } = new(StringComparer.Ordinal);
@@ -67,8 +71,90 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
         Parity(schema);
         References(schema);
         FiredEntities(schema);
+        Entities(schema);
+        Director(schema);
         return schema;
     });
+
+    // The HD2R Editor's Spawning pages (mappings/director.json, scripts/ExportDirector.py; native/mod-loader/director.c):
+    // "difficulty" (a level's DifficultySettings row, 1 to 11), "rosters" (an enemy's spawn weights by difficulty) and
+    // "compositions" (a squad: its groups' counts, weight, cost and the difficulties and player counts it is drawn at) and
+    // "demolition" (a demolition template: the force a destruction stage naming it requires).
+    // Family is a faction; Class a composition's role (patrol, map, reinforcement).
+    static void Director(StatsSchema schema)
+    {
+        using var stream = typeof(StatsSchema).Assembly.GetManifestResourceStream("HellForge.Core.mappings.director.json")!;
+        using var json = JsonDocument.Parse(stream);
+        foreach (var category in new[] { "difficulty", "rosters", "compositions", "demolition" })
+        {
+            var targets = new Dictionary<string, StatsTarget>(StringComparer.Ordinal);
+            foreach (var t in json.RootElement.GetProperty(category).EnumerateObject())
+            {
+                var fields = new Dictionary<string, StatsField>(StringComparer.Ordinal);
+                var order = 0;
+                foreach (var f in t.Value.GetProperty("fields").EnumerateArray())
+                    fields[f.GetProperty("key").GetString()!] = new StatsField(f.GetProperty("label").GetString()!, f.GetProperty("kind").GetString()!, "",
+                        "0x0", f.GetProperty("record").GetInt64(), f.GetProperty("offset").GetInt32(), f.GetProperty("storage").GetString()!,
+                        Number(f, "min"), Number(f, "max"), Text(f, "unit"), true, true)
+                    { Order = ++order, Section = Text(f, "section"), Note = Text(f, "note"), Hd2rKey = Text(f, "hd2r") };
+                targets[t.Name] = new StatsTarget(fields, new Dictionary<string, string>(StringComparer.Ordinal), new Dictionary<string, string>(StringComparer.Ordinal))
+                {
+                    Label = Text(t.Value, "label"), Family = Text(t.Value, "faction"), Class = Text(t.Value, "role"),
+                };
+            }
+            schema.Targets[category] = targets;
+        }
+    }
+
+    // The entities another page shows instead (StatsCatalog: the MS-11 Solo Silo's rack and missile), and the one whose
+    // main fields join the Helldiver page; the enemies category lists the rest.
+    public static readonly IReadOnlyDictionary<string, (string Item, string Title)> EntityParts = new Dictionary<string, (string, string)>(StringComparer.Ordinal)
+    {
+        ["weapon_rack_mini_missile_silo"] = ("MS-11 Solo Silo", "Rack"),
+        ["mini_missile_silo"] = ("MS-11 Solo Silo", "Missile"),
+    };
+    const string HelldiverEntity = "avatar_helldiver";
+
+    // The HD2R Editor's Enemies pages (mappings/entities.json, scripts/ExportEntities.py): every enemy, structure and other
+    // entity with the fields HellForge's engine writes, keyed by the HD2R Editor's row ids ("entity::entity.health",
+    // "damage_zone:zone_3:zone.armor", "attack:mapped_4:damage.stagger"); Family is its page (terminids, automatons,
+    // illuminate, structures, other). The Helldiver's own entity adds its main fields (main health) to the Helldiver page.
+    static void Entities(StatsSchema schema)
+    {
+        using var stream = typeof(StatsSchema).Assembly.GetManifestResourceStream("HellForge.Core.mappings.entities.json")!;
+        using var json = JsonDocument.Parse(stream);
+        var enemies = new Dictionary<string, StatsTarget>(StringComparer.Ordinal);
+        foreach (var e in json.RootElement.GetProperty("entities").EnumerateObject())
+        {
+            var resource = e.Value.GetProperty("resource").GetString()!;
+            var fields = new Dictionary<string, StatsField>(StringComparer.Ordinal);
+            var order = 0;
+            foreach (var f in e.Value.GetProperty("fields").EnumerateArray())
+            {
+                var kind = f.GetProperty("kind").GetString()!;
+                fields[f.GetProperty("key").GetString()!] = new StatsField(f.GetProperty("label").GetString()!, kind, Text(f, "component") ?? "",
+                    kind == "component" ? resource : "0x0", f.GetProperty("record").GetInt64(), f.GetProperty("offset").GetInt32(),
+                    f.GetProperty("storage").GetString()!, Number(f, "min"), Number(f, "max"), Text(f, "unit"), f.GetProperty("shared").GetBoolean(),
+                    !f.GetProperty("verified").GetBoolean())
+                { Order = ++order, Section = Text(f, "section"), Note = Text(f, "note") };
+            }
+            if (e.Name == HelldiverEntity && schema.Targets.TryGetValue("helldiver", out var helldivers) && helldivers.TryGetValue("Helldiver", out var helldiver))
+            {
+                var taken = helldiver.Fields.Values.Select(f => f.Hd2rAddress).ToHashSet(StringComparer.Ordinal);
+                var next = helldiver.Fields.Values.Select(f => f.Order).DefaultIfEmpty(0).Max();
+                foreach (var (key, field) in fields.Where(f => f.Key.StartsWith("entity::", StringComparison.Ordinal)))
+                    if (taken.Add(field.Hd2rAddress)) helldiver.Fields[key["entity::".Length..]] = field with { Section = null, Order = ++next };
+                continue;
+            }
+            enemies[e.Name] = new StatsTarget(fields, new Dictionary<string, string>(StringComparer.Ordinal), new Dictionary<string, string>(StringComparer.Ordinal))
+            {
+                Family = e.Value.GetProperty("category").GetString(),
+                Label = e.Value.GetProperty("label").GetString(),
+                Class = e.Value.GetProperty("kind").GetString(),
+            };
+        }
+        schema.Targets["enemies"] = enemies;
+    }
 
     // The references (HD2R Editor's payload swaps; mappings/references.json), which the exported schema lists as blocked,
     // placed by each target's own records: a weapon's projectile (ProjectileWeapon +0, or for six weapons their default

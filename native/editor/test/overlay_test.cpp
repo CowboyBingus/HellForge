@@ -631,11 +631,12 @@ int main(int argc, char** argv)
                 FILE* in = fopen(stats, "rb");
                 if (in) { fread(text, 1, sizeof text - 1, in); fclose(in); }
                 saved = strstr(text, "\"stratagem.max_uses\": -1") && strstr(text, "\"terminal.primary.impact.explosion\": 0") &&
-                    strstr(text, "\"damage.status_1_type\": 5") && strstr(text, "\"damage.durable_damage\": 41");
+                    strstr(text, "\"damage.status_1_type\": 5") && strstr(text, "\"damage.durable_damage\": 41") &&
+                    strstr(text, "\"entity::entity.health\": 7000"); /* an enemy's row (the HD2R Editor's Enemies pages) */
                 if (!saved) Sleep(50);
             }
-            printf("  preset: set_live %d time(s); Local Stats %s\n", g_lives - lives, saved ? "holds the four values" : "does not hold them");
-            if (g_lives - lives != 4 || !saved) { puts("FAIL the preset's four values were not staged and applied"); failures++; }
+            printf("  preset: set_live %d time(s); Local Stats %s\n", g_lives - lives, saved ? "holds the five values" : "does not hold them");
+            if (g_lives - lives != 5 || !saved) { puts("FAIL the preset's five values (an enemy's among them) were not staged and applied"); failures++; }
             Key(window, VK_F6); frames(4); /* LOGS */
             Key(window, VK_F6); frames(4); /* SETTINGS */
             Key(window, VK_F6); frames(4); /* BROWSE */

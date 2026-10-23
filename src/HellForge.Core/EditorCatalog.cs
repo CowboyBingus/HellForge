@@ -28,6 +28,10 @@ public static class EditorCatalog
         ("vehicles", "Vehicles", "STRATAGEMS", "support"), ("mission", "Mission", "STRATAGEMS", "support"),
         ("boosters", "Boosters", "EQUIPMENT", null),
         ("helldiver", "Helldiver", "HELLDIVER", null), ("perks", "Armor perks", "HELLDIVER", null),
+        ("terminids", "Terminids", "ENEMIES", null), ("automatons", "Automatons", "ENEMIES", null), ("illuminate", "Illuminate", "ENEMIES", null),
+        ("structures", "Structures", "ENEMIES", null), ("entities", "Other Entities", "ENEMIES", null),
+        ("difficulty", "Mission Difficulty", "SPAWNING", null), ("rosters", "Spawn Rosters", "SPAWNING", null),
+        ("compositions", "Spawn Compositions", "SPAWNING", null), ("demolition", "Demolition Templates", "SPAWNING", null),
         ("statuses", "Status Effects", "EFFECTS", null),
         ("explosions", "Explosions", "ADVANCED", null), ("projectiles", "Projectiles", "ADVANCED", null), ("damage", "Damage Types", "ADVANCED", null),
     ];
@@ -153,14 +157,29 @@ public static class EditorCatalog
     // The HD2R keys on a row's bytes, the row's own first (same item, same field id), and how their value is stored.
     static void Hd2rKeys(JsonObject json, StatsRow row, StatsItem item)
     {
-        if (!Hd2rByAddress.Value.TryGetValue(row.Field.Hd2rAddress, out var keys)) return;
+        // An entity's rows are the HD2R Editor's Enemies rows already ('en|<entity>|<row id>', mappings/entities.json); the
+        // Helldiver's main fields are its avatar entity's.
+        string? entity = row.Part.Category == "enemies" ? $"en|{row.Part.Target}|{row.Key}" : row.Field.Hd2rKey;
+        if (!Hd2rByAddress.Value.TryGetValue(row.Field.Hd2rAddress, out var keys))
+        {
+            if (entity == null && row.Part.Category == "helldiver" && row.Key.StartsWith("entity.", StringComparison.Ordinal))
+                entity = "en|avatar_helldiver|entity::" + row.Key;
+            if (entity == null) return;
+            json["hd2r"] = new JsonArray(entity);
+            json["hd2rKind"] = "number";
+            return;
+        }
         keys = keys.Where(k => k.Kind != "ap").ToList(); /* the displayed armor penetration: its own row (ApLabelRow) */
-        if (keys.Count == 0) return;
+        if (keys.Count == 0)
+        {
+            if (entity != null) (json["hd2r"], json["hd2rKind"]) = (new JsonArray(entity), "number");
+            return;
+        }
         var names = new HashSet<string>(item.Parts.Select(p => p.Target).Append(item.Name), StringComparer.Ordinal);
         var ordered = keys.OrderBy(k => names.Contains(k.Object) ? 0 : 1).ThenBy(k => k.Field == row.Key ? 0 : 1).ThenBy(k => k.Key, StringComparer.Ordinal).ToList();
         // bytes many items share (a melee hit volume, ~100 weapons): each item's row carries its own keys only
         if (ordered.Count > 8 && ordered.Any(k => names.Contains(k.Object))) ordered = ordered.Where(k => names.Contains(k.Object)).ToList();
-        json["hd2r"] = new JsonArray(ordered.Select(k => (JsonNode)k.Key).ToArray());
+        json["hd2r"] = new JsonArray((entity != null ? [entity] : Array.Empty<string>()).Concat(ordered.Select(k => k.Key)).Select(k => (JsonNode)k).ToArray());
         json["hd2rKind"] = ordered[0].Kind;
         // keys whose values are not the field's number (a flag, a name, a list): how each reads
         var structured = ordered.Where(k => k.Slot >= 0).ToList();
