@@ -90,7 +90,8 @@ purple question mark. A host can still have everyone play with their changes, wi
 player's projectile swaps fire as theirs on every screen, and everyone else's guns keep their own: hand-held weapons,
 the ones whose round comes from their ammunition or rounds feed (the Liberator, the shotguns), underbarrels (the
 One-Two's grenade) and programmable rounds ([multiplayer.md, shots in co-op](multiplayer.md#shots-in-co-op)). Vehicle
-weapons are next. This is built on the `lobby-asset-sync` branch and needs a two-PC test
+weapons are next. Every hand-held weapon's round can be swapped in the editor now: ammunition options, charge and heat
+levels and magazine patterns included. This is built on the `lobby-asset-sync` branch and needs a two-PC test
 ([multiplayer.md, step 10](multiplayer.md#step-10-every-players-own-stats-and-the-lobbys-assets-2026-10-23)).
 
 When the host goes back to the ship in the middle of a mission, everyone else gets dropped to the main menu. The fix

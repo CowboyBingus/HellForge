@@ -92,9 +92,12 @@ public sealed class AssetShare : IAsyncDisposable
             var sites = StatsSchema.Current.ProjectileSwaps;
             var swaps = StatsData.Parse(stats, EntityProfile.Current)
                 .Where(e => !e.Own && e.Value != 0 && e.Value <= 0xFFFF)
-                .Select(e => (Edit: e, Found: sites.TryGetValue(StatsSchema.SwapSite(e.Kind, e.Component, e.Resource, e.Offset), out var site), Site: site))
-                .Where(s => s.Found)
-                .GroupBy(s => (s.Site.Weapon, Function: s.Site.Native == "/f")).Select(g => g.Last()).OrderBy(s => s.Site.Weapon).ThenBy(s => s.Site.Native == "/f")
+                .SelectMany(e => sites.TryGetValue(StatsSchema.SwapSite(e.Kind, e.Component, e.Resource, e.Offset), out var list)
+                    ? list.Select(site => (Edit: e, Site: site)) : [])
+                // one swap per round of a weapon: its slot ("" / "/r" are its normal round, "/f" its programmable one, a
+                // stock type that round), the last edit winning
+                .GroupBy(s => (s.Site.Weapon, Round: s.Site.Native is "" or "/r" ? "" : s.Site.Native)).Select(g => g.Last())
+                .OrderBy(s => s.Site.Weapon).ThenBy(s => s.Site.Native, StringComparer.Ordinal)
                 .Select(s => s.Site.Weapon.ToString("x", System.Globalization.CultureInfo.InvariantCulture) + "=" +
                     s.Edit.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + s.Site.Native)
                 .Take(MaxPerPlayer);

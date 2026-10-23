@@ -529,22 +529,32 @@ screens, and on the swapping player's screen the others' guns fired the swap too
   travel with the lobby's assets: `assets.mine` adds `<weapon resource hex>=<type>[/r|/f|/<stock>]`, `assets.lobby`
   adds every player's `<peer hex>:...`, and each backend sends its game `shots <rules>` over the live pipe. Not while the
   host shares its stats (`shots -`): then every machine already plays with the same. The weapon is the one firing
-  (`StatsSchema.ProjectileSwaps` maps each Projectile row to it), and the suffix says where its round is:
-  - none: ProjectileWeapon +0 (most weapons);
+  (`StatsSchema.ProjectileSwaps` maps each Projectile row to it; an ammunition every weapon equipping it shares maps to
+  each of them), and the suffix says which of its rounds the swap replaces, recognised on each machine by its stock type:
+  - none: ProjectileWeapon +0 (most weapons, and the Maelstrom's and Bastion's machine guns and the M-1000 Maxigun,
+    whose round it is after all);
   - `/r`: WeaponRounds +64, a rounds feed (the DBS-2, R-2124, SG-22, SG-451 and SG-8S; the GL-15 Evictor, M90A, P-11
     Stim Pistol, P-4 Senator, P-69 Veto, R-6 Deadeye and SG-97 Sweeper, whose ProjectileWeapon +0 holds the same round;
     and the One-Two's and Arbitrator's underbarrels, weapons of their own). The type resolver (0x7456D0) checks heat
     (flag bit 9), then a magazine (bit 7), then rounds (bit 8, WeaponRounds +0x40); every live WeaponRounds weapon in
-    the decoded snapshots (SG-8 Punisher, SG-88 Break-Action Shotgun) has bit 8, and these have no magazine or heat.
-    +0x44, a second mode's round, is left alone;
-  - `/<stock>`: the round comes from the weapon's ammunition, an entity delta the six weapons' magazines chamber (the
-    AR-23 Liberator, JAR-5 Dominator, P-19 Redeemer, P-2 Peacemaker, R-63 Diligence, SG-225 Breaker), with its stock
-    type. The loader does not tie the delta to the weapon, so this machine's own swap of one is its own rule;
+    the decoded snapshots (SG-8 Punisher, SG-88 Break-Action Shotgun) has bit 8, and these have no magazine or heat. The
+    AC-8, SG-88, GL-52, the Breakthrough's right gun and the GP-31 too; +0x44, a second mode's round, is left alone;
+  - `/<stock>`: the round with that stock type. An ammunition's entity delta: the six weapons whose magazines chamber
+    it (AR-23 Liberator, JAR-5 Dominator, P-19 Redeemer, P-2 Peacemaker, R-63 Diligence, SG-225 Breaker), the SMG-37
+    Defender, and every ammunition option of the SG-8 Punisher and SG-20 Halt (WeaponRounds +64 / +68, written into the
+    weapon's own copy when it is built) and the MP-98 Knight. A magazine pattern's entry (MG-43, MGX-42, the A/G-16 and
+    A/MG-43 sentries: round n fires entry (n - 1) % count, the tracer included). A charge level's projectile (PLAS-101,
+    PLAS-15, PLAS-45: WeaponCharge +4 / +28 / +52, passed at release) or a heat level's (LAS-17: WeaponHeat +4 / +28 /
+    +52 at 50, 100 and 190 heat). Where those come from: `mappings/projectile-sources.json`
+    (`scripts/ExportProjectileSources.py`, research `HD2Mods\research\blocked-projectile-swaps`). This machine's own
+    swap of one is its own rule (the loader does not tie a delta to its weapon). Rounds of one weapon with the same stock
+    type (an MG-43's four normal pattern entries, the Loyalist's full charge and overcharge) are one round in co-op: the
+    last edit of them is the one the others see;
   - `/f`: the programmable round (ProjectileWeapon +0x240: the GR-8 Recoilless Rifle, RL-77 Airburst, AC-8 Autocannon
     and W.A.S.P.), a swap of its own beside the weapon's normal one.
-- A shot fires: the shooter's swap, if they have one for that weapon and its row and packages are ready here; else, for
-  this machine's player, what the game chose; else, for another player, the weapon's round from before this machine's
-  own swap. Only the swapped round is changed: a mode's, a charge's or another ammunition's type stays. Shots by no
+- A shot fires: the shooter's swap of that round (by its stock type: a type this machine's own swap made stands for the
+  stock round it replaced), if they have one and its row and packages are ready here; else, for this machine's player,
+  what the game chose; else, for another player, the stock round. A round no swap names stays. Shots by no
   player (sentries, enemies) are left alone; a weapon with a swap in the lobby that fires with no player found as its
   wielder is logged once (`shots: ... no player found as its wielder`), the first thing to check if an underbarrel's
   swap does not show.

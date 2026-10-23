@@ -65,6 +65,22 @@ static void ShotsFixture(void)
     assert(ShotsSetRules(rules, &why));
     g_shotRules[0].ready = 1;
     assert(ShotType(150, theirs) == 276 && ShotType(150, mine) == 150);  /* a friend without one: the stock round */
+    /* one weapon, a swap per round, each by its stock type (a charge weapon's partial and full charge); this machine's own
+     * swap of the partial round stands for that round on a friend's gun */
+    snprintf(rules, sizeof rules, "%llx:%llx=500/129,%llx:%llx=600/296,%llx:%llx=700/129", (unsigned long long)F, (unsigned long long)liberator,
+        (unsigned long long)F, (unsigned long long)liberator, (unsigned long long)L, (unsigned long long)liberator);
+    assert(ShotsSetRules(rules, &why));
+    g_shotRules[0].ready = g_shotRules[1].ready = g_shotRules[2].ready = 1;
+    assert(ShotType(129, theirs) == 500 && ShotType(296, theirs) == 600 && ShotType(999, theirs) == 999);
+    assert(ShotType(700, theirs) == 500 && ShotType(700, mine) == 700 && ShotType(296, mine) == 296);
+    /* a record this machine swapped: a friend's rule for it names the stock round, read here as the swap */
+    g_shotLocalCount = 0;
+    ShotsNoteLocal(onetwo, SHOT_NORMAL, 330, 142);
+    snprintf(rules, sizeof rules, "%llx:%llx=263", (unsigned long long)F, (unsigned long long)onetwo);
+    assert(ShotsSetRules(rules, &why));
+    g_shotRules[0].ready = 1; g_shotRules[0].native = 330; /* as the tick sets it: the record reads 142, this machine's swap of 330 */
+    assert(ShotType(142, theirTwo) == 263 && ShotType(330, theirTwo) == 263);
+    g_shotLocalCount = 0;
     /* a rounds feed's ("/r": WeaponRounds +64 is its normal round); malformed suffixes refused */
     assert(ShotsSetRules("1:2=142/r", &why) && g_shotRules[0].rounds && g_shotRules[0].stock == 0);
     assert(!ShotsSetRules("1:2=142/", &why) && !ShotsSetRules("1:2=142/0", &why) && !ShotsSetRules("1:2=142/rx", &why));

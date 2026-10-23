@@ -266,7 +266,7 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
 | `magazine_type` | +0x00 | u32 | respawn? | 1: rounds follow pattern (unverified) |
-| `pattern` | +0x04 | u32[32] | respawn? | projectile types of successive rounds |
+| `pattern` | +0x04 | u32[32] | respawn? | projectile types of successive rounds; with magazine_type 1, round n fires entry (n - 1) % count (game.dll 0x7456D0); never 0 inside the count, which is fixed at spawn (a projectile reference) |
 | `first_projectile` | +0x84 | u32 | respawn? | the projectile type chambered first (unverified) |
 | `capacity` | +0x88 | u32 | respawn? | rounds per magazine (a turret's live count is an 11-bit network field: at most 2047) |
 | `starting_magazines` | +0x8C | u32 | respawn? | spare magazines at the start (unverified) |
@@ -643,10 +643,13 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
 | `level_1_threshold` | +0x00 | f32 | respawn? | Heat level 1 threshold (heat_units) (unverified) |
+| `level_1_projectile` | +0x04 | u32 | respawn? | the projectile a shot at heat level 1 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_1_self_status` | +0x14 | u32 | respawn? | Heat level 1 status on the wielder (unverified) (a status reference) |
 | `level_2_threshold` | +0x18 | f32 | respawn? | Heat level 2 threshold (heat_units) (unverified) |
+| `level_2_projectile` | +0x1C | u32 | respawn? | the projectile a shot at heat level 2 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_2_self_status` | +0x2C | u32 | respawn? | Heat level 2 status on the wielder (unverified) (a status reference) |
 | `level_3_threshold` | +0x30 | f32 | respawn? | Heat level 3 threshold (heat_units) (unverified) |
+| `level_3_projectile` | +0x34 | u32 | respawn? | the projectile a shot at heat level 3 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_3_self_status` | +0x44 | u32 | respawn? | Heat level 3 status on the wielder (unverified) (a status reference) |
 | `fire_rate_multiplier_max` | +0x48 | f32 | respawn? | Fire rate multiplier at maximum heat (multiplier) (unverified) |
 | `fire_rate_curve_exponent` | +0x4C | f32 | respawn? | Heat fire rate curve exponent (factor) (unverified) |
@@ -756,8 +759,11 @@ Group `spread` (spread sideways and up and down): `horizontal_spread`, `vertical
 | Field | Offset | Type | Applies | Meaning |
 |---|---|---|---|---|
 | `level_1` | +0x00 | f32 | respawn? | Minimum charge time (seconds) (unverified) |
+| `level_1_projectile` | +0x04 | u32 | respawn? | the projectile a release at charge level 1 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_2` | +0x18 | f32 | respawn? | Full charge time (seconds) (unverified) |
+| `level_2_projectile` | +0x1C | u32 | respawn? | the projectile a release at charge level 2 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `level_3` | +0x30 | f32 | respawn? | Overcharge time (seconds) (unverified) |
+| `level_3_projectile` | +0x34 | u32 | respawn? | the projectile a release at charge level 3 fires (passed to the fire function as its explicit type) (unverified) (a projectile reference) |
 | `minimum_seconds` | +0x48 | f32 | respawn? | Projectile speed multiplier at minimum charge (deprecated id) (multiplier) (unverified) |
 | `maximum_seconds` | +0x4C | f32 | respawn? | Projectile speed multiplier at full overcharge (deprecated id) (multiplier) (unverified) |
 | `damage_multiplier_min` | +0x50 | f32 | respawn? | Damage multiplier at minimum charge (multiplier) (unverified) |

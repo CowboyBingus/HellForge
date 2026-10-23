@@ -262,7 +262,7 @@ HF_ASSERT_OFFSET(HfWeaponData, fire_ability_2, 944);
 typedef struct HfWeaponMagazine
 {
     uint32_t magazine_type;                      /* +0x00 1: rounds follow pattern (unverified) [respawn?] */
-    uint32_t pattern[32];                        /* +0x04 projectile types of successive rounds [respawn?] */
+    uint32_t pattern[32];                        /* +0x04 projectile types of successive rounds; with magazine_type 1, round n fires entry (n - 1) % count (game.dll 0x7456D0); never 0 inside the count, which is fixed at spawn [respawn?] */
     uint32_t first_projectile;                   /* +0x84 the projectile type chambered first (unverified) [respawn?] */
     uint32_t capacity;                           /* +0x88 rounds per magazine (a turret's live count is an 11-bit network field: at most 2047) [respawn?] */
     uint32_t starting_magazines;                 /* +0x8C spare magazines at the start (unverified) [respawn?] */
@@ -1720,13 +1720,16 @@ HF_ASSERT_OFFSET(HfBeamWeapon, pulse_seconds, 112);
 typedef struct HfWeaponHeat
 {
     float level_1_threshold;                     /* +0x00 Heat level 1 threshold (heat_units) (unverified) [respawn?] */
-    uint8_t _unknown_04[16];
+    uint32_t level_1_projectile;                 /* +0x04 the projectile a shot at heat level 1 fires (passed to the fire function as its explicit type) (unverified) [respawn?] */
+    uint8_t _unknown_08[12];
     uint32_t level_1_self_status;                /* +0x14 Heat level 1 status on the wielder (unverified) [respawn?] */
     float level_2_threshold;                     /* +0x18 Heat level 2 threshold (heat_units) (unverified) [respawn?] */
-    uint8_t _unknown_1C[16];
+    uint32_t level_2_projectile;                 /* +0x1C the projectile a shot at heat level 2 fires (passed to the fire function as its explicit type) (unverified) [respawn?] */
+    uint8_t _unknown_20[12];
     uint32_t level_2_self_status;                /* +0x2C Heat level 2 status on the wielder (unverified) [respawn?] */
     float level_3_threshold;                     /* +0x30 Heat level 3 threshold (heat_units) (unverified) [respawn?] */
-    uint8_t _unknown_34[16];
+    uint32_t level_3_projectile;                 /* +0x34 the projectile a shot at heat level 3 fires (passed to the fire function as its explicit type) (unverified) [respawn?] */
+    uint8_t _unknown_38[12];
     uint32_t level_3_self_status;                /* +0x44 Heat level 3 status on the wielder (unverified) [respawn?] */
     float fire_rate_multiplier_max;              /* +0x48 Fire rate multiplier at maximum heat (multiplier) (unverified) [respawn?] */
     float fire_rate_curve_exponent;              /* +0x4C Heat fire rate curve exponent (factor) (unverified) [respawn?] */
@@ -1756,14 +1759,20 @@ typedef struct HfWeaponHeat
 HF_ASSERT_SIZE(HfWeaponHeat, 592);
 HF_ASSERT_OFFSET(HfWeaponHeat, level_1_threshold, 0);
 #define HF_TYPE_WeaponHeat_level_1_threshold HF_TYPE_F32
+HF_ASSERT_OFFSET(HfWeaponHeat, level_1_projectile, 4);
+#define HF_TYPE_WeaponHeat_level_1_projectile HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponHeat, level_1_self_status, 20);
 #define HF_TYPE_WeaponHeat_level_1_self_status HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponHeat, level_2_threshold, 24);
 #define HF_TYPE_WeaponHeat_level_2_threshold HF_TYPE_F32
+HF_ASSERT_OFFSET(HfWeaponHeat, level_2_projectile, 28);
+#define HF_TYPE_WeaponHeat_level_2_projectile HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponHeat, level_2_self_status, 44);
 #define HF_TYPE_WeaponHeat_level_2_self_status HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponHeat, level_3_threshold, 48);
 #define HF_TYPE_WeaponHeat_level_3_threshold HF_TYPE_F32
+HF_ASSERT_OFFSET(HfWeaponHeat, level_3_projectile, 52);
+#define HF_TYPE_WeaponHeat_level_3_projectile HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponHeat, level_3_self_status, 68);
 #define HF_TYPE_WeaponHeat_level_3_self_status HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponHeat, fire_rate_multiplier_max, 72);
@@ -1991,11 +2000,14 @@ HF_ASSERT_OFFSET(HfVehicleMotion, steering_response_speed, 364);
 typedef struct HfWeaponCharge
 {
     float level_1;                               /* +0x00 Minimum charge time (seconds) (unverified) [respawn?] */
-    uint8_t _unknown_04[20];
+    uint32_t level_1_projectile;                 /* +0x04 the projectile a release at charge level 1 fires (passed to the fire function as its explicit type) (unverified) [respawn?] */
+    uint8_t _unknown_08[16];
     float level_2;                               /* +0x18 Full charge time (seconds) (unverified) [respawn?] */
-    uint8_t _unknown_1C[20];
+    uint32_t level_2_projectile;                 /* +0x1C the projectile a release at charge level 2 fires (passed to the fire function as its explicit type) (unverified) [respawn?] */
+    uint8_t _unknown_20[16];
     float level_3;                               /* +0x30 Overcharge time (seconds) (unverified) [respawn?] */
-    uint8_t _unknown_34[20];
+    uint32_t level_3_projectile;                 /* +0x34 the projectile a release at charge level 3 fires (passed to the fire function as its explicit type) (unverified) [respawn?] */
+    uint8_t _unknown_38[16];
     float minimum_seconds;                       /* +0x48 Projectile speed multiplier at minimum charge (deprecated id) (multiplier) (unverified) [respawn?] */
     float maximum_seconds;                       /* +0x4C Projectile speed multiplier at full overcharge (deprecated id) (multiplier) (unverified) [respawn?] */
     float damage_multiplier_min;                 /* +0x50 Damage multiplier at minimum charge (multiplier) (unverified) [respawn?] */
@@ -2019,10 +2031,16 @@ typedef struct HfWeaponCharge
 HF_ASSERT_SIZE(HfWeaponCharge, 216);
 HF_ASSERT_OFFSET(HfWeaponCharge, level_1, 0);
 #define HF_TYPE_WeaponCharge_level_1 HF_TYPE_F32
+HF_ASSERT_OFFSET(HfWeaponCharge, level_1_projectile, 4);
+#define HF_TYPE_WeaponCharge_level_1_projectile HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponCharge, level_2, 24);
 #define HF_TYPE_WeaponCharge_level_2 HF_TYPE_F32
+HF_ASSERT_OFFSET(HfWeaponCharge, level_2_projectile, 28);
+#define HF_TYPE_WeaponCharge_level_2_projectile HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponCharge, level_3, 48);
 #define HF_TYPE_WeaponCharge_level_3 HF_TYPE_F32
+HF_ASSERT_OFFSET(HfWeaponCharge, level_3_projectile, 52);
+#define HF_TYPE_WeaponCharge_level_3_projectile HF_TYPE_U32
 HF_ASSERT_OFFSET(HfWeaponCharge, minimum_seconds, 72);
 #define HF_TYPE_WeaponCharge_minimum_seconds HF_TYPE_F32
 HF_ASSERT_OFFSET(HfWeaponCharge, maximum_seconds, 76);

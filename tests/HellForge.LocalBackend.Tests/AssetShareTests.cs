@@ -142,6 +142,10 @@ static class AssetShareTests
         // weapons where both members carry the round fire WeaponRounds +64 too (the Sweeper's primary, the Senator's feed)
         const string both = """{"format":1,"weapons":{"SG-97 Sweeper":{"attack.primary.projectile":142},"P-4 Senator":{"attack.feed_primary.projectile":142}}}""";
         check(AssetShare.Swaps(both) == "8d3d52a3b2f19402=142/r,dcd1c835407ef7ba=142/r", "Rounds swaps of weapons with both members: " + AssetShare.Swaps(both));
+        // a weapon with a swap per round (the Purifier's partial and full charge), each by its stock type; an ammunition
+        // option's delta reaches every weapon equipping it (the Knight's HOLLOW POINT is the Peacemaker's default)
+        const string rounds = """{"format":1,"weapons":{"PLAS-101 Purifier":{"charge.level_1.projectile":142,"charge.level_2.projectile":150},"MP-98 Knight":{"ammunition.hollow_point.projectile":142}}}""";
+        check(AssetShare.Swaps(rounds) == "5e4e5c2db6e44a2=142/337,9571ca51f0daf35b=142/337,fb3a19078694708a=142/129,fb3a19078694708a=150/296", "A swap per round, and an ammunition's for each weapon equipping it: " + AssetShare.Swaps(rounds));
         // the One-Two's grenade launcher is a weapon of its own (0x02CD7321CD8445F5), fed by rounds
         const string grenade = """{"format":1,"weapons":{"AR/GL-21 One-Two / underbarrel":{"attack.feed_primary.projectile":142}}}""";
         check(AssetShare.Swaps(grenade) == "2cd7321cd8445f5=142/r", "An underbarrel's projectile swap: " + AssetShare.Swaps(grenade));

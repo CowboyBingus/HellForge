@@ -11,13 +11,14 @@
  *
  * A stub at 0x614081 calls ShotType with the chosen type and the source, writes back what it returns, and replays the
  * two instructions it displaced; one at 0x615B23 calls ShotFunctionType with the programmable round and replays the
- * three it displaced with what that returns. ShotType changes only a weapon's normal round, the one the native resolver
- * (0x7456D0) gives its first mode: ProjectileWeapon +0 for most weapons, WeaponRounds +0x40 for a rounds feed ("/r" in
- * its rule; +0x44, a second mode's round, stays), a magazine's chambered type for the six weapons whose round comes from
- * their ammunition ("/<stock type>": their ammunition's entity delta; this machine's own swap of one is its own rule);
- * ShotFunctionType only a programmable round ("/f": ProjectileWeapon +0x240). Before or after this machine's own swap; a
- * mode's, a charge's or another ammunition's type it leaves as it is. It finds the shooter (the weapon's wielder,
- * Wieldable manager [game+0x3326730]) among the players (event_polls.c EvpPlayers: peer and Helldiver), then:
+ * three it displaced with what that returns. Every type reaches 0x614081: the resolver's (0x7456D0: ProjectileWeapon
+ * +0, WeaponRounds +0x40/+0x44, a magazine's chambered or pattern type) and the explicit one a charge or heat level
+ * passes. A rule swaps one round of a weapon, recognised by its stock type on this machine: the weapon's ProjectileWeapon
+ * +0 (no suffix), WeaponRounds +64 ("/r"), its programmable round for ShotFunctionType ("/f": ProjectileWeapon +0x240), or
+ * a stock type the rule names ("/<stock type>": an ammunition's entity delta, a magazine pattern entry, a charge or heat
+ * level; this machine's own swap of one is its own rule). A type this machine's own swap made stands for the stock round
+ * it replaced; a round no rule names (another mode's, another ammunition's) stays. It finds the shooter (the weapon's
+ * wielder, Wieldable manager [game+0x3326730]) among the players (event_polls.c EvpPlayers: peer and Helldiver), then:
  *   - a player with a swap for that weapon (the lobby's rules, from the session's backend: live.c "shots"): theirs;
  *   - this machine's player: what the game chose (its own record, swapped or not);
  *   - another player without one: the weapon's type from before this machine's own swap.
@@ -89,8 +90,8 @@ static uint32_t (*g_shotWielder)(uint32_t weapon) = ShotWielderOf;
 static void ShotsNoteLocal(uint64_t resource, int slot, uint32_t before, uint32_t after)
 {
     AcquireSRWLockExclusive(&g_shotsLock);
-    int i = 0;
-    while (i < g_shotLocalCount && (g_shotLocal[i].resource != resource || g_shotLocal[i].slot != slot)) i++;
+    int i = 0; /* the same member changed again keeps its first type (the stock round it swaps) */
+    while (i < g_shotLocalCount && (g_shotLocal[i].resource != resource || g_shotLocal[i].slot != slot || g_shotLocal[i].now != before)) i++;
     if (i == g_shotLocalCount && g_shotLocalCount < SHOT_LOCAL) g_shotLocal[g_shotLocalCount++] = (ShotLocal){resource, slot, before, after};
     else if (i < g_shotLocalCount) g_shotLocal[i].now = after;
     ReleaseSRWLockExclusive(&g_shotsLock);
@@ -113,8 +114,6 @@ static uint32_t ShotPick(int slot, uint32_t selected, const uint8_t* source)
     uint32_t wielder = weapon ? g_shotWielder(weapon) : 0;
     uint32_t chosen = selected;
     AcquireSRWLockShared(&g_shotsLock);
-    const ShotLocal* local = NULL;
-    for (int i = 0; i < g_shotLocalCount; i++) if (g_shotLocal[i].resource == resource && g_shotLocal[i].slot == slot) local = &g_shotLocal[i];
     const ShotPlayer* shooter = NULL;
     uint64_t me = 0;
     for (int i = 0; i < g_shotPlayerCount; i++)
@@ -122,13 +121,28 @@ static uint32_t ShotPick(int slot, uint32_t selected, const uint8_t* source)
         if (wielder != 0 && g_shotPlayers[i].avatar == wielder) shooter = &g_shotPlayers[i];
         if (g_shotPlayers[i].local) me = g_shotPlayers[i].peer;
     }
-    const ShotRule* rule = NULL, *own = NULL;
+    /* the round's stock type: what this machine fires is its own, swapped or not; a type this machine's swap made
+     * (noted where it wrote it, or for a stock member, its own rule) stands for the stock round it replaced */
+    uint32_t stock = selected;
+    int swapped = 0;
+    for (int i = 0; shooter != NULL && i < g_shotLocalCount; i++)
+    {
+        const ShotLocal* l = &g_shotLocal[i];
+        if (l->resource == resource && l->slot == slot && l->now == selected && l->base != l->now) { stock = l->base; swapped = 1; }
+    }
+    for (int i = 0; shooter != NULL && me != 0 && i < g_shotRuleCount; i++)
+    {
+        const ShotRule* r = &g_shotRules[i];
+        if (r->peer == me && r->resource == resource && r->slot == slot && r->stock && r->type == selected && r->stock != r->type)
+        { stock = r->stock; swapped = 1; }
+    }
+    /* the shooter's swap of that round: a weapon may carry one per round (an ammunition option, a charge or heat level,
+     * a magazine's tracer) */
+    const ShotRule* rule = NULL;
     for (int i = 0; shooter != NULL && i < g_shotRuleCount; i++)
     {
         const ShotRule* r = &g_shotRules[i];
-        if (r->resource != resource || r->slot != slot) continue;
-        if (r->peer == shooter->peer && r->ready) rule = r;
-        if (me != 0 && r->peer == me && r->stock) own = r;
+        if (r->peer == shooter->peer && r->resource == resource && r->slot == slot && r->ready && r->native == stock) rule = r;
     }
     for (int i = 0; shooter == NULL && i < g_shotRuleCount; i++)
         if (g_shotRules[i].resource == resource && g_shotUnowned != (LONG64)resource)
@@ -137,17 +151,11 @@ static uint32_t ShotPick(int slot, uint32_t selected, const uint8_t* source)
             InterlockedExchange64(&g_shotUnowned, (LONG64)resource);
             break;
         }
-    /* this machine's own swap: noted where it wrote it, or, for an ammunition's (an entity delta the loader does not tie
-     * to the weapon), its own rule: its stock type before, the rule's after */
-    int swapped = local != NULL || own != NULL;
-    uint32_t base = local != NULL ? local->base : own != NULL ? own->stock : 0, now = local != NULL ? local->now : own != NULL ? own->type : 0;
-    /* only the slot's round: its type here, or its type before and after this machine's own swap; a mode's, a charge's
-     * or another ammunition's type stays */
-    int normal = (rule != NULL && selected == rule->native) || (swapped && (selected == base || selected == now));
-    if (shooter != NULL && normal)
+    /* a round no rule names (a mode's, another ammunition's) stays */
+    if (shooter != NULL)
     {
         if (rule != NULL) chosen = rule->type;
-        else if (!shooter->local && swapped) chosen = base; /* another player's gun: not this machine's swap */
+        else if (!shooter->local && swapped) chosen = stock; /* another player's gun: not this machine's swap */
     }
     ReleaseSRWLockShared(&g_shotsLock);
     if (chosen != selected) InterlockedIncrement(&g_shotChanged);
@@ -161,8 +169,9 @@ static uint32_t ShotType(uint32_t selected, const uint8_t* source) { return Shot
 static uint32_t ShotFunctionType(uint32_t round, const uint8_t* source) { return round == 0 ? 0 : ShotPick(SHOT_FUNCTION, round, source); }
 
 /* live.c "shots": the lobby's rules, "<peer hex>:<resource hex>=<type>[/r|/f|/<stock type>]" comma separated (the
- * weapon's resource; "/r" a rounds feed's swap, "/f" a programmable round's, "/<stock type>" an ammunition's), "-" none
- * (solo, or a host sharing its stats).
+ * weapon's resource; "/r" a rounds feed's swap, "/f" a programmable round's, "/<stock type>" the swap of the round with
+ * that stock type: an ammunition's, a magazine pattern entry's, a charge or heat level's), "-" none (solo, or a host
+ * sharing its stats).
  * Replaces the last. 0 with *why when malformed. */
 static int ShotsSetRules(const char* list, const char** why)
 {
@@ -241,6 +250,10 @@ static void ShotsTick(void)
         if (record == 0 || SafeRead(record + at, &native[i], 4)) ready[i] = 0;
     }
     AcquireSRWLockExclusive(&g_shotsLock);
+    for (int i = 0; i < rules; i++) /* a record this machine swapped holds its swap: the round it stands for is the stock one */
+        for (int j = 0; !copy[i].stock && j < g_shotLocalCount; j++)
+            if (g_shotLocal[j].resource == copy[i].resource && g_shotLocal[j].slot == copy[i].slot && g_shotLocal[j].now == native[i])
+                native[i] = g_shotLocal[j].base;
     g_shotPlayerCount = 0;
     for (int i = 0; i < count && i < 4; i++)
         if (players[i].peer != 0) g_shotPlayers[g_shotPlayerCount++] = (ShotPlayer){players[i].peer, players[i].avatar, players[i].local};
