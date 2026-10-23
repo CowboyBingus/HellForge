@@ -4,7 +4,7 @@ HellForge runs your own copy of HELLDIVERS 2 offline, against a local backend on
 stratagems, weapons, stats and difficulties. You can play solo or with other players who run HellForge too. It comes with
 an in-game editor (F8) and a C mod SDK with guides and examples.
 
-Status: beta (0.2.0-beta), made for modders first, so expect rough edges. The launcher shows its version and the game
+Status: beta (0.3.0-beta), made for modders first, so expect rough edges. The launcher shows its version and the game
 build it targets in its bottom-left corner.
 
 ## What HellForge is and is not
