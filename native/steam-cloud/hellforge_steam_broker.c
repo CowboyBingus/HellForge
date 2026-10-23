@@ -8,15 +8,15 @@
  * broker serves only the process with <game-pid>, and exits when that process exits, when it says BRIDGE_SHUTDOWN, or
  * when its pipe breaks. Its log is its standard error.
  *
- * Phase 2: the channel, the client check and the flat functions. The generated dispatch table and allow-list are
- * phase 3 (SdkShimGen steam-bridge). */
+ * The channel and the client check are phase 2; the interface methods, the allow-list's callbacks, call results and the
+ * snapshot (broker_bridge.c, with the dispatch SdkShimGen steam-bridge generates) are phase 3. */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "bridge_broker.h"
+#include "broker_bridge.h"
 
 #define GAME_APP_ID "553850"
 
@@ -88,35 +88,6 @@ static int InitSteam(void)
     return g_steam.hPipe != 0;
 }
 
-/* CallbackMsg_t from steam_api_common.h (what ManualDispatch_GetNextCallback fills). */
-#pragma pack(push, 8)
-typedef struct CallbackMsg {
-    int32_t  steamUser;
-    int32_t  callbackId;
-    uint8_t* data;
-    int32_t  dataSize;
-} CallbackMsg;
-#pragma pack(pop)
-
-static void Pump(void* context, BrokerChannel* ch)
-{
-    (void)context;
-    static uint32_t reportedDrops;
-    g_steam.ManualDispatch_RunFrame(g_steam.hPipe);
-    CallbackMsg msg;
-    while (g_steam.ManualDispatch_GetNextCallback(g_steam.hPipe, &msg))
-    {
-        uint32_t size = msg.dataSize > 0 ? (uint32_t)msg.dataSize : 0;
-        if (!BrokerChannelPushCallback(ch, (uint32_t)msg.callbackId, msg.data, size) && size > BRIDGE_RING_DATA_SIZE)
-            fprintf(stderr, "broker: callback %d of %u bytes does not fit a ring slot; dropped\n", msg.callbackId, size);
-        g_steam.ManualDispatch_FreeLastCallback(g_steam.hPipe);
-    }
-    /* a full ring: the game stopped reading. Said once, then counted at exit. */
-    if (ch->dropped > 0 && reportedDrops == 0) { fprintf(stderr, "broker: the ring is full; callbacks are being dropped\n"); reportedDrops = 1; }
-}
-
-static int IsSteamRunning(void* context) { (void)context; return g_steam.IsSteamRunning(); }
-
 int wmain(int argc, wchar_t* argv[])
 {
     if (argc < 3 || wcslen(argv[1]) == 0 || wcslen(argv[1]) > 64)
@@ -147,7 +118,14 @@ int wmain(int argc, wchar_t* argv[])
         if (!InitSteam()) { fprintf(stderr, "broker: Steam did not start\n"); goto fail; }
         fprintf(stderr, "broker: Steam ready (pipe %d)\n", g_steam.hPipe);
     }
-    BrokerSteam steam = { NULL, g_steam.module ? Pump : NULL, g_steam.module ? IsSteamRunning : NULL };
+    static BrokerBridge bridge;
+    BrokerSteam steam = { 0 };
+    if (g_steam.module)
+    {
+        if (!BrokerBridgeOpen(&bridge, g_steam.module, g_steam.hPipe)) { fprintf(stderr, "broker: Valve's DLL lacks manual dispatch\n"); goto fail; }
+        BrokerBridgeSnapshot(&bridge, ch); /* ready before the game's first frame */
+        steam = bridge.steam;
+    }
 
     fprintf(stderr, "broker: waiting for the game (%lu)\n", gamePid);
     int accepted = BrokerChannelAccept(ch, gamePid, game, 5000);
@@ -160,8 +138,8 @@ int wmain(int argc, wchar_t* argv[])
     fprintf(stderr, "broker: game connected\n");
 
     int why = BrokerServe(ch, &steam, game);
-    fprintf(stderr, "broker: %s; %u callback(s) dropped\n",
-        why == BROKER_END_SHUTDOWN ? "shutdown" : why == BROKER_END_GAME_GONE ? "the game exited" : "the pipe closed", ch->dropped);
+    fprintf(stderr, "broker: %s; %u callback(s) dropped, %u call(s) refused\n",
+        why == BROKER_END_SHUTDOWN ? "shutdown" : why == BROKER_END_GAME_GONE ? "the game exited" : "the pipe closed", ch->dropped, bridge.refusals);
 
     BrokerChannelClose(ch);
     free(ch);

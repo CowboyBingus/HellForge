@@ -1,0 +1,196 @@
+// A stand-in for Valve's steam_api64.dll on the broker's side, for bridge_test.c: the flat functions the allow-list
+// bridges and the snapshot reads, the interface accessors, and manual dispatch with a queue the test fills
+// (FakeValve_Queue). Each flat function checks it was given its own interface's object, and records what it received
+// (FakeValve_State), so the test can tell a bridged call from a refused one.
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+
+#define FAKE_API __declspec(dllexport)
+#define STEAM_ID 76561197960287930ull
+#define LOBBY 0x0186000000000123ull
+#define CREATE_LOBBY_CALL 5005ull
+
+typedef struct FakeValveState {
+    int wrongSelf;              // a flat function got another interface's object
+    int richPresenceCalls;
+    char richKey[80], richValue[300];
+    int lobbyDataCalls;
+    char lobbyKey[300];
+    uint64_t lobbyDataLobby;
+    int personaNameSets;        // SetPersonaName: refused, so never reached
+    int createLobbyMax;
+} FakeValveState;
+
+static FakeValveState g_state;
+static int g_user, g_friends, g_utils, g_apps, g_matchmaking, g_stats, g_input;
+
+FAKE_API FakeValveState* FakeValve_State(void) { return &g_state; }
+
+FAKE_API void* SteamAPI_SteamUser_v021(void) { return &g_user; }
+FAKE_API void* SteamAPI_SteamFriends_v017(void) { return &g_friends; }
+FAKE_API void* SteamAPI_SteamUtils_v010(void) { return &g_utils; }
+FAKE_API void* SteamAPI_SteamApps_v008(void) { return &g_apps; }
+FAKE_API void* SteamAPI_SteamMatchmaking_v009(void) { return &g_matchmaking; }
+FAKE_API void* SteamAPI_SteamUserStats_v012(void) { return &g_stats; }
+FAKE_API void* SteamAPI_SteamInput_v006(void) { return &g_input; }
+
+static void Check(void* self, void* expected) { if (self != expected) g_state.wrongSelf++; }
+
+FAKE_API bool SteamAPI_ISteamUser_BLoggedOn(void* self) { Check(self, &g_user); return true; }
+FAKE_API uint64_t SteamAPI_ISteamUser_GetSteamID(void* self) { Check(self, &g_user); return STEAM_ID; }
+FAKE_API uint32_t SteamAPI_ISteamUser_GetAuthSessionTicket(void* self, void* ticket, int cbMax, uint32_t* pcb)
+{
+    Check(self, &g_user);
+    if (!ticket || cbMax < 6) return 0;
+    memcpy(ticket, "TICKET", 6);
+    if (pcb) *pcb = 6;
+    return 42;
+}
+
+FAKE_API const char* SteamAPI_ISteamFriends_GetPersonaName(void* self) { Check(self, &g_friends); return "Helldiver"; }
+FAKE_API int SteamAPI_ISteamFriends_GetFriendCount(void* self, int flags) { Check(self, &g_friends); return flags == 4 ? 3 : -1; }
+FAKE_API bool SteamAPI_ISteamFriends_SetRichPresence(void* self, const char* key, const char* value)
+{
+    Check(self, &g_friends);
+    g_state.richPresenceCalls++;
+    strncpy(g_state.richKey, key ? key : "(null)", sizeof g_state.richKey - 1);
+    strncpy(g_state.richValue, value ? value : "(null)", sizeof g_state.richValue - 1);
+    return true;
+}
+FAKE_API uint64_t SteamAPI_ISteamFriends_SetPersonaName(void* self, const char* name) { (void)name; Check(self, &g_friends); g_state.personaNameSets++; return 1; }
+
+FAKE_API const char* SteamAPI_ISteamUtils_GetIPCountry(void* self) { Check(self, &g_utils); return "SE"; }
+FAKE_API bool SteamAPI_ISteamUtils_IsSteamRunningOnSteamDeck(void* self) { Check(self, &g_utils); return false; }
+FAKE_API int SteamAPI_ISteamUtils_FilterText(void* self, int context, uint64_t source, const char* in, char* out, uint32_t size)
+{
+    Check(self, &g_utils);
+    if (context != 1 || source != STEAM_ID || !in || !out || size == 0) return -1;
+    uint32_t n = 0;
+    for (; in[n] && n + 1 < size; n++) out[n] = (in[n] >= 'a' && in[n] <= 'z') ? (char)(in[n] - 32) : in[n];
+    out[n] = 0;
+    return (int)n;
+}
+
+FAKE_API int SteamAPI_ISteamApps_GetDLCCount(void* self) { Check(self, &g_apps); return 2; }
+FAKE_API bool SteamAPI_ISteamApps_BGetDLCDataByIndex(void* self, int i, uint32_t* app, bool* available, char* name, int capacity)
+{
+    Check(self, &g_apps);
+    static const char* names[2] = { "Viper Commandos", "Polar Patriots" };
+    if (i < 0 || i > 1) return false;
+    *app = 1001 + (uint32_t)i;
+    *available = i == 0;
+    strncpy(name, names[i], (size_t)capacity);
+    return true;
+}
+FAKE_API bool SteamAPI_ISteamApps_BIsSubscribedApp(void* self, uint32_t app) { Check(self, &g_apps); return app == 1001; }
+FAKE_API const char* SteamAPI_ISteamApps_GetCurrentGameLanguage(void* self) { Check(self, &g_apps); return "english"; }
+FAKE_API bool SteamAPI_ISteamApps_GetCurrentBetaName(void* self, char* name, int capacity) { Check(self, &g_apps); (void)name; (void)capacity; return false; }
+
+FAKE_API bool SteamAPI_ISteamUserStats_RequestCurrentStats(void* self) { Check(self, &g_stats); return true; }
+
+// ---- manual dispatch: a queue of callbacks, and CreateLobby's call result ----
+
+#pragma pack(push, 8)
+typedef struct CallbackMsg { int32_t steamUser; int32_t callbackId; uint8_t* data; int32_t dataSize; } CallbackMsg;
+#pragma pack(pop)
+
+#define QUEUE 32
+static struct { int id; int size; uint8_t data[1024]; } g_queue[QUEUE];
+static volatile LONG g_head, g_tail;
+static CRITICAL_SECTION g_lock;
+
+FAKE_API void FakeValve_Queue(int id, const void* data, int size)
+{
+    EnterCriticalSection(&g_lock);
+    if (g_tail - g_head < QUEUE && size >= 0 && size <= 1024)
+    {
+        int at = g_tail % QUEUE;
+        g_queue[at].id = id;
+        g_queue[at].size = size;
+        memcpy(g_queue[at].data, data, (size_t)size);
+        g_tail++;
+    }
+    LeaveCriticalSection(&g_lock);
+}
+
+FAKE_API uint64_t SteamAPI_ISteamMatchmaking_CreateLobby(void* self, int type, int maxMembers)
+{
+    Check(self, &g_matchmaking);
+    (void)type;
+    g_state.createLobbyMax = maxMembers;
+    // SteamAPICallCompleted_t: the call, LobbyCreated_t's id (513), its size
+    uint8_t completed[16];
+    uint64_t call = CREATE_LOBBY_CALL;
+    int32_t id = 513;
+    uint32_t size = 16;
+    memcpy(completed, &call, 8);
+    memcpy(completed + 8, &id, 4);
+    memcpy(completed + 12, &size, 4);
+    FakeValve_Queue(703, completed, 16);
+    return CREATE_LOBBY_CALL;
+}
+FAKE_API bool SteamAPI_ISteamMatchmaking_SetLobbyData(void* self, uint64_t lobby, const char* key, const char* value)
+{
+    Check(self, &g_matchmaking);
+    (void)value;
+    g_state.lobbyDataCalls++;
+    g_state.lobbyDataLobby = lobby;
+    strncpy(g_state.lobbyKey, key ? key : "(null)", sizeof g_state.lobbyKey - 1);
+    return true;
+}
+FAKE_API uint64_t SteamAPI_ISteamMatchmaking_GetLobbyOwner(void* self, uint64_t lobby) { Check(self, &g_matchmaking); return lobby == LOBBY ? STEAM_ID : 0; }
+FAKE_API int SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(void* self, uint64_t lobby) { Check(self, &g_matchmaking); return lobby == LOBBY ? 1 : 0; }
+
+FAKE_API int SteamAPI_IsSteamRunning(void) { return 1; }
+FAKE_API void SteamAPI_ManualDispatch_RunFrame(int pipe) { (void)pipe; }
+
+static int g_current = -1;
+
+FAKE_API bool SteamAPI_ManualDispatch_GetNextCallback(int pipe, CallbackMsg* msg)
+{
+    (void)pipe;
+    EnterCriticalSection(&g_lock);
+    bool any = g_head != g_tail;
+    if (any)
+    {
+        g_current = g_head % QUEUE;
+        msg->steamUser = 1;
+        msg->callbackId = g_queue[g_current].id;
+        msg->data = g_queue[g_current].data;
+        msg->dataSize = g_queue[g_current].size;
+    }
+    LeaveCriticalSection(&g_lock);
+    return any;
+}
+
+FAKE_API void SteamAPI_ManualDispatch_FreeLastCallback(int pipe)
+{
+    (void)pipe;
+    EnterCriticalSection(&g_lock);
+    if (g_current >= 0) { g_head++; g_current = -1; }
+    LeaveCriticalSection(&g_lock);
+}
+
+// LobbyCreated_t: k_EResultOK, then the lobby
+FAKE_API bool SteamAPI_ManualDispatch_GetAPICallResult(int pipe, uint64_t call, void* data, int size, int expected, bool* failed)
+{
+    (void)pipe;
+    if (call != CREATE_LOBBY_CALL || expected != 513 || size < 16) return false;
+    int32_t result = 1;
+    uint64_t lobby = LOBBY;
+    memset(data, 0, (size_t)size);
+    memcpy(data, &result, 4);
+    memcpy((uint8_t*)data + 8, &lobby, 8);
+    *failed = false;
+    return true;
+}
+
+BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void* reserved)
+{
+    (void)instance; (void)reserved;
+    if (reason == DLL_PROCESS_ATTACH) InitializeCriticalSection(&g_lock);
+    return TRUE;
+}

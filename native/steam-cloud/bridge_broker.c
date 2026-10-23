@@ -5,12 +5,25 @@
 #include <stdint.h>
 #include <string.h>
 #include "bridge_broker.h"
+#include "broker_dispatch.h"
 
 uint32_t BrokerHandleCall(const BrokerSteam* steam, uint32_t function, const uint8_t* args, uint32_t argsSize,
                           uint8_t* result, uint32_t capacity, uint32_t* resultSize)
 {
-    (void)args;
     *resultSize = 0;
+    if (function >= BRIDGE_FN_METHODS)
+    {
+        if (!steam || !steam->api) return BRIDGE_STATUS_UNKNOWN;
+        BridgeReader r = { argsSize, 0, args };
+        static BridgeWriter w; /* the one serving thread */
+        w = BridgeWriterStart();
+        uint32_t status = steam->api->dispatch ? steam->api->dispatch(steam->api, function, &r, &w) : BRIDGE_STATUS_UNKNOWN;
+        if (status != BRIDGE_STATUS_OK) return status;
+        if (w.size > capacity) return BRIDGE_STATUS_MALFORMED;
+        memcpy(result, w.data, w.size);
+        *resultSize = w.size;
+        return BRIDGE_STATUS_OK;
+    }
     switch (function)
     {
     case BRIDGE_FN_IS_STEAM_RUNNING:

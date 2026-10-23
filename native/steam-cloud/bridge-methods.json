@@ -1,0 +1,347 @@
+{
+  "format": 1,
+  "sdk": "1.55",
+  "about": "The Steam bridge's allow-list (docs/steam-bridge.md, phase 3), reviewed by hand. A method not listed is refused. mode: call (a round trip; the broker checks as listed), hand (written in bridge_local.c: answered in the game, from the snapshot or fixed), refuse. strings: an input string's longest length in bytes. buffers: an output buffer, the parameter that holds its size and the most the broker accepts. outs: pointers the method writes one value through. ownLobby: CSteamID parameters that must be a lobby the game made this session. range: [min, max] for an integer parameter. printable: strings that may hold only printable ASCII. logged: strings the broker writes to its log on every call.",
+  "callbacks": [
+    143,
+    152,
+    163,
+    331,
+    333,
+    337,
+    505,
+    513,
+    714,
+    1005,
+    1101,
+    1102,
+    1103,
+    1202,
+    1203,
+    1221
+  ],
+  "enumRefusals": {
+    "EBeginAuthSessionResult": 5,
+    "EUserHasLicenseForAppResult": 2,
+    "EVoiceResult": 2
+  },
+  "interfaces": {
+    "SteamClient020": {
+      "class": "ISteamClient",
+      "methods": {
+        "GetISteamUser": {
+          "mode": "interface"
+        },
+        "GetISteamGameServer": {
+          "mode": "interface"
+        },
+        "GetISteamFriends": {
+          "mode": "interface"
+        },
+        "GetISteamUtils": {
+          "mode": "interface"
+        },
+        "GetISteamMatchmaking": {
+          "mode": "interface"
+        },
+        "GetISteamMatchmakingServers": {
+          "mode": "interface"
+        },
+        "GetISteamGenericInterface": {
+          "mode": "interface"
+        },
+        "GetISteamUserStats": {
+          "mode": "interface"
+        },
+        "GetISteamGameServerStats": {
+          "mode": "interface"
+        },
+        "GetISteamApps": {
+          "mode": "interface"
+        },
+        "GetISteamNetworking": {
+          "mode": "interface"
+        },
+        "GetISteamRemoteStorage": {
+          "mode": "interface"
+        },
+        "GetISteamScreenshots": {
+          "mode": "interface"
+        },
+        "GetISteamGameSearch": {
+          "mode": "interface"
+        },
+        "GetISteamHTTP": {
+          "mode": "interface"
+        },
+        "GetISteamController": {
+          "mode": "interface"
+        },
+        "GetISteamUGC": {
+          "mode": "interface"
+        },
+        "GetISteamAppList": {
+          "mode": "interface"
+        },
+        "GetISteamMusic": {
+          "mode": "interface"
+        },
+        "GetISteamMusicRemote": {
+          "mode": "interface"
+        },
+        "GetISteamHTMLSurface": {
+          "mode": "interface"
+        },
+        "GetISteamInventory": {
+          "mode": "interface"
+        },
+        "GetISteamVideo": {
+          "mode": "interface"
+        },
+        "GetISteamParentalSettings": {
+          "mode": "interface"
+        },
+        "GetISteamInput": {
+          "mode": "interface"
+        },
+        "GetISteamParties": {
+          "mode": "interface"
+        },
+        "GetISteamRemotePlay": {
+          "mode": "interface"
+        },
+        "CreateSteamPipe": {
+          "mode": "hand"
+        },
+        "BReleaseSteamPipe": {
+          "mode": "hand"
+        },
+        "ConnectToGlobalUser": {
+          "mode": "hand"
+        },
+        "ReleaseUser": {
+          "mode": "hand"
+        }
+      }
+    },
+    "SteamUser021": {
+      "class": "ISteamUser",
+      "methods": {
+        "BLoggedOn": {
+          "mode": "hand"
+        },
+        "GetSteamID": {
+          "mode": "hand"
+        },
+        "GetHSteamUser": {
+          "mode": "hand"
+        },
+        "GetAuthSessionTicket": {
+          "mode": "call",
+          "buffers": {
+            "pTicket": {
+              "size": "cbMaxTicket",
+              "max": 1024
+            }
+          },
+          "outs": [
+            "pcbTicket"
+          ]
+        },
+        "CancelAuthTicket": {
+          "mode": "call"
+        }
+      }
+    },
+    "SteamFriends017": {
+      "class": "ISteamFriends",
+      "methods": {
+        "GetPersonaName": {
+          "mode": "hand"
+        },
+        "GetFriendCount": {
+          "mode": "call"
+        },
+        "GetFriendByIndex": {
+          "mode": "call"
+        },
+        "GetFriendRelationship": {
+          "mode": "call"
+        },
+        "GetUserRestrictions": {
+          "mode": "call"
+        },
+        "SetRichPresence": {
+          "mode": "call",
+          "strings": {
+            "pchKey": 64,
+            "pchValue": 256
+          },
+          "printable": [
+            "pchKey",
+            "pchValue"
+          ],
+          "logged": [
+            "pchKey"
+          ],
+          "review": "strings Steam friends see"
+        },
+        "ClearRichPresence": {
+          "mode": "call"
+        }
+      }
+    },
+    "SteamUtils010": {
+      "class": "ISteamUtils",
+      "methods": {
+        "GetAppID": {
+          "mode": "hand"
+        },
+        "GetIPCountry": {
+          "mode": "hand"
+        },
+        "IsSteamRunningOnSteamDeck": {
+          "mode": "hand"
+        },
+        "SetOverlayNotificationPosition": {
+          "mode": "hand"
+        },
+        "IsOverlayEnabled": {
+          "mode": "hand"
+        },
+        "InitFilterText": {
+          "mode": "call"
+        },
+        "FilterText": {
+          "mode": "call",
+          "strings": {
+            "pchInputMessage": 4096
+          },
+          "buffers": {
+            "pchOutFilteredText": {
+              "size": "nByteSizeOutFilteredText",
+              "max": 4096
+            }
+          }
+        }
+      }
+    },
+    "SteamMatchMaking009": {
+      "class": "ISteamMatchmaking",
+      "methods": {
+        "CreateLobby": {
+          "mode": "call",
+          "range": {
+            "cMaxMembers": [
+              1,
+              4
+            ]
+          },
+          "review": "a public lobby's data can be read by anyone who searches"
+        },
+        "LeaveLobby": {
+          "mode": "call",
+          "ownLobby": [
+            "steamIDLobby"
+          ]
+        },
+        "GetNumLobbyMembers": {
+          "mode": "call",
+          "ownLobby": [
+            "steamIDLobby"
+          ]
+        },
+        "GetLobbyMemberByIndex": {
+          "mode": "call",
+          "ownLobby": [
+            "steamIDLobby"
+          ]
+        },
+        "SetLobbyData": {
+          "mode": "call",
+          "ownLobby": [
+            "steamIDLobby"
+          ],
+          "strings": {
+            "pchKey": 255,
+            "pchValue": 4096
+          }
+        },
+        "SetLobbyJoinable": {
+          "mode": "call",
+          "ownLobby": [
+            "steamIDLobby"
+          ]
+        },
+        "GetLobbyOwner": {
+          "mode": "call",
+          "ownLobby": [
+            "steamIDLobby"
+          ]
+        }
+      }
+    },
+    "STEAMUSERSTATS_INTERFACE_VERSION012": {
+      "class": "ISteamUserStats",
+      "methods": {
+        "RequestCurrentStats": {
+          "mode": "call"
+        },
+        "GetAchievement": {
+          "mode": "call",
+          "strings": {
+            "pchName": 128
+          },
+          "outs": [
+            "pbAchieved"
+          ]
+        }
+      }
+    },
+    "STEAMAPPS_INTERFACE_VERSION008": {
+      "class": "ISteamApps",
+      "methods": {
+        "BIsSubscribedApp": {
+          "mode": "hand"
+        },
+        "GetDLCCount": {
+          "mode": "hand"
+        },
+        "BGetDLCDataByIndex": {
+          "mode": "hand"
+        },
+        "GetCurrentGameLanguage": {
+          "mode": "hand"
+        },
+        "GetCurrentBetaName": {
+          "mode": "hand"
+        }
+      }
+    },
+    "SteamNetworking006": {
+      "class": "ISteamNetworking",
+      "methods": {
+        "IsP2PPacketAvailable": {
+          "mode": "hand"
+        },
+        "ReadP2PPacket": {
+          "mode": "hand"
+        }
+      }
+    },
+    "SteamInput006": {
+      "class": "ISteamInput",
+      "methods": {
+        "GetControllerForGamepadIndex": {
+          "mode": "call",
+          "range": {
+            "nIndex": [
+              0,
+              15
+            ]
+          }
+        }
+      }
+    }
+  }
+}

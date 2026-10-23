@@ -2,8 +2,9 @@
 # EngineVersion in Directory.Build.props), which scripts/Publish-HellForge.ps1 puts into an installation's app folder:
 #   session/     HellForge.Session.exe, the session runner (NativeAOT)
 #   backend/     HellForge.LocalBackend.exe, the local backend (NativeAOT)
-#   sdk-shims/   the PlayFab SDK stand-ins (PartyWin.dll, PlayFabMultiplayerWin.dll), the steam_api64.dll stand-in, the Steam
-#                broker for low-integrity sessions (hellforge_steam_broker.exe, docs/steam-bridge.md), the mod loader
+#   sdk-shims/   the PlayFab SDK stand-ins (PartyWin.dll, PlayFabMultiplayerWin.dll), the steam_api64.dll stand-in, its bridge
+#                build and the Steam broker for low-integrity sessions (steam_api64_bridge.dll, hellforge_steam_broker.exe,
+#                docs/steam-bridge.md; only with the Steamworks SDK, -SteamSdk), the mod loader
 #                (hellforge_modloader.dll, with MinHook 1.3.4: BSD-2, MinHook-LICENSE.txt) and build.json (their pins)
 #   scripts/     the network block (Windows Firewall rules) and Steam ownership check, readable as they run
 #   engine.json  the version, the game build and every file's SHA-256; LICENSE (GPL-3.0) and LICENSE-EXCEPTION
@@ -12,10 +13,12 @@
 # (scripts/Get-BuildTools.ps1), and Microsoft's public PlayFab SDK packages, whose DLLs
 # are byte-identical to the ones HD2 ships, so their headers give the exact signatures (nothing from them is committed or
 # shipped). The steam_api64.dll stand-in's export table is generated from the game's own steam_api64.dll (-SteamApi, by
-# default the one in the Steam library), pinned below and never shipped. NativeAOT needs Visual Studio's C++ build tools.
+# default the one in the Steam library), pinned below and never shipped. The Steam bridge's definitions come from Valve's
+# Steamworks SDK 1.55 (-SteamSdk, its public/steam/steam_api.json; by default tools/steamworks-sdk-1.55), which needs a
+# Steam sign-in to download: pinned, never committed or shipped, and optional. NativeAOT needs Visual Studio's C++ build tools.
 # -SteamCensus packages the Steam census build of that stand-in instead (docs/steam-bridge.md, census step 2), as
 # hellforge-engine-<version>-census.zip: for a census session only, never for release.
-param([switch]$SkipSmoke,[string]$SteamApi,[switch]$SteamCensus)
+param([switch]$SkipSmoke,[string]$SteamApi,[switch]$SteamCensus,[string]$SteamSdk)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $ProgressPreference='SilentlyContinue'
@@ -89,6 +92,13 @@ if(-not $SteamApi){
     if(-not $SteamApi){throw 'HELLDIVERS 2 was not found in Steam; pass -SteamApi with the game''s bin/steam_api64.dll.'}
 }
 Assert-Hash $SteamApi $steamApiPin 'steam_api64.dll'
+# SDK 1.55's steam_api.json: the version whose steam_api64.dll is the pinned one (docs/steam-bridge.md). Without it the
+# package has no bridge build and no broker, and a sandboxed session refuses to start.
+$steamSdkPin='80A6C2196F6048749EE35A141C91083B29613FD7C56C2207C9FC73EF87566547'
+if(-not $SteamSdk){$SteamSdk=Join-Path $project 'tools/steamworks-sdk-1.55/public/steam/steam_api.json'}
+$bridge=Test-Path -LiteralPath $SteamSdk
+if($bridge){Assert-Hash $SteamSdk $steamSdkPin 'steam_api.json (Steamworks SDK 1.55)'}
+else{Write-Warning ('No Steamworks SDK 1.55 at '+$SteamSdk+': building without the Steam bridge.')}
 
 dotnet build (Join-Path $project 'src/HellForge.SdkShimGen/HellForge.SdkShimGen.csproj') --nologo -v q
 if($LASTEXITCODE){throw 'HellForge.SdkShimGen build failed.'}
@@ -128,11 +138,24 @@ Invoke-Generator census-thunks $SteamApi steam_api64_hellforge $cloudSource (Joi
     @cloudSources (Join-Path $gen 'census_thunks.g.c') @minHookSources (Join-Path $gen 'steam_api64_census.def') -ladvapi32 -o (Join-Path $census 'steam_api64.dll')
 if($LASTEXITCODE){throw 'Compiling the Steam census build of steam_api64.dll failed.'}
 Get-ChildItem -LiteralPath $census -Filter '*.lib'|Remove-Item
-# The Steam broker (docs/steam-bridge.md): Valve's DLL at the player's normal integrity, for a low-integrity game.
-$bridgeSources=@('bridge_broker.c','bridge_channel.c')|ForEach-Object {Join-Path $project ('native/steam-cloud/'+$_)}
-& $zig cc -target x86_64-windows-gnu -municode -O2 -std=c11 -Wall -Werror -Wno-unused-parameter -s (Join-Path $project 'native/steam-cloud/hellforge_steam_broker.c') `
-    @bridgeSources -ladvapi32 -o (Join-Path $out 'hellforge_steam_broker.exe')
-if($LASTEXITCODE){throw 'Compiling hellforge_steam_broker.exe failed.'}
+# The Steam bridge (docs/steam-bridge.md, phase 3): its generated proxies, dispatch and export stubs (SdkShimGen
+# steam-bridge, from the SDK, the pinned DLL and the reviewed allow-list), the bridge build of the stand-in, in which no
+# export forwards to Valve's DLL, and the broker: Valve's DLL at the player's normal integrity, for a low-integrity game.
+$steamCloud=Join-Path $project 'native/steam-cloud'
+$bridgeSources=@('bridge_broker.c','bridge_channel.c')|ForEach-Object {Join-Path $steamCloud $_}
+foreach($name in @('steam_api64_bridge.dll','hellforge_steam_broker.exe')){$old=Join-Path $out $name;if(Test-Path -LiteralPath $old){Remove-Item -LiteralPath $old}}
+if($bridge){
+    $bridgeExports=Join-Path $steamCloud 'bridge_exports.c'
+    Invoke-Generator steam-bridge $SteamSdk $SteamApi (Join-Path $steamCloud 'bridge-methods.json') ($cloudSource+','+$bridgeExports) $gen
+    $bridgeStandIn=@((Join-Path $steamCloud 'bridge_local.c'),$bridgeExports,(Join-Path $gen 'bridge_proxies_gen.c'),(Join-Path $gen 'bridge_exports_gen.c'))
+    & $zig cc -target x86_64-windows-gnu -shared -O2 -std=c11 -Wall -Werror -Wno-unused-parameter -s -DHELLFORGE_BRIDGE_BUILD -I (Join-Path $minHook 'include') `
+        -I $steamCloud -I $gen $cloudSource @cloudSources @bridgeStandIn @minHookSources (Join-Path $gen 'steam_api64_bridge.def') -ladvapi32 -o (Join-Path $out 'steam_api64_bridge.dll')
+    if($LASTEXITCODE){throw 'Compiling the bridge build of steam_api64.dll failed.'}
+    $brokerSources=@($bridgeSources)+@((Join-Path $steamCloud 'broker_bridge.c'),(Join-Path $gen 'broker_dispatch_gen.c'))
+    & $zig cc -target x86_64-windows-gnu -municode -O2 -std=c11 -Wall -Werror -Wno-unused-parameter -s -I $steamCloud -I $gen (Join-Path $steamCloud 'hellforge_steam_broker.c') `
+        @brokerSources -ladvapi32 -o (Join-Path $out 'hellforge_steam_broker.exe')
+    if($LASTEXITCODE){throw 'Compiling hellforge_steam_broker.exe failed.'}
+}
 # The network block tool: puts the copy's egress block straight into the Windows Filtering Platform (WFP), so the
 # block holds with Windows Firewall off and a security suite's own permit sublayer cannot override our BLOCK. It
 # installs/removes/reads persistent WFP filters (elevated), doing the firewall rules' old job (NetworkBlock.Common.ps1).
@@ -181,13 +204,26 @@ if(-not $SkipSmoke){& (Join-Path $testOut 'census_test.exe') (Join-Path $censusT
 & $zig cc -target x86_64-windows-gnu -O1 -std=c11 -municode -Wall -Werror -Wno-unused-parameter (Join-Path $project 'native/steam-cloud/test/broker_test.c') `
     @bridgeSources -ladvapi32 -o (Join-Path $testOut 'broker_test.exe')
 if($LASTEXITCODE){throw 'Compiling the Steam broker test failed.'}
-# and the stand-in in bridge mode, with the fake Steam DLL beside it as Valve's, which must never load
+# and the bridge build of the stand-in, as the game loads it, with the fake Steam DLL beside it as Valve's, which must
+# never load (without the SDK there is no bridge build, and only the channel is tested)
 $bridgeTest=Join-Path $testOut 'bridge'
 if(Test-Path -LiteralPath $bridgeTest){Remove-Item -LiteralPath $bridgeTest -Recurse -Force}
 New-Item -ItemType Directory $bridgeTest|Out-Null
-Copy-Item -LiteralPath (Join-Path $out 'steam_api64.dll') -Destination $bridgeTest
+if($bridge){Copy-Item -LiteralPath (Join-Path $out 'steam_api64_bridge.dll') -Destination (Join-Path $bridgeTest 'steam_api64.dll')}
 Copy-Item -LiteralPath (Join-Path $censusTest 'steam_api64_hellforge.dll') -Destination $bridgeTest
-if(-not $SkipSmoke){& (Join-Path $testOut 'broker_test.exe') (Join-Path $bridgeTest 'steam_api64.dll');if($LASTEXITCODE){throw 'Steam broker test failed.'}}
+$brokerTestArgs=if($bridge){@(Join-Path $bridgeTest 'steam_api64.dll')}else{@()}
+if(-not $SkipSmoke){& (Join-Path $testOut 'broker_test.exe') @brokerTestArgs;if($LASTEXITCODE){throw 'Steam broker test failed.'}}
+# The bridge end to end: the broker's loop with a fake Valve DLL behind the generated dispatch, and the bridge build of the
+# stand-in called as the game calls it (bridge_test.c).
+if($bridge){
+    & $zig cc -target x86_64-windows-gnu -shared -O1 -std=c11 -Wall -Werror -Wno-unused-parameter -s (Join-Path $steamCloud 'test/fake_valve.c') -o (Join-Path $bridgeTest 'fake_valve.dll')
+    if($LASTEXITCODE){throw 'Compiling the fake Valve DLL failed.'}
+    & $zig cc -target x86_64-windows-gnu -O1 -std=c11 -municode -Wall -Werror -Wno-unused-parameter -I $steamCloud -I $gen (Join-Path $steamCloud 'test/bridge_test.c') `
+        @bridgeSources (Join-Path $steamCloud 'broker_bridge.c') (Join-Path $gen 'broker_dispatch_gen.c') -ladvapi32 -o (Join-Path $testOut 'bridge_test.exe')
+    if($LASTEXITCODE){throw 'Compiling the Steam bridge test failed.'}
+    Get-ChildItem -LiteralPath $bridgeTest -Filter '*.lib'|Remove-Item
+    if(-not $SkipSmoke){& (Join-Path $testOut 'bridge_test.exe') (Join-Path $out 'steam_api64_bridge.dll') (Join-Path $bridgeTest 'fake_valve.dll');if($LASTEXITCODE){throw 'Steam bridge test failed.'}}
+}
 & $zig cc -target x86_64-windows-gnu -shared -O1 -std=c11 -Wall -Werror -Wno-unused-parameter -s (Join-Path $project 'native/mod-loader/test/fake_game.c') -o (Join-Path $testOut 'fake_game.dll')
 if($LASTEXITCODE){throw 'Compiling the fake game failed.'}
 & $zig cc -target x86_64-windows-gnu -shared -O2 -std=c11 -Wall -Werror -Wno-unused-parameter -s -I $sdk `
@@ -204,8 +240,12 @@ $receipt=[ordered]@{builtUtc=[DateTime]::UtcNow.ToString('o');zig='0.17.0';
     standIns=[ordered]@{'PartyWin.dll'=(Get-FileHash (Join-Path $out 'PartyWin.dll')).Hash;'PlayFabMultiplayerWin.dll'=(Get-FileHash (Join-Path $out 'PlayFabMultiplayerWin.dll')).Hash;
         'steam_api64.dll'=(Get-FileHash (Join-Path $(if($SteamCensus){$census}else{$out}) 'steam_api64.dll')).Hash};
     modLoader=(Get-FileHash (Join-Path $out 'hellforge_modloader.dll')).Hash;
-    steamBroker=(Get-FileHash (Join-Path $out 'hellforge_steam_broker.exe')).Hash;
     networkBlock=(Get-FileHash (Join-Path $out 'hellforge_wfp.exe')).Hash}
+# a sandboxed session swaps in the bridge build and starts the broker only when both are here, as pinned
+if($bridge){
+    $receipt.steamBridge=(Get-FileHash (Join-Path $out 'steam_api64_bridge.dll')).Hash
+    $receipt.steamBroker=(Get-FileHash (Join-Path $out 'hellforge_steam_broker.exe')).Hash
+}
 $receipt|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $out 'build.json') -Encoding UTF8
 
 # The session runner and the local backend, compiled ahead of time to native code (NativeAOT needs the Visual Studio
@@ -223,7 +263,8 @@ foreach($app in @(@{folder='session';project='src/HellForge.Session/HellForge.Se
 }
 if(-not $SkipSmoke){& (Join-Path $PSScriptRoot 'Test-BackendAot.ps1') -Aot (Join-Path $staging 'backend/HellForge.LocalBackend.exe')|Select-Object -Last 1}
 $shimTarget=New-Item -ItemType Directory (Join-Path $staging 'sdk-shims')
-foreach($name in @('build.json','PartyWin.dll','PlayFabMultiplayerWin.dll','steam_api64.dll','hellforge_steam_broker.exe','hellforge_modloader.dll','MinHook-LICENSE.txt')){Copy-Item -LiteralPath (Join-Path $out $name) -Destination $shimTarget}
+foreach($name in @('build.json','PartyWin.dll','PlayFabMultiplayerWin.dll','steam_api64.dll','hellforge_modloader.dll','MinHook-LICENSE.txt')){Copy-Item -LiteralPath (Join-Path $out $name) -Destination $shimTarget}
+if($bridge){foreach($name in @('steam_api64_bridge.dll','hellforge_steam_broker.exe')){Copy-Item -LiteralPath (Join-Path $out $name) -Destination $shimTarget}}
 # build.json's standIns pin names this one with -SteamCensus, since the session checks the stand-in it swaps in against it.
 if($SteamCensus){Copy-Item -LiteralPath (Join-Path $census 'steam_api64.dll') -Destination $shimTarget -Force}
 $scriptTarget=New-Item -ItemType Directory (Join-Path $staging 'scripts')

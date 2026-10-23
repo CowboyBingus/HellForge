@@ -393,10 +393,15 @@ sealed class PlaySession(PlayOptions options)
 
         // Steam Cloud stays in the profile: the steam_api64.dll stand-in, with the verified original next to it. No session
         // runs without it, so the copy never writes the Steam account's cloud files.
-        var cloudStandIn = Path.Combine(Shims, CloudName);
-        var cloudPin = (string?)build["standIns"]?[CloudName];
+        // Sandboxed, the bridge build instead (docs/steam-bridge.md): no export forwards, so Valve's DLL, still placed beside
+        // it for the broker to load, never loads in the game.
+        var cloudStandIn = Path.Combine(Shims, options.Sandbox ? "steam_api64_bridge.dll" : CloudName);
+        var cloudPin = options.Sandbox ? (string?)build["steamBridge"] : (string?)build["standIns"]?[CloudName];
+        if (options.Sandbox && cloudPin == null)
+            throw new SessionFailure("This HellForge was built without the Steam bridge (it needs the Steamworks SDK), so a sandboxed session cannot start.");
         if (cloudPin == null || !File.Exists(cloudStandIn)) throw new SessionFailure("The Steam Cloud stand-in is missing; reinstall HellForge.");
-        if (Tools.Sha256(cloudStandIn) != cloudPin) throw new SessionFailure("Stand-in changed since it was built: steam_api64.dll");
+        if (Tools.Sha256(cloudStandIn) != cloudPin) throw new SessionFailure("Stand-in changed since it was built: " + Path.GetFileName(cloudStandIn));
+        result["steamBridge"] = options.Sandbox;
         var realTarget = Path.GetFullPath(Path.Combine(copy, "bin", CloudReal));
         if (Tools.Sha256(Path.Combine(copy, "bin", CloudName)) != shimPins[CloudName]) throw new SessionFailure("The copy's steam_api64.dll is not the verified original.");
         SwapIn(CloudName, cloudStandIn, cloudPin, realTarget);

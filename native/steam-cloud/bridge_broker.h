@@ -9,6 +9,8 @@ typedef struct BrokerSteam {
     void (*pump)(void* context, BrokerChannel* ch);
     /* SteamAPI_IsSteamRunning */
     int (*isSteamRunning)(void* context);
+    /* the generated dispatch's needs (broker_dispatch.h); NULL: interface methods are unknown */
+    const struct BrokerApi* api;
 } BrokerSteam;
 
 /* How long the loop waits for a call before it pumps again. */
