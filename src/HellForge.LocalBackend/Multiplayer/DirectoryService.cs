@@ -214,7 +214,9 @@ public sealed partial class DirectoryService : IAsyncDisposable
     static bool Valid(DirectoryListing listing, out Dictionary<string, string> props, out int members, out int max, out bool locked)
     {
         var data = listing.Data;
-        props = data.Where(d => SearchKey().IsMatch(d.Key)).ToDictionary(d => d.Key, d => d.Value, StringComparer.Ordinal);
+        // bounded as this machine publishes its own: the stand-in hands them to the game
+        props = data.Where(d => SearchKey().IsMatch(d.Key) && d.Value.Length <= 256 && !d.Value.Any(char.IsControl))
+            .ToDictionary(d => d.Key, d => d.Value, StringComparer.Ordinal);
         locked = data.GetValueOrDefault(DirectoryKeys.Lock) == "1";
         max = members = 0;
         return data.TryGetValue(DirectoryKeys.LobbyId, out var id) && id.Length is > 0 and <= 100 &&
@@ -233,8 +235,10 @@ public sealed partial class DirectoryService : IAsyncDisposable
             catch (JsonException) { return null; }
         }
         // Without the host's record (its game has not uploaded one yet) the map gets none: no marker for it.
-        if (Json(DirectoryKeys.Record) is not { } record) return;
-        var found = new FriendPresence.DirectoryLobby(listing.Data[DirectoryKeys.LobbyId], listing.Data[DirectoryKeys.Connection], record, Json(DirectoryKeys.Live));
+        // A stranger's record is bounded before the game reads it (RecordGuard).
+        if (Json(DirectoryKeys.Record) is not { } sent || RecordGuard.Lobby(sent) is not { } record) return;
+        var found = new FriendPresence.DirectoryLobby(listing.Data[DirectoryKeys.LobbyId], listing.Data[DirectoryKeys.Connection], record,
+            Json(DirectoryKeys.Live) is { } live ? RecordGuard.Live(live) : null);
         lock (gate)
         {
             var now = DateTime.UtcNow;

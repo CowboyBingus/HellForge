@@ -252,7 +252,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
         if (reply) SendPresence([peer], "presence");
         try
         {
-            if (System.Text.Json.Nodes.JsonNode.Parse(frame.Text(0)) is System.Text.Json.Nodes.JsonObject objects) presence.SetFriendObjects(peer, objects);
+            if (System.Text.Json.Nodes.JsonNode.Parse(frame.Text(0)) is System.Text.Json.Nodes.JsonObject sent && RecordGuard.Objects(sent) is { } objects)
+                presence.SetFriendObjects(peer, objects);
         }
         catch (System.Text.Json.JsonException) { Log("Dropped malformed profile objects from a friend."); return; }
         if (frame.Count < 4) { presence.ClearFriendLobby(peer); return; }
@@ -266,7 +267,9 @@ public sealed class MultiplayerHost : IAsyncDisposable
         }
         try
         {
-            if (System.Text.Json.Nodes.JsonNode.Parse(frame.Text(3)) is System.Text.Json.Nodes.JsonObject body) presence.SetFriendLobby(peer, lobbyId, connection, body);
+            if (System.Text.Json.Nodes.JsonNode.Parse(frame.Text(3)) is System.Text.Json.Nodes.JsonObject sent && RecordGuard.Lobby(sent) is { } body)
+                presence.SetFriendLobby(peer, lobbyId, connection, body);
+            else Log("Dropped a friend's lobby record that is not one.");
         }
         catch (System.Text.Json.JsonException) { Log("Dropped a malformed lobby from a friend."); }
     }
