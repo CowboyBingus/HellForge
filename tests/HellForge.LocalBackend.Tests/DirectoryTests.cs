@@ -152,20 +152,36 @@ static class DirectoryTests
         check((await guest.Directory.SearchAsync("b1", MapFilter, 50)).Int(2) == 0, "A lobby running a blocked mod is hidden.");
         ModSettings.SetBlocked(guest.Mods, "test.ammo", false);
 
-        // Listings that cannot be joined, or are malformed, are left out.
+        // A lobby running unverified code the guest lacks (a valid listing of its own: a GUID, its host's record): a Steam
+        // friend's is shown, since joining brings the MOD SYNC prompt with TRUST (the first two-PC test's case); a
+        // stranger's needs its mods installed by hand and is left out, and the search log says so.
         var code = new ModSet("0123456789abcdef0123456789abcdef", [new ModSetEntry("test.code", "Code", "1", new string('c', 64), 10, ModClass.Code, 0)]);
+        var otherLobby = Guid.NewGuid().ToString("D");
         var other = new Dictionary<string, string>(listings.All.Single().Data)
         {
-            [DirectoryKeys.LobbyId] = "other-lobby", [DirectoryKeys.Connection] = LobbyService.ConnectionPrefix + "other-lobby;" + LobbyService.EntityId(OtherId),
+            [DirectoryKeys.LobbyId] = otherLobby, [DirectoryKeys.Connection] = LobbyService.ConnectionPrefix + otherLobby + ";" + LobbyService.EntityId(OtherId),
             [DirectoryKeys.Host] = OtherId.ToString(CultureInfo.InvariantCulture), [DirectoryKeys.Digest] = code.Digest
         };
         DirectoryData.Put(other, DirectoryKeys.Mods, DirectoryData.Pack(code.ToJson(local: false).ToJsonString()));
+        DirectoryData.Put(other, DirectoryKeys.Record, DirectoryData.Pack(DirectoryService.Public(JsonNode.Parse(Record(OtherId))!.AsObject(), OtherId).ToJsonString()));
+        check(DirectoryService.Valid(new DirectoryListing(OtherId, other), out _, out _, out _, out _, out var otherWhy), "The other host's listing is valid: " + otherWhy);
         listings.For(OtherId).Publish(new DirectoryListing(OtherId, other));
         await Task.Delay(SameSearchPause);
-        var withOther = await guest.Directory.SearchAsync("u1", MapFilter, 50);
-        check(withOther.Int(2) == 1 && withOther.Text(3) == lobbyId, "A lobby with unverified code the guest lacks is left out.");
+        var withFriend = await guest.Directory.SearchAsync("u1", MapFilter, 50);
+        check(withFriend.Int(2) == 2 && Enumerable.Range(0, withFriend.Count).Any(i => withFriend.Text(i) == otherLobby),
+            "A Steam friend's lobby with unverified code the guest lacks is shown (TRUST on joining).");
+        lock (network.Strangers) network.Strangers.Add(OtherId);
+        await Task.Delay(SameSearchPause);
+        var withStranger = await guest.Directory.SearchAsync("u1s", MapFilter, 50);
+        check(withStranger.Int(2) == 1 && withStranger.Text(3) == lobbyId, "A stranger's lobby with unverified code the guest lacks is left out.");
+        lock (guest.Log) check(guest.Log.Any(l => l.Contains("2 listed, 1 shown (1 left out: it needs mods installed by hand)")),
+            "The search says why: " + string.Join(" / ", guest.Log.TakeLast(2)));
+        lock (network.Strangers) network.Strangers.Remove(OtherId);
+        await Task.Delay(SameSearchPause);
+        await host.Directory.SearchAsync("own2", MapFilter, 50);
+        lock (host.Log) check(host.Log.Any(l => l.Contains("left out: this machine's own lobby")), "A host's search says it left out its own lobby: " + host.Log.Last());
         other[DirectoryKeys.Digest] = guest.Sync.OwnDigest;
-        other[DirectoryKeys.Connection] = LobbyService.ConnectionPrefix + "other-lobby;" + LobbyService.EntityId(HostId);
+        other[DirectoryKeys.Connection] = LobbyService.ConnectionPrefix + otherLobby + ";" + LobbyService.EntityId(HostId);
         listings.For(OtherId).Publish(new DirectoryListing(OtherId, other));
         await Task.Delay(SameSearchPause);
         check((await guest.Directory.SearchAsync("u2", MapFilter, 50)).Int(2) == 1, "A listing whose connection string names another host is left out.");

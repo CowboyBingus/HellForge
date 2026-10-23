@@ -30,7 +30,8 @@ reaches PlayFab, Arrowhead's services or vanilla players' sessions.
    - **Public:** any HellForge player. The lobby is listed for other HellForge players, who see it on the Galactic Map
      and can join it from there. It shows its players' names and the host's Steam account id. Lobbies a player could
      not join (a blocked mod, mods to install by hand, or a host who plays with edited stats unless shown) are left off
-     their map.
+     their map. A Steam friend's lobby is shown even when it runs code mods HellForge has not checked (when the friend
+     shares their mods, the default): joining it brings the MOD SYNC prompt, where you can trust them.
    - **Friends only:** your Steam friends, and players you invite. It is not listed.
    - **Invite only:** players you invite from the game's social menu. Friends you have not invited are refused too. It
      is not listed.
@@ -387,6 +388,30 @@ One that breaks any of the following is left out whole:
   host, who must be the listing's. Unknown fields are dropped.
 
 The published record is rebuilt from the same schema, with every account id but the host's at 0.
+
+Which lobbies a search shows is mod sync's rule (`ModSync.Joinable`), and it uses the plan a join would make
+(`ModSyncPlan`):
+- A Steam friend's lobby running code or raw mods that are not verified is shown, because joining brings the MOD SYNC
+  prompt with TRUST.
+- A stranger's lobby running such mods is hidden, because they are mods to install by hand.
+
+Each search logs what it found, what it showed, and why it left out the rest: `Directory: search "<the game's filter>": 2
+listed, 1 shown (1 left out: it needs mods installed by hand)`. The reasons are:
+- `this machine's own lobby`, which Steam's search returns too;
+- `malformed (...)`;
+- `the game's filter`, which covers clauses Steam's search does not apply, such as difficulty ranges and member counts;
+- `its host plays with edited stats`;
+- `its mod list is malformed`;
+- `it runs a blocked mod`;
+- `its host runs another HellForge version`;
+- `it needs mods installed by hand`.
+
+Until 2026-10-23 a search left this machine's own lobby out without counting it. On the first two-PC test, "1 listed, 0
+shown" was the searching player's own lobby, not the friend's:
+- It was listed from the planet's search once the player's own listing had been rewritten for that planet (11:22:25,
+  "3 listing value(s) written").
+- None of the lines named a reason, and every other path names one.
+- The friend's backend first reached this one at 11:26:17, after the last search.
 
 `HELLFORGE_TEST_STRANGERS=1` makes a backend treat friends as strangers, for testing with two friends' PCs. Details and
 open questions: [Step 7](#step-7-public-lobbies-on-the-galactic-map-2026-10-22).
@@ -863,7 +888,7 @@ Built 2026-10-22 and tested on one PC only.
 1. Both turn on multiplayer and Local PlayFab. The host opens a Public lobby on a planet.
 2. The other player opens the Galactic Map on that planet. Check:
    - a marker and a hover card with the host's name;
-   - `multiplayer.log` "Directory: search ... shown";
+   - `multiplayer.log` "Directory: search ... shown", with the reasons for any lobby left out;
    - the stand-in log's `PFMultiplayerFindLobbies: filter "..."`.
 3. JOIN from the map. Check:
    - the join is admitted (the host's log has no "Dropped ... not a Steam friend");

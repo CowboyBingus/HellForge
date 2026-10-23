@@ -182,7 +182,8 @@ public sealed partial class DirectoryService : IAsyncDisposable
         var refused = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var listing in listings)
         {
-            if (listing.Host == localId) continue;
+            // (Steam's search finds this machine's own listing too: counted, so "1 listed, 0 shown" never hides why)
+            if (listing.Host == localId) { Count(refused, "this machine's own lobby"); continue; }
             if (!Valid(listing, out var props, out var members, out var max, out var locked, out var malformed)) { Count(refused, "malformed (" + malformed + ")"); continue; }
             if (!filter.Matches(props, members, max, locked)) { Count(refused, "the game's filter"); continue; }
             if (sync != null && !sync.Joinable(listing, out var why)) { Count(refused, why); continue; }

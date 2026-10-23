@@ -171,8 +171,10 @@ public sealed class ModSync : IAsyncDisposable
     ModLocator Locator { get { lock (gate) return locator ??= new ModLocator(modsFolder); } }
 
     // Whether a listed lobby could be joined: the same mods, or a plan that is not blocked or unjoinable (mods to install
-    // by hand, another HellForge), and edited stats only when the player shows such lobbies. A listing without a mod set
-    // is shown: the join's refusal then brings it.
+    // by hand, another HellForge), and edited stats only when the player shows such lobbies. The plan is the one a join
+    // would make (ModSyncPlan): a Steam friend's code and raw mods that wait for the player's trust are shown (joining
+    // brings the MOD SYNC prompt with TRUST), a stranger's are to install by hand and hidden. A listing without a mod set
+    // is shown: the join's refusal then brings it. why: the search log's reason (DirectoryService.SearchAsync).
     public bool Joinable(DirectoryListing listing, out string why)
     {
         why = "";
@@ -185,8 +187,13 @@ public sealed class ModSync : IAsyncDisposable
         catch (InvalidDataException) { why = "its mod list is malformed"; return false; }
         var plan = ModSyncPlan.Make(set, listing.Data.GetValueOrDefault(DirectoryKeys.Share) == "1", own ?? new ModSet("none", []), Locator.Find, settings.Blocked, verified,
             hostIsFriend: transport.IsFriend(listing.Host), trusted: settings.Trusts);
-        why = plan.Verdict switch { SyncVerdict.Blocked => "it runs a blocked mod", SyncVerdict.Unjoinable => "it runs mods that cannot be downloaded", _ => "" };
-        // a friend's mods the player may still trust on the prompt: shown
+        why = plan.Verdict switch
+        {
+            SyncVerdict.Blocked => "it runs a blocked mod",
+            SyncVerdict.Unjoinable when plan.Items.Any(i => i.Action == SyncAction.Update) => "its host runs another HellForge version",
+            SyncVerdict.Unjoinable => "it needs mods installed by hand",
+            _ => ""
+        };
         return plan.Verdict is SyncVerdict.Ready or SyncVerdict.Download or SyncVerdict.Trust;
     }
 
