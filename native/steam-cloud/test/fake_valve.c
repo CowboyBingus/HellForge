@@ -22,6 +22,9 @@ typedef struct FakeValveState {
     uint64_t lobbyDataLobby;
     int personaNameSets;        // SetPersonaName: refused, so never reached
     int createLobbyMax;
+    int createLobbyType;        // the type Steam was asked for (the broker may change the game's)
+    int setLobbyTypeCalls, setLobbyType;
+    uint64_t setLobbyTypeLobby;
 } FakeValveState;
 
 static FakeValveState g_state;
@@ -119,7 +122,7 @@ FAKE_API void FakeValve_Queue(int id, const void* data, int size)
 FAKE_API uint64_t SteamAPI_ISteamMatchmaking_CreateLobby(void* self, int type, int maxMembers)
 {
     Check(self, &g_matchmaking);
-    (void)type;
+    g_state.createLobbyType = type;
     g_state.createLobbyMax = maxMembers;
     // SteamAPICallCompleted_t: the call, LobbyCreated_t's id (513), its size
     uint8_t completed[16];
@@ -131,6 +134,15 @@ FAKE_API uint64_t SteamAPI_ISteamMatchmaking_CreateLobby(void* self, int type, i
     memcpy(completed + 12, &size, 4);
     FakeValve_Queue(703, completed, 16);
     return CREATE_LOBBY_CALL;
+}
+// Called by the broker itself (a change of Play with strangers), never by the game: the table refuses it.
+FAKE_API bool SteamAPI_ISteamMatchmaking_SetLobbyType(void* self, uint64_t lobby, int type)
+{
+    Check(self, &g_matchmaking);
+    g_state.setLobbyTypeCalls++;
+    g_state.setLobbyType = type;
+    g_state.setLobbyTypeLobby = lobby;
+    return true;
 }
 FAKE_API bool SteamAPI_ISteamMatchmaking_SetLobbyData(void* self, uint64_t lobby, const char* key, const char* value)
 {

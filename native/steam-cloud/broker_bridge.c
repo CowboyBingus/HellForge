@@ -11,6 +11,9 @@
 #define STEAM_API_CALL_COMPLETED 703
 #define LOBBY_CREATED 513
 #define RESULT_OK 1
+/* ELobbyType */
+#define LOBBY_FRIENDS_ONLY 1
+#define LOBBY_PUBLIC 2
 
 /* CallbackMsg_t (steam_api_common.h), what ManualDispatch_GetNextCallback fills. */
 #pragma pack(push, 8)
@@ -59,6 +62,121 @@ static void LogValue(const BrokerApi* api, const char* what, const char* value)
     fprintf(stderr, "broker: %s = %.64s\n", what, value ? value : "(null)");
 }
 
+/* ---- Play with strangers: the game's own Steam lobby (docs/steam-bridge.md, "The game's own Steam lobby") ----
+ * A Public lobby is in every Steam search, with its host's id, PlayFab lobby id and connection string. Strangers can
+ * reach no one with Play with strangers off, so the game's Public lobby is made Friends only then (friends and invitees
+ * still join), and turned back when it is switched on. Every other type is left as asked. */
+
+int BrokerStrangersIn(const char* json, size_t length)
+{
+    static const char key[] = "playWithStrangers";
+    int depth = 0;
+    for (size_t i = 0; i < length; i++)
+    {
+        char c = json[i];
+        if (c == '{' || c == '[') depth++;
+        else if (c == '}' || c == ']') depth--;
+        else if (c == '"')
+        {
+            size_t start = ++i;
+            while (i < length && json[i] != '"') i += json[i] == '\\' ? 2 : 1;
+            if (i >= length) return 0;
+            if (depth != 1 || i - start != sizeof key - 1 || memcmp(json + start, key, sizeof key - 1) != 0) continue;
+            size_t at = i + 1;
+            while (at < length && (json[at] == ' ' || json[at] == '\t' || json[at] == '\r' || json[at] == '\n')) at++;
+            if (at >= length || json[at] != ':') continue;
+            at++;
+            while (at < length && (json[at] == ' ' || json[at] == '\t' || json[at] == '\r' || json[at] == '\n')) at++;
+            return length - at >= 4 && memcmp(json + at, "true", 4) == 0;
+        }
+    }
+    return 0;
+}
+
+/* The settings file as the backend finds it (ModSettings: hellforge-mods.json, else the older bts-mods.json). */
+static int SettingsFile(const BrokerBridge* b, wchar_t* path, size_t capacity, WIN32_FILE_ATTRIBUTE_DATA* data)
+{
+    static const wchar_t* const names[] = { L"hellforge-mods.json", L"bts-mods.json" };
+    for (int i = 0; i < 2; i++)
+    {
+        if (swprintf(path, capacity, L"%ls\\%ls", b->modsFolder, names[i]) < 0) return 0;
+        if (GetFileAttributesExW(path, GetFileExInfoStandard, data)) return 1;
+    }
+    return 0;
+}
+
+static int ReadStrangers(const wchar_t* path)
+{
+    HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (file == INVALID_HANDLE_VALUE) return 0;
+    static char text[1 << 20];
+    DWORD read = 0;
+    BOOL ok = ReadFile(file, text, sizeof text, &read, NULL);
+    CloseHandle(file);
+    return ok ? BrokerStrangersIn(text, read) : 0;
+}
+
+/* The game's lobbies it asked to be Public get Friends only or Public again, as the setting now says. */
+static void ApplyLobbyTypes(BrokerBridge* b)
+{
+    typedef bool (*SetTypeFn)(void*, uint64_t, int);
+    SetTypeFn setType = (SetTypeFn)(void*)GetProcAddress(b->valve, "SteamAPI_ISteamMatchmaking_SetLobbyType");
+    void* matchmaking = Self(&b->api, "SteamAPI_SteamMatchmaking_v009");
+    int type = b->strangers ? LOBBY_PUBLIC : LOBBY_FRIENDS_ONLY;
+    for (int i = 0; i < b->lobbyCount; i++)
+        if (b->lobbyAsked[i] == LOBBY_PUBLIC)
+        {
+            bool set = setType && matchmaking && setType(matchmaking, b->lobbies[i], type);
+            fprintf(stderr, "broker: lobby %llu made %s (Play with strangers %s)%s\n", (unsigned long long)b->lobbies[i],
+                type == LOBBY_PUBLIC ? "Public" : "Friends only", b->strangers ? "on" : "off", set ? "" : ": SetLobbyType failed");
+        }
+}
+
+/* Looks at the settings file (at most every BROKER_STRANGERS_MS unless now), reading it only when its time stamp moved. */
+static void CheckStrangers(BrokerBridge* b, int now)
+{
+    if (!b->modsFolder[0]) return;
+    DWORD tick = GetTickCount();
+    if (!now && tick - b->strangersChecked < BROKER_STRANGERS_MS) return;
+    b->strangersChecked = tick;
+    wchar_t path[600];
+    WIN32_FILE_ATTRIBUTE_DATA data;
+    int found = SettingsFile(b, path, sizeof path / sizeof path[0], &data);
+    FILETIME stamp = found ? data.ftLastWriteTime : (FILETIME){ 0, 0 };
+    if (!now && CompareFileTime(&stamp, &b->strangersStamp) == 0) return;
+    b->strangersStamp = stamp;
+    int strangers = found && ReadStrangers(path);
+    if (strangers == b->strangers && !now) return;
+    int changed = strangers != b->strangers;
+    b->strangers = strangers;
+    fprintf(stderr, "broker: Play with strangers %s\n", strangers ? "on" : "off");
+    if (changed) ApplyLobbyTypes(b);
+}
+
+void BrokerBridgeWatchStrangers(BrokerBridge* b, const wchar_t* modsFolder)
+{
+    if (!modsFolder || wcslen(modsFolder) >= sizeof b->modsFolder / sizeof b->modsFolder[0]) return;
+    wcscpy(b->modsFolder, modsFolder);
+    CheckStrangers(b, 1);
+}
+
+static int64_t Adjust(const BrokerApi* api, uint32_t method, const char* argument, int64_t value)
+{
+    BrokerBridge* b = Of(api);
+    if (method != BRIDGE_M_SteamMatchMaking009_CreateLobby || strcmp(argument, "eLobbyType") != 0) return value;
+    CheckStrangers(b, 0);
+    int64_t given = value == LOBBY_PUBLIC && !b->strangers ? LOBBY_FRIENDS_ONLY : value;
+    if (b->pendingCount == BROKER_PENDING_LOBBIES)
+    {
+        memmove(b->pendingAsked, b->pendingAsked + 1, sizeof b->pendingAsked[0] * (BROKER_PENDING_LOBBIES - 1));
+        b->pendingCount--;
+    }
+    b->pendingAsked[b->pendingCount++] = (int32_t)value;
+    fprintf(stderr, "broker: CreateLobby asks lobby type %lld; Steam gets %lld (Play with strangers %s)\n", (long long)value, (long long)given,
+        b->strangers ? "on" : "off");
+    return given;
+}
+
 static bool Allowed(int id)
 {
     for (int i = 0; i < BRIDGE_CALLBACK_COUNT; i++) if (g_bridgeCallbacks[i] == id) return true;
@@ -88,13 +206,23 @@ static void CallCompleted(BrokerBridge* b, BrokerChannel* ch, const uint8_t* dat
     if (!result || !result(b->hPipe, call, slot + BRIDGE_CALL_RESULT_HEADER, (int)resultSize, id, &failed)) failed = true;
     memcpy(slot, &call, 8);
     slot[8] = failed ? 1 : 0;
-    if (id == LOBBY_CREATED && !failed && resultSize >= 16 && b->lobbyCount < BROKER_MAX_LOBBIES)
+    if (id == LOBBY_CREATED)
     {
-        int32_t eResult;
-        uint64_t lobby;
-        memcpy(&eResult, slot + BRIDGE_CALL_RESULT_HEADER, 4);
-        memcpy(&lobby, slot + BRIDGE_CALL_RESULT_HEADER + 8, 8);
-        if (eResult == RESULT_OK && lobby) b->lobbies[b->lobbyCount++] = lobby;
+        /* the oldest CreateLobby waiting is this one's */
+        int32_t asked = b->pendingCount > 0 ? b->pendingAsked[0] : -1;
+        if (b->pendingCount > 0) memmove(b->pendingAsked, b->pendingAsked + 1, sizeof b->pendingAsked[0] * (size_t)--b->pendingCount);
+        int32_t eResult = 0;
+        uint64_t lobby = 0;
+        if (!failed && resultSize >= 16)
+        {
+            memcpy(&eResult, slot + BRIDGE_CALL_RESULT_HEADER, 4);
+            memcpy(&lobby, slot + BRIDGE_CALL_RESULT_HEADER + 8, 8);
+        }
+        if (eResult == RESULT_OK && lobby && b->lobbyCount < BROKER_MAX_LOBBIES)
+        {
+            b->lobbyAsked[b->lobbyCount] = asked;
+            b->lobbies[b->lobbyCount++] = lobby;
+        }
     }
     BrokerChannelPushCallback(ch, (uint32_t)id | BRIDGE_CALL_RESULT_FLAG, slot, BRIDGE_CALL_RESULT_HEADER + resultSize);
 }
@@ -115,6 +243,7 @@ static void Pump(void* context, BrokerChannel* ch)
         b->freeLast(b->hPipe);
     }
     if (ch->dropped > 0 && reportedDrops == 0) { fprintf(stderr, "broker: the ring is full; callbacks are being dropped\n"); reportedDrops = 1; }
+    CheckStrangers(b, 0);
     DWORD now = GetTickCount();
     if (!b->snapshotDone || now - b->lastSnapshot >= BROKER_SNAPSHOT_MS) BrokerBridgeSnapshot(b, ch);
 }
@@ -195,7 +324,7 @@ int BrokerBridgeOpen(BrokerBridge* b, HMODULE valve, int hPipe)
     b->next = (void*)GetProcAddress(valve, "SteamAPI_ManualDispatch_GetNextCallback");
     b->freeLast = (FreeFn)(void*)GetProcAddress(valve, "SteamAPI_ManualDispatch_FreeLastCallback");
     if (!b->runFrame || !b->next || !b->freeLast) return 0;
-    b->api = (BrokerApi){ b, Resolve, Self, OwnLobby, Refuse, LogValue, BrokerDispatchMethod };
+    b->api = (BrokerApi){ b, Resolve, Self, OwnLobby, Refuse, LogValue, Adjust, BrokerDispatchMethod };
     b->steam = (BrokerSteam){ b, Pump, IsRunning, &b->api };
     return 1;
 }

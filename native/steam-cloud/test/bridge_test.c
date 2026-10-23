@@ -28,7 +28,22 @@ typedef struct FakeValveState {
     uint64_t lobbyDataLobby;
     int personaNameSets;
     int createLobbyMax;
+    int createLobbyType;
+    int setLobbyTypeCalls, setLobbyType;
+    uint64_t setLobbyTypeLobby;
 } FakeValveState;
+
+// Play with strangers in a mods folder of the test's own: the settings file's text (written anew, so its time stamp moves).
+static wchar_t g_mods[MAX_PATH];
+
+static void Strangers(const char* json)
+{
+    wchar_t path[MAX_PATH + 32];
+    swprintf(path, sizeof path / sizeof path[0], L"%ls\\hellforge-mods.json", g_mods);
+    HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    DWORD wrote = 0;
+    if (file != INVALID_HANDLE_VALUE) { WriteFile(file, json, (DWORD)strlen(json), &wrote, NULL); CloseHandle(file); }
+}
 
 // ---- the broker, on a thread ----
 
@@ -100,6 +115,13 @@ int wmain(int argc, wchar_t** argv)
     swprintf(suffix, 64, L"bridgetest-%lu", GetCurrentProcessId());
     if (!BrokerChannelCreate(&g_broker, suffix) || !BrokerBridgeOpen(&g_bridge, valve, 1)) { fprintf(stderr, "broker setup failed\n"); return 2; }
     BrokerBridgeSnapshot(&g_bridge, &g_broker);
+    // strangers off: a nested "playWithStrangers" (a mod's own setting) is not the player's
+    wchar_t temp[MAX_PATH];
+    GetTempPathW(MAX_PATH, temp);
+    swprintf(g_mods, MAX_PATH, L"%lsbridgetest-mods-%lu", temp, GetCurrentProcessId());
+    CreateDirectoryW(g_mods, NULL);
+    Strangers("{\"mods\":{\"x\":{\"playWithStrangers\":true}},\"playWithStrangers\":false}");
+    BrokerBridgeWatchStrangers(&g_bridge, g_mods);
     HANDLE broker = CreateThread(NULL, 0, Broker, NULL, 0, NULL);
 
     SetEnvironmentVariableW(L"HELLFORGE_BRIDGE_PIPE", suffix);
@@ -203,9 +225,11 @@ int wmain(int argc, wchar_t** argv)
     EXPECT(!setLobbyData(matchmaking, LOBBY, "mission", "1") && fake->lobbyDataCalls == 0, "SetLobbyData on a lobby the game did not make is refused");
     typedef uint64_t (*CreateLobbyFn)(void*, int, int);
     CreateLobbyFn createLobby = (CreateLobbyFn)SLOT(matchmaking, SteamMatchMaking009_CreateLobby);
-    EXPECT(createLobby(matchmaking, 1, 9) == 0 && fake->createLobbyMax == 0, "CreateLobby for 9 members is refused (table: 1-4)");
-    uint64_t call = createLobby(matchmaking, 1, 4);
+    EXPECT(createLobby(matchmaking, 1, 9) == 0 && fake->createLobbyMax == 0 && g_bridge.pendingCount == 0,
+        "CreateLobby for 9 members is refused (table: 1-4), before the broker's own rule sees it");
+    uint64_t call = createLobby(matchmaking, 2, 4);
     EXPECT(call == 5005 && fake->createLobbyMax == 4, "CreateLobby returns its SteamAPICall_t");
+    EXPECT(fake->createLobbyType == 1, "Play with strangers off: the game's Public lobby (2) is made Friends only (1)");
     FakeCallback created = { g_callbackVtable, 0, { 0 }, 513, 16, 0, { 0 }, false, 0 };
     EXPORT(RegisterResultFn, "SteamAPI_RegisterCallResult")(&created, call);
     RunUntil(&created.runs, 1);
@@ -217,6 +241,22 @@ int wmain(int argc, wchar_t** argv)
     uint64_t owner = 0;
     EXPECT(((uint64_t* (*)(void*, uint64_t*, uint64_t))SLOT(matchmaking, SteamMatchMaking009_GetLobbyOwner))(matchmaking, &owner, LOBBY) == &owner &&
         owner == STEAM_ID, "GetLobbyOwner: a CSteamID argument, and its result through the hidden pointer");
+
+    // Play with strangers turned on: the game's lobby is Public again, and a new Public lobby stays Public; a private one
+    // (0) is never changed. Off again: every lobby the game asked to be Public is Friends only.
+    Strangers("{\"playWithStrangers\": true}");
+    for (int i = 0; i < 400 && fake->setLobbyTypeCalls == 0; i++) Sleep(10);
+    EXPECT(fake->setLobbyTypeCalls == 1 && fake->setLobbyType == 2 && fake->setLobbyTypeLobby == LOBBY, "Strangers on: the game's lobby is made Public again");
+    createLobby(matchmaking, 2, 4);
+    EXPECT(fake->createLobbyType == 2, "Strangers on: a Public lobby stays Public");
+    createLobby(matchmaking, 0, 4);
+    EXPECT(fake->createLobbyType == 0, "a private lobby (0) is left as asked");
+    for (int i = 0; i < 400 && g_bridge.lobbyCount < 3; i++) Sleep(10);
+    Strangers("{\"playWithStrangers\":false}");
+    for (int i = 0; i < 400 && fake->setLobbyTypeCalls < 3; i++) Sleep(10);
+    Sleep(BROKER_STRANGERS_MS + 300);
+    EXPECT(g_bridge.lobbyCount == 3 && fake->setLobbyTypeCalls == 3 && fake->setLobbyType == 1,
+        "Strangers off again: the two lobbies asked to be Public are made Friends only, the private one is not touched");
 
     // the inline accessors' context, ISteamClient, and an interface the table does not know
     ContextInitFn contextInit = EXPORT(ContextInitFn, "SteamInternal_ContextInit");

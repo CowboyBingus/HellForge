@@ -615,6 +615,8 @@ sealed class PlaySession(PlayOptions options)
             brokerStart.ArgumentList.Add(bridgeSuffix!);
             brokerStart.ArgumentList.Add(job.Process.Id.ToString());
             brokerStart.ArgumentList.Add(Path.GetFullPath(Path.Combine(copy, "bin", CloudReal)));
+            // Play with strangers, which the broker reads as the backend does: off, the game's Public Steam lobby is Friends only
+            brokerStart.ArgumentList.Add(Path.GetFullPath(install.Mods));
             broker = Process.Start(brokerStart) ?? throw new SessionFailure("The Steam broker did not start.");
             var brokerLog = new StreamWriter(Path.Combine(run, "steam-broker.log")) { AutoFlush = true };
             broker.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (brokerLog) brokerLog.WriteLine(e.Data); };

@@ -246,8 +246,11 @@ public static partial class SteamBridge
         var args = m.Params.Sum(p => p.Kind switch { Kind.InString => 2 + p.Max, Kind.Buffer or Kind.Out or Kind.OutSteamId => 1, _ => p.Size });
         var result = (ret.Kind == "string" ? 2 + ReturnedString : ret.Size) + m.Params.Sum(p => p.Kind switch { Kind.Buffer => p.Max, Kind.Out or Kind.OutSteamId => p.Size, _ => 0 });
         if (args > MaxMessage || result > MaxMessage) throw new InvalidDataException($"{where}: {Math.Max(args, result)} bytes do not fit one message.");
-        foreach (var rangeName in Names(m.Rule, "range").Concat(Names(m.Rule, "ownLobby")).Concat(Names(m.Rule, "printable")).Concat(Names(m.Rule, "logged")))
+        foreach (var rangeName in Names(m.Rule, "range").Concat(Names(m.Rule, "ownLobby")).Concat(Names(m.Rule, "printable")).Concat(Names(m.Rule, "logged"))
+            .Concat(Names(m.Rule, "adjust")))
             if (m.Params.All(p => p.Name != rangeName)) throw new InvalidDataException($"{where}: the table names {rangeName}, which is not a parameter.");
+        foreach (var adjusted in Names(m.Rule, "adjust"))
+            if (m.Params.First(p => p.Name == adjusted).Kind != Kind.Value) throw new InvalidDataException($"{where}: only an integer parameter can be adjusted ({adjusted}).");
     }
 
     [GeneratedRegex("^E(BeginAuthSessionResult|UserHasLicenseForAppResult|VoiceResult|Result)$")]
@@ -448,6 +451,10 @@ public static partial class SteamBridge
                 if (p.Kind is Kind.Out or Kind.OutSteamId)
                     s.AppendLine($"        {(p.Kind == Kind.OutSteamId ? "uint64_t" : p.CType[..^2])} out_{p.Name} = 0;");
             }
+            // the broker's own rule for a value (BrokerApi.adjust), once every check of the table passed: a refused call
+            // never reaches it
+            foreach (var p in m.Params.Where(p => Names(m.Rule, "adjust").Contains(p.Name)))
+                s.AppendLine($"        {p.Name} = ({p.CType})api->adjust(api, BRIDGE_M_{m.Id}, \"{p.Name}\", (int64_t){p.Name});");
             var flatParams = new List<string> { "void *" };
             var flatArgs = new List<string> { "self_" };
             foreach (var p in m.Params)

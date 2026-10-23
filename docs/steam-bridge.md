@@ -1,9 +1,10 @@
 # The Steam bridge: the game at low integrity
 
-**Status: in development** on `port/networking-0.2.0`. Built and tested with fixtures: the census, the broker and its
-channel (phase 2), the generated bridge with its first allow-list (phase 3), and the session side of phase 4. None of it
-has run in game: the allow-list covers the calls one census run saw, and the next census (a controller, a whole mission,
-the social tab) will show what it misses. A session is sandboxed only when asked (`HellForge.Session play --sandbox`, or
+**Status: in development** on `port/lockdown-0.3.0`. Built and tested with fixtures: the census, the broker and its
+channel (phase 2), the generated bridge with its first allow-list (phase 3), and the session side of phase 4. In game,
+one sandboxed solo session reached the title screen (2026-10-23, phase 4 below); a mission, a controller and co-op are
+untested. The allow-list covers the calls one census run saw, and the next census (a controller, a whole mission, the
+social tab) will show what it misses. A session is sandboxed only when asked (`HellForge.Session play --sandbox`, or
 `HELLFORGE_SANDBOX=1`), and only with an engine built with the Steamworks SDK; nothing here ships yet.
 
 ## Why
@@ -41,14 +42,14 @@ client's IPC objects are at the player's normal integrity, so a low-integrity pr
     It waits up to 10 s for the broker's pipe. Without a broker it **fails closed**: init returns false,
     `IsSteamRunning` 0, and nothing falls back to Valve's DLL.
   - It answers the flat API itself: init, shutdown, `RunCallbacks`, `IsSteamRunning` (asked of the broker), callback
-    registration, the user and pipe handles. `SteamInternal_ContextInit` is still to do.
-  - **Until phase 3**, the other exports are still loader forwarders to Valve's DLL, so a forwarded call would load it
-    in the game. Phase 3's generated exports and proxies replace them: an export with no bridged implementation logs
-    once and fails.
+    registration, the user and pipe handles, and `SteamInternal_ContextInit` (the inline accessors' cache).
+  - The **bridge build** of the stand-in (`steam_api64_bridge.dll`, phase 3) has no forwarders to Valve's DLL: an export
+    with no bridged implementation logs once and fails, and a game-server interface is NULL.
   - It hands out generated proxy objects for each interface the game requests (phase 3). Each vtable slot marshals its
     call to the broker.
 - **The broker** (`hellforge_steam_broker.exe`, beside the stand-ins) is native C and runs at the player's normal
-  integrity: one process per session, started by the session runner as `<pipe suffix> <game pid> <Valve's DLL>`.
+  integrity: one process per session, started by the session runner as `<pipe suffix> <game pid> <Valve's DLL> <mods
+  folder>` (the mods folder for Play with strangers: "The game's own Steam lobby" below).
   - It creates the pipe and ring first, then loads Valve's `steam_api64.dll` (the game's pinned copy) as app 553850
     (`SteamAppId` in its environment; it never calls `SteamAPI_RestartAppIfNecessary`, which may start the installed
     game) and calls `SteamAPI_Init` (`SteamAPI_InitFlat` with a newer SDK) and manual dispatch.
@@ -188,7 +189,7 @@ rather than run on Valve's DLL.
 | `SteamUtils010` | `GetIPCountry`, `IsSteamRunningOnSteamDeck` | snapshot | |
 | `SteamUtils010` | `SetOverlayNotificationPosition`, `IsOverlayEnabled` | local | the overlay is in the broker: nothing to place, none shown |
 | `SteamUtils010` | `InitFilterText`, `FilterText` | call | input at most 4096 bytes, output buffer bounded |
-| `SteamMatchMaking009` | `CreateLobby` | call | **to review:** strangers can read a public lobby's data; at most 4 members |
+| `SteamMatchMaking009` | `CreateLobby` | call | **to review:** strangers can read a public lobby's data; at most 4 members; the type is logged, and Public becomes Friends only while Play with strangers is off (below) |
 | `SteamMatchMaking009` | `SetLobbyData`, `SetLobbyJoinable`, `LeaveLobby`, `GetNumLobbyMembers`, `GetLobbyMemberByIndex`, `GetLobbyOwner` | call | only a lobby the game made this session; key at most 255, value at most 8192 bytes |
 | `STEAMUSERSTATS_INTERFACE_VERSION012` | `RequestCurrentStats`, `GetAchievement` | call | name at most 128 |
 | `SteamInput006` | `GetControllerForGamepadIndex` | call | index 0-15; per-frame use unknown until a controller census |
@@ -201,6 +202,36 @@ are answered in the game, and the other 300 the nine interfaces declare are refu
 answers (0.85) and `BLoggedOn` (0.024) are memory reads. None makes a system call, so an idle frame stays at the ring
 read. The lobby queries (about 0.02 per frame each) and everything else are a round trip each, two system calls in the
 game; the census saw them on events only.
+
+### The game's own Steam lobby
+
+The game makes a Steam lobby of its own beside its PlayFab one. A Public one is in every Steam search of the app
+(probed 2026-10-22), with its data:
+- the PlayFab connection string (key `"0"`), so the lobby id;
+- the build string vanilla games share (`"1"`);
+- the host's SteamID (`"3"`);
+- the host's coordinates ×100 (`"22"`, `"23"`).
+
+HellForge's public lobbies go through its own directory instead (docs/multiplayer.md, step 7).
+
+The census saw `CreateLobby`, `SetLobbyData`, `SetLobbyJoinable` and `LeaveLobby`, never `SetLobbyType`, so the
+lobby's type is the one asked for at creation. The table marks `eLobbyType` for the broker to adjust (`adjust` in
+`bridge-methods.json`, `BrokerApi.adjust`, run once every check of the table passed):
+- **Play with strangers off** (the default): a Public lobby (`2`) is made Friends only (`1`). Friends and invitees
+  can still join it, and it is in no search. Strangers could reach no one anyway, so nothing is lost.
+- **Play with strangers on:** the type is left as the game asked. A stranger joining through the directory may join
+  the host's Steam lobby too (a joiner posts it as its `platform_lobby`), which Friends only would refuse. To settle
+  in the two-PC test: if a stranger's join still works with the host's lobby Friends only, it can be Friends only
+  always.
+- Every other type is left as asked, and every request is logged: `broker: CreateLobby asks lobby type 2; Steam gets
+  1 (Play with strangers off)`.
+- The broker reads the setting as the backend does (`mods/hellforge-mods.json` `playWithStrangers`, top level only, off
+  without the file). It looks at the file's time stamp every 2 s, in the broker's process. When the setting changes,
+  each lobby the game asked to be Public gets `SetLobbyType`, Public or Friends only.
+- `bridge_test.c` checks the clamp, a nested key that is not the setting, both changes and a private lobby left alone.
+
+Sessions that are not sandboxed load Valve's DLL in the game, so this does not apply to them; there the game's Public
+lobby stays listed.
 
 ### The rest of a low-integrity session
 
@@ -398,8 +429,10 @@ Every number here is unmeasured in game until phase 4.
    DLL behind the generated dispatch and calls the bridge build's interfaces as the game does: values, strings and the
    printable check, buffers and their bounds, out values, a CSteamID argument and the hidden-pointer result, the
    snapshot, a refused method that never reaches Steam, a lobby the game did not make, callbacks (and an id the table
-   does not list), a call result, `ContextInit`, `ISteamClient`, an unknown interface, and that Valve's DLL never loads.
-   Built 2026-10-23. Still to do: the next census, then the table's two review items (`SetRichPresence`, `CreateLobby`).
+   does not list), a call result, `ContextInit`, `ISteamClient`, an unknown interface, the game's lobby type and Play
+   with strangers, a NULL game-server interface, and that Valve's DLL never loads (42 checks).
+   Built 2026-10-23. Still to do: the next census, then the table's two review items (`SetRichPresence`, `CreateLobby`;
+   `CreateLobby`'s type is now the broker's, above).
 4. **A low-integrity session:** the token and job, labelled folders, pipe labels, and the editor's saves through the
    backend. In game, solo then co-op on two PCs: no STEAM NOT DETECTED, login, a mission, a controller, an invite, and
    per-frame cost measured.

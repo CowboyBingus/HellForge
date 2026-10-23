@@ -7,6 +7,9 @@
 
 #define BROKER_SNAPSHOT_MS 1000
 #define BROKER_MAX_LOBBIES 16
+/* how often the settings file's time stamp is looked at, as the backend does (StrangerSetting.Recheck) */
+#define BROKER_STRANGERS_MS 2000
+#define BROKER_PENDING_LOBBIES 4
 
 typedef struct BrokerBridge {
     HMODULE valve;
@@ -14,7 +17,17 @@ typedef struct BrokerBridge {
     BrokerApi api;
     BrokerSteam steam;
     uint64_t lobbies[BROKER_MAX_LOBBIES];
+    int32_t lobbyAsked[BROKER_MAX_LOBBIES];   /* the lobby type the game asked for each */
     int lobbyCount;
+    /* CreateLobby's types asked for, oldest first, until their LobbyCreated_t (the calls run in order) */
+    int32_t pendingAsked[BROKER_PENDING_LOBBIES];
+    int pendingCount;
+    /* Play with strangers (mods/hellforge-mods.json "playWithStrangers", off without the file): the mods folder, the
+     * settings file's time stamp when read, when it was last looked at */
+    wchar_t modsFolder[520];
+    int strangers;
+    FILETIME strangersStamp;
+    DWORD strangersChecked;
     DWORD lastSnapshot;
     int snapshotDone;
     uint32_t refusals;
@@ -27,6 +40,13 @@ typedef struct BrokerBridge {
 /* Fills b for a loaded and initialized Valve DLL (or a fake) and its Steam pipe. Returns 0 when manual dispatch's
  * exports are missing. */
 int BrokerBridgeOpen(BrokerBridge* b, HMODULE valve, int hPipe);
+
+/* Reads Play with strangers from that mods folder now, and again whenever its settings file changes (the pump looks
+ * every BROKER_STRANGERS_MS). Without it, strangers are off. Call before serving. */
+void BrokerBridgeWatchStrangers(BrokerBridge* b, const wchar_t* modsFolder);
+
+/* Play with strangers in a settings file's text: a top-level "playWithStrangers": true. */
+int BrokerStrangersIn(const char* json, size_t length);
 
 /* Fills the snapshot in ch's mapping now (the pump also does it every BROKER_SNAPSHOT_MS). */
 void BrokerBridgeSnapshot(BrokerBridge* b, BrokerChannel* ch);

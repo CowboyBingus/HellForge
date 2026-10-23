@@ -16,6 +16,8 @@ typedef struct BrokerApi {
     uint32_t (*refuse)(const struct BrokerApi* api, const char* why);
     /* the table's "logged" strings */
     void (*log)(const struct BrokerApi* api, const char* what, const char* value);
+    /* the table's "adjust" integers: the value Valve's DLL gets for that method's argument */
+    int64_t (*adjust)(const struct BrokerApi* api, uint32_t method, const char* argument, int64_t value);
     /* BrokerDispatchMethod: the serving loop reaches the generated code through this, so it builds without it */
     uint32_t (*dispatch)(const struct BrokerApi* api, uint32_t method, BridgeReader* r, BridgeWriter* w);
 } BrokerApi;
