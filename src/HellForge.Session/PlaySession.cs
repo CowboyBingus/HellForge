@@ -33,7 +33,8 @@ sealed class PlaySession(PlayOptions options)
     string[] erlBefore = [];
     FileStream? lease;
     HostBoundedProcess? job;
-    Process? server;
+    Process? server, broker;
+    nint lowToken;
     Thread? applier;
     DateTime? gameStarted;
     TextWriter? log;
@@ -623,10 +624,38 @@ sealed class PlaySession(PlayOptions options)
         var childReason = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HELLFORGE_CRASH_DUMP")) ? "crash dump"
             : Environment.GetEnvironmentVariable("HELLFORGE_ALLOW_CHILD_PROCESSES") == "1" ? "HELLFORGE_ALLOW_CHILD_PROCESSES" : null;
         result["childProcesses"] = childReason == null ? "blocked" : "allowed (" + childReason + ")";
+        // Low-integrity sandbox (docs/steam-bridge.md phase 4): the game runs at low mandatory integrity and cannot
+        // write to the player's files, registry or other processes. A broker at normal integrity forwards Steam API
+        // calls over a named pipe and pushes callbacks through a shared-memory ring.
+        string? bridgeSuffix = null;
+        if (options.Sandbox)
+        {
+            bridgeSuffix = (string)result["runId"]!;
+            Environment.SetEnvironmentVariable("HELLFORGE_BRIDGE_PIPE", bridgeSuffix);
+            LowIntegrityHelper.LabelFoldersLow(new[] {
+                profileFolder!, Path.GetFullPath(cloudDirectory),
+                Directory.CreateDirectory(Path.Combine(run, "sdk-shims")).FullName, run });
+            lowToken = LowIntegrityHelper.CreateLowToken();
+            result["sandbox"] = true;
+        }
         job = new HostBoundedProcess(exe, $"--bundle-dir \"{bundle}\" --release" + (options.EngineLog ? " --log-to-file" : "") + (gameOptions.Length > 0 ? " " + gameOptions : ""),
-            Path.Combine(copy, "bin"), profileFolder, 0, singleProcess: childReason == null);
+            Path.Combine(copy, "bin"), profileFolder, 0, singleProcess: childReason == null, token: lowToken);
         result["gamePid"] = job.Process.Id;
         result["gameLaunched"] = true;
+        if (options.Sandbox)
+        {
+            var brokerExe = Path.Combine(Shims, "hellforge_steam_broker.exe");
+            if (!File.Exists(brokerExe)) throw new SessionFailure("The Steam broker is missing; reinstall HellForge.");
+            var brokerStart = new ProcessStartInfo(brokerExe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
+            brokerStart.ArgumentList.Add(bridgeSuffix!);
+            brokerStart.ArgumentList.Add(job.Process.Id.ToString());
+            brokerStart.ArgumentList.Add(Path.GetFullPath(Path.Combine(copy, "bin", CloudReal)));
+            broker = Process.Start(brokerStart) ?? throw new SessionFailure("The Steam broker did not start.");
+            var brokerLog = new StreamWriter(Path.Combine(run, "steam-broker.log")) { AutoFlush = true };
+            broker.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (brokerLog) brokerLog.WriteLine(e.Data); };
+            broker.BeginErrorReadLine();
+            result["brokerPid"] = broker.Id;
+        }
         result["status"] = "patching";
         Save();
         job.Resume();
@@ -890,6 +919,11 @@ sealed class PlaySession(PlayOptions options)
                 }
                 result["engineLogFiles"] = copied;
             });
+        if (broker != null)
+            try { if (!broker.HasExited) { broker.Kill(); broker.WaitForExit(5000); } result["brokerStopped"] = broker.HasExited; }
+            catch (InvalidOperationException) { }
+            finally { broker.Dispose(); }
+        if (lowToken != 0) { LowIntegrityHelper.CloseToken(lowToken); lowToken = 0; }
         if (server != null)
             try { if (!server.HasExited) { server.Kill(); server.WaitForExit(5000); } result["backendStopped"] = server.HasExited; }
             catch (InvalidOperationException) { }

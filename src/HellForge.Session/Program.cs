@@ -80,4 +80,5 @@ sealed class PlayOptions
     public bool EngineLog { get; set; }
     public List<string> GameOptions { get; set; } = [];
     public string? ModSync { get; set; } /* the next session's mods after a mod sync (ModSyncSession); this session only */
+    public bool Sandbox { get; set; } /* low-integrity game process with a Steam broker (docs/steam-bridge.md phase 4) */
 }
