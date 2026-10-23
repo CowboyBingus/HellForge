@@ -157,6 +157,10 @@ the cryo pod." Press STOP, then PLAY again: the next launch goes through.
 | "The session runner exited before starting." | The launcher points to `logs\session-runner.log`, which says why. |
 | "Mod left out of this session: ..." (in the Console) | The session still runs without that mod. The Mods page shows why on the mod's row ([using mods](mods.md)). |
 | "HellForge's file ... could not be held read-only for the session ..." | Another program has that file of the installation's `app` folder open for writing. Close it (or restart the PC), then press PLAY. |
+| "Mod file ... could not be held read-only for the session ..." | Another program (an editor, an archive tool) has that file in `mods` open for writing. Close it, then press PLAY. |
+| "WARNING: ... file(s) appeared in the mods folder during the session ..." (in the Console, after a session) | Something wrote into `mods` while the game ran. If you did not add them, delete the files it lists (in that session's `result.json`, `plantedMods`) and leave any switched-off mod off ([using mods](mods.md#the-mods-page)). |
+| "Port ..., HellForge's backend port, is used by another program on this PC." | Close the program using it (or restart the PC). The network block lets the game reach only that port. |
+| "The network block still lets the game reach every program on this PC ..." | Run Settings > Installation once: setup narrows the block to HellForge's backend. |
 | "Cleanup failed." | Check the session logs before playing again. |
 
 ### The game could not be prepared or connected

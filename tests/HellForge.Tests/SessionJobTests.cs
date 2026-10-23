@@ -20,5 +20,42 @@ static class SessionJobTests
             var limited = Run(singleProcess: true);
             check(limited != 7, $"With the limit the child cannot start (exit code {limited}).");
         });
+
+        test("Sandboxed sessions: a low-integrity game writes to the pipes and folders labelled for it, and no others", () =>
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+            var name = "hellforge-test-" + Guid.NewGuid().ToString("N");
+            HellForge.Core.PipeServer.LowIntegrityClients = true;
+            using var pipe = HellForge.Core.PipeServer.Create(name, 1);
+            HellForge.Core.PipeServer.LowIntegrityClients = false;
+            check(HellForge.Core.PipeServer.LabelLevel(pipe.SafePipeHandle) == 0x1000, "The pipe carries a low label.");
+            var labelled = Directory.CreateDirectory(Path.Combine(root, "sandbox-low", "game")).FullName;
+            HellForge.Session.LowIntegrityHelper.LabelFoldersLow([labelled]);
+            // a folder at this process's own level: refused to the game only when this process is above low (a workspace
+            // labelled low runs its tests at low integrity)
+            var above = HellForge.Session.LowIntegrityHelper.CurrentLevel() > 0x1000;
+            var other = above ? Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "hellforge-sandbox-test-" + Guid.NewGuid().ToString("N"))).FullName : labelled;
+            var token = HellForge.Session.LowIntegrityHelper.CreateLowToken();
+            try
+            {
+                var waiting = pipe.WaitForConnectionAsync();
+                var command = $"/d /c \"echo from the game> \\\\.\\pipe\\{name} & echo x> \"{Path.Combine(labelled, "written.txt")}\" & echo x> \"{Path.Combine(other, "written.txt")}\"\"";
+                using var job = new HostBoundedProcess(cmd, command, Environment.SystemDirectory, "", 30, token: token);
+                job.Resume();
+                check(waiting.Wait(20000), "The low-integrity process opened the pipe.");
+                using var reader = new StreamReader(pipe);
+                check(reader.ReadLine()?.Trim() == "from the game", "Its message arrived.");
+                check(job.Process.WaitForExit(20000), "The test process ended.");
+                check(File.Exists(Path.Combine(labelled, "written.txt")), "It wrote into the folder labelled low.");
+                if (above)
+                    check(!File.Exists(Path.Combine(other, "written.txt")), "It could not write into a folder at the player's level.");
+            }
+            finally
+            {
+                HellForge.Session.LowIntegrityHelper.CloseToken(token);
+                if (above) Directory.Delete(other, recursive: true);
+            }
+        });
     }
 }

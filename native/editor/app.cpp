@@ -171,6 +171,13 @@ void Toast(const std::string& text, ImU32 colour)
 
 /* ---- settings (the editor's folder, editor-settings.json) ---- */
 std::wstring SettingsPath() { return hfjson::Wide(g_host.modFolder) + L"\\editor-settings.json"; }
+/* Sandboxed, the game cannot write into its mods folder: settings and exported presets go to the session's sandbox
+ * folder, and HellForge puts them in place once the game is gone (SandboxStats.cs). */
+std::wstring SettingsWritePath()
+{
+    std::wstring sandbox = localstats::SandboxFolder();
+    return sandbox.empty() ? SettingsPath() : sandbox + L"\\editor-settings.json";
+}
 
 void LoadSettings()
 {
@@ -212,7 +219,7 @@ void SaveSettings()
     mounts.kind = hfjson::Value::Object;
     for (auto& m : g_mounts) mounts.members.emplace_back(m.first, hfjson::Value::MakeNumber(m.second, true));
     root.members.emplace_back("mounts", mounts);
-    hfjson::WriteAtomically(SettingsPath(), hfjson::Write(root));
+    hfjson::WriteAtomically(SettingsWritePath(), hfjson::Write(root));
 }
 
 /* ---- values ---- */
@@ -1636,6 +1643,11 @@ int g_preset;
 struct { bool shown = false; std::string name, text; ImU32 colour = TEXT; } g_presetResult;
 
 std::wstring PresetFolder() { return hfjson::Wide(g_host.modFolder) + L"\\presets"; }
+std::wstring PresetWriteFolder()
+{
+    std::wstring sandbox = localstats::SandboxFolder();
+    return sandbox.empty() ? PresetFolder() : sandbox + L"\\presets";
+}
 
 std::string Narrow(const std::wstring& text)
 {
@@ -1645,11 +1657,8 @@ std::string Narrow(const std::wstring& text)
     return out;
 }
 
-void ScanPresets()
+void ScanPresetFolder(const std::wstring& folder)
 {
-    std::wstring folder = PresetFolder();
-    CreateDirectoryW(folder.c_str(), nullptr);
-    g_presets.clear();
     WIN32_FIND_DATAW found;
     HANDLE find = FindFirstFileW((folder + L"\\*.json").c_str(), &found);
     if (find == INVALID_HANDLE_VALUE) return;
@@ -1677,9 +1686,20 @@ void ScanPresets()
                 p.fields = fields != nullptr && fields->kind == hfjson::Value::Array ? (int)fields->items.size() : 0;
             }
         }
-        g_presets.push_back(p);
+        /* a preset exported this (sandboxed) session replaces the saved one of its name */
+        auto same = std::find_if(g_presets.begin(), g_presets.end(), [&](const PresetFile& q) { return q.file == p.file; });
+        if (same != g_presets.end()) *same = p; else g_presets.push_back(p);
     } while (FindNextFileW(find, &found));
     FindClose(find);
+}
+
+void ScanPresets()
+{
+    std::wstring folder = PresetFolder(), written = PresetWriteFolder();
+    CreateDirectoryW(written.c_str(), nullptr);
+    g_presets.clear();
+    ScanPresetFolder(folder);
+    if (written != folder) ScanPresetFolder(written);
     std::sort(g_presets.begin(), g_presets.end(), [](const PresetFile& a, const PresetFile& b) { return a.file < b.file; });
     g_preset = std::clamp(g_preset, 0, std::max(0, (int)g_presets.size() - 1));
 }
@@ -1971,8 +1991,8 @@ void ExportPreset()
     root.members.emplace_back("runtime", hfjson::Value::MakeString(g_catalog.hd2rRuntime));
     root.members.emplace_back("created", hfjson::Value::MakeString(created));
     root.members.emplace_back("fields", list);
-    CreateDirectoryW(PresetFolder().c_str(), nullptr);
-    std::wstring path = PresetFolder() + L"\\" + hfjson::Wide(name) + L".hd2rpreset.json";
+    CreateDirectoryW(PresetWriteFolder().c_str(), nullptr);
+    std::wstring path = PresetWriteFolder() + L"\\" + hfjson::Wide(name) + L".hd2rpreset.json";
     if (!hfjson::WriteAtomically(path, hfjson::Write(root))) { Toast("The preset could not be written", ERROR_); return; }
     ScanPresets();
     for (int i = 0; i < (int)g_presets.size(); i++) if (g_presets[i].path == path) g_preset = i;

@@ -90,6 +90,25 @@ static class LowIntegrityHelper
 
     public static void CloseToken(nint token) { if (token != 0) CloseHandle(token); }
 
+    /// <summary>This process's mandatory integrity level (0x1000 low, 0x2000 medium, 0x3000 high).</summary>
+    public static int CurrentLevel()
+    {
+        if (!OpenProcessToken((nint)(-1), 0x0008, out var token)) throw new Win32Exception(Marshal.GetLastWin32Error(), "OpenProcessToken");
+        try
+        {
+            GetTokenInformation(token, 25, 0, 0, out var size);
+            var buffer = Marshal.AllocHGlobal(size);
+            try
+            {
+                if (!GetTokenInformation(token, 25, buffer, size, out _)) throw new Win32Exception(Marshal.GetLastWin32Error(), "GetTokenInformation");
+                var sid = Marshal.ReadIntPtr(buffer);
+                return Marshal.ReadInt32(GetSidSubAuthority(sid, (uint)(Marshal.ReadByte(GetSidSubAuthorityCount(sid)) - 1)));
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+        finally { CloseHandle(token); }
+    }
+
     // --- P/Invoke ---
 
     [StructLayout(LayoutKind.Sequential)]
@@ -122,6 +141,15 @@ static class LowIntegrityHelper
 
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     static extern uint SetNamedSecurityInfoW(string name, int objectType, uint info, nint owner, nint group, nint dacl, nint sacl);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool GetTokenInformation(nint token, int cls, nint info, int size, out int returned);
+
+    [DllImport("advapi32.dll")]
+    static extern nint GetSidSubAuthority(nint sid, uint index);
+
+    [DllImport("advapi32.dll")]
+    static extern nint GetSidSubAuthorityCount(nint sid);
 
     [DllImport("kernel32.dll")]
     static extern bool CloseHandle(nint handle);

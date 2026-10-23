@@ -51,6 +51,13 @@ packs, Lua mods and mods that say they are cosmetic; friends need not have the s
 Changes apply to the next session. While a session runs, the page is locked and the session keeps the mods it started
 with.
 
+While a session runs, its mod files are held read-only, so nothing the game runs can change a mod that loads as yours
+next time. HellForge's own files stay writable: the page's settings file, Local Stats, the in-game editor's settings,
+presets and the host's files beside it, and the mod sync downloads in `mods/.synced` (each checked again, by its hash,
+whenever a session would use it). When the session ends, anything else that appeared in `mods/` is listed in the
+Console, and a new mod, or a mod whose folder gained files, is switched off until you switch it on here. Only switch it
+on again if you put those files there.
+
 The page saves its switches, order and pack options in `mods/hellforge-mods.json`.
 
 ## Load order

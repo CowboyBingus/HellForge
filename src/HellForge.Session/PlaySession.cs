@@ -22,13 +22,14 @@ sealed class PlaySession(PlayOptions options)
     readonly JsonObject result = new();
     readonly List<FileStream> locks = [];
     readonly List<string> swapped = [];
-    HashSet<string>? modSnapshot;
+    ModsHold? modsHold;
     readonly Dictionary<string, string> shimPins = new(StringComparer.Ordinal);
     // HELLFORGE_DEBUG=1 writes the full step reports (addresses, before/after bytes) and the per-second diagnostics into
     // the run folder, for development. Normal sessions keep only what happened, not how.
     static readonly bool Debug = Environment.GetEnvironmentVariable("HELLFORGE_DEBUG") == "1";
     InstallLayout install = null!;
-    string run = "", copy = "", exe = "", gameDll = "", bundle = "", shimOriginals = "", app = "";
+    // gameOut: where the game writes its logs and the editor its sandboxed saves (run, or run/game labelled low when sandboxed)
+    string gameOut = "", run = "", copy = "", exe = "", gameDll = "", bundle = "", shimOriginals = "", app = "";
     string? normal, hint, erlBackup, profileFolder;
     string[] erlBefore = [];
     FileStream? lease;
@@ -82,6 +83,9 @@ sealed class PlaySession(PlayOptions options)
         var profileDirectory = Path.GetFullPath(options.Profile ?? Path.Combine(install.Root, "profiles", "default"));
         var runId = Guid.NewGuid().ToString("N");
         run = Directory.CreateDirectory(Path.Combine(install.Sessions, runId)).FullName;
+        // Sandboxed, the game may write only into folders labelled low: its logs go to run/game, and the rest of the run
+        // folder (this runner's files, the backend's evidence and the DLL it loads) stays out of its reach.
+        gameOut = options.Sandbox ? Directory.CreateDirectory(Path.Combine(run, "game")).FullName : run;
         log = new StreamWriter(Path.Combine(run, "session.log"), append: true, new UTF8Encoding(false));
         result["runId"] = runId;
         result["status"] = "preparing";
@@ -172,7 +176,7 @@ sealed class PlaySession(PlayOptions options)
         var loaderPlan = Path.Combine(run, "modloader-plan.txt");
         // --modset: the gameplay mods with their content hashes, for the backend (mod sync); --sync: after a mod sync, the
         // host's mods instead of the player's own (ModSyncSession).
-        string[] stage = ["mods-stage", "--install", install.Root, "--plan", loaderPlan, "--logs", run, "--progress", Path.Combine(run, "mod-builds.json"),
+        string[] stage = ["mods-stage", "--install", install.Root, "--plan", loaderPlan, "--logs", gameOut, "--progress", Path.Combine(run, "mod-builds.json"),
             "--modset", ModSetFile];
         if (options.ModSync != null) stage = [.. stage, "--sync", Path.GetFullPath(options.ModSync)];
         var planText = HellForgeCli(stage);
@@ -206,9 +210,9 @@ sealed class PlaySession(PlayOptions options)
         foreach (var problem in plan["problems"] as JsonArray ?? []) Say("Mod not loaded: " + (string?)problem);
 
         // The player's mods are held read-only so nothing the game runs can change or plant a mod.
-        var (modsHeld, snapshot) = HoldModFiles();
-        modSnapshot = snapshot;
-        result["modsHeld"] = modsHeld;
+        try { modsHold = ModsHold.Take(install.Mods); }
+        catch (IOException error) { throw new SessionFailure(error.Message); }
+        result["modsHeld"] = modsHold.Held;
 
         // Every game file (the build's, and everything in data/: staged mods and the player's own patches) is held
         // read-only for the session, then verified against the supported build while data/settings.ini is pointed at
@@ -287,81 +291,6 @@ sealed class PlaySession(PlayOptions options)
             held++;
         }
         return held;
-    }
-
-    // The player's installed mods are held read-only for the session: the game cannot modify a mod that loads as the
-    // player's own next time. At cleanup, any files the game planted in the folder (new entries that bypassed the hold)
-    // are caught and the new mod folders disabled until the player reviews them.
-    (int Held, HashSet<string> Snapshot) HoldModFiles()
-    {
-        var modsRoot = install.Mods;
-        if (!Directory.Exists(modsRoot)) return (0, []);
-        var snapshot = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var held = 0;
-        foreach (var file in Directory.EnumerateFiles(modsRoot, "*", SearchOption.AllDirectories))
-        {
-            var full = Path.GetFullPath(file);
-            snapshot.Add(full);
-            Tools.NoLinks(full);
-            try { locks.Add(new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read)); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            {
-                throw new SessionFailure($"Mod file {Path.GetRelativePath(modsRoot, full)} could not be held read-only for the session ({error.Message}). Close what has it open and start again.");
-            }
-            held++;
-        }
-        foreach (var dir in Directory.EnumerateDirectories(modsRoot, "*", SearchOption.AllDirectories))
-            snapshot.Add(Path.GetFullPath(dir));
-        return (held, snapshot);
-    }
-
-    // After the session: any new file or folder in mods/ that was not in the snapshot is a planted mod. New top-level
-    // mod folders are disabled so they will not load until the player reviews them in the Mods page.
-    JsonObject? CheckPlantedMods()
-    {
-        if (modSnapshot == null || !Directory.Exists(install.Mods)) return null;
-        var planted = new List<string>();
-        var disabledIds = new List<string>();
-        foreach (var file in Directory.EnumerateFiles(install.Mods, "*", SearchOption.AllDirectories))
-        {
-            var full = Path.GetFullPath(file);
-            if (!modSnapshot.Contains(full)) planted.Add(Path.GetRelativePath(install.Mods, full));
-        }
-        foreach (var dir in Directory.EnumerateDirectories(install.Mods, "*", SearchOption.AllDirectories))
-        {
-            var full = Path.GetFullPath(dir);
-            if (!modSnapshot.Contains(full)) planted.Add(Path.GetRelativePath(install.Mods, full) + Path.DirectorySeparatorChar);
-        }
-        if (planted.Count == 0) return null;
-        // Disable any new top-level mod folder (a folder directly under mods/ that was not there at session start).
-        foreach (var dir in Directory.GetDirectories(install.Mods))
-        {
-            var full = Path.GetFullPath(dir);
-            if (modSnapshot.Contains(full)) continue;
-            try
-            {
-                var (mods, _) = ModCatalog.Load(install.Mods);
-                var mod = mods.FirstOrDefault(m => string.Equals(Path.GetFullPath(m.Folder).TrimEnd('\\', '/'),
-                    full.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
-                if (mod != null && mod.Enabled)
-                {
-                    ModSettings.SetEnabled(install.Mods, mod.Id, false);
-                    disabledIds.Add(mod.Id);
-                }
-            }
-            catch (Exception error) when (error is IOException or JsonException or InvalidDataException)
-            {
-                Say("Could not disable planted mod folder " + Path.GetFileName(dir) + ": " + error.Message);
-            }
-        }
-        var report = new JsonObject
-        {
-            ["plantedFiles"] = planted.Count,
-            ["files"] = new JsonArray([.. planted.Take(50).Select(f => (JsonNode?)f)]),
-            ["disabledMods"] = new JsonArray([.. disabledIds.Select(id => (JsonNode?)id)])
-        };
-        Say($"WARNING: {planted.Count} file(s) appeared in the mods folder during the session. {disabledIds.Count} new mod(s) disabled until you review them.");
-        return report;
     }
 
     // Network block (the readable scripts in app/scripts): $HellForgeInstallRoot names the installation's rule group.
@@ -484,7 +413,7 @@ sealed class PlaySession(PlayOptions options)
             }
             result["sdkShimHashes"] = hashes;
             // The game inherits this environment (HostBoundedProcess).
-            Environment.SetEnvironmentVariable("HELLFORGE_SHIM_LOG_DIR", Directory.CreateDirectory(Path.Combine(run, "sdk-shims")).FullName);
+            Environment.SetEnvironmentVariable("HELLFORGE_SHIM_LOG_DIR", Directory.CreateDirectory(Path.Combine(gameOut, "sdk-shims")).FullName);
         }
         Ownership(Path.Combine(copy, "bin", CloudName), Path.Combine(run, "ownership.json"));
         result["ownershipConfirmed"] = true;
@@ -514,11 +443,11 @@ sealed class PlaySession(PlayOptions options)
             }
         }
         Environment.SetEnvironmentVariable("HELLFORGE_CLOUD_DIR", Path.GetFullPath(cloudDirectory));
-        Environment.SetEnvironmentVariable("HELLFORGE_CLOUD_LOG", Path.Combine(run, "steam-cloud.log"));
+        Environment.SetEnvironmentVariable("HELLFORGE_CLOUD_LOG", Path.Combine(gameOut, "steam-cloud.log"));
         // The network gate's census (the stand-in's net_gate.c): every connection, name lookup and program the copy
         // attempts, logged beside the firewall, which still blocks them; summarised into the result at the end.
         Environment.SetEnvironmentVariable("HELLFORGE_NETGATE", "census");
-        Environment.SetEnvironmentVariable("HELLFORGE_NETGATE_LOG", Path.Combine(run, CensusLog));
+        Environment.SetEnvironmentVariable("HELLFORGE_NETGATE_LOG", Path.Combine(gameOut, CensusLog));
         result["steamCloud"] = new JsonObject { ["directory"] = Path.GetFullPath(cloudDirectory), ["standIn"] = cloudPin, ["controlsSeeded"] = cloudSeeded };
         var authorization = Stopwatch.StartNew();
 
@@ -641,9 +570,12 @@ sealed class PlaySession(PlayOptions options)
         {
             bridgeSuffix = (string)result["runId"]!;
             Environment.SetEnvironmentVariable("HELLFORGE_BRIDGE_PIPE", bridgeSuffix);
-            LowIntegrityHelper.LabelFoldersLow(new[] {
-                profileFolder!, Path.GetFullPath(cloudDirectory),
-                Directory.CreateDirectory(Path.Combine(run, "sdk-shims")).FullName, run });
+            // The folders the game writes: its environment (AppData, temp, shader cache), its profile's user data (settings,
+            // saves, the cloud folder) and gameOut. The first two keep the label: HellForge reads nothing in them as
+            // trusted. The editor's saves go to gameOut/sandbox-stats, applied after the game is gone (SandboxStats).
+            var sandboxStats = Directory.CreateDirectory(Path.Combine(gameOut, "sandbox-stats")).FullName;
+            LowIntegrityHelper.LabelFoldersLow([profileFolder!, Path.GetFullPath((string?)result["userData"] ?? install.UserData), gameOut]);
+            Environment.SetEnvironmentVariable("HELLFORGE_SANDBOX_STATS", sandboxStats);
             lowToken = LowIntegrityHelper.CreateLowToken();
             result["sandbox"] = true;
         }
@@ -654,7 +586,10 @@ sealed class PlaySession(PlayOptions options)
         if (options.Sandbox)
         {
             var brokerExe = Path.Combine(Shims, "hellforge_steam_broker.exe");
-            if (!File.Exists(brokerExe)) throw new SessionFailure("The Steam broker is missing; reinstall HellForge.");
+            // Pinned like the stand-ins: the broker runs at the player's integrity and loads Valve's DLL for the game.
+            var brokerPin = (string?)Tools.ReadJson(Path.Combine(Shims, "build.json"))?["steamBroker"];
+            if (!File.Exists(brokerExe) || brokerPin == null) throw new SessionFailure("The Steam broker is missing; reinstall HellForge.");
+            if (!Tools.Sha256(brokerExe).Equals(brokerPin, StringComparison.OrdinalIgnoreCase)) throw new SessionFailure("The Steam broker changed since it was built; reinstall HellForge.");
             var brokerStart = new ProcessStartInfo(brokerExe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
             brokerStart.ArgumentList.Add(bridgeSuffix!);
             brokerStart.ArgumentList.Add(job.Process.Id.ToString());
@@ -756,6 +691,7 @@ sealed class PlaySession(PlayOptions options)
         foreach (var argument in new[] { "--port", install.BackendPort.ToString(), "--startup-fixtures", "true", "--lifetime-seconds", "0", "--evidence", evidence,
                      "--profile-dir", profileDirectoryUsed, "--capture-mission-bodies", "true" }) start.ArgumentList.Add(argument);
         if (options.Template != null) { start.ArgumentList.Add("--profile-template"); start.ArgumentList.Add(options.Template); }
+        if (options.Sandbox) { start.ArgumentList.Add("--sandbox"); start.ArgumentList.Add("true"); }
         // Follows the live galactic war read-only through the community mirror; fetched before the backend is ready.
         // The all-planets war (every planet but Super Earth a liberation) takes the live war's place.
         if (options.OpenWar)
@@ -932,7 +868,12 @@ sealed class PlaySession(PlayOptions options)
                 result["engineLogFiles"] = copied;
             });
         if (broker != null)
-            try { if (!broker.HasExited) { broker.Kill(); broker.WaitForExit(5000); } result["brokerStopped"] = broker.HasExited; }
+            try
+            {
+                if (!broker.HasExited) { broker.Kill(); broker.WaitForExit(5000); }
+                result["brokerStopped"] = broker.HasExited;
+                if (broker.HasExited) result["brokerExitCode"] = broker.ExitCode;
+            }
             catch (InvalidOperationException) { }
             finally { broker.Dispose(); }
         if (lowToken != 0) { LowIntegrityHelper.CloseToken(lowToken); lowToken = 0; }
@@ -959,9 +900,10 @@ sealed class PlaySession(PlayOptions options)
                     ["outcome"] = r["outcome"]?.DeepClone(), ["authorization"] = r["authorization"]?.DeepClone()
                 }).ToArray());
             });
-        if (gameStarted != null) Try("networkCensusError", () => result["networkCensus"] = NetworkCensus.Summarize(Path.Combine(run, CensusLog)));
+        if (gameStarted != null) Try("networkCensusError", () => result["networkCensus"] = NetworkCensus.Summarize(Path.Combine(gameOut, CensusLog)));
         if (hint != null && File.Exists(hint)) Try("hintError", () => File.Delete(hint));
         foreach (var held in locks) held.Dispose();
+        modsHold?.Release();
         // A loaded DLL cannot be replaced, so the originals go back only once the game is gone; otherwise the next session
         // restores them before verifying the copy.
         if (swapped.Count > 0)
@@ -1016,11 +958,31 @@ sealed class PlaySession(PlayOptions options)
                     result["installedDllUnchanged"] = Tools.Sha256(Path.Combine(normal, "data", "game", "game.dll")) == (string?)result["installedDllSha256"];
                 }
             });
-        Try("plantedModsError", () =>
-        {
-            var planted = CheckPlantedMods();
-            if (planted != null) result["plantedMods"] = planted;
-        });
+        // What appeared in mods/ during the session, before HellForge applies the sandboxed editor's saves.
+        if (modsHold != null)
+            Try("plantedModsError", () =>
+            {
+                if (modsHold.Check(Say) is not { } planted) return;
+                result["plantedMods"] = new JsonObject
+                {
+                    ["plantedFiles"] = planted.Files.Count,
+                    ["files"] = new JsonArray([.. planted.Files.Take(50).Select(f => (JsonNode?)f)]),
+                    ["disabledMods"] = new JsonArray([.. planted.DisabledMods.Select(id => (JsonNode?)id)])
+                };
+                Say($"WARNING: {planted.Files.Count} file(s) appeared in the mods folder during the session" +
+                    (planted.DisabledMods.Count > 0 ? $"; {planted.DisabledMods.Count} mod(s) they appeared in switched off until you turn them on in Mods." : "."));
+            });
+        if (options.Sandbox && (bool?)result["jobEmpty"] == true)
+            Try("sandboxStatsError", () =>
+            {
+                var applied = SandboxStats.Apply(Path.Combine(gameOut, "sandbox-stats"), install.Mods, EntityProfile.Current);
+                result["sandboxStats"] = applied == null ? "none" : new JsonObject
+                {
+                    ["stats"] = applied.Stats, ["modValues"] = applied.ModValues, ["refused"] = applied.Refused,
+                    ["settings"] = applied.Settings, ["presets"] = applied.Presets
+                };
+                if (applied?.Refused > 0) Say($"{applied.Refused} in-game editor change(s) were left out: the stats file would not accept them.");
+            });
         lease?.Dispose();
         result["completedUtc"] = DateTime.UtcNow.ToString("o");
         Save();
