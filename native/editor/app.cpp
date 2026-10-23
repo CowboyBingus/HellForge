@@ -302,10 +302,13 @@ std::vector<std::string> Wrapped(const std::string& text, float max, float size)
     if (!line.empty()) out.push_back(line);
     return out;
 }
-/* The message at the top of the screen, over the game and the editor alike. */
+bool SyncShown(); /* mod sync's dialog is up */
+/* The message at the top of the screen, over the game and the editor alike. A refused join's notice gives way to mod
+ * sync's dialog, which lists the same mods and what happens to each: once that is up, the notice is done. */
 void DrawNotice()
 {
     if (g_notice.version == 0) return;
+    if (SyncShown()) { g_notice.at = 0; return; }
     ULONGLONG age = GetTickCount64() - g_notice.at, total = NoticeMs();
     if (age >= total) return;
     float alpha = age + NOTICE_FADE_MS > total ? (float)(total - age) / (float)NOTICE_FADE_MS : 1.0f;
@@ -2486,6 +2489,7 @@ struct
  * keys wait this long after it appears or its state turns. Esc, which only says no or hides it, works at once. */
 const double SYNC_ARM = 1.0;
 bool SyncArmed() { return ImGui::GetTime() - g_sync.shownAt >= SYNC_ARM; }
+bool SyncShown() { return g_sync.on; }
 bool g_windowShown; /* Opened() to Closed() */
 
 bool HasSync() { return g_host.api->size >= offsetof(HfApi, sync_answer) + sizeof(void*) && g_host.api->sync_state != nullptr; }

@@ -768,6 +768,12 @@ int main(int argc, char** argv)
         g_syncList[0] = {sizeof(HfSyncMod), HF_SYNC_MOD_DOWNLOAD, HF_SYNC_CLASS_CONTENT, 0, 3u << 20, "friend.tanks", "Tanks", "2.0"};
         g_syncList[1] = {sizeof(HfSyncMod), HF_SYNC_MOD_MANUAL, HF_SYNC_CLASS_CODE, 0, 200000, "friend.guns", "Guns", "1.1"};
         g_syncList[2] = {sizeof(HfSyncMod), HF_SYNC_MOD_OFF, HF_SYNC_CLASS_CONTENT, 0, 0, "mine.extra", "My Extra Mod", "1.0"};
+        /* the refused join's notice comes first, as in game; the dialog takes its place (the screenshot shows the dialog alone) */
+        g_noticeNow.version++;
+        g_noticeNow.kind = HF_NOTICE_ERROR;
+        snprintf(g_noticeNow.title, sizeof g_noticeNow.title, "COULDN'T JOIN FRIEND HOST");
+        snprintf(g_noticeNow.text, sizeof g_noticeNow.text, "Your gameplay mods don't match the host's.\nMissing: Tanks 2.0 (the host has it)");
+        frames(20);
         SyncOffer(HF_SYNC_OFFER, 1, 3u << 20, 0);
         frames(40);
         if (argc > 2 && dot) { snprintf(dot, (size_t)(shot + sizeof shot - dot), "-sync.bmp"); Screenshot(shot, width, height); }
