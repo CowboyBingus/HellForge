@@ -223,9 +223,39 @@ public static class ModSets
     internal static bool Hex(string text, int length) => text.Length == length && text.All(char.IsAsciiHexDigitLower);
 }
 
+// A mod's content hash as a player's HellForge takes it (HellForge.Cli mod-hash, for the verified list): a folder by its
+// counted files; a zip as the catalogue loads it from a mods folder, by what it ships (ModArchives), from a copy in a
+// temporary mods folder of its own (the zip's own folder is not touched).
+public static class ModHash
+{
+    public sealed record Hashed(string Id, string Name, string Version, string Hash, ModClass Class, int Files, string? Url);
+
+    public static Hashed Of(string path, EntityProfile? profile = null)
+    {
+        if (!path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) return Of(ModCatalog.Parse(path, profile ?? EntityProfile.Current));
+        var temp = Path.Combine(Path.GetTempPath(), "hellforge-mod-hash-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            Directory.CreateDirectory(temp);
+            File.Copy(path, Path.Combine(temp, Path.GetFileName(path)));
+            var (loaded, problems) = ModCatalog.Load(temp, profile);
+            return loaded.Count == 1 ? Of(loaded[0])
+                : throw new InvalidDataException(problems.Count > 0 ? string.Join("\n", problems) : $"{Path.GetFileName(path)} holds no mod.");
+        }
+        finally
+        {
+            try { Directory.Delete(temp, recursive: true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    public static Hashed Of(ModManifest mod) =>
+        new(mod.Id, mod.Name, mod.Version, ModSets.ContentHash(mod), ModSets.ClassOf(mod), ModSets.Files(mod).Count, mod.Url);
+}
+
 // HellForge's verified list (data/verified-mods.json, embedded in Core): code and raw mods whose exact content a HellForge
 // maintainer reviewed, which mod sync may download from a Steam friend. A version of a mod is listed by its content hash
-// (ModSets.ContentHash), so any other bytes
+// (ModSets.ContentHash; HellForge.Cli mod-hash prints it, docs/modding/tools.md "The verified list"), so any other bytes
 // under the same id and version are not verified.
 //   {"format":1,"mods":[{"id":"...","name":"...","version":"...","hash":"<64 hex>","reviewed":"<date>, <by whom>"}]}
 public static class VerifiedMods

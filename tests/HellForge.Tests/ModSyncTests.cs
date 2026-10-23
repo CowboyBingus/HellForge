@@ -73,6 +73,9 @@ static class ModSyncTests
         return mods;
     }
 
+    // The verified list's one entry (data/verified-mods.json): the Stratagem Compendium 1.0.4 as its zip shipped.
+    const string CompendiumId = "skyeshade.stratagem-compendium", CompendiumHash = "2992e13fc3dc78f9786b22136026aced840acc86eb2597333e62389b5753e3db";
+
     // Copies a mod's counted files, as a download would write them.
     static void CopyFiles(ModSetEntry mod, string to)
     {
@@ -154,7 +157,9 @@ static class ModSyncTests
 
         test("Mod sync: the verified list is embedded and checked; the blocklist and share switch are saved with the Mods page's settings", () =>
         {
-            check(VerifiedMods.All.Count == 0 && !VerifiedMods.Contains("test.prebuilt", new string('a', 64)), "The shipped list starts empty.");
+            check(VerifiedMods.All.Count == 1 && VerifiedMods.All[0] is { Id: CompendiumId, Version: "1.0.4", Hash: CompendiumHash } &&
+                VerifiedMods.Contains(CompendiumId, CompendiumHash) && !VerifiedMods.Contains(CompendiumId, new string('a', 64)) &&
+                !VerifiedMods.Contains("test.prebuilt", CompendiumHash), "The shipped list names the Stratagem Compendium 1.0.4 alone, by its exact content.");
             var listed = VerifiedMods.Parse($$"""{"format":1,"mods":[{"id":"a.b","name":"B","version":"1","hash":"{{new string('c', 64)}}","reviewed":"2026-10-22, maintainer"}]}""");
             check(listed.Count == 1 && listed[0].Hash == new string('c', 64), "A listed entry parses.");
             foreach (var bad in new[] { "{\"format\":1}", $$"""{"format":1,"mods":[{"id":"a.b","version":"1","hash":"{{new string('C', 64)}}","reviewed":"x"}]}""",
@@ -383,6 +388,29 @@ static class ModSyncTests
             first["url"] = "https://example.com/editor";
             first["class"] = "bundled";
             check(ModSet.Parse(wire.ToJsonString(), local: false).Mods[0].Url == null, "A bundled mod's url is dropped.");
+        });
+
+        test("Mod sync: the verified Stratagem Compendium is its 1.0.4 zip's content hash, as HellForge.Cli mod-hash prints it (zips hash as their folders do)", () =>
+        {
+            // a zip and its folder hash alike, as the catalogue loads them
+            var source = Path.Combine(root, "sync-hash-source", "hash-mod");
+            Write(source, ModCatalog.ManifestName, Manifest("test.hash", "1", ",\"code\":{\"dll\":\"mod.dll\",\"sdk\":1}"));
+            Write(source, "mod.dll", "synthetic dll");
+            var zip = Path.Combine(root, "sync-hash-zip", "hash-mod-1.zip");
+            Directory.CreateDirectory(Path.GetDirectoryName(zip)!);
+            System.IO.Compression.ZipFile.CreateFromDirectory(Path.GetDirectoryName(source)!, zip);
+            var fromZip = ModHash.Of(zip);
+            var fromFolder = ModHash.Of(source);
+            var loaded = ModSet.Of(ModCatalog.Load(Path.GetDirectoryName(zip)!).Mods).Mods.Single();
+            check(fromZip.Hash == fromFolder.Hash && fromZip.Hash == loaded.Hash && fromZip.Class == ModClass.Code && fromZip.Files == 2,
+                $"Zip {fromZip.Hash[..12]}, folder {fromFolder.Hash[..12]}, catalogue {loaded.Hash[..12]}.");
+            // the shipped zip, where it is installed (a maintainer's PC; HELLFORGE_TEST_COMPENDIUM names another copy)
+            var shipped = Environment.GetEnvironmentVariable("HELLFORGE_TEST_COMPENDIUM") ??
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "HellForge", "mods", "stratagem-compendium-1.0.4.zip");
+            if (!File.Exists(shipped)) { Console.WriteLine("  (the Stratagem Compendium 1.0.4 zip is not installed here: its hash is not rechecked)"); return; }
+            var compendium = ModHash.Of(shipped);
+            check(compendium is { Id: CompendiumId, Version: "1.0.4", Hash: CompendiumHash, Class: ModClass.Code } && VerifiedMods.Contains(compendium.Id, compendium.Hash),
+                $"The shipped zip hashes {compendium.Hash} ({compendium.Class}).");
         });
 
         test("Mod sync: a data spec is content only when HellForge checks all it builds; a hostile host's replace, lua, or an edit on another type needs the verified list", () =>
