@@ -26,6 +26,7 @@ try
             new-mod --id <owner.mod-name> --name <name> (--install <folder> | --out <folder>)
             build-mod --mod <mod folder>
             package-mod --mod <mod folder> [--out <folder>]
+            mod-hash --mod <mod folder or .zip>
             mod-tools --install <installation or source folder> [--ide yes]
 
             For launchers of their own (docs/external-launchers.md); --install defaults to the installation this is in:
@@ -57,6 +58,9 @@ try
             folder into the build a session loads (temp/mod-builds; sessions build source mods themselves), elsewhere into
             the DLL its manifest names. package-mod compiles a source mod, then zips it to share (the installation's exports
             folder, or --out): sources and files, no DLL a player's HellForge would rebuild, no IDE leftovers.
+            mod-hash prints a mod's content hash as mod sync and HellForge's verified list (data/verified-mods.json) take
+            it: a folder by its files, a zip by what it ships, as a player's HellForge loads it; with its class and an entry
+            for the verified list.
             mod-tools downloads that Zig (and CMake and Ninja for IDEs with --ide yes), pinned and checksummed.
             play starts a session as HellForge.exe's PLAY does, with the launcher's saved choices unless an option
             replaces one; the engine's session runner does every check and cleanup itself. Without --wait it prints the
@@ -89,6 +93,7 @@ try
         "new-mod" => ["--id", "--name", "--install", "--out"],
         "build-mod" => ["--mod"],
         "package-mod" => ["--mod", "--out"],
+        "mod-hash" => ["--mod"],
         "mod-tools" => ["--install", "--ide"],
         "play" => ["--install", "--profile", "--war", "--local-playfab", "--multiplayer", "--engine-log", "--crash-dump", "--game-options", "--wait", "--dry-run"],
         "stop" => ["--install", "--run", "--wait"],
@@ -328,6 +333,17 @@ try
                 : layout?.Exports ?? throw new ArgumentException("Pass --out <folder>: the mod is not in an installation's mods folder.");
             var zipPath = ModPackage.Create(mod, outFolder);
             result = new { mod.Id, mod.Version, zip = zipPath, files = ModPackage.Files(mod).Count, kilobytes = new FileInfo(zipPath).Length / 1024 };
+            break;
+        }
+        case "mod-hash":
+        {
+            var hashed = ModHash.Of(Path.GetFullPath(Required("--mod")));
+            result = new
+            {
+                hashed.Id, hashed.Name, hashed.Version, hashed.Hash, @class = ModSets.ClassName(hashed.Class), hashed.Files, hashed.Url,
+                verified = VerifiedMods.Contains(hashed.Id, hashed.Hash),
+                entry = new { id = hashed.Id, name = hashed.Name, version = hashed.Version, hash = hashed.Hash, reviewed = "YYYY-MM-DD, reviewer: what was reviewed" }
+            };
             break;
         }
         case "mod-tools":

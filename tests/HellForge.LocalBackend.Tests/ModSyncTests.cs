@@ -36,9 +36,11 @@ static class ModSyncTests
         public readonly Display Shown = new();
         public readonly string Mods, Run, SessionFile;
         public readonly List<string> Log = [];
+        public readonly ulong Id;
 
         public Node(InMemoryNetwork network, ulong id, string folder, ModSet own, Func<string, string, bool> verified)
         {
+            Id = id;
             Mods = Path.Combine(folder, "mods");
             Run = Directory.CreateDirectory(Path.Combine(folder, "run")).FullName;
             var evidence = Directory.CreateDirectory(Path.Combine(Run, "backend")).FullName;
@@ -92,7 +94,7 @@ static class ModSyncTests
         Write(Path.Combine(host, "ammo"), ModCatalog.ManifestName, Ammo);
         Write(Path.Combine(host, "texture"), ModCatalog.ManifestName, """{"format":1,"id":"test.texture","name":"Texture","version":"2"}""");
         Patch(Path.Combine(host, "texture", "data", "9ba626afa44a3aa3.patch_0"), 600_000, 7);
-        Write(Path.Combine(host, "code"), ModCatalog.ManifestName, """{"format":1,"id":"test.code","name":"Code","version":"1","code":{"dll":"mod.dll","sdk":1}}""");
+        Write(Path.Combine(host, "code"), ModCatalog.ManifestName, """{"format":1,"id":"test.code","name":"Code","version":"1","url":"https://example.com/code","code":{"dll":"mod.dll","sdk":1}}""");
         Write(Path.Combine(host, "code"), "mod.dll", "synthetic dll");
         Write(Path.Combine(host, "stats"), ModCatalog.ManifestName, """{"format":1,"id":"test.stats","name":"Stats","version":"1"}""");
         Write(Path.Combine(host, "stats"), StatsData.FileName, Stats);
@@ -111,7 +113,7 @@ static class ModSyncTests
     // The host creates a lobby; the guest joins and is refused for its mods: the offer it is shown.
     static SyncView Refused(Node host, Node guest, Action<bool, string> check, string op, params string[] states)
     {
-        host.Lobby.FromLocal(MultiplayerTests.Create(op + "-create", HostId));
+        host.Lobby.FromLocal(MultiplayerTests.Create(op + "-create", host.Id));
         var created = host.Next("lobby.result", check);
         guest.Lobby.FromLocal(MultiplayerTests.Join(op + "-join", GuestId, created.Text(4)));
         var refused = guest.Next("lobby.result", check);
@@ -131,11 +133,12 @@ static class ModSyncTests
         var guest = new Node(network, GuestId, Path.Combine(root, "guest"), guestSet, Verified);
         SyncAction Action(SyncView view, string id) => view.Items.Single(i => i.Mod.Id == id).Action;
 
-        // Unverified code and raw data: the lobby cannot be joined, and both are named; schema stats would download.
+        // A friend's unverified code and raw data: the lobby cannot be joined until the player trusts them (or installs them),
+        // and both are named; schema stats would download.
         var blocked = Refused(host, guest, check, "a", "blocked");
         check(Action(blocked, "test.ammo") == SyncAction.Have && Action(blocked, "test.stats") == SyncAction.Download &&
-            Action(blocked, "test.texture") == SyncAction.Manual && Action(blocked, "test.code") == SyncAction.Manual &&
-            blocked.Message.Contains("Code, Texture") && blocked.Message.Contains("cannot check and has not verified"), "Unverified code and raw data: " + blocked.Message);
+            Action(blocked, "test.texture") == SyncAction.Trust && Action(blocked, "test.code") == SyncAction.Trust &&
+            blocked.Message.Contains("Code, Texture") && blocked.Message.Contains("TRUST"), "Unverified code and raw data: " + blocked.Message);
         check(File.Exists(Path.Combine(guest.Run, "backend", ModSync.OfferFile)), "The offer is in the session's logs.");
 
         // Verified code and raw data: an offer; accepted, everything downloads, is checked and stored; restart writes the
@@ -248,6 +251,7 @@ static class ModSyncTests
         check(caught.Message.Contains("runs code") && SyncedStore.Find(guest.Mods, code.Id, code.Hash) == null, "A lying host is caught: " + caught.Message);
         await Liars(network, guest, hostSet, root, check);
         await Hostile(network, guest, root, check);
+        await Trusting(network, guest, hostSet, root, check);
 
         await LiveDisplay(root, check);
         await liar.Sync.DisposeAsync();
@@ -472,6 +476,90 @@ static class ModSyncTests
             $"An offer of 600 mods: {shown.Count} listed, {message}");
     }
 
+    // TRUST and GET IT: a Steam friend's code and raw mods, not verified, wait for the player's trust; GET IT opens a mod's
+    // own address; a trust names one exact mod the plan offers for trust, and the last one starts the download, every byte
+    // checked as before. A stranger's are never offered for trust (trusted or not), and untrusted, a mod waits again.
+    static async Task Trusting(InMemoryNetwork network, Node guest, ModSet hostSet, string root, Action<bool, string> check)
+    {
+        // a friend of its own: the first host's grant to the guest is spent by now
+        var host = new Node(network, 0x110000100000051, Path.Combine(root, "trust-host"), hostSet, (_, _) => false);
+        var code = hostSet.Mods.Single(m => m.Id == "test.code");
+        var texture = hostSet.Mods.Single(m => m.Id == "test.texture");
+        foreach (var mod in new[] { code, texture })
+            if (SyncedStore.Find(guest.Mods, mod.Id, mod.Hash) is { } stored) Directory.Delete(stored, recursive: true);
+        SyncAction Action(SyncView view, string id) => view.Items.Single(i => i.Mod.Id == id).Action;
+        string Trusted() => string.Join(", ", ModSettings.Read(guest.Mods).Trusted.Select(t => t.Id));
+
+        var asked = Refused(host, guest, check, "trust-a", "blocked");
+        check(Action(asked, "test.code") == SyncAction.Trust && Action(asked, "test.texture") == SyncAction.Trust &&
+            asked.Items.Single(i => i.Mod.Id == "test.code").Mod.Url == "https://example.com/code", "Both wait for trust; the code mod's address came with it: " + asked.Message);
+        // a trust for a mod the plan does not offer for trust (content that downloads anyway, one not in the set) is dropped
+        guest.Sync.Answer(["syncanswer", asked.Version.ToString(), "trust", "test.stats"]);
+        guest.Sync.Answer(["syncanswer", asked.Version.ToString(), "trust", "test.other"]);
+        check(Trusted() == "", "Only a mod offered for trust is trusted: " + Trusted());
+
+        // GET IT: the mod's address from the host's set, handed to the browser; a mod without one opens nothing
+        var opened = new BlockingCollection<string>();
+        guest.Sync.Browse = opened.Add;
+        guest.Sync.Answer(["syncanswer", asked.Version.ToString(), "open", "test.stats"]);
+        guest.Sync.Answer(["syncanswer", asked.Version.ToString(), "open", "test.code"]);
+        check(opened.TryTake(out var page, TimeSpan.FromSeconds(5)) && page == "https://example.com/code" && !opened.TryTake(out _, TimeSpan.FromMilliseconds(300)),
+            "GET IT opens the code mod's page alone: " + page);
+
+        // A stranger hosting the same mods (a Public lobby): nothing to trust, the player installs them.
+        const ulong StrangerHost = 0x110000100000050;
+        lock (network.Strangers) network.Strangers.Add(StrangerHost);
+        var far = new Node(network, StrangerHost, Path.Combine(root, "trust-stranger"), hostSet, (_, _) => false);
+        far.Lobby.FromLocal(MultiplayerTests.Create("trust-s-create", StrangerHost));
+        var farLobby = far.Next("lobby.result", check).Text(4);
+        far.Lobby.FromLocal(PrivacyTests.Privacy("public", far.Lobby.HostedLobbies().Single(l => l.ConnectionString == farLobby).Id, StrangerHost, "0"));
+        while (far.Inbox.TryTake(out var told, TimeSpan.FromSeconds(5)) && !(told.Type == "lobby.result" && told.Text(0) == "public")) { }
+        guest.Lobby.FromLocal(MultiplayerTests.Join("trust-s-join", GuestId, farLobby));
+        guest.Next("lobby.result", check);
+        var strange = guest.Shown.Next(check, "blocked");
+        check(Action(strange, "test.code") == SyncAction.Manual && Action(strange, "test.texture") == SyncAction.Manual && strange.Items.All(i => i.Action != SyncAction.Trust) &&
+            strange.Message.Contains("Steam friends"), "A stranger's code and raw data are the player's to install: " + strange.Message);
+        guest.Sync.Answer(["syncanswer", strange.Version.ToString(), "trust", "test.code"]);
+        check(Trusted() == "", "A stranger's mod cannot be trusted from the prompt.");
+        guest.Sync.Answer(["syncanswer", strange.Version.ToString(), "decline"]);
+        guest.Shown.Next(check, "none");
+        await far.Sync.DisposeAsync();
+        lock (network.Strangers) network.Strangers.Remove(StrangerHost);
+
+        // Trust the code mod: kept by its exact content, with who hosted it; the offer is made again, the texture still waits.
+        var again = Refused(host, guest, check, "trust-b", "blocked");
+        guest.Sync.Answer(["syncanswer", again.Version.ToString(), "trust", "test.code"]);
+        var one = guest.Shown.Next(check, "blocked");
+        var kept = ModSettings.Read(guest.Mods).Trusted;
+        check(Action(one, "test.code") == SyncAction.Download && Action(one, "test.texture") == SyncAction.Trust && kept.Count == 1 && kept[0].Id == code.Id &&
+            kept[0].Hash == code.Hash && kept[0].From.Contains(LobbyService.EntityId(host.Id)), $"One trusted, the other waits: {one.Message} ({Trusted()})");
+        // Trust the texture: nothing else waits, so it downloads at once (TRUST AND DOWNLOAD), each file checked and stored.
+        guest.Sync.Answer(["syncanswer", one.Version.ToString(), "trust", "test.texture"]);
+        var ready = guest.Shown.Next(check, "ready", "failed");
+        check(ready.State == "ready" && SyncedStore.Find(guest.Mods, code.Id, code.Hash) != null && SyncedStore.Find(guest.Mods, texture.Id, texture.Hash) != null,
+            $"Trusted mods download: {ready.State} {ready.Message}");
+        guest.Sync.Answer(["syncanswer", ready.Version.ToString(), "decline"]);
+        guest.Shown.Next(check, "none");
+
+        // Untrusted on the Mods page (its copy deleted with it): it waits for trust again; the texture is here.
+        ModSettings.Untrust(guest.Mods, code.Id, code.Hash);
+        SyncedStore.Forget(guest.Mods, code.Id, code.Hash);
+        var untrusted = Refused(host, guest, check, "trust-c", "blocked");
+        check(Action(untrusted, "test.code") == SyncAction.Trust && Action(untrusted, "test.texture") == SyncAction.Have, "Untrusted, it waits again: " + untrusted.Message);
+        // Trust in other content of the same mod (another version's hash) is not trust in this one.
+        ModSettings.SetTrusted(guest.Mods, new TrustedMod(code.Id, new string('0', 64), code.Name, code.Version, "Someone", ""));
+        guest.Sync.Answer(["syncanswer", untrusted.Version.ToString(), "decline"]);
+        guest.Shown.Next(check, "none");
+        var otherHash = Refused(host, guest, check, "trust-d", "blocked");
+        check(Action(otherHash, "test.code") == SyncAction.Trust, "Another hash trusted: this one still waits.");
+        guest.Sync.Answer(["syncanswer", otherHash.Version.ToString(), "decline"]);
+        guest.Shown.Next(check, "none");
+        ModSettings.Untrust(guest.Mods, code.Id, new string('0', 64));
+        ModSettings.Untrust(guest.Mods, texture.Id, texture.Hash);
+        guest.Sync.Browse = _ => { };
+        await host.Sync.DisposeAsync();
+    }
+
     // The game's side over the live-edit pipe: the offer's lines, and its answer back.
     static async Task LiveDisplay(string root, Action<bool, string> check)
     {
@@ -498,12 +586,13 @@ static class ModSyncTests
                 if (parts[0] == "syncstate") return;
             }
         });
-        var mod = new ModSetEntry("test.tab", "Name\twith a tab", "1", new string('a', 64), 1234, ModClass.Code, 0);
-        var raw = new ModSetEntry("test.raw", "Raw", "2", new string('b', 64), 10, ModClass.Raw, 1);
-        var view = new SyncView(7, "offer", "Host\nName", 1244, 0, "Message", [new SyncItem(mod, SyncAction.Download, null), new SyncItem(raw, SyncAction.Manual, null)]);
+        // (a url HellForge would not open never reaches the game, whatever the entry holds)
+        var mod = new ModSetEntry("test.tab", "Name\twith a tab", "1", new string('a', 64), 1234, ModClass.Code, 0) { Url = "javascript:alert(1)" };
+        var raw = new ModSetEntry("test.raw", "Raw", "2", new string('b', 64), 10, ModClass.Raw, 1) { Url = "https://example.com/raw" };
+        var view = new SyncView(7, "offer", "Host\nName", 1244, 0, "Message", [new SyncItem(mod, SyncAction.Download, null), new SyncItem(raw, SyncAction.Trust, null)]);
         check(await new LiveSyncDisplay(live).ShowAsync(view, withMods: true), "The game took the offer.");
         await game;
-        check(lines.SequenceEqual(["syncmod\t7\t0\tdownload\tcode\t1234\ttest.tab\tNamewith a tab\t1", "syncmod\t7\t1\tmanual\traw\t10\ttest.raw\tRaw\t2",
+        check(lines.SequenceEqual(["syncmod\t7\t0\tdownload\tcode\t1234\ttest.tab\tNamewith a tab\t1\t-", "syncmod\t7\t1\ttrust\traw\t10\ttest.raw\tRaw\t2\thttps://example.com/raw",
                 "syncstate\t7\toffer\tHostName\t1244\t0\t2\tMessage"]),
             "The lines: " + string.Join(" | ", lines));
         await writer.WriteLineAsync("syncanswer\t7\tblock\ttest.tab");

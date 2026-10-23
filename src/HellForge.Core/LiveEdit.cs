@@ -131,8 +131,10 @@ public sealed class LiveEditServer : IAsyncDisposable
 
     // Mod sync (HfApi sync_state / sync_mod): an offer's mods, index 0 up, then its state, which publishes them in the
     // game. A progress update is the state alone, with the same version. Words, not numbers, for actions, classes and states.
-    public Task<LiveResult> SyncModAsync(int version, int index, string action, string modClass, long bytes, string id, string name, string modVersion) =>
-        SendAsync("syncmod", string.Join('\t', Invariant(version), Invariant(index), action, modClass, Invariant(bytes), Field(id), Field(name), Field(modVersion)));
+    // url: where players get the mod (ModCatalog.WebAddress, at most 200 characters), or "-".
+    public Task<LiveResult> SyncModAsync(int version, int index, string action, string modClass, long bytes, string id, string name, string modVersion, string? url = null) =>
+        SendAsync("syncmod", string.Join('\t', Invariant(version), Invariant(index), action, modClass, Invariant(bytes), Field(id), Field(name), Field(modVersion),
+            ModCatalog.WebAddress(url) ?? "-"));
     public Task<LiveResult> SyncStateAsync(int version, string state, string host, long bytes, long done, int mods, string message) =>
         SendAsync("syncstate", string.Join('\t', Invariant(version), state, Field(host), Invariant(bytes), Invariant(done), Invariant(mods), Field(message)));
 

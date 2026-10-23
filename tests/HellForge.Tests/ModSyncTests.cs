@@ -73,6 +73,9 @@ static class ModSyncTests
         return mods;
     }
 
+    // The verified list's one entry (data/verified-mods.json): the Stratagem Compendium 1.0.4 as its zip shipped.
+    const string CompendiumId = "skyeshade.stratagem-compendium", CompendiumHash = "2992e13fc3dc78f9786b22136026aced840acc86eb2597333e62389b5753e3db";
+
     // Copies a mod's counted files, as a download would write them.
     static void CopyFiles(ModSetEntry mod, string to)
     {
@@ -154,7 +157,9 @@ static class ModSyncTests
 
         test("Mod sync: the verified list is embedded and checked; the blocklist and share switch are saved with the Mods page's settings", () =>
         {
-            check(VerifiedMods.All.Count == 0 && !VerifiedMods.Contains("test.prebuilt", new string('a', 64)), "The shipped list starts empty.");
+            check(VerifiedMods.All.Count == 1 && VerifiedMods.All[0] is { Id: CompendiumId, Version: "1.0.4", Hash: CompendiumHash } &&
+                VerifiedMods.Contains(CompendiumId, CompendiumHash) && !VerifiedMods.Contains(CompendiumId, new string('a', 64)) &&
+                !VerifiedMods.Contains("test.prebuilt", CompendiumHash), "The shipped list names the Stratagem Compendium 1.0.4 alone, by its exact content.");
             var listed = VerifiedMods.Parse($$"""{"format":1,"mods":[{"id":"a.b","name":"B","version":"1","hash":"{{new string('c', 64)}}","reviewed":"2026-10-22, maintainer"}]}""");
             check(listed.Count == 1 && listed[0].Hash == new string('c', 64), "A listed entry parses.");
             foreach (var bad in new[] { "{\"format\":1}", $$"""{"format":1,"mods":[{"id":"a.b","version":"1","hash":"{{new string('C', 64)}}","reviewed":"x"}]}""",
@@ -198,11 +203,11 @@ static class ModSyncTests
             var none = new HashSet<string>();
             var plan = ModSyncPlan.Make(host, hostShares: true, own, locator.Find, none, verified: (_, _) => false);
             SyncAction A(ModSyncPlan p, string id) => p.Items.Single(i => i.Mod.Id == id).Action;
-            check(A(plan, "test.ammo") == SyncAction.Have && A(plan, "test.texture") == SyncAction.Have && A(plan, "test.prebuilt") == SyncAction.Manual &&
-                A(plan, "test.source") == SyncAction.Manual && A(plan, "test.scripted") == SyncAction.Manual && A(plan, "test.mine") == SyncAction.Off,
+            check(A(plan, "test.ammo") == SyncAction.Have && A(plan, "test.texture") == SyncAction.Have && A(plan, "test.prebuilt") == SyncAction.Trust &&
+                A(plan, "test.source") == SyncAction.Trust && A(plan, "test.scripted") == SyncAction.Trust && A(plan, "test.mine") == SyncAction.Off,
                 "Actions: " + string.Join(", ", plan.Items.Select(i => $"{i.Mod.Id}={i.Action}")));
-            check(plan.Items.Single(i => i.Mod.Id == "test.texture").Folder == Path.Combine(joinerFolder, "texture") && plan.Verdict == SyncVerdict.Unjoinable,
-                "A switched-off copy counts, and unverified code makes the lobby unjoinable.");
+            check(plan.Items.Single(i => i.Mod.Id == "test.texture").Folder == Path.Combine(joinerFolder, "texture") && plan.Verdict == SyncVerdict.Trust,
+                "A switched-off copy counts, and a friend's unverified code waits for the player's trust.");
             var verified = ModSyncPlan.Make(host, true, own, locator.Find, none, verified: (id, hash) => host.Find(id, hash)?.Class == ModClass.Code);
             check(A(verified, "test.prebuilt") == SyncAction.Download && verified.Verdict == SyncVerdict.Download &&
                 verified.DownloadBytes == host.Mods.Where(m => m.Class == ModClass.Code).Sum(m => m.Bytes), "Verified code downloads.");
@@ -245,12 +250,15 @@ static class ModSyncTests
             foreach (var (id, kind) in expected) check(set.Find(id, set.Mods.Single(m => m.Id == id).Hash)!.Class == kind, $"{id} is {kind}.");
             check(ModSet.Parse(set.ToJson(local: false).ToJsonString(), local: false).Mods.Single(m => m.Id == "test.patch").Class == ModClass.Raw, "The raw class goes over the wire.");
 
-            // The plan: unverified, content downloads and the rest is the player's to install; verified, all of it downloads.
-            // One rule for every host (no friends' exception: the plan is not told who the host is).
+            // The plan: unverified, content downloads and the rest waits for the player's trust (a Steam friend's) or is theirs to
+            // install (a stranger's); verified, all of it downloads from a friend. The class is the same for every host.
             var none = new ModSet("none", []);
             var plan = ModSyncPlan.Make(set, true, none, (_, _) => null, new HashSet<string>(), verified: (_, _) => false);
             foreach (var (id, kind) in expected)
-                check(plan.Items.Single(i => i.Mod.Id == id).Action == (kind == ModClass.Content ? SyncAction.Download : SyncAction.Manual), $"{id}: unverified plan.");
+                check(plan.Items.Single(i => i.Mod.Id == id).Action == (kind == ModClass.Content ? SyncAction.Download : SyncAction.Trust), $"{id}: unverified plan.");
+            var strangerPlan = ModSyncPlan.Make(set, true, none, (_, _) => null, new HashSet<string>(), verified: (_, _) => true, hostIsFriend: false);
+            foreach (var (id, kind) in expected)
+                check(strangerPlan.Items.Single(i => i.Mod.Id == id).Action == (kind == ModClass.Content ? SyncAction.Download : SyncAction.Manual), $"{id}: a stranger's plan, verified or not.");
             var verifiedPlan = ModSyncPlan.Make(set, true, none, (_, _) => null, new HashSet<string>(), verified: (id, hash) => set.Find(id, hash) != null);
             check(verifiedPlan.Items.All(i => i.Action == SyncAction.Download), "Verified raw data and code download.");
 
@@ -277,6 +285,132 @@ static class ModSyncTests
                 check(SyncedStore.Install(install.Mods, mod, Fresh(mod), verified: (id, hash) => id == mod.Id && hash == mod.Hash) == SyncedStore.Find(install.Mods, mod.Id, mod.Hash),
                     mod.Id + " is stored verified.");
             }
+        });
+
+        test("Mod sync: a Steam friend's unverified code and raw mods wait for the player's trust, that exact content; a stranger's are the player's to install", () =>
+        {
+            var (hostMods, _) = ModCatalog.Load(Mods(root, "sync-trust-host"));
+            var host = ModSet.Of(ModCatalog.LoadOrder(hostMods));
+            var prebuilt = host.Mods.Single(m => m.Id == "test.prebuilt");
+            var texture = host.Mods.Single(m => m.Id == "test.texture");
+            var none = new ModSet("none", []);
+            var nothing = new HashSet<string>();
+            SyncAction A(ModSyncPlan p, string id) => p.Items.Single(i => i.Mod.Id == id).Action;
+            ModSyncPlan Plan(Func<string, string, bool> trusted, bool friend = true, bool shares = true) =>
+                ModSyncPlan.Make(host, shares, none, (_, _) => null, nothing, verified: (_, _) => false, hostIsFriend: friend, trusted: trusted);
+
+            var untrusted = Plan((_, _) => false);
+            check(A(untrusted, "test.prebuilt") == SyncAction.Trust && A(untrusted, "test.texture") == SyncAction.Trust && A(untrusted, "test.ammo") == SyncAction.Download &&
+                untrusted.Verdict == SyncVerdict.Trust && untrusted.DownloadBytes == host.Mods.Where(m => m.Class == ModClass.Content).Sum(m => m.Bytes),
+                "A friend's code and raw data wait for trust; content downloads.");
+            var stranger = Plan((_, _) => true, friend: false);
+            check(A(stranger, "test.prebuilt") == SyncAction.Manual && A(stranger, "test.texture") == SyncAction.Manual && stranger.Verdict == SyncVerdict.Unjoinable,
+                "A stranger's code is never offered for trust, even trusted before.");
+            check(A(Plan((_, _) => true, shares: false), "test.prebuilt") == SyncAction.Manual, "A host that does not share: nothing to trust.");
+            var one = Plan((id, hash) => id == prebuilt.Id && hash == prebuilt.Hash);
+            check(A(one, "test.prebuilt") == SyncAction.Download && A(one, "test.texture") == SyncAction.Trust && one.Verdict == SyncVerdict.Trust, "One trusted, one to go.");
+            var otherHash = Plan((id, hash) => id == prebuilt.Id && hash != prebuilt.Hash);
+            check(A(otherHash, "test.prebuilt") == SyncAction.Trust, "Trust is for that exact content: another version or other bytes are not trusted.");
+            var all = Plan((id, hash) => host.Find(id, hash) != null);
+            check(all.Verdict == SyncVerdict.Download && all.Items.All(i => i.Action == SyncAction.Download), "All trusted: everything downloads.");
+
+            // Kept beside the blocklist in hellforge-mods.json; a malformed entry is left out; untrusted, it is gone.
+            var mods = Path.Combine(root, "sync-trust-settings");
+            ModSettings.SetBlocked(mods, "bad.mod", true);
+            ModSettings.SetTrusted(mods, new TrustedMod(prebuilt.Id, prebuilt.Hash, "Prebuilt", "1", "Friend (76561190000000001)", "2026-10-23T10:00:00.0000000Z"));
+            ModSettings.SetTrusted(mods, new TrustedMod(prebuilt.Id, prebuilt.Hash, "Prebuilt", "1", "Friend (76561190000000001)", "2026-10-23T11:00:00.0000000Z"));
+            ModSettings.SetShare(mods, false);
+            var state = ModSettings.Read(mods);
+            check(state.Trusted.Count == 1 && state.Trusts(prebuilt.Id, prebuilt.Hash) && !state.Trusts(prebuilt.Id, texture.Hash) && !state.Trusts(texture.Id, prebuilt.Hash) &&
+                state.Trusted[0].Since.StartsWith("2026-10-23T11", StringComparison.Ordinal) && state.Blocked.Contains("bad.mod") && !state.Share,
+                "Trusted once by id and hash, kept with the other settings.");
+            var file = Path.Combine(mods, ModSettings.FileName);
+            var json = JsonNode.Parse(File.ReadAllText(file))!.AsObject();
+            json["trusted"]!.AsArray().Add(new JsonObject { ["id"] = "Bad Id", ["hash"] = prebuilt.Hash });
+            json["trusted"]!.AsArray().Add(new JsonObject { ["id"] = texture.Id, ["hash"] = texture.Hash.ToUpperInvariant() });
+            json["trusted"]!.AsArray().Add("not an object");
+            File.WriteAllText(file, json.ToJsonString());
+            check(ModSettings.Read(mods).Trusted.Count == 1, "Malformed trusted entries are left out.");
+            ModSettings.Untrust(mods, prebuilt.Id, prebuilt.Hash);
+            state = ModSettings.Read(mods);
+            check(state.Trusted.Count == 0 && state.Blocked.Contains("bad.mod"), "Untrusted, and the rest kept.");
+
+            // The store takes a trusted raw mod (what the backend passes: verified or trusted), only by its hash; Forget
+            // deletes the copy (the Mods page's Untrust).
+            var install = new InstallLayout(Path.Combine(root, "sync-trust-install"));
+            install.Create(SupportedBuild.Current.BuildId);
+            Directory.CreateDirectory(install.Mods);
+            string Fresh(ModSetEntry mod) { var p = SyncedStore.Partial(install.Mods, mod.Id, mod.Hash); CopyFiles(mod, p); return p; }
+            reject(() => SyncedStore.Install(install.Mods, texture, Fresh(texture), verified: (id, hash) => id == texture.Id && hash == prebuilt.Hash));
+            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == null, "Trust in other content does not let it in.");
+            var stored = SyncedStore.Install(install.Mods, texture, Fresh(texture), verified: (id, hash) => id == texture.Id && hash == texture.Hash);
+            check(stored == SyncedStore.Find(install.Mods, texture.Id, texture.Hash), "A trusted raw mod is stored, every file checked as before.");
+            SyncedStore.Forget(install.Mods, texture.Id, texture.Hash);
+            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == null && !Directory.Exists(stored), "Forgotten: its copy is gone.");
+        });
+
+        test("Mod sync: a mod's url is an https:// address or nothing, kept in its mod set (never a bundled mod's); others are left out", () =>
+        {
+            foreach (var good in new[] { "https://www.nexusmods.com/helldivers2/mods/123", "https://example.com/a?b=c&d=%20#top", "https://github.com/SkyeShade/HellForge" })
+                check(ModCatalog.WebAddress(good) == good, "Refused: " + good);
+            foreach (var bad in new[] {
+                         "http://example.com/mod", "javascript:alert(1)", "file:///C:/Windows/System32/calc.exe", "ftp://example.com/mod", "data:text/html,<b>x</b>",
+                         "HTTPS://EXAMPLE.COM/MOD", " https://example.com/mod", "https://example.com/mod ", "https://exa mple.com/", "https://example.com/\"onclick",
+                         "https://example.com/'x", "https://example.com\\..\\calc.exe", "https://user:password@example.com/", "https://example.com:8443/mod",
+                         "https://localhost/mod", "https://192.168.1.10/mod", "https://[::1]/mod", "https://exämple.com/mod", "https://example.com/\u202Eexe.txt",
+                         "https://example.com/\nline", "https://", "https://.", "\\\\server\\share\\mod.exe", "C:\\mods\\mod.exe", "",
+                         "https://example.com/" + new string('a', ModCatalog.MaxUrl) })
+                check(ModCatalog.WebAddress(bad) == null, "Taken: " + bad);
+            check(ModCatalog.WebAddress(null) == null, "Taken: null.");
+
+            var mods = Path.Combine(root, "sync-url");
+            Write(Path.Combine(mods, "linked"), ModCatalog.ManifestName, Manifest("test.linked", "1",
+                ",\"url\":\"https://example.com/linked\",\"native\":{\"networkFieldTypes\":[{\"name\":\"remaining\",\"expect\":{\"kind\":1,\"bits\":8,\"min\":0},\"bits\":9}]}"));
+            Write(Path.Combine(mods, "unsafe"), ModCatalog.ManifestName, Manifest("test.unsafe", "1", ",\"url\":\"javascript:alert(1)\",\"code\":{\"dll\":\"mod.dll\",\"sdk\":1}"));
+            Write(Path.Combine(mods, "unsafe"), "mod.dll", "synthetic dll");
+            Write(Path.Combine(mods, "number"), ModCatalog.ManifestName, Manifest("test.number", "1", ",\"url\":5,\"code\":{\"dll\":\"mod.dll\",\"sdk\":1}"));
+            Write(Path.Combine(mods, "number"), "mod.dll", "synthetic dll");
+            var (loaded, problems) = ModCatalog.Load(mods);
+            check(loaded.Count == 3 && problems.Count == 0, "A bad url leaves the mod loading: " + string.Join(" | ", problems));
+            check(loaded.Single(m => m.Id == "test.linked").Url == "https://example.com/linked" && loaded.Where(m => m.Id != "test.linked").All(m => m.Url == null),
+                "Only an https:// address is kept.");
+            var set = ModSet.Of(ModCatalog.LoadOrder(loaded));
+            check(set.Mods.Single(m => m.Id == "test.linked").Url == "https://example.com/linked", "The mod set carries it.");
+            var wire = set.ToJson(local: false);
+            check(ModSet.Parse(wire.ToJsonString(), local: false).Mods.Single(m => m.Id == "test.linked").Url == "https://example.com/linked", "Over the wire.");
+            // a host's set: an address HellForge would not open is dropped (the set stands); a bundled mod has none
+            var first = (JsonObject)wire["mods"]![0]!;
+            foreach (var hostile in new JsonNode?[] { "javascript:alert(1)", "http://example.com/x", 5, new JsonObject() })
+            {
+                first["url"] = hostile?.DeepClone();
+                check(ModSet.Parse(wire.ToJsonString(), local: false).Mods[0].Url == null, "A host's bad url is dropped: " + hostile?.ToJsonString());
+            }
+            first["url"] = "https://example.com/editor";
+            first["class"] = "bundled";
+            check(ModSet.Parse(wire.ToJsonString(), local: false).Mods[0].Url == null, "A bundled mod's url is dropped.");
+        });
+
+        test("Mod sync: the verified Stratagem Compendium is its 1.0.4 zip's content hash, as HellForge.Cli mod-hash prints it (zips hash as their folders do)", () =>
+        {
+            // a zip and its folder hash alike, as the catalogue loads them
+            var source = Path.Combine(root, "sync-hash-source", "hash-mod");
+            Write(source, ModCatalog.ManifestName, Manifest("test.hash", "1", ",\"code\":{\"dll\":\"mod.dll\",\"sdk\":1}"));
+            Write(source, "mod.dll", "synthetic dll");
+            var zip = Path.Combine(root, "sync-hash-zip", "hash-mod-1.zip");
+            Directory.CreateDirectory(Path.GetDirectoryName(zip)!);
+            System.IO.Compression.ZipFile.CreateFromDirectory(Path.GetDirectoryName(source)!, zip);
+            var fromZip = ModHash.Of(zip);
+            var fromFolder = ModHash.Of(source);
+            var loaded = ModSet.Of(ModCatalog.Load(Path.GetDirectoryName(zip)!).Mods).Mods.Single();
+            check(fromZip.Hash == fromFolder.Hash && fromZip.Hash == loaded.Hash && fromZip.Class == ModClass.Code && fromZip.Files == 2,
+                $"Zip {fromZip.Hash[..12]}, folder {fromFolder.Hash[..12]}, catalogue {loaded.Hash[..12]}.");
+            // the shipped zip, where it is installed (a maintainer's PC; HELLFORGE_TEST_COMPENDIUM names another copy)
+            var shipped = Environment.GetEnvironmentVariable("HELLFORGE_TEST_COMPENDIUM") ??
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "HellForge", "mods", "stratagem-compendium-1.0.4.zip");
+            if (!File.Exists(shipped)) { Console.WriteLine("  (the Stratagem Compendium 1.0.4 zip is not installed here: its hash is not rechecked)"); return; }
+            var compendium = ModHash.Of(shipped);
+            check(compendium is { Id: CompendiumId, Version: "1.0.4", Hash: CompendiumHash, Class: ModClass.Code } && VerifiedMods.Contains(compendium.Id, compendium.Hash),
+                $"The shipped zip hashes {compendium.Hash} ({compendium.Class}).");
         });
 
         test("Mod sync: a data spec is content only when HellForge checks all it builds; a hostile host's replace, lua, or an edit on another type needs the verified list", () =>
@@ -314,7 +448,7 @@ static class ModSyncTests
                 check(declared == (mod.Class == ModClass.Raw ? ModClass.Raw : null), $"{mod.Id}: its spec declares {declared?.ToString() ?? "nothing"} before its other files.");
             }
             var plan = ModSyncPlan.Make(set, true, new ModSet("none", []), (_, _) => null, new HashSet<string>(), verified: (_, _) => false);
-            check(plan.Items.All(i => i.Action == (specs[i.Mod.Id].Class == ModClass.Content ? SyncAction.Download : SyncAction.Manual)), "Unverified, only checked specs download.");
+            check(plan.Items.All(i => i.Action == (specs[i.Mod.Id].Class == ModClass.Content ? SyncAction.Download : SyncAction.Trust)), "Unverified, only checked specs download.");
 
             // A hostile host calls its specs content: the joiner's store reads them from their own bytes and refuses them.
             var install = new InstallLayout(Path.Combine(root, "sync-specs-install"));

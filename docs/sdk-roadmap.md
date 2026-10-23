@@ -494,7 +494,9 @@ SDK 13 (2026-10-21): managed hooks, as described under [Mod conflicts, events an
 hooks](#mod-conflicts-events-and-hooks).
 
 SDK 14 (2026-10-23): mod sync's `sync_state`, `sync_mod` and `sync_answer`, which the in-game editor's MOD SYNC prompt
-uses ([mods.md](mods.md#playing-with-other-mods), [multiplayer.md](multiplayer.md)).
+uses ([mods.md](mods.md#playing-with-other-mods), [multiplayer.md](multiplayer.md)). Before 0.3.0 shipped, SDK 14 also
+gained a Steam friend's mods to trust (`HF_SYNC_MOD_TRUST`, answered `HF_SYNC_TRUST` after the editor's warning), each
+mod's web address (`HfSyncMod.url`, from the manifest's `url`) and `HF_SYNC_OPEN`, which has the backend open it.
 
 ### 6. Editor (HellRaiser)
 

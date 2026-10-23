@@ -237,8 +237,14 @@ launcher restarts the session with the host's mods (`--mod-sync`). Each mod's cl
 with one rule for every host, Steam friends included (`ModSets.ClassOf`). Content (data specs HellForge checks all of,
 `DataSpecs.Unchecked`; schema stats; network field types) downloads from any host. Code and raw data (binary data
 patches, data specs with `"replace"` or unreviewed resource types such as `lua`, raw stats lines, `componentWrites`)
-download only when `data/verified-mods.json` names their exact content hash, and only from a Steam friend: a host
-serves them to friends alone. Bundled mods never download. The host side is
+download only from a Steam friend (a host serves them to friends alone), and only when `data/verified-mods.json` names
+their exact content hash or the player trusted it. A friend's unverified one is `SyncAction.Trust` ("needs your trust"):
+the prompt's TRUST, after a warning, answers `trust`, which adds `{id, hash, name, version, from, since}` to
+`"trusted"` in `mods/hellforge-mods.json` (`ModSettings`, beside `"blocked"`; the Mods page lists and untrusts them) and
+makes the offer again, downloading once nothing else waits. The joiner's checks then take the verified list or that
+list (`ModSync.Allowed`), every byte checked as before. A mod's manifest `url` (an `https://` address,
+`ModCatalog.WebAddress`) travels in its mod set entry; GET IT answers `open`, and the joiner's backend opens that
+address (checked again) in the default browser. Bundled mods never download. The host side is
 `src/HellForge.LocalBackend/Multiplayer/ModSync.cs`; the protocol and limits are in
 [Step 6](#step-6-mod-sync-a-joiner-takes-the-hosts-mods-2026-10-22) below.
 
@@ -641,7 +647,14 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
   - The offer becomes the game's (`ModSyncPlan` in HellForge.Core). The loader's live pipe gets
     `syncmod` lines and then `syncstate` (`native/mod-loader/live.c`, SDK 14 `sync_state`/`sync_mod`), and the in-game
     editor shows its MOD SYNC prompt over the game, the editor window closed. The answer comes back as
-  `syncanswer <version> <answer> [<mod id>]`.
+  `syncanswer <version> <answer> [<mod id>]` (accept, decline, restart, block, trust, open). Each `syncmod` line ends
+  with the mod's `url` or `-`; the loader keeps only an `https://` address of printable ASCII.
+  - A Steam friend's code or raw mod that is not verified is offered for trust (`trust` in the plan, the offer
+    `blocked` until none waits). `trust <mod id>` is taken only for such a mod of the current offer: its id and hash go
+    on the player's trusted list with the host's name and SteamID64, and the offer is made again; when nothing else
+    waits, its download starts at once. A stranger's are `manual` whatever the player trusted.
+  - `open <mod id>` opens the mod's `url` from the host's set in the default browser (at most once a second), after
+    `ModCatalog.WebAddress` checks it again; nothing else is ever started.
   - The offer is also written to `<run>/backend/mod-sync.json`.
   - On accept it checks the drive has room (the download and 256 MB), then downloads, four requests in flight. The
     file list, the manifest (`hellforge-mod.json` before `bts-mod.json`), the stats file and the data spec come
@@ -661,17 +674,23 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
   restart, the other item, is built ([Step 9](#step-9-rejoining-after-a-mod-sync-2026-10-23)).
 
 **To test on two PCs:**
-1. The host enables a content mod (a data patch or stats mod) and a code mod; the friend has neither.
+1. The host enables a content mod (a data patch or stats mod) and a code mod that is not on the verified list, with a
+   `"url": "https://..."` in its manifest; the friend has neither.
 2. The friend joins. Check that the MOD SYNC prompt shows (no editor window behind it), lists the content mod as
-   downloading and the code mod as "install it yourself", and refuses to start.
-3. The host turns the code mod off and starts a new session. The friend joins again, then DOWNLOAD AND RESTART:
-   - check the progress bar and that the files land in `mods/.synced`;
+   downloading and the code mod as "needs your trust" with TRUST and GET IT buttons, and refuses to start (OK only).
+3. GET IT (or G): the mod's page opens in the friend's browser; the prompt stays.
+4. TRUST (or T): the warning shows in the prompt's place; Enter does nothing, the button is grey for a second, CANCEL
+   and Esc go back to the list. Then TRUST AND DOWNLOAD:
+   - check the download starts at once, the progress bar, and that the files land in `mods/.synced`;
    - check that the session restarts with "Playing with <host>'s mods" in the launcher;
-   - check that joining again from the social tab works. Now: the restarted game is invited back by itself (step 9's
-     test).
-4. Time how long a large download takes, and whether the host notices it in game (it is paced to 1 MiB/s).
-5. BLOCK a mod from the dialog: the next join to that lobby shows it blocked; unblock it on the Mods page.
-6. Collect both sessions' `multiplayer.log` ("Mod sync:" lines), `backend/mod-sync.json` and `modloader.log`
+   - check that the restarted game is invited back into the host's lobby by itself (step 9's test);
+   - check that the launcher's Mods page (MOD SYNC card) lists the code mod as trusted from the host, and that
+     Untrust removes it and its `mods/.synced` copy.
+5. Time how long a large download takes, and whether the host notices it in game (it is paced to 1 MiB/s).
+6. BLOCK a mod from the dialog: the next join to that lobby shows it blocked; unblock it on the Mods page.
+7. With `HELLFORGE_TEST_STRANGERS=1` on the friend's PC (the host then counts as a stranger, in a Public lobby): the
+   code mod is "install it yourself", with GET IT and no TRUST, even after it was trusted.
+8. Collect both sessions' `multiplayer.log` ("Mod sync:" lines), `backend/mod-sync.json` and `modloader.log`
    ("mod sync" lines).
 
 ### Step 7: public lobbies on the Galactic Map (2026-10-22)
