@@ -14,7 +14,9 @@ public static class RecordGuard
 {
     public sealed record Limits(int Bytes, int Depth, int Items, int Text);
 
-    public static readonly Limits LobbyLimits = new(16 << 10, 6, 64, 256), ObjectLimits = new(64 << 10, 8, 256, 4096);
+    public static readonly Limits LobbyLimits = new(16 << 10, 6, 64, 256), ObjectLimits = new(64 << 10, 8, 256, 4096),
+        // a host's Local Stats, mod content values and arm swaps (StatsShare): up to StatsData.MaxEdits values
+        HostFileLimits = new(1 << 20, 6, 8192, 256);
 
     static readonly HashSet<string> LobbyFields = new(StringComparer.Ordinal)
     {
@@ -40,6 +42,9 @@ public static class RecordGuard
 
     // A friend's PlayFab profile objects (presence): no known field list, so only bounded.
     public static JsonObject? Objects(JsonObject objects) => Clean(objects, null, ObjectLimits, players: false);
+
+    // Any other object: bounded only.
+    public static JsonObject? Bounded(JsonObject value, Limits limits) => Clean(value, null, limits, players: false);
 
     static JsonObject? Clean(JsonObject record, IReadOnlySet<string>? fields, Limits limits, bool players)
     {
