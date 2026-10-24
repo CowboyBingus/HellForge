@@ -21,6 +21,11 @@ sealed class PlaySession(PlayOptions options)
 
     readonly JsonObject result = new();
     readonly List<FileStream> locks = [];
+    // Several installations (GameProcesses.MultiInstance): the installed game's files another installation's session held
+    // when this one started, taken over once that session ends (every 5 s, on the timer's thread); released at clean-up.
+    Timer? normalHoldRetry;
+    readonly List<FileStream> retaken = [];
+    bool retakeStopped;
     readonly List<string> swapped = [];
     ModsHold? modsHold;
     readonly Dictionary<string, string> shimPins = new(StringComparer.Ordinal);
@@ -119,6 +124,14 @@ sealed class PlaySession(PlayOptions options)
         return (string?)result["status"] == "observed" ? 0 : 1;
     }
 
+    // Holds a file of the installed game closed (no other handle, so it cannot start) into `into`; false when another
+    // process has it open.
+    static bool HoldClosed(string path, List<FileStream> into)
+    {
+        try { into.Add(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None)); return true; }
+        catch (IOException) { return false; }
+    }
+
     // Runs HellForge.Cli: its JSON output, or null (its messages go to the run's cli-output.txt).
     string? HellForgeCli(params string[] arguments)
     {
@@ -132,8 +145,8 @@ sealed class PlaySession(PlayOptions options)
         if (!Environment.Is64BitProcess) throw new SessionFailure("The session runner must run as a 64-bit process.");
         // installations set up before setup checked for them, or a runtime uninstalled since
         if (VisualCppRuntimes.Problem("press Play again.") is { } runtimes) throw new SessionFailure(runtimes);
-        foreach (var name in new[] { "helldivers2", "GameGuard", "GameMon", "GameMon64" })
-            if (Process.GetProcessesByName(name).Length > 0) throw new SessionFailure("Existing game or GameGuard process.");
+        if (GameProcesses.Blocking(install, GameProcesses.Running(), GameProcesses.MultiInstance) is { } busy) throw new SessionFailure(busy);
+        result["multiInstance"] = GameProcesses.MultiInstance;
         if (Process.GetProcessesByName("HD2RuntimeModBuilder").Length > 0) throw new SessionFailure("External mod builder is running.");
         // One session at a time per installation: a second one (Play pressed again, or a session runner from an earlier session
         // that has not ended) finds the lock held.
@@ -259,7 +272,10 @@ sealed class PlaySession(PlayOptions options)
         result["gameDllSha256"] = Tools.Sha256(gameDll);
         if (normal != null)
         {
-            result["installedExeSha256"] = Tools.Sha256(Path.Combine(normal, "bin", "helldivers2.exe"));
+            // Several installations: another installation's session may hold the installed game's executable closed
+            // already, which keeps it from being read too.
+            try { result["installedExeSha256"] = Tools.Sha256(Path.Combine(normal, "bin", "helldivers2.exe")); }
+            catch (IOException) when (GameProcesses.MultiInstance) { result["installedExeHeldElsewhere"] = true; }
             result["installedDllSha256"] = Tools.Sha256(Path.Combine(normal, "data", "game", "game.dll"));
         }
         profileDirectoryUsed = profileDirectory;
@@ -475,9 +491,16 @@ sealed class PlaySession(PlayOptions options)
             programs.AddRange(Directory.EnumerateFiles(Path.Combine(normal, "bin"), "*", SearchOption.AllDirectories)
                 .Where(f => (f.EndsWith(".des", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".now", StringComparison.OrdinalIgnoreCase)) &&
                             f.Contains("GameGuard", StringComparison.OrdinalIgnoreCase)));
-            foreach (var path in programs)
-                try { locks.Add(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None)); }
-                catch (IOException) { throw new SessionFailure("Could not hold the installed game closed (is it running?): " + path); }
+            var heldElsewhere = programs.Where(path => !HoldClosed(path, locks)).ToList();
+            if (heldElsewhere.Count > 0 && !GameProcesses.MultiInstance)
+                throw new SessionFailure("Could not hold the installed game closed (is it running?): " + heldElsewhere[0]);
+            // Several installations: the first session holds them, and this one takes the hold over once that one ends
+            // (its game was refused above, so a held file here is another installation's session's).
+            if (heldElsewhere.Count > 0)
+            {
+                result["installedGameHeldElsewhere"] = heldElsewhere.Count;
+                normalHoldRetry = new Timer(_ => { lock (retaken) if (!retakeStopped) heldElsewhere.RemoveAll(path => HoldClosed(path, retaken)); }, null, 5000, 5000);
+            }
         }
         hint = Path.Combine(copy, "bin", "steam_appid.txt");
         // Not a game file: only a session writes it, so one here was left by a session that was cut short.
@@ -734,8 +757,16 @@ sealed class PlaySession(PlayOptions options)
             var pipe = "hellforge-" + (string)result["runId"]!;
             // --mods: co-op plays with the host's Local Stats (StatsShare): the host's backend reads it, a joiner's restores it
             // --modset: joiners lacking this session's mods may download them (ModSync)
-            foreach (var argument in new[] { "--pipe", pipe, "--link", "steam:" + link, "--mod-digest", modDigest, "--mods", install.Mods, "--modset", ModSetFile })
+            // Several installations on one PC (GameProcesses.MultiInstance): the backends reach each other over loopback
+            // (HELLFORGE_PEER_LINK, a udp: link) and share a folder as the lobby directory (HELLFORGE_DIRECTORY_FOLDER);
+            // the backend logs the game in as that link's id (HELLFORGE_IDENTITY, which it reads itself).
+            var peerLink = GameProcesses.MultiInstance ? Environment.GetEnvironmentVariable("HELLFORGE_PEER_LINK") : null;
+            var directoryFolder = GameProcesses.MultiInstance ? Environment.GetEnvironmentVariable("HELLFORGE_DIRECTORY_FOLDER") : null;
+            if (peerLink != null && !peerLink.StartsWith("udp:", StringComparison.Ordinal)) throw new SessionFailure("HELLFORGE_PEER_LINK must be a udp: link.");
+            foreach (var argument in new[] { "--pipe", pipe, "--link", peerLink ?? "steam:" + link, "--mod-digest", modDigest, "--mods", install.Mods, "--modset", ModSetFile })
                 start.ArgumentList.Add(argument);
+            if (directoryFolder != null) { start.ArgumentList.Add("--directory"); start.ArgumentList.Add(Path.GetFullPath(directoryFolder)); }
+            if (peerLink != null) result["peerLink"] = peerLink;
             // --mod-list: the digest's mods one by one, so a refused join can say which differ (ModlistDiff)
             if (modList != null)
             {
@@ -929,6 +960,12 @@ sealed class PlaySession(PlayOptions options)
         if (gameStarted != null) Try("networkCensusError", () => result["networkCensus"] = NetworkCensus.Summarize(Path.Combine(gameOut, CensusLog)));
         if (hint != null && File.Exists(hint)) Try("hintError", () => File.Delete(hint));
         foreach (var held in locks) held.Dispose();
+        normalHoldRetry?.Dispose();
+        lock (retaken)
+        {
+            retakeStopped = true;
+            foreach (var held in retaken) held.Dispose();
+        }
         modsHold?.Release();
         // A loaded DLL cannot be replaced, so the originals go back only once the game is gone; otherwise the next session
         // restores them before verifying the copy.
@@ -980,7 +1017,9 @@ sealed class PlaySession(PlayOptions options)
                 result["copyDllUnchanged"] = Tools.Sha256(gameDll) == (string?)result["gameDllSha256"];
                 if (normal != null && result["installedExeSha256"] != null)
                 {
-                    result["installedExeUnchanged"] = Tools.Sha256(Path.Combine(normal, "bin", "helldivers2.exe")) == (string?)result["installedExeSha256"];
+                    // several installations: a later installation's session may hold it closed by now
+                    try { result["installedExeUnchanged"] = Tools.Sha256(Path.Combine(normal, "bin", "helldivers2.exe")) == (string?)result["installedExeSha256"]; }
+                    catch (IOException) when (GameProcesses.MultiInstance) { result["installedExeHeldElsewhere"] = true; }
                     result["installedDllUnchanged"] = Tools.Sha256(Path.Combine(normal, "data", "game", "game.dll")) == (string?)result["installedDllSha256"];
                 }
             });
