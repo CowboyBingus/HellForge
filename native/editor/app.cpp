@@ -92,6 +92,20 @@ static void ReadNotice()
 static ULONGLONG NoticeMs() { return g_notice.error ? NOTICE_ERROR_MS : NOTICE_INFO_MS; }
 static ImU32 Faded(ImU32 colour, float alpha) { return (colour & 0x00FFFFFF) | ((ImU32)((float)(colour >> 24) * alpha + 0.5f) << 24); }
 
+/* The notice's lines wrapped to the width, at most 14 (the last "..."); *lead the first line's rows. */
+static std::vector<std::string> NoticeLines(float w, size_t* lead)
+{
+    std::vector<std::string> lines;
+    *lead = 0; /* the first line's rows, brighter: what happened; the rest say why */
+    for (const std::string& line : g_notice.lines)
+    {
+        for (std::string& part : Wrapped(line, w - 56, SZ_LABEL)) lines.push_back(std::move(part));
+        if (*lead == 0) *lead = lines.size();
+    }
+    if (lines.size() > 14) { lines.resize(14); lines.back() = "..."; }
+    return lines;
+}
+
 /* The message at the top of the screen, over the game and the editor alike. A refused join's notice gives way to mod
  * sync's dialog, which lists the same mods and what happens to each: once that is up, the notice is done. */
 static void DrawNotice()
@@ -103,14 +117,8 @@ static void DrawNotice()
     float alpha = age + NOTICE_FADE_MS > total ? (float)(total - age) / (float)NOTICE_FADE_MS : 1.0f;
     ImU32 accent = g_notice.error ? ERROR_ : GOLD;
     float w = std::min(860.0f, g_cv.width - 40), x = floorf(g_cv.width / 2 - g_cv.ox - w / 2), y = 36 - g_cv.oy;
-    std::vector<std::string> lines;
-    size_t lead = 0; /* the first line's rows, brighter: what happened; the rest say why */
-    for (const std::string& line : g_notice.lines)
-    {
-        for (std::string& part : Wrapped(line, w - 56, SZ_LABEL)) lines.push_back(std::move(part));
-        if (lead == 0) lead = lines.size();
-    }
-    if (lines.size() > 14) { lines.resize(14); lines.back() = "..."; }
+    size_t lead;
+    std::vector<std::string> lines = NoticeLines(w, &lead);
     float h = 62 + 24.0f * (float)lines.size() + (lines.empty() ? 0 : 12);
     g_cv.Rect(x - 4, y - 4, w + 8, h + 8, Faded(SHADOW, alpha), 13);
     g_cv.Rect(x, y, w, h, Faded(PANEL_ALT, alpha), 13);
@@ -167,22 +175,25 @@ static void SendAllMounts()
 }
 static ULONGLONG g_modCheck;
 
+/* A mod category's numbers as entries (category, target, key, value). */
+static void AddModEntries(const std::pair<std::string, hfjson::Value>& category, std::vector<localstats::Entry>& out)
+{
+    for (auto& target : category.second.members)
+        for (auto& field : target.second.members)
+            if (field.second.kind == hfjson::Value::Number) out.push_back({category.first, target.first, field.first, field.second.AsNumber()});
+}
+
 static std::vector<localstats::Entry> ModEntriesOf(const hfjson::Value& document)
 {
     std::vector<localstats::Entry> out;
     for (auto& category : document.members)
-        if (localstats::IsMod(category.first) && category.second.kind == hfjson::Value::Object)
-            for (auto& target : category.second.members)
-                for (auto& field : target.second.members)
-                    if (field.second.kind == hfjson::Value::Number) out.push_back({category.first, target.first, field.first, field.second.AsNumber()});
+        if (localstats::IsMod(category.first) && category.second.kind == hfjson::Value::Object) AddModEntries(category, out);
     return out;
 }
 
-/* The game's mod content to these values; the editor's other live edits of it (and this machine's saved values, which an
- * APPLY may have set since) undone. Returns how many were applied. */
-static int ApplyModValues(const std::vector<localstats::Entry>& entries, const char* whose, const char* refused)
+/* The mod content rows these entries set, and their values (-1: unlimited). */
+static std::map<const Row*, double> WantedValues(const std::vector<localstats::Entry>& entries)
 {
-    const HfApi* api = g_host.api;
     std::map<const Row*, double> want;
     for (const localstats::Entry& e : entries)
     {
@@ -190,28 +201,99 @@ static int ApplyModValues(const std::vector<localstats::Entry>& entries, const c
         const Row* row = g_catalog.Entry(e.category, e.target, e.key);
         if (row != nullptr && row->Live()) want[row] = row->unlimited && e.value == -1 ? 4294967295.0 : e.value;
     }
+    return want;
+}
+
+/* The mod content rows the editor's live edits hold, and those this machine saved (an APPLY may have set them since). */
+static std::set<const Row*> HeldRows()
+{
     std::set<const Row*> undo;
     for (auto& held : g_modLive) undo.insert(held.first);
     for (const localstats::Entry& e : localstats::OwnEntries())
         if (const Row* row = localstats::IsMod(e.category) ? g_catalog.Entry(e.category, e.target, e.key) : nullptr; row != nullptr && row->Live()) undo.insert(row);
-    int applied = 0, undone = 0;
+    return undo;
+}
+
+/* The held rows not wanted back to their base; how many. */
+static int UndoValues(const std::set<const Row*>& undo, const std::map<const Row*, double>& want)
+{
+    int undone = 0;
     for (const Row* row : undo)
     {
         if (want.count(row)) continue;
         HfField field = FieldOf(row);
-        if (api->set_live(g_host.mod, row->ref, &field, nullptr, row->shared ? HF_LIVE_SHARED : 0)) undone++;
+        if (g_host.api->set_live(g_host.mod, row->ref, &field, nullptr, row->shared ? HF_LIVE_SHARED : 0)) undone++;
     }
+    return undone;
+}
+
+/* The wanted values to the game (a refusal is the row's error); how many it took. */
+static int SetValues(const std::map<const Row*, double>& want, const char* refused)
+{
+    int applied = 0;
     for (auto& [row, value] : want)
     {
         HfField field = FieldOf(row);
         HfValue v{row->type, value, 0};
-        if (api->set_live(g_host.mod, row->ref, &field, &v, row->shared ? HF_LIVE_SHARED : 0)) applied++;
+        if (g_host.api->set_live(g_host.mod, row->ref, &field, &v, row->shared ? HF_LIVE_SHARED : 0)) applied++;
         else SetError(row, Refusal(refused));
     }
+    return applied;
+}
+
+/* The game's mod content to these values; the editor's other live edits of it (and this machine's saved values, which an
+ * APPLY may have set since) undone. Returns how many were applied. */
+static int ApplyModValues(const std::vector<localstats::Entry>& entries, const char* whose, const char* refused)
+{
+    std::map<const Row*, double> want = WantedValues(entries);
+    int undone = UndoValues(HeldRows(), want);
+    int applied = SetValues(want, refused);
     g_modLive = want;
     g_live.clear();
-    if (g_modRole != -1 && (applied || undone)) api->log(g_host.mod, "editor: %s mod content values: %d applied, %d undone", whose, applied, undone);
+    if (g_modRole != -1 && (applied || undone)) g_host.api->log(g_host.mod, "editor: %s mod content values: %d applied, %d undone", whose, applied, undone);
     return applied;
+}
+
+/* Back on this machine's own stats: the host's values and arm swaps go, this machine's come back. */
+static void BackToOwn()
+{
+    g_modRole = HF_SESSION_SOLO; /* this machine's own again */
+    g_hostModText.clear();
+    g_hostStatsText.clear();
+    g_hostMountsText.clear();
+    localstats::ShowOwn();
+    if (g_hostMountsShown) { g_hostMountsShown = false; g_hostMounts.clear(); SendAllMounts(); }
+    ApplyModValues(localstats::OwnEntries(), "this machine's", "HellForge refused its saved value");
+}
+
+/* The host's files beside the editor, as the session's backend writes them ("" none yet). */
+static void ReadHostFiles(std::string* text, std::string* stats, std::string* mounts)
+{
+    std::wstring folder = hfjson::Wide(g_host.modFolder);
+    if (!hfjson::ReadFile(folder + L"\\host-mod-stats.json", text)) text->clear(); /* none (yet) */
+    if (!hfjson::ReadFile(folder + L"\\host-stats.json", stats)) stats->clear();
+    if (!hfjson::ReadFile(folder + L"\\host-mounts.json", mounts)) mounts->clear();
+}
+
+/* The host's files parsed; false while one is being written (read again the next second). */
+static bool ParseHostFiles(const std::string& text, const std::string& stats, const std::string& mounts, hfjson::Value* document,
+    hfjson::Value* statsDocument, hfjson::Value* mountsDocument)
+{
+    if (!text.empty() && !hfjson::Parse(text, document, nullptr)) return false; /* being written: the next second */
+    if (!stats.empty() && !hfjson::Parse(stats, statsDocument, nullptr)) return false;
+    if (!mounts.empty() && !hfjson::Parse(mounts, mountsDocument, nullptr)) return false;
+    return true;
+}
+
+/* The host's arm swaps, shown and sent in place of this machine's. */
+static void ShowHostMounts(const hfjson::Value& mountsDocument)
+{
+    g_hostMounts.clear();
+    if (mountsDocument.kind == hfjson::Value::Object)
+        for (auto& m : mountsDocument.members) if (m.second.kind == hfjson::Value::Number) g_hostMounts[m.first] = m.second.AsNumber();
+    g_hostMountsShown = true;
+    SendAllMounts(); /* vehicles called in from now on carry the host's swaps */
+    g_host.api->log(g_host.mod, "editor: the host's arm swaps: %d", (int)g_hostMounts.size());
 }
 
 /* Joined to a host who shares its stats: the host's values, read again each second (the backend rewrites the files when
@@ -220,31 +302,17 @@ static void SyncModValues()
 {
     if (!Locked())
     {
-        if (g_modRole == HF_SESSION_JOINER)
-        {
-            g_modRole = HF_SESSION_SOLO; /* this machine's own again */
-            g_hostModText.clear();
-            g_hostStatsText.clear();
-            g_hostMountsText.clear();
-            localstats::ShowOwn();
-            if (g_hostMountsShown) { g_hostMountsShown = false; g_hostMounts.clear(); SendAllMounts(); }
-            ApplyModValues(localstats::OwnEntries(), "this machine's", "HellForge refused its saved value");
-        }
+        if (g_modRole == HF_SESSION_JOINER) BackToOwn();
         return;
     }
     ULONGLONG now = GetTickCount64();
     if (g_modRole == HF_SESSION_JOINER && now < g_modCheck) return;
     g_modCheck = now + 1000;
-    std::wstring folder = hfjson::Wide(g_host.modFolder);
     std::string text, stats, mounts;
-    if (!hfjson::ReadFile(folder + L"\\host-mod-stats.json", &text)) text.clear(); /* none (yet) */
-    if (!hfjson::ReadFile(folder + L"\\host-stats.json", &stats)) stats.clear();
-    if (!hfjson::ReadFile(folder + L"\\host-mounts.json", &mounts)) mounts.clear();
+    ReadHostFiles(&text, &stats, &mounts);
     if (g_modRole == HF_SESSION_JOINER && text == g_hostModText && stats == g_hostStatsText && mounts == g_hostMountsText) return;
     hfjson::Value document, statsDocument, mountsDocument;
-    if (!text.empty() && !hfjson::Parse(text, &document, nullptr)) return; /* being written: the next second */
-    if (!stats.empty() && !hfjson::Parse(stats, &statsDocument, nullptr)) return;
-    if (!mounts.empty() && !hfjson::Parse(mounts, &mountsDocument, nullptr)) return;
+    if (!ParseHostFiles(text, stats, mounts, &document, &statsDocument, &mountsDocument)) return;
     bool joining = g_modRole != HF_SESSION_JOINER;
     bool modsChanged = joining || text != g_hostModText, mountsChanged = joining || mounts != g_hostMountsText;
     g_hostModText = text;
@@ -253,15 +321,7 @@ static void SyncModValues()
     g_modRole = HF_SESSION_JOINER;
     localstats::ShowHost(stats, text); /* from the moment of joining: empty until the host's files arrive */
     if (modsChanged) ApplyModValues(ModEntriesOf(document), "the host's", "HellForge refused the host's value");
-    if (mountsChanged)
-    {
-        g_hostMounts.clear();
-        if (mountsDocument.kind == hfjson::Value::Object)
-            for (auto& m : mountsDocument.members) if (m.second.kind == hfjson::Value::Number) g_hostMounts[m.first] = m.second.AsNumber();
-        g_hostMountsShown = true;
-        SendAllMounts(); /* vehicles called in from now on carry the host's swaps */
-        g_host.api->log(g_host.mod, "editor: the host's arm swaps: %d", (int)g_hostMounts.size());
-    }
+    if (mountsChanged) ShowHostMounts(mountsDocument);
 }
 
 /* The layout for a screen: the interface size as large as still fits (full width, at least PANEL_MIN_H of height). */
@@ -276,6 +336,26 @@ static void Layout(float width, float height, float* ox, float* oy, float* s)
     *ox = std::max(0.0f, floorf((W - PANEL_W) / 2 + 0.5f));
     *oy = std::max(0.0f, floorf((H - g_panelH) / 2 + 0.5f));
     *s = base * k;
+}
+
+/* The category list: each group's heading, then its categories (the first one selected). */
+static void BuildCategoryList()
+{
+    for (int n = 0; n < (int)g_catalog.navs.size(); n++)
+    {
+        if (n == 0 || g_catalog.navs[n].group != g_catalog.navs[n - 1].group) g_cats.push_back({true, g_catalog.navs[n].group, -1});
+        g_cats.push_back({false, g_catalog.navs[n].label, n});
+    }
+    g_cat = g_cats.size() > 1 ? 1 : 0;
+}
+
+/* The rows the editor keeps itself, and what it kept of them from last time sent to the loader. */
+static void SendKeptChoices()
+{
+    for (auto& r : g_catalog.rows) if (!r.choice.empty() && !IsApLabel(&r)) g_choiceRows.push_back(&r);
+    if (g_choice[0] >= 0 || g_choice[1] >= 0) SendPassives(); /* the armor perks kept from last time */
+    for (const Row* row : g_choiceRows) /* the arm swaps, pods and row copies kept from last time (a row several pages show is sent for each: the same value) */
+        if (IsMount(row) && g_mounts.count(MountKey(row))) SendMount(row);
 }
 
 void Init(const Host& host)
@@ -295,20 +375,32 @@ void Init(const Host& host)
     std::string error;
     localstats::SetModFile(folder + L"\\mod-stats.json");
     if (!host.modsFolder.empty() && !localstats::Load(host.modsFolder, &error)) Toast("Local Stats: " + error, ERROR_);
-    for (int n = 0; n < (int)g_catalog.navs.size(); n++)
-    {
-        if (n == 0 || g_catalog.navs[n].group != g_catalog.navs[n - 1].group) g_cats.push_back({true, g_catalog.navs[n].group, -1});
-        g_cats.push_back({false, g_catalog.navs[n].label, n});
-    }
-    g_cat = g_cats.size() > 1 ? 1 : 0;
+    BuildCategoryList();
     g_logs.source = g_logSource == 1 ? 1 : 0;
-    for (auto& r : g_catalog.rows) if (!r.choice.empty() && !IsApLabel(&r)) g_choiceRows.push_back(&r);
-    if (g_choice[0] >= 0 || g_choice[1] >= 0) SendPassives(); /* the armor perks kept from last time */
-    for (const Row* row : g_choiceRows) /* the arm swaps, pods and row copies kept from last time (a row several pages show is sent for each: the same value) */
-        if (IsMount(row) && g_mounts.count(MountKey(row))) SendMount(row);
+    SendKeptChoices();
     host.api->log(host.mod, "editor: %s; %d game icons%s", g_catalogOk ? (std::to_string(g_catalog.objects.size()) + " objects, " +
         std::to_string(g_catalog.rows.size()) + " fields (read in " + std::to_string(loading) + " ms)").c_str() : g_catalogError.c_str(), iconCount,
         HasGetLive() ? "" : "; this HellForge has no get_live (values are not shown)");
+}
+
+/* The resource of that name with an icon in a mod's data (its patches' resources), or nullptr. */
+static const hfjson::Value* IconResource(const hfjson::Value& data, const std::string& resource)
+{
+    const hfjson::Value* patches = data.Find("patches");
+    if (patches == nullptr) return nullptr;
+    for (const hfjson::Value& p : patches->items)
+        if (const hfjson::Value* resources = p.Find("resources"))
+            for (const hfjson::Value& r : resources->items)
+                if (r.GetString("name") == resource && !r.GetString("icon").empty()) return &r;
+    return nullptr;
+}
+
+/* An icon's file in the mod's folder (its slashes Windows'), or "" when its path leaves the folder. */
+static std::wstring IconPath(const std::wstring& root, const std::string& icon)
+{
+    std::wstring file = hfjson::Wide(icon);
+    for (wchar_t& c : file) if (c == L'/') c = L'\\';
+    return file.find(L"..") == std::wstring::npos ? root + L"\\" + file : L"";
 }
 
 /* The PNG a mod's data builds an icon resource from (its hellforge-data.json: {"icon": file, "name": resource}), or "". */
@@ -318,17 +410,144 @@ static std::wstring IconFile(const std::string& folder, const std::string& resou
     hfjson::Value data;
     std::wstring root = hfjson::Wide(folder);
     if (!hfjson::ReadFile(root + L"\\hellforge-data.json", &text) || !hfjson::Parse(text, &data, &why)) return L"";
-    if (const hfjson::Value* patches = data.Find("patches"))
-        for (const hfjson::Value& p : patches->items)
-            if (const hfjson::Value* resources = p.Find("resources"))
-                for (const hfjson::Value& r : resources->items)
-                    if (r.GetString("name") == resource && !r.GetString("icon").empty())
-                    {
-                        std::wstring file = hfjson::Wide(r.GetString("icon"));
-                        for (wchar_t& c : file) if (c == L'/') c = L'\\';
-                        return file.find(L"..") == std::wstring::npos ? root + L"\\" + file : L"";
-                    }
-    return L"";
+    const hfjson::Value* r = IconResource(data, resource);
+    return r != nullptr ? IconPath(root, r->GetString("icon")) : L"";
+}
+
+/* Every content the mods added (SDK 7, HfApi.content). */
+static std::vector<HfContent> AllContent(const HfApi* api)
+{
+    std::vector<HfContent> all;
+    for (uint32_t i = 0; i < 4096; i++)
+    {
+        HfContent c{};
+        c.size = sizeof c;
+        if (!api->content(g_host.mod, i, &c)) break;
+        all.push_back(c);
+    }
+    return all;
+}
+
+/* The entities standing for the page's (remap.entity); returns the designation of the first that has one ("" none). */
+static std::string RemapEntities(const HfContent& s, const std::vector<HfContent>& all, catalog::Remap& remap)
+{
+    std::string designation;
+    for (const HfEditorEntity* e = s.editor_entities; e != nullptr && e->entity != 0; e++)
+    {
+        remap.entity[e->like] = e->entity;
+        for (const HfContent& c : all)
+            if (c.kind == HF_KIND_ENTITY && c.id == e->entity && c.designation != nullptr && designation.empty()) designation = c.designation;
+    }
+    return designation;
+}
+
+/* A u32 of a record (a settings row, an entity's component) read through get_live; false when it cannot be read. */
+static bool ReadU32(const char* component, uint64_t target, uint16_t offset, uint64_t* out)
+{
+    if (!HasGetLive()) return false;
+    HfField field{component, g_layout, offset, 4, HF_TYPE_U32, 0};
+    HfLiveValue value;
+    if (!g_host.api->get_live(g_host.mod, target, &field, &value)) return false;
+    *out = (uint64_t)value.now.number;
+    return true;
+}
+
+/* what each entity standing in fires, against what the page's entity fires, and the damage of each (read from the
+ * game) */
+static void RemapFired(catalog::Remap& remap)
+{
+    for (auto& [likeEntity, copyEntity] : remap.entity)
+    {
+        uint64_t a, b;
+        if (ReadU32("ProjectileWeaponComponentData", likeEntity, 0, &a) && ReadU32("ProjectileWeaponComponentData", copyEntity, 0, &b) && a != b && b != 0)
+            remap.projectile[a] = b;
+    }
+    for (auto& [a, b] : remap.projectile)
+    {
+        uint64_t da, db;
+        if (ReadU32("ProjectileSettings", a, 0x3C, &da) && ReadU32("ProjectileSettings", b, 0x3C, &db) && da != db && db != 0) remap.damage[da] = db;
+    }
+}
+
+/* A content of the stratagem's own mod. */
+static bool SameMod(const HfContent& c, const HfContent& s) { return c.mod != nullptr && s.mod != nullptr && !strcmp(c.mod, s.mod); }
+
+/* How many projectiles and damage records the stratagem's mod copied from each base. */
+static void CountCopies(const HfContent& s, const std::vector<HfContent>& all, std::map<uint64_t, int>& projectiles, std::map<uint64_t, int>& damages)
+{
+    for (const HfContent& c : all)
+    {
+        if (!SameMod(c, s)) continue;
+        if (c.kind == HF_KIND_PROJECTILE) projectiles[c.base]++;
+        if (c.kind == HF_KIND_DAMAGE) damages[c.base]++;
+    }
+}
+
+/* else the projectiles and damage its mod copied from the page's, one copy of each base */
+static void RemapCopied(const HfContent& s, const std::vector<HfContent>& all, catalog::Remap& remap)
+{
+    std::map<uint64_t, int> projectiles, damages;
+    CountCopies(s, all, projectiles, damages);
+    for (const HfContent& c : all)
+    {
+        if (!SameMod(c, s)) continue;
+        if (c.kind == HF_KIND_PROJECTILE && projectiles[c.base] == 1) remap.projectile.emplace(c.base, c.id);
+        if (c.kind == HF_KIND_DAMAGE && damages[c.base] == 1) remap.damage.emplace(c.base, c.id);
+    }
+}
+
+/* The page's name: the mod's title (else the page's), after its entity's designation where the title lacks it. */
+static std::string StratagemName(const HfContent& s, const Object* like, const std::string& designation)
+{
+    std::string title = s.title != nullptr ? s.title : like->name;
+    return designation.empty() || title.rfind(designation, 0) == 0 ? title : designation + " " + title;
+}
+
+/* its loadout section: the one its mod gave it, else its page's */
+static std::string StratagemNav(const HfContent& s, const Object* like)
+{
+    return s.category == HF_CATEGORY_OFFENSIVE ? "offensive" : s.category == HF_CATEGORY_DEFENSIVE ? "defensive"
+        : s.category == HF_CATEGORY_MISSION ? "mission" : s.category == HF_CATEGORY_SUPPLY && like->tone != "support" ? "support" : "";
+}
+
+/* The page's icon: the mod's own image, where its data names one (else the page's). */
+static void SetPageIcon(Object* o, const HfContent& s)
+{
+    if (s.icon == nullptr || s.folder == nullptr) return;
+    std::wstring file = IconFile(s.folder, s.icon);
+    if (!file.empty() && icons::AddStratagem(s.icon, file)) { o->icon = "stratagem"; o->sprite = s.icon; }
+    else g_host.api->log(g_host.mod, "editor: %s: its icon's image was not found in its mod's data; it shows the page's", s.name);
+}
+
+/* A custom stratagem's page: a copy of the page of the stratagem it is like, pointed at its own settings row, entities,
+ * projectiles and damage; false (logged why) when it gets none. */
+static bool AddStratagemPage(const HfContent& s, const std::vector<HfContent>& all)
+{
+    const HfApi* api = g_host.api;
+    const Object* like = g_catalog.StratagemObject(s.editor_like);
+    if (like == nullptr) { api->log(g_host.mod, "editor: %s has no page (stratagem type %llu has none)", s.name, (unsigned long long)s.editor_like); return false; }
+    /* its own settings row, the entities standing for the page's, and the projectiles and damage its mod copied from
+     * the page's (one copy of each: two of the same base would be a guess) */
+    catalog::Remap remap;
+    remap.stratagem[s.editor_like] = s.id;
+    std::string designation = RemapEntities(s, all, remap);
+    RemapFired(remap);
+    RemapCopied(s, all, remap);
+    std::string name = StratagemName(s, like, designation);
+    std::string nav = StratagemNav(s, like);
+    /* an entity's fields only where it has the record (a Pelican's turret has no hellpod payload, say) */
+    auto keep = [&](const Row& r, uint64_t ref) {
+        if (r.component.find("ComponentData") == std::string::npos || !HasGetLive()) return true;
+        HfField field = FieldOf(&r);
+        HfLiveValue value;
+        return api->get_live(g_host.mod, ref, &field, &value) != 0;
+    };
+    Object* o = g_catalog.AddCopy(*like, {std::string("mod/") + s.name, name, std::string("mod:") + s.name, s.name, nav}, remap, keep);
+    if (o == nullptr) { api->log(g_host.mod, "editor: %s: none of its page's fields are its own", s.name); return false; }
+    o->detail = std::string("Added by ") + s.mod;
+    SetPageIcon(o, s);
+    api->log(g_host.mod, "editor: %s gets a page (%s's, %d field(s) of its own)", name.c_str(), like->name.c_str(), (int)o->rows.size());
+    return true;
 }
 
 void AddModContent()
@@ -338,89 +557,10 @@ void AddModContent()
     done = true;
     const HfApi* api = g_host.api;
     if (api->size < offsetof(HfApi, content) + sizeof(void*) || api->content == nullptr) return;
-    std::vector<HfContent> all;
-    for (uint32_t i = 0; i < 4096; i++)
-    {
-        HfContent c{};
-        c.size = sizeof c;
-        if (!api->content(g_host.mod, i, &c)) break;
-        all.push_back(c);
-    }
+    std::vector<HfContent> all = AllContent(api);
     int pages = 0;
     for (const HfContent& s : all)
-    {
-        if (s.kind != HF_KIND_STRATAGEM) continue;
-        const Object* like = g_catalog.StratagemObject(s.editor_like);
-        if (like == nullptr) { api->log(g_host.mod, "editor: %s has no page (stratagem type %llu has none)", s.name, (unsigned long long)s.editor_like); continue; }
-        /* its own settings row, the entities standing for the page's, and the projectiles and damage its mod copied from
-         * the page's (one copy of each: two of the same base would be a guess) */
-        catalog::Remap remap;
-        remap.stratagem[s.editor_like] = s.id;
-        std::string designation;
-        for (const HfEditorEntity* e = s.editor_entities; e != nullptr && e->entity != 0; e++)
-        {
-            remap.entity[e->like] = e->entity;
-            for (const HfContent& c : all)
-                if (c.kind == HF_KIND_ENTITY && c.id == e->entity && c.designation != nullptr && designation.empty()) designation = c.designation;
-        }
-        /* what each entity standing in fires, against what the page's entity fires, and the damage of each (read from
-         * the game); else the projectiles and damage its mod copied from the page's, one copy of each base */
-        auto read = [&](const char* component, uint64_t target, uint16_t offset, uint64_t* out) {
-            if (!HasGetLive()) return false;
-            HfField field{component, g_layout, offset, 4, HF_TYPE_U32, 0};
-            HfLiveValue value;
-            if (!api->get_live(g_host.mod, target, &field, &value)) return false;
-            *out = (uint64_t)value.now.number;
-            return true;
-        };
-        for (auto& [likeEntity, copyEntity] : remap.entity)
-        {
-            uint64_t a, b;
-            if (read("ProjectileWeaponComponentData", likeEntity, 0, &a) && read("ProjectileWeaponComponentData", copyEntity, 0, &b) && a != b && b != 0)
-                remap.projectile[a] = b;
-        }
-        for (auto& [a, b] : remap.projectile)
-        {
-            uint64_t da, db;
-            if (read("ProjectileSettings", a, 0x3C, &da) && read("ProjectileSettings", b, 0x3C, &db) && da != db && db != 0) remap.damage[da] = db;
-        }
-        std::map<uint64_t, int> projectiles, damages;
-        for (const HfContent& c : all)
-            if (c.mod != nullptr && s.mod != nullptr && !strcmp(c.mod, s.mod))
-            {
-                if (c.kind == HF_KIND_PROJECTILE) projectiles[c.base]++;
-                if (c.kind == HF_KIND_DAMAGE) damages[c.base]++;
-            }
-        for (const HfContent& c : all)
-            if (c.mod != nullptr && s.mod != nullptr && !strcmp(c.mod, s.mod))
-            {
-                if (c.kind == HF_KIND_PROJECTILE && projectiles[c.base] == 1) remap.projectile.emplace(c.base, c.id);
-                if (c.kind == HF_KIND_DAMAGE && damages[c.base] == 1) remap.damage.emplace(c.base, c.id);
-            }
-        std::string title = s.title != nullptr ? s.title : like->name;
-        std::string name = designation.empty() || title.rfind(designation, 0) == 0 ? title : designation + " " + title;
-        /* its loadout section: the one its mod gave it, else its page's */
-        std::string nav = s.category == HF_CATEGORY_OFFENSIVE ? "offensive" : s.category == HF_CATEGORY_DEFENSIVE ? "defensive"
-            : s.category == HF_CATEGORY_MISSION ? "mission" : s.category == HF_CATEGORY_SUPPLY && like->tone != "support" ? "support" : "";
-        /* an entity's fields only where it has the record (a Pelican's turret has no hellpod payload, say) */
-        auto keep = [&](const Row& r, uint64_t ref) {
-            if (r.component.find("ComponentData") == std::string::npos || !HasGetLive()) return true;
-            HfField field = FieldOf(&r);
-            HfLiveValue value;
-            return api->get_live(g_host.mod, ref, &field, &value) != 0;
-        };
-        Object* o = g_catalog.AddCopy(*like, {std::string("mod/") + s.name, name, std::string("mod:") + s.name, s.name, nav}, remap, keep);
-        if (o == nullptr) { api->log(g_host.mod, "editor: %s: none of its page's fields are its own", s.name); continue; }
-        o->detail = std::string("Added by ") + s.mod;
-        if (s.icon != nullptr && s.folder != nullptr)
-        {
-            std::wstring file = IconFile(s.folder, s.icon);
-            if (!file.empty() && icons::AddStratagem(s.icon, file)) { o->icon = "stratagem"; o->sprite = s.icon; }
-            else api->log(g_host.mod, "editor: %s: its icon's image was not found in its mod's data; it shows the page's", s.name);
-        }
-        pages++;
-        api->log(g_host.mod, "editor: %s gets a page (%s's, %d field(s) of its own)", name.c_str(), like->name.c_str(), (int)o->rows.size());
-    }
+        if (s.kind == HF_KIND_STRATAGEM && AddStratagemPage(s, all)) pages++;
     /* their saved values, to the game: the stats pass does not know them (joined to a friend, Tick swaps in the host's) */
     int applied = ApplyModValues(localstats::OwnEntries(), "this machine's", "HellForge refused its saved value");
     g_modRole = HF_SESSION_SOLO;
