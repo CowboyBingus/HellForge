@@ -560,11 +560,12 @@ try
     await MultiplayerTests.Run(Check);
     results.Add(new { mode = "multiplayer", outcome = "passed" });
     Console.WriteLine("PASS multiplayer: frames, lobby create/join/update/leave across backends, modlist gate, forged events, named pipe, loopback UDP");
-    // The command line: every option the session runner passes (PlaySession.StartBackend; its multiplayer path the longest)
-    // is accepted; an unknown or repeated one is refused.
+    // The command line: every option the session runner passes (PlaySession.StartBackend and the WarArguments and
+    // MultiplayerArguments it delegates to, up to Observe; the multiplayer path the longest) is accepted; an unknown or
+    // repeated one is refused.
     var runner = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../src/HellForge.Session/PlaySession.cs"));
     var startAt = runner.IndexOf("void StartBackend(", StringComparison.Ordinal);
-    var startBackend = startAt < 0 ? "" : runner[startAt..runner.IndexOf("Process.Start(", startAt, StringComparison.Ordinal)];
+    var startBackend = startAt < 0 ? "" : runner[startAt..runner.IndexOf("void Observe(", startAt, StringComparison.Ordinal)];
     var passed = System.Text.RegularExpressions.Regex.Matches(startBackend, "\"(--[a-z][a-z-]+)\"").Select(m => m.Groups[1].Value).Distinct().ToList();
     Check(passed.Contains("--mods") && passed.Contains("--pipe") && passed.Contains("--port") && passed.Contains("--mod-digest"),
         "The session runner's backend options were not found.");
