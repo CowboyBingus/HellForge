@@ -71,8 +71,7 @@ public sealed class LiveEditServer : IAsyncDisposable
     {
         while (!stop.IsCancellationRequested)
         {
-            var server = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            var server = PipeServer.Create(name, 1);
             try
             {
                 await server.WaitForConnectionAsync(stop.Token);

@@ -91,6 +91,16 @@ public static class DirectoryData
         catch (Exception error) when (error is FormatException or InvalidDataException) { return null; }
     }
 
+    // A listing's data as one SHA-256 (lowercase hex), keys in ordinal order, each key and value length-prefixed: what a
+    // friend's backend vouches for (FriendPresence.Vouches).
+    public static string Digest(IReadOnlyDictionary<string, string> data)
+    {
+        var text = new StringBuilder();
+        foreach (var (key, value) in data.OrderBy(d => d.Key, StringComparer.Ordinal))
+            text.Append(key.Length).Append(':').Append(key).Append(value.Length).Append(':').Append(value);
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
+    }
+
     // Does the listing match the query's coarse filters (what a directory may apply itself)?
     public static bool Matches(DirectoryListing listing, DirectoryQuery query) =>
         listing.Data.GetValueOrDefault(DirectoryKeys.Protocol) == query.Protocol && query.Equal.All(e => listing.Data.GetValueOrDefault(e.Key) == e.Value);

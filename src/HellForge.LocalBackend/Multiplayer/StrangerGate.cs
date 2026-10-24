@@ -1,7 +1,8 @@
 namespace HellForge.LocalBackend.Multiplayer;
 
-// What a backend takes from someone who is not a Steam friend (docs/multiplayer.md step 7). Strangers only come through
-// the lobby directory, or come back to a lobby here after a mod sync:
+// What a backend takes from someone who is not a Steam friend (docs/multiplayer.md step 7). Nothing at all unless the
+// player has turned on "Play with strangers" (off by default, ModSettings.PlayWithStrangers), whatever a lobby's privacy.
+// Then strangers only come through the lobby directory, or come back to a lobby here after a mod sync:
 //   - a join (lobby.join) while a public lobby is listed here, from a machine this one deals with already (below), or
 //     from one a lobby here expects back (welcome: admitted before, invited, or back after a mod sync, LobbyService.Welcome),
 //     and a rejoin request after a mod sync (lobby.rejoin) by the same rule,
@@ -13,7 +14,8 @@ namespace HellForge.LocalBackend.Multiplayer;
 //   - pings.
 // Presence (the social tab) and invitations stay between friends. The tables of strangers forget a machine after
 // Window of silence, and are pruned at most every PruneInterval.
-public sealed class StrangerGate(IPeerTransport transport, Func<bool> listing, Func<ulong, bool> related, Action<string> log, Func<ulong, bool>? welcome = null)
+public sealed class StrangerGate(IPeerTransport transport, Func<bool> listing, Func<ulong, bool> related, Func<bool> strangersAllowed, Action<string> log,
+    Func<ulong, bool>? welcome = null)
 {
     public const int JoinsPerPeer = 6, JoinsInAll = 60;
     static readonly TimeSpan Window = TimeSpan.FromMinutes(1), PruneInterval = TimeSpan.FromSeconds(10);
@@ -32,6 +34,7 @@ public sealed class StrangerGate(IPeerTransport transport, Func<bool> listing, F
     {
         if (transport.IsFriend(peer)) return true;
         Prune(now);
+        if (!strangersAllowed()) return Refuse(peer, frame.Type + " (Play with strangers is off)", now);
         if (frame.Type is "presence" or "presence.hello" or "lobby.invite" or "lobby.invited") return Refuse(peer, frame.Type, now);
         if (frame.Type == "peer.ping") return true;
         if (frame.Type is "lobby.join" or "lobby.rejoin")

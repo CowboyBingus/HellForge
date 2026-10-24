@@ -278,7 +278,7 @@ static class PrivacyTests
         var transport = network.Join(HostId);
         var related = false;
         var welcome = new HashSet<ulong>();
-        var gate = new StrangerGate(transport, () => false, _ => related, _ => { }, peer => welcome.Contains(peer));
+        var gate = new StrangerGate(transport, () => false, _ => related, () => true, _ => { }, peer => welcome.Contains(peer));
         var join = new Frame("lobby.join").Add("op");
         var now = DateTime.UtcNow;
         check(!gate.Admit(StrangerId, join, now), "No join without a listing.");

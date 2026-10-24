@@ -604,7 +604,7 @@ public partial class MainWindow
         var report = Path.Combine(install.Logs, "setup-network-block.json");
         if (File.Exists(report)) File.Delete(report);
         var start = new ProcessStartInfo(PowerShell, $"-NoProfile -ExecutionPolicy Bypass -File {Arg(ScriptPath("Install-WfpBlock.ps1"))} " +
-            $"-InstallRoot {Arg(install.Root)} -ReportPath {Arg(report)}" + (uninstall ? " -Uninstall" : ""))
+            $"-InstallRoot {Arg(install.Root)} -ReportPath {Arg(report)}" + (uninstall ? " -Uninstall" : $" -BackendPort {install.ComputedBackendPort}"))
         { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = install.Root };
         await Task.Run(() =>
         {

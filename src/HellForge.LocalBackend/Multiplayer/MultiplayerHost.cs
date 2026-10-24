@@ -35,6 +35,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
     // After a mod sync restart: this game is invited back into the host's lobby (null in any other session).
     public AutoRejoin? Rejoin { get; private set; }
     StrangerGate? gate;
+    string? modsFolder;
 
     readonly WarClock? warClock;
     AccountKeyExchange? keyExchange;
@@ -44,6 +45,13 @@ public sealed class MultiplayerHost : IAsyncDisposable
     readonly object presenceGate = new();
     readonly HashSet<ulong> presenceSentTo = [];
     static readonly TimeSpan PresenceInterval = TimeSpan.FromSeconds(10);
+    // This machine's co-op peers (lobby and Party), for a sandboxed game's Steam broker: the game's Steam P2P passes only to
+    // and from them (docs/steam-bridge.md "Steam P2P"). Decimal SteamIDs, one a line, rewritten when they change: at once
+    // when a lobby here changes or a join starts (a host sends to a joiner the moment it joins), and on each heartbeat.
+    public const string PeersFileName = "p2p-peers.txt";
+    readonly string peersFile;
+    readonly object peersGate = new();
+    string? peersWritten;
 
     MultiplayerHost(string pipeName, string link, string modDigest, string evidenceDirectory, WarClock? warClock, AccountKeys? accountKeys,
         FriendPresence? presence, string? modList)
@@ -51,9 +59,13 @@ public sealed class MultiplayerHost : IAsyncDisposable
         this.presence = presence;
         this.warClock = warClock;
         logFile = new StreamWriter(Path.Combine(evidenceDirectory, "multiplayer.log"), append: true) { AutoFlush = true };
+        peersFile = Path.Combine(evidenceDirectory, PeersFileName);
         transport = CreateTransport(link, Log);
         pipes = new PipeHost(pipeName, Log);
         Lobby = new LobbyService(transport, pipes.SendLobby, Log, modDigest, warClock, modList);
+        // off the lobby service's lock
+        Lobby.HostedChanged += () => Task.Run(WritePeers);
+        Lobby.LocalJoinStarted += (_, _) => Task.Run(WritePeers);
         // A refused join, in both games (the in-game editor shows it over the game): the joiner's says why, the host's who.
         Lobby.Refused += (peer, lines) => Stats?.Notice("error", "Couldn't join " + FriendName(peer), lines);
         Lobby.RefusedFriend += (peer, lines) => Stats?.Notice("info", FriendName(peer) + " couldn't join", lines);
@@ -116,6 +128,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
             catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException) { host.Log("Stats sharing is off: " + error.Message); }
         }
         if (host.transport != null && modsFolder != null) host.StartSync(modsFolder, modSetFile, evidenceDirectory);
+        host.modsFolder = modsFolder;
         directory ??= host.transport != null && directoryFolder != null ? new FolderLobbyDirectory(directoryFolder, host.transport.LocalId) : null;
         host.StartDirectory(directory ?? (host.transport as SteamPeerTransport)?.Directory, modsFolder);
         // The transport knows this machine's SteamID only once started.
@@ -170,12 +183,19 @@ public sealed class MultiplayerHost : IAsyncDisposable
     void StartDirectory(ILobbyDirectory? directory, string? modsFolder)
     {
         if (transport == null) return;
+        var setting = new StrangerSetting(modsFolder);
+        bool StrangersAllowed() => setting.Allowed;
         if (directory != null && presence != null)
             Directory = new DirectoryService(directory, Lobby, presence, transport.LocalId, pipes.SendLobby, Log, Sync, () => Stats?.SharesEdited == true,
-                listPublic: modsFolder != null ? () => ModSettings.Read(modsFolder).ListPublic : null);
-        gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, Log, Lobby.Welcome);
-        if (transport is SteamPeerTransport steam) steam.AcceptStranger = peer => Directory?.Listing == true || Related(peer) || Lobby.Welcome(peer);
-        Log(Directory != null ? "Directory: public lobbies are listed and searched." : "Directory: off (no lobby directory for this link).");
+                listPublic: modsFolder != null ? () => ModSettings.Read(modsFolder).ListPublic : null, strangersAllowed: StrangersAllowed);
+        gate = new StrangerGate(transport, () => Directory?.Listing == true, Related, StrangersAllowed, Log, Lobby.Welcome);
+        if (transport is SteamPeerTransport steam)
+            steam.AcceptStranger = peer => StrangersAllowed() && (Directory?.Listing == true || Related(peer) || Lobby.Welcome(peer));
+        var link = transport;
+        Lobby.JoinRefusal = peer => link.IsFriend(peer) || StrangersAllowed() ? null :
+            ["This player is not a Steam friend, and Play with strangers is off.", "Turn it on in the launcher's Multiplayer settings to join public lobbies."];
+        Log((Directory != null ? "Directory: public lobbies are listed and searched" : "Directory: off (no lobby directory for this link)") +
+            (StrangersAllowed() ? "; Play with strangers is on." : "; Play with strangers is off: friends only."));
     }
 
     // A machine this one deals with: in a lobby hosted here, hosting one joined (or being joined) from here, a mod download,
@@ -213,9 +233,27 @@ public sealed class MultiplayerHost : IAsyncDisposable
         throw new ArgumentException("--link must be none, steam:<steam_api64.dll> or udp:<id>:<port>:<peer>=<port>,...");
     }
 
+    // The co-op peers file (PeersFileName), written whole when the set changed.
+    void WritePeers()
+    {
+        try
+        {
+            var text = string.Concat(Lobby.Peers().Concat(Party.Peers()).Distinct().Order().Select(p => p.ToString(CultureInfo.InvariantCulture) + "\n"));
+            lock (peersGate)
+            {
+                if (text == peersWritten) return;
+                File.WriteAllText(peersFile + ".partial", text);
+                File.Move(peersFile + ".partial", peersFile, overwrite: true);
+                peersWritten = text;
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Log("Could not write the co-op peers for Steam P2P: " + error.Message); }
+    }
+
     // Pings every friend this machine shares a lobby or network with; a friend unheard for PeerTimeout is gone.
     void Beat()
     {
+        WritePeers();
         try
         {
             var now = DateTime.UtcNow;
@@ -245,8 +283,10 @@ public sealed class MultiplayerHost : IAsyncDisposable
 
     // The social tab: friends running HellForge (from the transport) get this player's profile objects and the game's current
     // lobby every 10 s and at once when either changes: "presence" [objects JSON, lobbyId, connectionString, lobby JSON as
-    // the game uploaded it], without the lobby fields when in none. The first one to a friend is "presence.hello", which
-    // is always answered, so two backends know each other at once, also after one restarts.
+    // the game uploaded it, listing digest], without the lobby fields when in none, and without the digest when the
+    // directory lists nothing (FriendPresence.SetLocalListing; older backends send none and ignore it). The first one to a
+    // friend is "presence.hello", which is always answered, so two backends know each other at once, also after one
+    // restarts.
     void SharePresence(DateTime now)
     {
         if (presence == null || transport is not IFriendSource source) return;
@@ -277,10 +317,18 @@ public sealed class MultiplayerHost : IAsyncDisposable
         var (lobbyId, body, objects, _) = presence.Local;
         var connection = lobbyId != null ? Lobby.ConnectionStringFor(lobbyId) : null;
         var frame = new Frame(type).Add(objects.ToJsonString());
-        if (lobbyId != null && connection != null && body != null) frame.Add(lobbyId).Add(connection).Add(body.ToJsonString());
+        if (lobbyId != null && connection != null && body != null)
+        {
+            frame.Add(lobbyId).Add(connection).Add(body.ToJsonString());
+            if (presence.LocalListing is { } listing) frame.Add(listing);
+        }
         var bytes = frame.Encode();
         foreach (var target in targets) transport.Send(target, bytes, reliable: true);
     }
+
+    // A presence frame's listing digest (DirectoryData.Digest: 64 lowercase hex digits), or null when it has none.
+    public static string? ListingOf(Frame frame) =>
+        frame.Count > 4 && frame.Text(4) is { Length: 64 } digest && digest.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f')) ? digest : null;
 
     void FromPeerPresence(ulong peer, Frame frame)
     {
@@ -291,7 +339,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
         if (reply) SendPresence([peer], "presence");
         try
         {
-            if (System.Text.Json.Nodes.JsonNode.Parse(frame.Text(0)) is System.Text.Json.Nodes.JsonObject objects) presence.SetFriendObjects(peer, objects);
+            if (System.Text.Json.Nodes.JsonNode.Parse(frame.Text(0)) is System.Text.Json.Nodes.JsonObject sent && RecordGuard.Objects(sent) is { } objects)
+                presence.SetFriendObjects(peer, objects);
         }
         catch (System.Text.Json.JsonException) { Log("Dropped malformed profile objects from a friend."); return; }
         if (frame.Count < 4) { presence.ClearFriendLobby(peer); return; }
@@ -305,7 +354,9 @@ public sealed class MultiplayerHost : IAsyncDisposable
         }
         try
         {
-            if (System.Text.Json.Nodes.JsonNode.Parse(frame.Text(3)) is System.Text.Json.Nodes.JsonObject body) presence.SetFriendLobby(peer, lobbyId, connection, body);
+            if (System.Text.Json.Nodes.JsonNode.Parse(frame.Text(3)) is System.Text.Json.Nodes.JsonObject sent && RecordGuard.Lobby(sent) is { } body)
+                presence.SetFriendLobby(peer, lobbyId, connection, body, ListingOf(frame));
+            else Log("Dropped a friend's lobby record that is not one.");
         }
         catch (System.Text.Json.JsonException) { Log("Dropped a malformed lobby from a friend."); }
     }

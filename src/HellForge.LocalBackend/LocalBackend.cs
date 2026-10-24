@@ -17,6 +17,14 @@ public static class LocalBackend
     // The error bodies the backend answers with ({"errorCode": "HELLFORGE_..."}).
     static JsonObject Error(string code) => new() { ["errorCode"] = code };
 
+    // A request from a program on this PC, not from a web page in the player's browser: the Host is the loopback address
+    // the backend listens on (a DNS-rebinding page sends its own name), and none of a browser's marks is there (Origin,
+    // Referer, Sec-Fetch-*). The game, the session runner and the launcher send none of them.
+    public static bool FromLocalProgram(HttpRequest request) =>
+        request.Host.Host is "127.0.0.1" or "localhost" or "[::1]" &&
+        !request.Headers.ContainsKey("Origin") && !request.Headers.ContainsKey("Referer") &&
+        !request.Headers.Keys.Any(k => k.StartsWith("Sec-Fetch-", StringComparison.OrdinalIgnoreCase));
+
     // A response body: a JSON node or element, written compactly as the serializer writes them.
     static byte[] Utf8(object response)
     {
@@ -180,7 +188,13 @@ public static class LocalBackend
             object response = new JsonObject { ["errorCode"] = "HELLFORGE_UNSUPPORTED_REQUEST", ["message"] = "Local contract not implemented." };
             try
             {
-                if (request.Path == "/config/locator.json")
+                if (!FromLocalProgram(request))
+                {
+                    status = StatusCodes.Status403Forbidden;
+                    outcome = "web_page_rejected";
+                    response = Error("HELLFORGE_NOT_FROM_THIS_PC");
+                }
+                else if (request.Path == "/config/locator.json")
                 {
                     if (!HttpMethods.IsGet(request.Method))
                     {

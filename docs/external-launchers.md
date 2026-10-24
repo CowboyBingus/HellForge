@@ -130,8 +130,12 @@ and prints every setting:
 
 ```json
 {"profile": "default", "war": "live", "localPlayFab": true, "multiplayer": true, "engineLog": true, "crashDump": false,
- "gameOptions": "", "file": "<installation>\\launcher-settings.json"}
+ "gameOptions": "", "playWithStrangers": false, "file": "<installation>\\launcher-settings.json"}
 ```
+
+`settings --strangers yes|no` also turns Play with strangers on or off (off by default; see
+[multiplayer.md](multiplayer.md#play-with-strangers)). It is saved in `mods\hellforge-mods.json`, not in
+`launcher-settings.json`, and `play` has no option for it. A running session's backend picks it up within a few seconds.
 
 HellForge.exe reads the same file, so a choice made in your launcher is the one its Settings page shows. `profiles`
 lists and creates profiles; `settings --profile <name>` selects one.

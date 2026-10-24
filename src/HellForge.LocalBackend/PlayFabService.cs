@@ -21,7 +21,9 @@ public sealed class PlayFabService
     public const string Prefix = "/playfab";
     const ulong MasterOffset = 0x1000000000000000;
 
-    // Objects set by players through Object/SetObjects (testament_platform_user_name etc.), keyed by entity id.
+    // Objects set by players through Object/SetObjects (testament_platform_user_name etc.), keyed by entity id. Bounded:
+    // the game sets a few small objects for its own entity, and what it sets is shared with friends.
+    public const int MaxEntities = 16, MaxObjectsPerEntity = 32, MaxObjectBytes = 16 << 10;
     readonly ConcurrentDictionary<string, JsonObject> objects = new(StringComparer.OrdinalIgnoreCase);
     readonly ConcurrentDictionary<string, string> displayNames = new(StringComparer.OrdinalIgnoreCase);
     readonly FriendPresence? presence;
@@ -174,13 +176,20 @@ public sealed class PlayFabService
         if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("Entity", out var entity) || !entity.TryGetProperty("Id", out var idElement) ||
             idElement.GetString() is not { Length: > 0 } id || !body.TryGetProperty("Objects", out var list) || list.ValueKind != JsonValueKind.Array)
             return Error(400, "InvalidParams", 1000, "Entity and Objects are required.", "pf_set_objects_rejected");
+        if (!objects.ContainsKey(id) && objects.Count >= MaxEntities)
+            return Error(400, "InvalidParams", 1000, "Too many entities.", "pf_set_objects_rejected");
         var stored = objects.GetOrAdd(id, _ => new JsonObject());
         var results = new JsonArray();
         lock (stored)
             foreach (var item in list.EnumerateArray())
             {
-                if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("ObjectName", out var nameElement) || nameElement.GetString() is not { Length: > 0 } name) continue;
+                if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("ObjectName", out var nameElement) || nameElement.GetString() is not { Length: > 0 and <= 64 } name) continue;
                 if (!item.TryGetProperty("DataObject", out var value)) continue;
+                if (value.GetRawText().Length > MaxObjectBytes || (!stored.ContainsKey(name) && stored.Count >= MaxObjectsPerEntity))
+                {
+                    results.Add((JsonNode?)new JsonObject { ["ObjectName"] = name, ["OperationReason"] = "Rejected", ["SetResult"] = "None" });
+                    continue;
+                }
                 // The engine reads only EscapedDataObject (the object's JSON text) and dereferences it unchecked
                 // (exe 0x8D4710): a profile object without it crashes the client.
                 stored[name] = new JsonObject

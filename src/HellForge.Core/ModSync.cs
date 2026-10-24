@@ -393,6 +393,9 @@ public static class SyncedStore
     // Beside a synced mod's files; a dot file, so the digest and the content hash leave it out.
     public const string RecordName = ".hellforge-synced.json";
     public const int MaxFiles = 10000;
+    // How many synced mods the store keeps (Prune): the ones a session played or downloaded most recently.
+    public const int Keep = 20;
+    static readonly TimeSpan PartialAge = TimeSpan.FromDays(1);
 
     public static string Root(string modsFolder) => Path.Combine(modsFolder, FolderName);
     static string Name(string id, string hash) => id + "@" + hash[..16];
@@ -409,7 +412,12 @@ public static class SyncedStore
             var record = Path.Combine(folder, RecordName);
             if (!File.Exists(record) || (string?)JsonNode.Parse(File.ReadAllText(record))?["hash"] != hash) return null;
             var mod = ModCatalog.Parse(folder, profile ?? EntityProfile.Current);
-            return mod.Id == id && ModSets.ContentHash(mod) == hash ? folder : null;
+            if (mod.Id != id || ModSets.ContentHash(mod) != hash) return null;
+            // The store stays writable while a session runs (the backend downloads into it): a file the mod does not count
+            // would load without being compared, so a copy with one is not this mod.
+            var counted = ModSets.Files(mod).Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
+            return Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(folder, f).Replace('\\', '/'))
+                .All(f => f == RecordName || counted.Contains(f)) ? folder : null;
         }
         catch (Exception error) when (error is JsonException or InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException) { return null; }
     }
@@ -420,6 +428,59 @@ public static class SyncedStore
         if (!ModCatalog.IsModId(id) || !ModSets.Hex(hash, 64)) return;
         var folder = Path.Combine(Root(modsFolder), Name(id, hash));
         if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+    }
+
+    // A stored mod a session plays now: its record's "used", which Prune goes by.
+    public static void Touch(string folder)
+    {
+        var record = Path.Combine(folder, RecordName);
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(record)) is not JsonObject node) return;
+            node["used"] = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+            File.WriteAllText(record + ".tmp", node.ToJsonString());
+            File.Move(record + ".tmp", record, overwrite: true);
+        }
+        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException) { }
+    }
+
+    // Deletes the stored mods beyond the `keep` used most recently (a record's "used", else when it was downloaded), never
+    // one of `inUse` (the starting session's folders), and downloads left half-done for more than a day. Returns what it
+    // removed, by folder name.
+    public static List<string> Prune(string modsFolder, IEnumerable<string> inUse, int keep = Keep)
+    {
+        var store = Root(modsFolder);
+        var removed = new List<string>();
+        if (!Directory.Exists(store)) return removed;
+        var kept = inUse.Select(f => Path.GetFullPath(f).TrimEnd('\\', '/')).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var partials = Path.Combine(store, PartialFolder);
+        if (Directory.Exists(partials))
+            foreach (var partial in Directory.GetDirectories(partials).Where(d => DateTime.UtcNow - Directory.GetLastWriteTimeUtc(d) > PartialAge))
+                if (Delete(partial)) removed.Add(PartialFolder + "/" + Path.GetFileName(partial));
+        var stored = Directory.GetDirectories(store).Where(d => !Path.GetFileName(d).StartsWith('.'))
+            .Select(d => (Folder: d, Used: LastUsed(d))).OrderByDescending(m => m.Used).ToList();
+        foreach (var (folder, _) in stored.Skip(keep).Where(m => !kept.Contains(Path.GetFullPath(m.Folder).TrimEnd('\\', '/'))))
+            if (Delete(folder)) removed.Add(Path.GetFileName(folder));
+        return removed;
+
+        static bool Delete(string folder)
+        {
+            try { Directory.Delete(folder, recursive: true); return true; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return false; } // in use: the next start
+        }
+    }
+
+    static DateTime LastUsed(string folder)
+    {
+        try
+        {
+            var node = JsonNode.Parse(File.ReadAllText(Path.Combine(folder, RecordName)));
+            foreach (var key in new[] { "used", "synced" })
+                if (node?[key] is JsonValue value && value.TryGetValue<string>(out var text) &&
+                    DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var time)) return time;
+        }
+        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException) { }
+        return DateTime.MinValue; // no record: the first to go
     }
 
     public const string PartialFolder = ".partial";
@@ -521,6 +582,66 @@ public static class SyncedStore
         if (kind == ModClass.Bundled) throw new InvalidDataException($"{expected.Id} is a mod HellForge ships; it is never downloaded.");
         if (ModSets.NeedsVerified(kind) && !verified(mod.Id, expected.Hash))
             throw new InvalidDataException($"{expected.Id} {ModSets.Unchecked(kind)} and is neither on HellForge's verified list nor trusted.");
+    }
+}
+
+// The offer as a session's backend writes it for launchers (<run>/backend/mod-sync.json), and the player's answer a
+// launcher writes back (<run>/backend/mod-sync-answer.json), which the backend takes once a second. For sessions whose
+// game has no in-game editor to show the MOD SYNC prompt; the answer is the one the prompt sends (sync_answer).
+public sealed record ModSyncOffer(int Version, string State, string Host, long Bytes, long Done, string Message, IReadOnlyList<ModSyncOffer.Mod> Mods)
+{
+    public sealed record Mod(string Id, string Name, string Version, string Class, string Action, long Bytes, string? Url = null);
+
+    public const string FileName = "mod-sync.json", AnswerFileName = "mod-sync-answer.json";
+    public static readonly IReadOnlySet<string> Answers = new HashSet<string>(StringComparer.Ordinal) { "accept", "decline", "restart", "block", "trust", "open" };
+    // the answers about one mod, which name it
+    static readonly IReadOnlySet<string> ModAnswers = new HashSet<string>(StringComparer.Ordinal) { "block", "trust", "open" };
+
+    // The offer in a session's backend folder; null when there is none or it cannot be read (being written).
+    public static ModSyncOffer? Read(string backendFolder)
+    {
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(Path.Combine(backendFolder, FileName))) is not JsonObject root) return null;
+            static string Text(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : "";
+            static long Number(JsonNode? node) => node is JsonValue value && value.TryGetValue<long>(out var number) ? number : 0;
+            var mods = root["mods"] is JsonArray list
+                ? list.OfType<JsonObject>().Select(m => new Mod(Text(m["id"]), Text(m["name"]), Text(m["version"]), Text(m["class"]), Text(m["action"]), Number(m["bytes"]),
+                    ModCatalog.WebAddress(Text(m["url"]) is { Length: > 0 } url ? url : null))).ToList()
+                : [];
+            return new ModSyncOffer((int)Number(root["version"]), Text(root["state"]), Text(root["host"]), Number(root["bytes"]), Number(root["done"]), Text(root["message"]), mods);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { return null; }
+    }
+
+    // The player's answer to the offer of that version: written whole (a temporary file, then a rename).
+    public static void Answer(string backendFolder, int version, string answer, string? modId = null)
+    {
+        if (!Answers.Contains(answer) || ModAnswers.Contains(answer) != (modId != null) || modId != null && !ModCatalog.IsModId(modId))
+            throw new InvalidDataException($"{answer} {modId} is not an answer to a mod sync offer.");
+        var path = Path.Combine(backendFolder, AnswerFileName);
+        File.WriteAllText(path + ".tmp", new JsonObject { ["version"] = version, ["answer"] = answer, ["mod"] = modId }.ToJsonString());
+        File.Move(path + ".tmp", path, overwrite: true);
+    }
+
+    // The backend's side: the waiting answer as a syncanswer line's parts, and the file gone; null when there is none or
+    // it is not an answer (it is deleted either way).
+    public static IReadOnlyList<string>? TakeAnswer(string backendFolder)
+    {
+        var path = Path.Combine(backendFolder, AnswerFileName);
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var text = File.ReadAllText(path);
+            File.Delete(path);
+            var root = JsonNode.Parse(text) as JsonObject;
+            var version = root?["version"] is JsonValue v && v.TryGetValue<int>(out var number) && number >= 0 ? number : -1;
+            var answer = root?["answer"] is JsonValue a && a.TryGetValue<string>(out var word) ? word : "";
+            var mod = root?["mod"] is JsonValue m && m.TryGetValue<string>(out var id) ? id : null;
+            if (version < 0 || !Answers.Contains(answer) || ModAnswers.Contains(answer) != (mod != null) || mod != null && !ModCatalog.IsModId(mod)) return null;
+            return mod == null ? ["syncanswer", version.ToString(CultureInfo.InvariantCulture), answer] : ["syncanswer", version.ToString(CultureInfo.InvariantCulture), answer, mod];
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { return null; }
     }
 }
 

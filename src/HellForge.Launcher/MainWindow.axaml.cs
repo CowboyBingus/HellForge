@@ -107,6 +107,17 @@ public partial class MainWindow : Window
         LocalPlayFabBox.IsCheckedChanged += (_, _) => ProfileStore.SaveLocalPlayFab(paths, LocalPlayFabBox.IsChecked == true);
         SdkShimsBox.IsChecked = ProfileStore.LoadSdkShims(paths);
         SdkShimsBox.IsCheckedChanged += (_, _) => ProfileStore.SaveSdkShims(paths, SdkShimsBox.IsChecked == true);
+        // Play with strangers lives in the installation's mods settings (ModSettings), which the backend reads: off by default.
+        StrangersBox.IsEnabled = paths.ModsFolder != null;
+        StrangersBox.IsChecked = paths.ModsFolder != null && ModSettings.PlayWithStrangers(paths.ModsFolder);
+        StrangersWarning.IsVisible = StrangersBox.IsChecked == true;
+        StrangersBox.IsCheckedChanged += (_, _) =>
+        {
+            StrangersWarning.IsVisible = StrangersBox.IsChecked == true;
+            if (paths.ModsFolder == null) return;
+            try { ModSettings.SetPlayWithStrangers(paths.ModsFolder, StrangersBox.IsChecked == true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save Play with strangers: " + error.Message, Red); }
+        };
         var war = ProfileStore.LoadWar(paths);
         WarLiveRadio.IsChecked = war == ProfileStore.WarLive;
         WarFrozenRadio.IsChecked = war == ProfileStore.WarFrozen;
@@ -193,6 +204,7 @@ public partial class MainWindow : Window
         if (runner.IsRunning) return;
         runDirectory = null;  // Forget the previous run so its final state does not overwrite this one.
         launchedUtc = default;
+        NoteSessionEditor();
         if (!SessionRunner.IsSupported)
         {
             SetStatus(SessionRunner.UnsupportedMessage, Phase.Idle);
@@ -297,6 +309,8 @@ public partial class MainWindow : Window
             if (SessionFiles.ReadJson(Path.Combine(runDirectory, "result.json")) is { } state) ShowState(state);
             // Mods are built before the script writes its first result.json: their progress shows from the start.
             else if (!stopRequested && ShowModBuilds(out var built)) RenderSteps(BuildStep, false, built);
+            if (runner.IsRunning) ShowModSync(runDirectory);
+            else ModSyncCard.IsVisible = false;
         }
         var runnerExited = runner.CollectExited();
         if (runnerExited) PruneSessionLogs();
