@@ -19,9 +19,9 @@ Nothing here has a date, and stability comes first.
 | Faster mod sync | Testing | Built for 0.3.0 |
 | Host-leaves fix | Next | Planned |
 | Co-op tools for mods | Next | Planned |
-| Cyberstan missions | Testing | Built for 0.3.0-dev.4 (All planets open) |
+| Cyberstan missions | Testing | Built for 0.3.0-dev.4 (All planets open); difficulty 11 left |
 | Super Earth missions | Later | Research done (research/cyberstan sketches it) |
-| Subfactions | Testing | Built for 0.3.0-dev.4, with a seed in the launcher |
+| Subfactions | Testing | Built for 0.3.0-dev.4, with a seed in the launcher; not fully working yet |
 | Custom missions | Later | Planned in steps |
 | Progression system | Later | Design not decided |
 | Custom models | Later | Mesh importer works; physics, AI and textures left |
@@ -143,9 +143,11 @@ CYBERSTAN", difficulties 4 to 10). The war never served those regions, so it off
 each of an enemy home world's regions as the enemy's, at full health and available (HD2Mods research/cyberstan). To test:
 each region at difficulty 4 and 10, the map and biome loading, the campaign panel, and a friend joining.
 
+To do: make Cyberstan's missions work at difficulty 11 (Hell Forge).
+
 ### Subfactions
 
-Status: built for 0.3.0-dev.4 (steps 1 and 2), needs testing in game.
+Status: built for 0.3.0-dev.4 (steps 1 and 2), not fully working yet; needs fixing and testing in game.
 
 A mission's subfactions come from its planet's galactic war effects of type 40: each adds an enemy tag (Predator Strain,
 Spore Burst, Rupture, Dragonroach, Hive Lord; Jet Brigade, Incineration Corps, Cyborgs; the Illuminate's four), and the
