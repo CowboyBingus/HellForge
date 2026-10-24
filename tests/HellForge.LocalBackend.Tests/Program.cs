@@ -4,6 +4,10 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using HellForge.LocalBackend;
 
+// The checks block threads (waits on queues and files) beside backends whose timers run on the thread pool; on a two-core
+// CI runner the pool grows too slowly for them and a stats share's 1 s tick missed an 8 s wait (CI, 2026-10-24).
+ThreadPool.GetMinThreads(out var workers, out var ports);
+ThreadPool.SetMinThreads(Math.Max(workers, 32), ports);
 var root = Path.GetFullPath(Path.Combine("artifacts", "local-backend-tests", Guid.NewGuid().ToString("N")));
 Directory.CreateDirectory(root);
 var results = new List<object>();
