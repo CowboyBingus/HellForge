@@ -30,6 +30,10 @@ public static class EditorIcons
     static readonly ulong TextureAtlas = ResourceTypes.Hash("texture_atlas");
     const int TextureHeader = 0xC0, Largest = 128;
     static readonly string[] Groups = ["weapons", "throwables", "stratagems", "boosters", "passives", "factions"];
+    // What an installation's icons were made from: the file's format, the groups, and the sprites mappings/hud-icons.json
+    // names (BundledMods makes them again when it changes; a change to how a group is extracted adds to Version).
+    public static string Stamp { get; } = Version + ":" + string.Join(",", Groups) + ":" + Convert.ToHexString(
+        System.Security.Cryptography.SHA256.HashData(typeof(EditorIcons).Assembly.GetManifestResourceStream("HellForge.Core.mappings.hud-icons.json")!));
 
     public sealed record Icon(int Kind, string Name, int Width, int Height, int Channels, byte[] Pixels);
 
