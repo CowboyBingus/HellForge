@@ -62,8 +62,8 @@ standard error and exits with 1.
 | `profiles` | Lists the profiles (name, template, folder, used, selected) and the templates. `--create <name> --template <template>` makes a profile; the name is 1 to 32 lowercase letters, digits or hyphens. |
 | `mods` | Prints the Mods page's list, top first. Each mod has its id, name, version, description, enabled, group, tags, folder, archive (its zip, if it came as one), removable, and a pack's options. Also printed: the folder's problems, the modlist code friends compare (null when no gameplay mod is on) and the path of `hellforge-mods.json`. |
 | `mod-add --file <path>` | Adds a mod the way the Mods page's "Add mods..." does: a `.zip`, `.rar` or `.7z`, a folder mod's `hellforge-mod.json`, or a cosmetic pack's `manifest.json`. A mod with the same id is replaced (an update). |
-| `mod-remove --id <id>` | Deletes the mod's zip or folder. Mods HellForge ships (tag `bundled`) come back by themselves, and Local Stats (tag `local-stats`) cannot be removed: switch these off instead. |
-| `mod-switch --id <id> --on yes\|no` | Switches a mod on or off. |
+| `mod-remove --id <id>` | Deletes the mod's zip or folder. Mods HellForge ships (tag `bundled`) come back by themselves: switch these off instead. Local Stats (tag `local-stats`) cannot be removed. |
+| `mod-switch --id <id> --on yes\|no` | Switches a mod on or off. Local Stats (tag `local-stats`) is always on and refuses `--on no`. |
 | `mod-order --ids <id,id,...>` | Puts the listed mods first, top first, in that order. The others keep their order after them. Gameplay mods stay above cosmetic ones, so the order changes within each group. |
 | `mod-pack --id <pack id> --option <name> [--on yes\|no] [--variant <name>]` | Switches one of a cosmetic pack's options, or picks one of its variants, as the pack's picker on the Mods page does. `--all yes\|no` switches every option at once. Prints the pack's options. |
 | `settings [options]` | Prints the choices `play` and HellForge.exe start from, after saving any option given (see [Profiles and settings](#profiles-and-settings)). |
@@ -72,7 +72,9 @@ standard error and exits with 1.
 | `stop [--run <run folder>] [--wait yes]` | Asks the running session to close the game and clean up, as STOP does. Without `--run` it stops the newest session. |
 | `fetch-war` | Fetches the live galactic war into `live-war.json`. The Linux scripts run this before a session. |
 
-The tags in `mods` are `source`, `code`, `stats`, `data`, `pack`, `lua`, `bundled` and `local-stats`.
+The tags in `mods` are `source`, `code`, `stats`, `data`, `pack`, `lua`, `bundled` and `local-stats`. The Mods page does
+not show Local Stats (the in-game editor's saved changes, always on and never compared between friends); `mods` still
+lists it, so a launcher can hide it the same way.
 
 Mod changes are refused while a session runs, as on the Mods page, because a session keeps the mods it started with.
 HellForge.exe can stay open meanwhile: its Mods page watches the folder.
