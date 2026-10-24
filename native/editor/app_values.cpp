@@ -45,7 +45,7 @@ void LoadSettings()
     for (float s : UI_SCALES) if (fabsf(s - scale) < 0.001f) g_uiScale = s;
     if (const hfjson::Value* open = root.Find("open"))
         for (const hfjson::Value& v : open->items) if (v.kind == hfjson::Value::String) g_open.insert(v.text);
-    if (const hfjson::Value* mounts = root.Find("mounts"); mounts != nullptr && mounts->kind == hfjson::Value::Object)
+    if (const hfjson::Value* mounts = root.Find("mounts", hfjson::Value::Object))
         for (auto& m : mounts->members) g_mounts[m.first] = m.second.AsNumber();
     if (const hfjson::Value* passives = root.Find("passives"))
     {
@@ -142,21 +142,32 @@ void SendPassives()
     g_host.api->set_passives(g_host.mod, g_choice[0] < 0 ? HF_PASSIVE_KIT : (uint32_t)g_choice[0], g_choice[1] < 0 ? HF_PASSIVE_KIT : (uint32_t)g_choice[1]);
 }
 
+/* The armory's armor penetration row: the trait its weapon's trait slots hold (one it names), read through each slot. */
+static void LiveApLabel(LiveState& s, const Row* row, bool fresh)
+{
+    s.read = true; s.now = s.base = 0; s.mod.clear();
+    for (const Row* t : TraitRows(row))
+    {
+        const LiveState& ts = Live(t, fresh);
+        if (!ts.read) continue;
+        if (ts.now != 0 && row->OptionOf(ts.now)) s.now = ts.now;
+        if (ts.base != 0 && row->OptionOf(ts.base)) s.base = ts.base;
+        if (!ts.mod.empty()) s.mod = ts.mod;
+    }
+}
+
+/* What get_live or get_stat answered (read: whether it could), kept from now on. */
+static void Took(LiveState& s, bool read, const HfLiveValue& value, ULONGLONG now)
+{
+    s.read = read;
+    if (s.read) { s.now = value.now.number; s.base = value.base.number; s.mod = value.mod ? value.mod : ""; }
+    s.at = now;
+}
+
 LiveState& Live(const Row* row, bool fresh)
 {
     LiveState& s = g_live[row];
-    if (IsApLabel(row))
-    {
-        s.read = true; s.now = s.base = 0; s.mod.clear();
-        for (const Row* t : TraitRows(row))
-        {
-            const LiveState& ts = Live(t, fresh);
-            if (ts.read && ts.now != 0 && row->OptionOf(ts.now)) s.now = ts.now;
-            if (ts.read && ts.base != 0 && row->OptionOf(ts.base)) s.base = ts.base;
-            if (ts.read && !ts.mod.empty()) s.mod = ts.mod;
-        }
-        return s;
-    }
+    if (IsApLabel(row)) { LiveApLabel(s, row, fresh); return s; }
     if (!row->choice.empty())
     {
         s.read = true; s.now = ChoiceGet(row); s.mod.clear();
@@ -168,18 +179,14 @@ LiveState& Live(const Row* row, bool fresh)
     {
         HfField field = FieldOf(row);
         HfLiveValue value;
-        s.read = g_host.api->get_live(g_host.mod, row->ref, &field, &value) != 0;
-        if (s.read) { s.now = value.now.number; s.base = value.base.number; s.mod = value.mod ? value.mod : ""; }
-        s.at = now;
+        Took(s, g_host.api->get_live(g_host.mod, row->ref, &field, &value) != 0, value, now);
     }
     else if (!row->Live() && row->Stat() && HasGetStat() && (fresh || s.at == 0 || now - s.at > 400))
     {
         /* applied at boot: the value the game holds now, and its base (the Local Stats mod's edit undone) */
-        HfStat stat{row->statKind.c_str(), row->statComponent.c_str(), row->statResource, row->statRecord, row->offset, row->type};
+        HfStat stat = StatOf(row);
         HfLiveValue value;
-        s.read = g_host.api->get_stat(g_host.mod, &stat, &value) != 0;
-        if (s.read) { s.now = value.now.number; s.base = value.base.number; s.mod = value.mod ? value.mod : ""; }
-        s.at = now;
+        Took(s, g_host.api->get_stat(g_host.mod, &stat, &value) != 0, value, now);
     }
     return s;
 }
@@ -196,6 +203,21 @@ std::string RefLabel(const Row* row, double v)
     return text;
 }
 
+/* A number as a field shows it: whole numbers without decimals, tiny ones in %g, the rest with up to four decimals. */
+static void FormatNumber(char* text, size_t size, double v, bool whole)
+{
+    if (whole || (fabs(v) < 1e15 && v == floor(v))) snprintf(text, size, "%.0f", v);
+    else if (fabs(v) < 0.001) snprintf(text, size, "%.6g", v);
+    else
+    {
+        snprintf(text, size, "%.4f", v);
+        char* end = text + strlen(text) - 1;
+        while (end > text && *end == '0') *end-- = 0;
+        if (*end == '.') *end = 0;
+    }
+    if (!strcmp(text, "-0")) strcpy(text, "0");
+}
+
 std::string Format(const Row* row, double v)
 {
     if (!row->choice.empty()) { const Row::Option* o = row->OptionOf(v); return o ? o->label : "?"; }
@@ -203,16 +225,7 @@ std::string Format(const Row* row, double v)
     if (!row->pick.empty()) return RefLabel(row, v);
     if (row->unlimited && v == 4294967295.0) return "Unlimited";
     char text[64];
-    if (row->Whole() || (fabs(v) < 1e15 && v == floor(v))) snprintf(text, sizeof text, "%.0f", v);
-    else if (fabs(v) < 0.001) snprintf(text, sizeof text, "%.6g", v);
-    else
-    {
-        snprintf(text, sizeof text, "%.4f", v);
-        char* end = text + strlen(text) - 1;
-        while (end > text && *end == '0') *end-- = 0;
-        if (*end == '.') *end = 0;
-    }
-    if (!strcmp(text, "-0")) strcpy(text, "0");
+    FormatNumber(text, sizeof text, v, row->Whole());
     return text;
 }
 
@@ -260,23 +273,28 @@ RowView ViewOf(const Row* row, bool withPending)
     return m.view;
 }
 
-static RowView ViewOfNow(const Row* row, bool withPending)
+/* The armory's armor penetration row: the trait its weapon's trait slots hold (staged when a slot's pick is). */
+static RowView ViewOfApLabel(const Row* row, bool withPending)
 {
     RowView v;
-    if (IsApLabel(row))
+    bool staged = false;
+    v.has = v.hasBase = true;
+    for (const Row* t : TraitRows(row))
     {
-        bool staged = false;
-        v.has = v.hasBase = true;
-        for (const Row* t : TraitRows(row))
-        {
-            RowView tv = ViewOf(t, withPending);
-            if (tv.value != 0 && row->OptionOf(tv.value)) v.value = tv.value;
-            if (tv.hasBase && tv.base != 0 && row->OptionOf(tv.base)) v.base = tv.base;
-            staged = staged || tv.source == STAGED;
-        }
-        v.source = staged ? STAGED : v.value != v.base ? EDITED : GAME;
-        return v;
+        RowView tv = ViewOf(t, withPending);
+        if (tv.value != 0 && row->OptionOf(tv.value)) v.value = tv.value;
+        if (tv.hasBase && tv.base != 0 && row->OptionOf(tv.base)) v.base = tv.base;
+        staged = staged || tv.source == STAGED;
     }
+    v.source = staged ? STAGED : v.value != v.base ? EDITED : GAME;
+    return v;
+}
+
+/* A row's view without its pending change: what the game holds (another mod's value), the saved value, or the
+ * catalogue's default where get_live cannot read one. */
+static RowView HeldView(const Row* row)
+{
+    RowView v;
     LiveState& live = Live(row);
     double saved;
     /* joined: Saved answers with the host's saved changes, which the game holds (attachments' from the next respawn) */
@@ -289,14 +307,24 @@ static RowView ViewOfNow(const Row* row, bool withPending)
     else if (isSaved) { v.has = true; v.value = saved; }
     if (!live.read && row->hasBase) { v.hasBase = true; v.base = row->base; if (!isSaved) { v.has = true; v.value = row->base; } }
     v.source = isSaved ? EDITED : !v.holder.empty() ? MODDED : GAME;
+    return v;
+}
+
+/* A pending change (or a pending reset) over the view. */
+static void Staged(RowView& v, const Row* row, const Pend* p)
+{
+    v.source = STAGED;
+    v.reset = p->reset || (v.hasBase && Same(row, p->value, v.base));
+    if (p->reset) { v.has = v.hasBase; v.value = v.base; }
+    else { v.has = true; v.value = p->value; }
+}
+
+static RowView ViewOfNow(const Row* row, bool withPending)
+{
+    if (IsApLabel(row)) return ViewOfApLabel(row, withPending);
+    RowView v = HeldView(row);
     if (withPending && !Locked())
-        if (const Pend* p = PendingOf(row))
-        {
-            v.source = STAGED;
-            v.reset = p->reset || (v.hasBase && Same(row, p->value, v.base));
-            if (p->reset) { v.has = v.hasBase; v.value = v.base; }
-            else { v.has = true; v.value = p->value; }
-        }
+        if (const Pend* p = PendingOf(row)) Staged(v, row, p);
     return v;
 }
 
@@ -395,28 +423,54 @@ std::string LockOf(const Row* row)
     return m.why;
 }
 
-static std::string LockOfNow(const Row* row)
+/* a vehicle weapon's rows while its slot holds another weapon (HD2R Editor refuses them then) */
+static bool MountLock(const Row* row, std::string* why)
 {
+    if (row->mountSlot.empty()) return false;
+    const Row* slot = g_catalog.Entry("mounts", row->object->rows.empty() ? "" : MountVehicle(row), row->mountSlot);
+    if (slot == nullptr || !ChoiceSaved(slot)) return false;
+    const Row::Option* o = slot->OptionOf(ChoiceGet(slot));
+    if (o == nullptr || o == &slot->options[0]) return false;
+    *why = "\"" + slot->label + "\" holds " + o->label + " now: reset it to edit this weapon";
+    return true;
+}
+
+/* the weapon's own round while it fires a donor */
+static bool RoundLock(const Row* row, std::string* why)
+{
+    if (row->fires.empty()) return false;
     double value;
-    /* a vehicle weapon's rows while its slot holds another weapon (HD2R Editor refuses them then) */
-    if (!row->mountSlot.empty())
-        if (const Row* slot = g_catalog.Entry("mounts", row->object->rows.empty() ? "" : MountVehicle(row), row->mountSlot);
-            slot != nullptr && ChoiceSaved(slot))
-            if (const Row::Option* o = slot->OptionOf(ChoiceGet(slot)); o != nullptr && o != &slot->options[0])
-                return "\"" + slot->label + "\" holds " + o->label + " now: reset it to edit this weapon";
-    if (!row->fires.empty())
-        if (const Row* swap = g_catalog.Entry(row->category, row->target, row->fires); swap != nullptr && Swapped(swap, &value))
-            return "the weapon fires " + RefLabel(swap, value) + " now: reset \"Projectile\" to edit its own round";
-    if (row->component != "ExplosionSettings" && row->component != "DamageInfo") return "";
+    const Row* swap = g_catalog.Entry(row->category, row->target, row->fires);
+    if (swap == nullptr || !Swapped(swap, &value)) return false;
+    *why = "the weapon fires " + RefLabel(swap, value) + " now: reset \"Projectile\" to edit its own round";
+    return true;
+}
+
+/* the own explosion of a slot (and its damage) while the slot sets off another */
+static bool ExplosionLock(const Row* row, std::string* why)
+{
+    if (row->component != "ExplosionSettings" && row->component != "DamageInfo") return false;
+    double value;
     for (const Row* slot : row->object->rows)
     {
         if (slot->pick != "explosion" || slot->target != row->target || !Swapped(slot, &value)) continue;
         uint32_t own = (uint32_t)llround(ViewOf(slot).base);
         if (own == 0) continue;
         if ((row->component == "ExplosionSettings" && row->ref == own) || (row->component == "DamageInfo" && row->ref == ExplosionDamage(own)))
-            return "\"" + slot->label + "\" sets off " + RefLabel(slot, value) + " now: reset it to edit its own explosion";
+        {
+            *why = "\"" + slot->label + "\" sets off " + RefLabel(slot, value) + " now: reset it to edit its own explosion";
+            return true;
+        }
     }
-    return "";
+    return false;
+}
+
+static std::string LockOfNow(const Row* row)
+{
+    std::string why;
+    if (MountLock(row, &why) || RoundLock(row, &why)) return why;
+    ExplosionLock(row, &why);
+    return why;
 }
 
 /* The status slots fill in order, from slot 1 (HD2R Editor's slot_block): why a slot (or its strength) waits, or "". */
