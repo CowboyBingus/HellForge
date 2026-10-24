@@ -645,6 +645,8 @@ static int ApiSubscribe(HfMod* mod, uint32_t kind, HfListener listener, void* us
 #include "difficulty.c"
 #include "director.c" /* after difficulty.c: its rosters and the difficulty copies */
 #include "behaviours.c"
+#include "behaviour_turret.c" /* right after behaviours.c: the turret behaviour (TurretUpdate) */
+#include "crash_notes.c" /* after behaviours.c: the crash and freeze notes (BHV_CLOCK) */
 #include "packages.c"
 #include "loadout_preview.c"
 #include "abilities.c"

@@ -397,7 +397,7 @@ static const uint8_t kCardViewStub[180] = {
     0xF3, 0x0F, 0x5C, 0xD1,                                           /* 163 subss xmm2, xmm1 */
     0xF3, 0x0F, 0x11, 0x15, 0, 0, 0, 0,                               /* 167 movss [g3], xmm2 */
     0xE9, 0, 0, 0, 0};                                                /* 175 jmp 0x18762C8 (rel32 at 176) */
-static void FieldWatch(uintptr_t field); /* behaviours.c: the preview diagnostic's watchpoints */
+static void FieldWatch(uintptr_t field); /* crash_notes.c: the preview diagnostic's watchpoints */
 static volatile uint8_t* g_restartWatch; /* +0 the last level that restarted, +8 a count per site, +0x18 pockets left,
                                           * +0x20 the last level initialised, +0x40 the countdown delta registered,
                                           * +0x44 level-11 missions launched with it, +0x48..+0x54 the mission
