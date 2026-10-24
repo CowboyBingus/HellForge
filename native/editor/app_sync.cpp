@@ -76,33 +76,24 @@ void AnswerSync(uint32_t answer, const char* id)
     if (!sent || answer == HF_SYNC_DECLINE || answer == HF_SYNC_BLOCK) CloseSync();
 }
 
-/* Every 30 frames (Tick): the backend's offer, when it changed. Nothing is allocated unless it did. */
-void ReadSync()
+/* The offer's mods read again (a new offer, or another count), the selection and the TRUST warning with them. */
+static void ReadSyncMods(uint32_t count)
 {
-    static int frames;
-    if (!HasSync() || ++frames < 30) return;
-    frames = 0;
-    HfSyncState now{};
-    now.size = sizeof now;
-    g_host.api->sync_state(g_host.mod, &now);
-    HfSyncState& was = g_sync.state;
-    bool turned = now.version != was.version || now.state != was.state;
-    if (!turned && now.done == was.done && now.bytes == was.bytes && !strcmp(now.message, was.message) && !strcmp(now.host, was.host)) return;
-    if (now.version != was.version || now.mods != g_sync.mods.size())
+    g_sync.mods.clear();
+    for (uint32_t i = 0; i < count; i++)
     {
-        g_sync.mods.clear();
-        for (uint32_t i = 0; i < now.mods; i++)
-        {
-            HfSyncMod mod{};
-            mod.size = sizeof mod;
-            if (!g_host.api->sync_mod(g_host.mod, i, &mod)) break;
-            g_sync.mods.push_back(mod);
-        }
-        g_sync.index = 0;
-        g_sync.trust = -1; /* the warning was for the offer that is gone */
+        HfSyncMod mod{};
+        mod.size = sizeof mod;
+        if (!g_host.api->sync_mod(g_host.mod, i, &mod)) break;
+        g_sync.mods.push_back(mod);
     }
-    g_sync.state = now;
-    if (!turned) return;
+    g_sync.index = 0;
+    g_sync.trust = -1; /* the warning was for the offer that is gone */
+}
+
+/* The offer turned (a new one, or its state): the dialog goes, waits while the mods download, or shows. */
+static void SyncTurned(const HfSyncState& now)
+{
     g_sync.sent = false;
     if (now.state == HF_SYNC_NONE) { if (g_sync.on) CloseSync(); return; }
     if (now.state == HF_SYNC_DOWNLOADING) return;
@@ -121,6 +112,23 @@ void ReadSync()
     /* over the game (again, when it was hidden while downloading), or in the open window */
     if (!g_windowShown) ShowSyncAlone(true);
     else if (fresh) Sound(sounds::OPEN);
+}
+
+/* Every 30 frames (Tick): the backend's offer, when it changed. Nothing is allocated unless it did. */
+void ReadSync()
+{
+    static int frames;
+    if (!HasSync() || ++frames < 30) return;
+    frames = 0;
+    HfSyncState now{};
+    now.size = sizeof now;
+    g_host.api->sync_state(g_host.mod, &now);
+    HfSyncState& was = g_sync.state;
+    bool turned = now.version != was.version || now.state != was.state;
+    if (!turned && now.done == was.done && now.bytes == was.bytes && !strcmp(now.message, was.message) && !strcmp(now.host, was.host)) return;
+    if (now.version != was.version || now.mods != g_sync.mods.size()) ReadSyncMods(now.mods);
+    g_sync.state = now;
+    if (turned) SyncTurned(now);
 }
 
 static const char* SyncActionText(uint32_t action)
@@ -200,6 +208,25 @@ static const char* SyncPrimary(uint32_t* answer)
     return "";
 }
 
+/* B, T and G on the selected mod; true when T showed its TRUST warning. */
+static bool SyncModKeys(int n)
+{
+    if (ImGui::IsKeyPressed(ImGuiKey_B, false) && g_sync.index < n && SyncBlockable(g_sync.mods[g_sync.index]))
+        AnswerSync(HF_SYNC_BLOCK, g_sync.mods[g_sync.index].id);
+    if (ImGui::IsKeyPressed(ImGuiKey_T, false) && g_sync.index < n && SyncTrustable(g_sync.mods[g_sync.index])) { AskTrust(g_sync.index); return true; }
+    if (ImGui::IsKeyPressed(ImGuiKey_G, false) && g_sync.index < n && SyncGettable(g_sync.mods[g_sync.index]))
+        AnswerSync(HF_SYNC_OPEN, g_sync.mods[g_sync.index].id);
+    return false;
+}
+
+/* Esc: the window closes (Closed() answers), the prompt goes while the download goes on, or the offer is declined. */
+static void SyncEscape()
+{
+    if (g_windowShown) g_host.close(); /* Closed() answers */
+    else if (g_sync.sent || g_sync.state.state == HF_SYNC_DOWNLOADING) { ShowSyncAlone(false); Sound(sounds::BACK); } /* it goes on */
+    else AnswerSync(HF_SYNC_DECLINE);
+}
+
 void SyncKeys()
 {
     int n = (int)g_sync.mods.size();
@@ -212,19 +239,58 @@ void SyncKeys()
     if (Pressed(ImGuiKey_UpArrow)) g_sync.index = std::max(0, g_sync.index - 1);
     if (Pressed(ImGuiKey_DownArrow)) g_sync.index = std::min(std::max(0, n - 1), g_sync.index + 1);
     bool armed = SyncArmed();
-    if (armed && ImGui::IsKeyPressed(ImGuiKey_B, false) && g_sync.index < n && SyncBlockable(g_sync.mods[g_sync.index]))
-        AnswerSync(HF_SYNC_BLOCK, g_sync.mods[g_sync.index].id);
-    if (armed && ImGui::IsKeyPressed(ImGuiKey_T, false) && g_sync.index < n && SyncTrustable(g_sync.mods[g_sync.index])) { AskTrust(g_sync.index); return; }
-    if (armed && ImGui::IsKeyPressed(ImGuiKey_G, false) && g_sync.index < n && SyncGettable(g_sync.mods[g_sync.index]))
-        AnswerSync(HF_SYNC_OPEN, g_sync.mods[g_sync.index].id);
+    if (armed && SyncModKeys(n)) return;
     uint32_t answer;
     const char* primary = SyncPrimary(&answer);
     if (armed && (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) && primary[0] && !g_sync.sent)
         AnswerSync(answer);
-    if (!ImGui::IsKeyPressed(ImGuiKey_Escape, false)) return;
-    if (g_windowShown) g_host.close(); /* Closed() answers */
-    else if (g_sync.sent || g_sync.state.state == HF_SYNC_DOWNLOADING) { ShowSyncAlone(false); Sound(sounds::BACK); } /* it goes on */
-    else AnswerSync(HF_SYNC_DECLINE);
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) SyncEscape();
+}
+
+/* A mod's class chip (CODE, RAW DATA) at x; the room it takes (none for a mod of plain data). */
+static float ClassChip(const HfSyncMod& mod, float x, float cy, int z)
+{
+    if (mod.kind == HF_SYNC_CLASS_CODE) return Chip("CODE", x, cy, INVERSE, LUA, false, z) + 8;
+    if (mod.kind == HF_SYNC_CLASS_RAW) return Chip("RAW DATA", x, cy, INVERSE, LUA, false, z) + 8;
+    return 0;
+}
+
+/* The TRUST warning's lines: what trusting the mod means (*lead of them, drawn brighter), then what HellForge still
+ * checks. */
+static std::vector<std::string> TrustLines(const HfSyncMod& mod, const std::string& name, const std::string& friendName, float w, size_t* lead)
+{
+    std::vector<std::string> lines;
+    std::string warning = mod.kind == HF_SYNC_CLASS_RAW
+        ? name + " carries game data HellForge cannot check, which goes straight to the game. Data like this can break your game, or "
+          "through a flaw in the game run code on your PC that can do anything your Windows account can."
+        : name + " runs its own code on your PC. A mod like this can do anything your Windows account can: read and change your "
+          "files, or install other programs.";
+    warning += " Only trust it if you trust " + friendName + " and know where the mod comes from.";
+    for (std::string& part : Wrapped(warning, w - 56, SZ_LABEL)) lines.push_back(std::move(part));
+    *lead = lines.size();
+    for (std::string& part : Wrapped("HellForge still checks that every file you download is exactly the one " + friendName + " has. You can take "
+             "the trust back on the launcher's Mods page (MOD SYNC).", w - 56, SZ_SMALL))
+        lines.push_back(std::move(part));
+    return lines;
+}
+
+/* CANCEL and TRUST (TRUST AND DOWNLOAD when trusting this mod leaves nothing else in the way): TRUST waits SYNC_ARM
+ * seconds and answers only to a click. */
+static void TrustButtons(const HfSyncMod& mod, const Area& box)
+{
+    bool armed = TrustArmed();
+    const char* label = TrustDownloads(g_sync.trust) ? "TRUST AND DOWNLOAD" : "TRUST";
+    float bx = box.x + box.w - 24 - 150;
+    if (Button("CANCEL", {bx, box.y + box.h - 66, 150, 30}, NORMAL, ui::Id("synctrustno"), 11)) { g_sync.trust = -1; Sound(sounds::BACK); return; }
+    float pw = std::max(150.0f, g_cv.Measure(label, SZ_TAB, ui::TITLE) + 40);
+    bx -= 12 + pw;
+    if (Button(label, {bx, box.y + box.h - 66, pw, 30}, armed ? DANGER : DISABLED, ui::Id("synctrustyes"), 11) && armed)
+    {
+        g_host.api->log(g_host.mod, "editor: mod sync: the player trusts %s", mod.id);
+        AnswerSync(HF_SYNC_TRUST, mod.id);
+        return;
+    }
+    g_cv.Text("Click " + std::string(label) + " to trust it   Esc back to the list", box.x + 24, box.y + box.h - 20, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, 0, 11));
 }
 
 /* The TRUST warning, in the prompt's place: what trusting a mod HellForge has not checked means, in plain words. Its
@@ -233,19 +299,9 @@ static void DrawTrust(const HfSyncMod& mod)
 {
     const HfSyncState& s = g_sync.state;
     std::string name = std::string(mod.name[0] ? mod.name : mod.id) + " " + mod.version, friendName = s.host[0] ? s.host : "the host";
-    std::vector<std::string> lines;
     float w = std::min(760.0f, PANEL_W - 60);
-    std::string warning = mod.kind == HF_SYNC_CLASS_RAW
-        ? name + " carries game data HellForge cannot check, which goes straight to the game. Data like this can break your game, or "
-          "through a flaw in the game run code on your PC that can do anything your Windows account can."
-        : name + " runs its own code on your PC. A mod like this can do anything your Windows account can: read and change your "
-          "files, or install other programs.";
-    warning += " Only trust it if you trust " + friendName + " and know where the mod comes from.";
-    for (std::string& part : Wrapped(warning, w - 56, SZ_LABEL)) lines.push_back(std::move(part));
-    size_t lead = lines.size();
-    for (std::string& part : Wrapped("HellForge still checks that every file you download is exactly the one " + friendName + " has. You can take "
-             "the trust back on the launcher's Mods page (MOD SYNC).", w - 56, SZ_SMALL))
-        lines.push_back(std::move(part));
+    size_t lead;
+    std::vector<std::string> lines = TrustLines(mod, name, friendName, w, &lead);
     /* at least 420 units high, so its buttons stay put whatever the text (overlay_test clicks them) */
     float h = std::min(g_panelH - 80, std::max(420.0f, 196 + 26.0f * (float)lines.size())), x = (PANEL_W - w) / 2, y = (g_panelH - h) / 2;
     g_cv.Block();
@@ -256,58 +312,43 @@ static void DrawTrust(const HfSyncMod& mod)
     g_cv.Text(std::string("from ") + friendName + "'s lobby", x + 36 + tw, y + 31, T(SZ_LABEL, DIM, ui::BODY, ui::LEFT, w - tw - 80, 11));
     float ly = y + 70;
     float cx = x + 24;
-    if (mod.kind == HF_SYNC_CLASS_CODE) cx += Chip("CODE", cx, ly, INVERSE, LUA, false, 11) + 8;
-    else if (mod.kind == HF_SYNC_CLASS_RAW) cx += Chip("RAW DATA", cx, ly, INVERSE, LUA, false, 11) + 8;
+    cx += ClassChip(mod, cx, ly, 11);
     g_cv.Text(name, cx, ly, T(SZ_LABEL, TEXT, ui::BODY, ui::LEFT, x + w - 24 - cx, 11));
     g_cv.Rect(x + 12, ly + 22, w - 24, 1, LINE, 10);
     for (size_t i = 0; i < lines.size(); i++)
         g_cv.Text(lines[i], x + 28, ly + 50 + 26.0f * (float)i + (i >= lead ? 8.0f : 0), T(i < lead ? SZ_LABEL : SZ_SMALL, i < lead ? TEXT : DIM, ui::BODY, ui::LEFT, w - 56, 11));
-    bool armed = TrustArmed();
-    const char* label = TrustDownloads(g_sync.trust) ? "TRUST AND DOWNLOAD" : "TRUST";
-    float bx = x + w - 24 - 150;
-    if (Button("CANCEL", {bx, y + h - 66, 150, 30}, NORMAL, ui::Id("synctrustno"), 11)) { g_sync.trust = -1; Sound(sounds::BACK); return; }
-    float pw = std::max(150.0f, g_cv.Measure(label, SZ_TAB, ui::TITLE) + 40);
-    bx -= 12 + pw;
-    if (Button(label, {bx, y + h - 66, pw, 30}, armed ? DANGER : DISABLED, ui::Id("synctrustyes"), 11) && armed)
-    {
-        g_host.api->log(g_host.mod, "editor: mod sync: the player trusts %s", mod.id);
-        AnswerSync(HF_SYNC_TRUST, mod.id);
-        return;
-    }
-    g_cv.Text("Click " + std::string(label) + " to trust it   Esc back to the list", x + 24, y + h - 20, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, 0, 11));
+    TrustButtons(mod, {x, y, w, h});
 }
 
-void DrawSync()
+/* What the dialog says for the offer's state (the backend's own words, where it has some). */
+static std::string SyncMessage(const HfSyncState& s)
 {
-    if (!g_sync.on) return;
-    const HfSyncState& s = g_sync.state;
-    int n = (int)g_sync.mods.size();
-    bool bad = s.state == HF_SYNC_BLOCKED || s.state == HF_SYNC_FAILED;
-    if (g_sync.alone) g_cv.Rect(-g_cv.ox, -g_cv.oy, g_cv.width, g_cv.height, C(0, 0, 0, 150), 8); /* the game, dimmed */
-    else g_cv.Rect(0, 0, PANEL_W, g_panelH, C(0, 0, 0, 120), 8);
-    if (g_sync.trust >= 0 && g_sync.trust < n) { DrawTrust(g_sync.mods[g_sync.trust]); return; }
-    float w = std::min(900.0f, PANEL_W - 60), h = std::clamp(214.0f + 40.0f * (float)std::max(1, n), 320.0f, g_panelH - 80);
-    float x = (PANEL_W - w) / 2, y = (g_panelH - h) / 2;
-    g_cv.Block();
-    g_cv.Rect(x, y, w, h, PANEL_ALT, 9);
-    g_cv.Frame(x, y, w, h, LINE_STRONG, 10);
-    g_cv.Rect(x, y, w, 3, bad ? ERROR_ : GOLD, 10);
-    float tw = g_cv.Text("MOD SYNC", x + 24, y + 30, T(18, bad ? ERROR_ : GOLD, ui::TITLE, ui::LEFT, 0, 11));
-    g_cv.Text(std::string(s.host[0] ? s.host : "The host") + "'s lobby", x + 36 + tw, y + 31, T(SZ_LABEL, TEXT, ui::BODY, ui::LEFT, w - tw - 80, 11));
-    std::string say = s.message[0] ? s.message :
+    return s.message[0] ? s.message :
         s.state == HF_SYNC_OFFER ? "The host plays with gameplay mods you don't have. Get them and restart with the host's mods: their invitation waits on your ship." :
         s.state == HF_SYNC_DOWNLOADING ? "Downloading the host's mods; each file is checked before it is kept." :
         s.state == HF_SYNC_READY ? "Every mod is here. Restart with the host's mods: their invitation waits on your ship." :
         s.state == HF_SYNC_BLOCKED ? "You cannot join this lobby with these mods." : "The download failed.";
-    g_cv.Text(say, x + 24, y + 58, T(SZ_SMALL, bad ? ERROR_ : DIM, ui::BODY, ui::LEFT, w - 48, 11));
+}
+
+/* The dialog's title (whose lobby), what it says, and its list's heading. */
+static void DrawSyncHead(const HfSyncState& s, bool bad, const Area& box)
+{
+    float x = box.x, y = box.y, w = box.w;
+    g_cv.Rect(x, y, w, 3, bad ? ERROR_ : GOLD, 10);
+    float tw = g_cv.Text("MOD SYNC", x + 24, y + 30, T(18, bad ? ERROR_ : GOLD, ui::TITLE, ui::LEFT, 0, 11));
+    g_cv.Text(std::string(s.host[0] ? s.host : "The host") + "'s lobby", x + 36 + tw, y + 31, T(SZ_LABEL, TEXT, ui::BODY, ui::LEFT, w - tw - 80, 11));
+    g_cv.Text(SyncMessage(s), x + 24, y + 58, T(SZ_SMALL, bad ? ERROR_ : DIM, ui::BODY, ui::LEFT, w - 48, 11));
     float hy = y + 80;
     g_cv.Rect(x + 1, hy, w - 2, 22, HEADER, 10);
     g_cv.Text("MOD", x + 24, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::LEFT, 0, 11));
     g_cv.Text("WHAT HAPPENS", x + w - 460, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::LEFT, 0, 11));
-    bool gettable = false, trustable = false;
-    for (const HfSyncMod& mod : g_sync.mods) { gettable = gettable || SyncGettable(mod); trustable = trustable || SyncTrustable(mod); }
+}
+
+/* The host's mods: each with its class, what happens to it, and its BLOCK, TRUST and GET IT buttons. */
+static void DrawSyncList(const Area& box, float hy, int n)
+{
     ListOpts o;
-    o.x = x + 2; o.y = hy + 26; o.w = w - 4; o.h = y + h - hy - 26 - 108; o.rowH = 40; o.count = n; o.selected = g_sync.index;
+    o.x = box.x + 2; o.y = hy + 26; o.w = box.w - 4; o.h = box.y + box.h - hy - 26 - 108; o.rowH = 40; o.count = n; o.selected = g_sync.index;
     o.key = "sync"; o.focused = true; o.layer = 12;
     o.click = [&](int i) { g_sync.index = i; };
     o.draw = [&](int i, float rx, float ry, float rw, float rh, bool hovered) {
@@ -316,8 +357,7 @@ void DrawSync()
         if (selected) { g_cv.Rect(rx + 10, ry + 2, rw - 20, rh - 4, SELECT, 10); g_cv.Rect(rx + 10, ry + 2, 3, rh - 4, GOLD, 11); }
         else if (hovered) g_cv.Rect(rx + 10, ry + 2, rw - 20, rh - 4, HOVER, 10);
         float lx = rx + 22, right = rx + rw - 460;
-        if (mod.kind == HF_SYNC_CLASS_CODE) lx += Chip("CODE", lx, ry + rh / 2, INVERSE, LUA, false, 12) + 8;
-        else if (mod.kind == HF_SYNC_CLASS_RAW) lx += Chip("RAW DATA", lx, ry + rh / 2, INVERSE, LUA, false, 12) + 8;
+        lx += ClassChip(mod, lx, ry + rh / 2, 12);
         float nw = g_cv.Text(mod.name[0] ? mod.name : mod.id, lx, ry + rh / 2, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, (right - lx) * 0.7f, 12));
         g_cv.Text(mod.version, lx + nw + 10, ry + rh / 2, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, right - lx - nw - 20, 12));
         std::string what = SyncActionText(mod.action);
@@ -343,9 +383,11 @@ void DrawSync()
             AnswerSync(HF_SYNC_OPEN, mod.id);
     };
     List(o);
-    if (n == 0) g_cv.Text("The host's mods are not listed.", x + 28, hy + 48, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, 0, 12));
-    float fy = y + h - 104;
-    g_cv.Rect(x + 12, fy, w - 24, 1, LINE, 10);
+}
+
+/* The download's progress, or how much there is to download. */
+static void DrawSyncSize(const HfSyncState& s, float x, float fy, float w)
+{
     if (s.state == HF_SYNC_DOWNLOADING)
     {
         float bw = w - 48, filled = s.bytes > 0 ? bw * (float)std::min(1.0, (double)s.done / (double)s.bytes) : 0;
@@ -356,37 +398,81 @@ void DrawSync()
     else
         g_cv.Text(s.bytes > 0 ? SizeText(s.bytes) + " to download from the host" : "Nothing to download", x + 24, fy + 22,
             T(SZ_SMALL, s.bytes > 0 ? TEXT : FAINT, ui::BODY, ui::LEFT, 0, 11));
-    uint32_t answer;
-    const char* primary = SyncPrimary(&answer);
-    float bx = x + w - 24;
+}
+
+/* The first button while an answer is on its way: what it waits for. */
+static const char* PrimaryLabel(uint32_t answer, const char* primary) { return g_sync.sent ? (answer == HF_SYNC_RESTART ? "RESTARTING..." : "STARTING...") : primary; }
+static Style PrimaryStyle(bool bad) { return g_sync.sent || !SyncArmed() ? DISABLED : bad ? NORMAL : PRIMARY; }
+
+/* The dialog's second button (CANCEL, LATER) and its first, by state, from the right; returns the x left of them. */
+static float DrawSyncButtons(const HfSyncState& s, bool bad, const Area& box, uint32_t answer, const char* primary)
+{
+    float bx = box.x + box.w - 24;
     const char* second = s.state == HF_SYNC_OFFER || s.state == HF_SYNC_DOWNLOADING ? "CANCEL" : s.state == HF_SYNC_READY ? "LATER" : "";
     if (second[0])
     {
         bx -= 150;
-        if (Button(second, {bx, y + h - 66, 150, 30}, NORMAL, ui::Id("syncsecond"), 11) && SyncArmed()) AnswerSync(HF_SYNC_DECLINE);
+        if (Button(second, {bx, box.y + box.h - 66, 150, 30}, NORMAL, ui::Id("syncsecond"), 11) && SyncArmed()) AnswerSync(HF_SYNC_DECLINE);
         bx -= 12;
     }
     if (primary[0])
     {
         float pw = std::max(150.0f, g_cv.Measure(primary, SZ_TAB, ui::TITLE) + 40);
         bx -= pw;
-        if (Button(g_sync.sent ? (answer == HF_SYNC_RESTART ? "RESTARTING..." : "STARTING...") : primary, {bx, y + h - 66, pw, 30},
-                g_sync.sent || !SyncArmed() ? DISABLED : bad ? NORMAL : PRIMARY, ui::Id("syncprimary"), 11) && SyncArmed())
+        if (Button(PrimaryLabel(answer, primary), {bx, box.y + box.h - 66, pw, 30}, PrimaryStyle(bad), ui::Id("syncprimary"), 11) && SyncArmed())
             AnswerSync(answer);
     }
-    /* beside the buttons: what GET IT does, and that installing a mod by hand takes a new session */
-    if (gettable && s.state != HF_SYNC_DOWNLOADING)
-    {
-        auto lines = Wrapped("GET IT opens the mod's page in your browser. To install a mod yourself, close the game, add the mod "
-            "on the Mods page, then start HellForge again and join.", bx - x - 48, SZ_SMALL);
-        for (size_t i = 0; i < lines.size() && i < 2; i++)
-            g_cv.Text(lines[i], x + 24, fy + 46 + 18.0f * (float)i, T(SZ_SMALL, DIM, ui::BODY, ui::LEFT, bx - x - 36, 11));
-    }
+    return bx;
+}
+
+/* beside the buttons: what GET IT does, and that installing a mod by hand takes a new session */
+static void DrawGetItNote(float x, float fy, float bx)
+{
+    auto lines = Wrapped("GET IT opens the mod's page in your browser. To install a mod yourself, close the game, add the mod "
+        "on the Mods page, then start HellForge again and join.", bx - x - 48, SZ_SMALL);
+    for (size_t i = 0; i < lines.size() && i < 2; i++)
+        g_cv.Text(lines[i], x + 24, fy + 46 + 18.0f * (float)i, T(SZ_SMALL, DIM, ui::BODY, ui::LEFT, bx - x - 36, 11));
+}
+
+/* The dialog's keys, as they are now. */
+static std::string SyncKeysText(const HfSyncState& s, const char* primary, bool gettable, bool trustable)
+{
     std::string keys = "\xE2\x86\x91\xE2\x86\x93 select   B block the mod   ";
     if (trustable) keys += "T trust   ";
     if (gettable) keys += "G get it   ";
     if (primary[0]) keys += std::string("Enter ") + primary + "   ";
     keys += s.state == HF_SYNC_DOWNLOADING ? "Esc hide (the download goes on)" : "Esc close (no)";
-    g_cv.Text(keys, x + 24, y + h - 20, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, 0, 11));
+    return keys;
+}
+
+void DrawSync()
+{
+    if (!g_sync.on) return;
+    const HfSyncState& s = g_sync.state;
+    int n = (int)g_sync.mods.size();
+    bool bad = s.state == HF_SYNC_BLOCKED || s.state == HF_SYNC_FAILED;
+    if (g_sync.alone) g_cv.Rect(-g_cv.ox, -g_cv.oy, g_cv.width, g_cv.height, C(0, 0, 0, 150), 8); /* the game, dimmed */
+    else g_cv.Rect(0, 0, PANEL_W, g_panelH, C(0, 0, 0, 120), 8);
+    if (g_sync.trust >= 0 && g_sync.trust < n) { DrawTrust(g_sync.mods[g_sync.trust]); return; }
+    float w = std::min(900.0f, PANEL_W - 60), h = std::clamp(214.0f + 40.0f * (float)std::max(1, n), 320.0f, g_panelH - 80);
+    float x = (PANEL_W - w) / 2, y = (g_panelH - h) / 2;
+    Area box{x, y, w, h};
+    g_cv.Block();
+    g_cv.Rect(x, y, w, h, PANEL_ALT, 9);
+    g_cv.Frame(x, y, w, h, LINE_STRONG, 10);
+    DrawSyncHead(s, bad, box);
+    float hy = y + 80;
+    bool gettable = false, trustable = false;
+    for (const HfSyncMod& mod : g_sync.mods) { gettable = gettable || SyncGettable(mod); trustable = trustable || SyncTrustable(mod); }
+    DrawSyncList(box, hy, n);
+    if (n == 0) g_cv.Text("The host's mods are not listed.", x + 28, hy + 48, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, 0, 12));
+    float fy = y + h - 104;
+    g_cv.Rect(x + 12, fy, w - 24, 1, LINE, 10);
+    DrawSyncSize(s, x, fy, w);
+    uint32_t answer;
+    const char* primary = SyncPrimary(&answer);
+    float bx = DrawSyncButtons(s, bad, box, answer, primary);
+    if (gettable && s.state != HF_SYNC_DOWNLOADING) DrawGetItNote(x, fy, bx);
+    g_cv.Text(SyncKeysText(s, primary, gettable, trustable), x + 24, y + h - 20, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, 0, 11));
 }
 } // namespace editorapp
