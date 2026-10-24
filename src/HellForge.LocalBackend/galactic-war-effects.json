@@ -1,15 +1,17 @@
 {
- "scope": "The galactic war effects that set enemy subfactions (effect type 40: each adds one enemy tag to a planet's missions, which the spawn director's roster rows and squads require). Read from the live server's /WarSeason/GalacticWarEffects in the retained snapshots of 2026-10-14 (HD2Mods research/subfactions); the community mirror has no copy of that endpoint. Without them every planet effect the war names is inert.",
+ "scope": "The galactic war effects that set enemy subfactions (effect type 40: each adds one enemy tag to a planet's missions, which the spawn director's roster rows and squads require). Read from the live server's /WarSeason/GalacticWarEffects in the retained snapshots of 2026-10-14 (HD2Mods research/subfactions); the community mirror has no copy of that endpoint. Without them every planet effect the war names is inert. Each subfaction's planets also carry an effect of type 71 in the frozen war, its \"flag\" here (1306 and 1307 are always together, so which of 1308 and 1309 is whose is a guess; Spore Burst 1244 and Illuminate Invasion 1413 are on no planet, so theirs are unknown): taken to be the war table's subfaction flag, not yet seen in game.",
  "subfactions": [
   {
    "id": 1202,
    "name": "Jet Brigade",
-   "faction": 3
+   "faction": 3,
+   "flag": 1203
   },
   {
    "id": 1243,
    "name": "Predator Strain",
-   "faction": 2
+   "faction": 2,
+   "flag": 1245
   },
   {
    "id": 1244,
@@ -19,47 +21,56 @@
   {
    "id": 1248,
    "name": "Incineration Corps",
-   "faction": 3
+   "faction": 3,
+   "flag": 1249
   },
   {
    "id": 1303,
    "name": "Rupture Strain",
-   "faction": 2
+   "faction": 2,
+   "flag": 1310
   },
   {
    "id": 1306,
    "name": "Dragonroach",
-   "faction": 2
+   "faction": 2,
+   "flag": 1308
   },
   {
    "id": 1307,
    "name": "Hive Lord",
-   "faction": 2
+   "faction": 2,
+   "flag": 1309
   },
   {
    "id": 1360,
    "name": "Cyborgs",
-   "faction": 3
+   "faction": 3,
+   "flag": 1361
   },
   {
    "id": 1377,
    "name": "Illuminate Harvest",
-   "faction": 4
+   "faction": 4,
+   "flag": 1378
   },
   {
    "id": 1380,
    "name": "Illuminate Engineers",
-   "faction": 4
+   "faction": 4,
+   "flag": 1379
   },
   {
    "id": 1401,
    "name": "SEAF allies",
-   "faction": 0
+   "faction": 0,
+   "flag": 1400
   },
   {
    "id": 1402,
    "name": "Illuminate Body Horror",
-   "faction": 4
+   "faction": 4,
+   "flag": 1403
   },
   {
    "id": 1413,
@@ -274,6 +285,182 @@
    ],
    "values": [
     872028856
+   ]
+  },
+  {
+   "id": 1203,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 2232702098,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 3176669199,
+   "descriptionGamePlayShortHash": 4166386514,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    1045188094
+   ]
+  },
+  {
+   "id": 1245,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 4119785905,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 3407154363,
+   "descriptionGamePlayShortHash": 1196994687,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    3923464812
+   ]
+  },
+  {
+   "id": 1249,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 1905612455,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 1623712229,
+   "descriptionGamePlayShortHash": 2403469794,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    173102335
+   ]
+  },
+  {
+   "id": 1310,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 125217715,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 3000581748,
+   "descriptionGamePlayShortHash": 3906038084,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    1445539563
+   ]
+  },
+  {
+   "id": 1308,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 1519081470,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 3346915951,
+   "descriptionGamePlayShortHash": 4239432734,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    1772407687
+   ]
+  },
+  {
+   "id": 1309,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 4043185720,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 2161473465,
+   "descriptionGamePlayShortHash": 1380376990,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    2509900961
+   ]
+  },
+  {
+   "id": 1361,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 1833547084,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 4031555600,
+   "descriptionGamePlayShortHash": 2908273961,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    2693256615
+   ]
+  },
+  {
+   "id": 1378,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 1808243368,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 3537113968,
+   "descriptionGamePlayShortHash": 1963250708,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    3616799310
+   ]
+  },
+  {
+   "id": 1379,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 1555311427,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 3244052745,
+   "descriptionGamePlayShortHash": 25717685,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    2286663220
+   ]
+  },
+  {
+   "id": 1400,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 1261993335,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 3203635020,
+   "descriptionGamePlayShortHash": 941163558,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    1227833482
+   ]
+  },
+  {
+   "id": 1403,
+   "gameplayEffectId32": 0,
+   "effectType": 71,
+   "flags": 1,
+   "nameHash": 552152078,
+   "descriptionFluffHash": 0,
+   "descriptionGamePlayLongHash": 110090379,
+   "descriptionGamePlayShortHash": 968631311,
+   "valueTypes": [
+    16
+   ],
+   "values": [
+    1011342526
    ]
   }
  ]

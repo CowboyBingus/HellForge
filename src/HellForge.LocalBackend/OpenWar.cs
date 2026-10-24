@@ -45,6 +45,14 @@ public static class OpenWar
         return data.RootElement.GetProperty("subfactions").EnumerateArray().ToDictionary(s => s.GetProperty("id").GetInt32(), s => s.GetProperty("faction").GetInt32());
     }
 
+    // Each subfaction's flag effect (type 71), which goes with it on a planet: by the subfaction's id.
+    public static IReadOnlyDictionary<int, int> Flags()
+    {
+        using var data = LocalBackend.LoadResource("galactic-war-effects.json");
+        return data.RootElement.GetProperty("subfactions").EnumerateArray().Where(s => s.TryGetProperty("flag", out _))
+            .ToDictionary(s => s.GetProperty("id").GetInt32(), s => s.GetProperty("flag").GetInt32());
+    }
+
     // FNV-1a of a sector's name: string.GetHashCode differs per process.
     static uint StableHash(string text)
     {
@@ -135,14 +143,18 @@ public static class OpenWar
         if (node["planetRegions"] is JsonArray regions)
             foreach (var r in regions)
                 if (r?["planetIndex"] is { } at && changed.TryGetValue((int)at, out var enemy)) r["owner"] = enemy;
-        // subfactions: the new enemy's own, else one per sector (or none), always one on an Illuminate planet
+        // subfactions: the new enemy's own, else one per sector (or none), always one on an Illuminate planet; each with
+        // its flag (the frozen war's flags go, and come back with the subfactions kept or dealt)
         var subfactions = Subfactions();
+        var flags = Flags();
+        var flagIds = flags.Values.ToHashSet();
         var now = planetStatus.ToDictionary(p => (int)p!["index"]!, p => (int)p!["owner"]!);
         var effects = new JsonArray();
         var has = new HashSet<int>();
         foreach (var e in node["planetActiveEffects"] as JsonArray ?? [])
         {
             int index = (int)e!["index"]!, id = (int)e["galacticEffectId"]!;
+            if (flagIds.Contains(id)) continue;
             if (subfactions.TryGetValue(id, out var of) && of != 0)
             {
                 if (seed != 0 || !now.TryGetValue(index, out var holder) || holder != of) continue; /* another enemy's, or dealt anew */
@@ -160,6 +172,9 @@ public static class OpenWar
                 (uint)(choices.Count + (holder == Illuminate ? 0 : 1)));
             if (pick < choices.Count) effects.Add((JsonNode)new JsonObject { ["index"] = index, ["galacticEffectId"] = choices[pick] });
         }
+        foreach (var e in effects.ToList())
+            if (flags.TryGetValue((int)e!["galacticEffectId"]!, out var flag))
+                effects.Add((JsonNode)new JsonObject { ["index"] = (int)e["index"]!, ["galacticEffectId"] = flag });
         node["planetActiveEffects"] = effects;
         // an enemy home world's regions: its operations (Cyberstan's Megafactories)
         var enemyHomes = new HashSet<int>();
