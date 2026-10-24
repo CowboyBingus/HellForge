@@ -206,8 +206,8 @@ public sealed class ModSync : IAsyncDisposable
         ModSet set;
         try { set = ModSet.Parse(wire, local: false); }
         catch (InvalidDataException) { why = "its mod list is malformed"; return false; }
-        var plan = ModSyncPlan.Make(set, listing.Data.GetValueOrDefault(DirectoryKeys.Share) == "1", own ?? new ModSet("none", []), Locator.Find, settings.Blocked, verified,
-            hostIsFriend: transport.IsFriend(listing.Host), trusted: settings.Trusts);
+        var plan = ModSyncPlan.Make(set, listing.Data.GetValueOrDefault(DirectoryKeys.Share) == "1", own ?? new ModSet("none", []), Locator.Find, settings.Blocked,
+            new SyncTrust(verified, transport.IsFriend(listing.Host), settings.Trusts));
         why = plan.Verdict switch
         {
             SyncVerdict.Blocked => "it runs a blocked mod",
@@ -394,8 +394,8 @@ public sealed class ModSync : IAsyncDisposable
     ModSyncPlan Plan(ModSet set, bool shares, ulong host)
     {
         var settings = ModSettings.Read(modsFolder);
-        return ModSyncPlan.Make(set, shares, own ?? new ModSet("none", []), new ModLocator(modsFolder).Find, settings.Blocked, verified,
-            hostIsFriend: transport.IsFriend(host), trusted: settings.Trusts);
+        return ModSyncPlan.Make(set, shares, own ?? new ModSet("none", []), new ModLocator(modsFolder).Find, settings.Blocked,
+            new SyncTrust(verified, transport.IsFriend(host), settings.Trusts));
     }
 
     // What lets a code or raw mod's exact content through on this machine: HellForge's verified list, or the player's trust
@@ -865,8 +865,7 @@ public sealed class LiveSyncDisplay(LiveEditServer live) : ISyncDisplay
                 for (var i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
-                    if (!(await live.SyncModAsync(view.Version, i, ModSyncPlan.ActionName(item.Action), ModSets.ClassName(item.Mod.Class), item.Mod.Bytes, item.Mod.Id,
-                            item.Mod.Name, item.Mod.Version, item.Mod.Url)).Ok) return false;
+                    if (!(await live.SyncModAsync(view.Version, i, item)).Ok) return false;
                 }
             return (await live.SyncStateAsync(view.Version, view.State, view.Host, view.Bytes, view.Done, items.Count, message)).Ok;
         }

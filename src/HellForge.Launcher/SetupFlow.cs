@@ -381,8 +381,8 @@ public partial class MainWindow
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         await Task.Run(async () =>
         {
-            await Downpatcher.ApplyAsync(source, install.Game, install.Temp, pack, http,
-                downloadProgress: (done, total) =>
+            await Downpatcher.ApplyAsync(source, install.Game, install.Temp, pack, http, new DownpatchProgress(
+                Download: (done, total) =>
                 {
                     if (downloadStart == TimeSpan.Zero) downloadStart = clock.Elapsed;
                     var elapsed = clock.Elapsed - downloadStart;
@@ -390,9 +390,9 @@ public partial class MainWindow
                     Update($"Downloading build patch: {done / 1e9:0.00} of {total / 1e9:0.0} GB  ·  {rate:0} MB/s",
                         total > 0 ? (double)done / total * 0.5 : 0);
                 },
-                applyProgress: (done, total, file) =>
+                Apply: (done, total, file) =>
                     Update($"Applying: {done / 1e9:0.0} of {total / 1e9:0.0} GB  ·  {file}",
-                        0.5 + (total > 0 ? (double)done / total * 0.5 : 0)),
+                        0.5 + (total > 0 ? (double)done / total * 0.5 : 0))),
                 cancellation: token);
         }, token);
 
