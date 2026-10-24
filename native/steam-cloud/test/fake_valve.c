@@ -12,6 +12,10 @@
 #define STEAM_ID 76561197960287930ull
 #define LOBBY 0x0186000000000123ull
 #define CREATE_LOBBY_CALL 5005ull
+#define HOST_LOBBY 0x0186000000000456ull
+#define CLOSED_LOBBY 0x0186000000000789ull
+#define JOIN_LOBBY_CALL 5006ull
+#define JOIN_CLOSED_CALL 5007ull
 
 typedef struct FakeValveState {
     int wrongSelf;              // a flat function got another interface's object
@@ -154,7 +158,31 @@ FAKE_API bool SteamAPI_ISteamMatchmaking_SetLobbyData(void* self, uint64_t lobby
     return true;
 }
 FAKE_API uint64_t SteamAPI_ISteamMatchmaking_GetLobbyOwner(void* self, uint64_t lobby) { Check(self, &g_matchmaking); return lobby == LOBBY ? STEAM_ID : 0; }
-FAKE_API int SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(void* self, uint64_t lobby) { Check(self, &g_matchmaking); return lobby == LOBBY ? 1 : 0; }
+FAKE_API int SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(void* self, uint64_t lobby)
+{
+    Check(self, &g_matchmaking);
+    return lobby == LOBBY ? 1 : lobby == HOST_LOBBY ? 2 : lobby == CLOSED_LOBBY ? 3 : 0;
+}
+
+// A co-op join: entering the host's lobby succeeds, the closed one is refused by Steam (LobbyEnter_t's response).
+FAKE_API uint64_t SteamAPI_ISteamMatchmaking_JoinLobby(void* self, uint64_t lobby)
+{
+    Check(self, &g_matchmaking);
+    uint64_t call = lobby == HOST_LOBBY ? JOIN_LOBBY_CALL : JOIN_CLOSED_CALL;
+    uint8_t completed[16];
+    int32_t id = 504;
+    uint32_t size = 24;
+    memcpy(completed, &call, 8);
+    memcpy(completed + 8, &id, 4);
+    memcpy(completed + 12, &size, 4);
+    FakeValve_Queue(703, completed, 16);
+    return call;
+}
+FAKE_API const char* SteamAPI_ISteamMatchmaking_GetLobbyData(void* self, uint64_t lobby, const char* key)
+{
+    Check(self, &g_matchmaking);
+    return lobby == HOST_LOBBY && key && strcmp(key, "mission") == 0 ? "host-mission" : "";
+}
 
 FAKE_API int SteamAPI_IsSteamRunning(void) { return 1; }
 FAKE_API void SteamAPI_ManualDispatch_RunFrame(int pipe) { (void)pipe; }
@@ -186,10 +214,21 @@ FAKE_API void SteamAPI_ManualDispatch_FreeLastCallback(int pipe)
     LeaveCriticalSection(&g_lock);
 }
 
-// LobbyCreated_t: k_EResultOK, then the lobby
+// LobbyCreated_t: k_EResultOK, then the lobby. LobbyEnter_t (a join): the lobby, then the response at 16 (1 entered,
+// 2 k_EChatRoomEnterResponseDoesntExist).
 FAKE_API bool SteamAPI_ManualDispatch_GetAPICallResult(int pipe, uint64_t call, void* data, int size, int expected, bool* failed)
 {
     (void)pipe;
+    if ((call == JOIN_LOBBY_CALL || call == JOIN_CLOSED_CALL) && expected == 504 && size >= 24)
+    {
+        uint64_t lobby = call == JOIN_LOBBY_CALL ? HOST_LOBBY : CLOSED_LOBBY;
+        uint32_t response = call == JOIN_LOBBY_CALL ? 1 : 2;
+        memset(data, 0, (size_t)size);
+        memcpy(data, &lobby, 8);
+        memcpy((uint8_t*)data + 16, &response, 4);
+        *failed = false;
+        return true;
+    }
     if (call != CREATE_LOBBY_CALL || expected != 513 || size < 16) return false;
     int32_t result = 1;
     uint64_t lobby = LOBBY;

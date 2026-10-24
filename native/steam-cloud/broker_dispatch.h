@@ -10,7 +10,7 @@ typedef struct BrokerApi {
     void* (*resolve)(const struct BrokerApi* api, const char* flat);
     /* an interface's object, from its flat accessor (SteamAPI_SteamUser_v021) */
     void* (*self)(const struct BrokerApi* api, const char* accessor);
-    /* a lobby the game made this session */
+    /* a lobby the game made or entered this session */
     int (*ownLobby)(const struct BrokerApi* api, uint64_t lobby);
     /* logs why and returns BRIDGE_STATUS_REFUSED */
     uint32_t (*refuse)(const struct BrokerApi* api, const char* why);

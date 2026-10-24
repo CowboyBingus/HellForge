@@ -18,6 +18,8 @@ static int g_failures;
 
 #define STEAM_ID 76561197960287930ull
 #define LOBBY 0x0186000000000123ull
+#define HOST_LOBBY 0x0186000000000456ull
+#define CLOSED_LOBBY 0x0186000000000789ull
 
 typedef struct FakeValveState {
     int wrongSelf;
@@ -262,6 +264,38 @@ int wmain(int argc, wchar_t** argv)
     EXPECT(g_bridge.lobbyCount == 4 && fake->setLobbyTypeCalls == 4 && fake->setLobbyType == 1,
         "Strangers off again: the three lobbies asked to be Public are made Friends only, the private one is not touched");
 
+    // A co-op join (census 2026-10-24): after the PlayFab join the joiner enters the host's Steam lobby (JoinLobby, whose
+    // LobbyEnter_t says whether it did), then reads its members and data and writes to it. Before entering, and for a
+    // lobby Steam would not let it into, those stay refused.
+    typedef uint64_t (*JoinLobbyFn)(void*, uint64_t);
+    typedef const char* (*GetLobbyDataFn)(void*, uint64_t, const char*);
+    typedef int (*MembersFn)(void*, uint64_t);
+    JoinLobbyFn joinLobby = (JoinLobbyFn)SLOT(matchmaking, SteamMatchMaking009_JoinLobby);
+    GetLobbyDataFn getLobbyData = (GetLobbyDataFn)SLOT(matchmaking, SteamMatchMaking009_GetLobbyData);
+    MembersFn members = (MembersFn)SLOT(matchmaking, SteamMatchMaking009_GetNumLobbyMembers);
+    const char* before = getLobbyData(matchmaking, HOST_LOBBY, "mission");
+    EXPECT(members(matchmaking, HOST_LOBBY) == 0 && before && before[0] == 0, "Before the join, the host's lobby is not the game's: its members and data are refused");
+    FakeCallback entered = { g_callbackVtable, 0, { 0 }, 504, 24, 0, { 0 }, false, 0 };
+    uint64_t joinCall = joinLobby(matchmaking, HOST_LOBBY);
+    EXPORT(RegisterResultFn, "SteamAPI_RegisterCallResult")(&entered, joinCall);
+    RunUntil(&entered.runs, 1);
+    uint32_t response = 0;
+    memcpy(&response, entered.last + 16, 4);
+    EXPECT(joinCall == 5006 && entered.runs == 1 && entered.call == 5006 && response == 1, "JoinLobby's LobbyEnter_t (callback 504) reaches its CCallResult");
+    const char* mission = getLobbyData(matchmaking, HOST_LOBBY, "mission");
+    int writes = fake->lobbyDataCalls;
+    EXPECT(members(matchmaking, HOST_LOBBY) == 2 && mission && strcmp(mission, "host-mission") == 0 &&
+        setLobbyData(matchmaking, HOST_LOBBY, "player", "2") && fake->lobbyDataCalls == writes + 1 && fake->lobbyDataLobby == HOST_LOBBY,
+        "Entered, the host's lobby is the game's: its members, its data, and writes to it pass");
+    EXPECT(fake->setLobbyTypeCalls == 4, "A lobby the game entered never has its type changed (the game asked nothing about it)");
+    FakeCallback refusedEntry = { g_callbackVtable, 0, { 0 }, 504, 24, 0, { 0 }, false, 0 };
+    uint64_t closedCall = joinLobby(matchmaking, CLOSED_LOBBY);
+    EXPORT(RegisterResultFn, "SteamAPI_RegisterCallResult")(&refusedEntry, closedCall);
+    RunUntil(&refusedEntry.runs, 1);
+    writes = fake->lobbyDataCalls;
+    EXPECT(refusedEntry.runs == 1 && members(matchmaking, CLOSED_LOBBY) == 0 && !setLobbyData(matchmaking, CLOSED_LOBBY, "player", "2") &&
+        fake->lobbyDataCalls == writes, "A lobby Steam did not let the game into (LobbyEnter_t response 2) stays refused");
+
     // the inline accessors' context, ISteamClient, and an interface the table does not know
     ContextInitFn contextInit = EXPORT(ContextInitFn, "SteamInternal_ContextInit");
     struct { void (*fn)(void*); uintptr_t counter; void* ptr; } context = { FillContext, 0, NULL };
@@ -282,8 +316,9 @@ int wmain(int argc, wchar_t** argv)
     EXPECT(GetModuleHandleW(L"steam_api64_hellforge.dll") == NULL, "the stand-in never loaded Valve's DLL");
     EXPORT(VoidFn, "SteamAPI_Shutdown")();
     EXPECT(WaitForSingleObject(broker, 5000) == WAIT_OBJECT_0, "SteamAPI_Shutdown ends the broker's loop");
-    // the control character, the 9-member lobby and the foreign lobby (the long key never left the game)
-    EXPECT(g_bridge.refusals == 3, "the broker counted its three refusals");
+    // the control character, the 9-member lobby and the foreign lobby (the long key never left the game), the host's lobby
+    // twice before the join, and the lobby Steam refused twice
+    EXPECT(g_bridge.refusals == 7, "the broker counted its seven refusals");
 
     printf("%s Steam bridge: %d failure(s)\n", g_failures ? "FAIL" : "PASS", g_failures);
     return g_failures ? 1 : 0;

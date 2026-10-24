@@ -10,7 +10,12 @@
 
 #define STEAM_API_CALL_COMPLETED 703
 #define LOBBY_CREATED 513
+#define LOBBY_ENTER 504
 #define RESULT_OK 1
+/* LobbyEnter_t (pack 8): uint64 m_ulSteamIDLobby, uint32 m_rgfChatPermissions, bool m_bLocked, uint32
+ * m_EChatRoomEnterResponse at 16; k_EChatRoomEnterResponseSuccess is 1 */
+#define LOBBY_ENTER_RESPONSE 16
+#define ENTER_SUCCESS 1
 /* ELobbyType */
 #define LOBBY_FRIENDS_ONLY 1
 #define LOBBY_PUBLIC 2
@@ -185,6 +190,22 @@ static int64_t Adjust(const BrokerApi* api, uint32_t method, const char* argumen
     return given;
 }
 
+/* A lobby the game entered (LobbyEnter_t, the result of its JoinLobby or a callback) is the game's too, for the table's
+ * ownLobby checks: a co-op joiner reads the host's Steam lobby's data and members (census 2026-10-24). Only a
+ * successful entry counts; the game asked nothing about its type, so a change of Play with strangers leaves it alone. */
+static void RememberEntered(BrokerBridge* b, const uint8_t* data, uint32_t size)
+{
+    if (!data || size < LOBBY_ENTER_RESPONSE + 4) return;
+    uint64_t lobby;
+    uint32_t response;
+    memcpy(&lobby, data, 8);
+    memcpy(&response, data + LOBBY_ENTER_RESPONSE, 4);
+    if (response != ENTER_SUCCESS || !lobby || OwnLobby(&b->api, lobby) || b->lobbyCount >= BROKER_MAX_LOBBIES) return;
+    b->lobbyAsked[b->lobbyCount] = -1;
+    b->lobbies[b->lobbyCount++] = lobby;
+    fprintf(stderr, "broker: the game entered lobby %llu\n", (unsigned long long)lobby);
+}
+
 static bool Allowed(int id)
 {
     for (int i = 0; i < BRIDGE_CALLBACK_COUNT; i++) if (g_bridgeCallbacks[i] == id) return true;
@@ -232,6 +253,7 @@ static void CallCompleted(BrokerBridge* b, BrokerChannel* ch, const uint8_t* dat
             b->lobbies[b->lobbyCount++] = lobby;
         }
     }
+    else if (id == LOBBY_ENTER && !failed) RememberEntered(b, slot + BRIDGE_CALL_RESULT_HEADER, resultSize);
     BrokerChannelPushCallback(ch, (uint32_t)id | BRIDGE_CALL_RESULT_FLAG, slot, BRIDGE_CALL_RESULT_HEADER + resultSize);
 }
 
@@ -246,8 +268,12 @@ static void Pump(void* context, BrokerChannel* ch)
     {
         uint32_t size = msg.dataSize > 0 ? (uint32_t)msg.dataSize : 0;
         if (msg.callbackId == STEAM_API_CALL_COMPLETED) CallCompleted(b, ch, msg.data, msg.dataSize);
-        else if (Allowed(msg.callbackId) && !BrokerChannelPushCallback(ch, (uint32_t)msg.callbackId, msg.data, size) && size > BRIDGE_RING_DATA_SIZE)
-            fprintf(stderr, "broker: callback %d of %u bytes does not fit a ring slot; dropped\n", msg.callbackId, size);
+        else
+        {
+            if (msg.callbackId == LOBBY_ENTER) RememberEntered(b, msg.data, size);
+            if (Allowed(msg.callbackId) && !BrokerChannelPushCallback(ch, (uint32_t)msg.callbackId, msg.data, size) && size > BRIDGE_RING_DATA_SIZE)
+                fprintf(stderr, "broker: callback %d of %u bytes does not fit a ring slot; dropped\n", msg.callbackId, size);
+        }
         b->freeLast(b->hPipe);
     }
     if (ch->dropped > 0 && reportedDrops == 0) { fprintf(stderr, "broker: the ring is full; callbacks are being dropped\n"); reportedDrops = 1; }

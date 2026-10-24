@@ -16,8 +16,8 @@ typedef struct BrokerBridge {
     int hPipe;
     BrokerApi api;
     BrokerSteam steam;
-    uint64_t lobbies[BROKER_MAX_LOBBIES];
-    int32_t lobbyAsked[BROKER_MAX_LOBBIES];   /* the lobby type the game asked for each */
+    uint64_t lobbies[BROKER_MAX_LOBBIES];     /* the lobbies the game made or entered (RememberEntered) */
+    int32_t lobbyAsked[BROKER_MAX_LOBBIES];   /* the lobby type the game asked for each; -1 for one it entered */
     int lobbyCount;
     /* CreateLobby's types asked for, oldest first, until their LobbyCreated_t (the calls run in order) */
     int32_t pendingAsked[BROKER_PENDING_LOBBIES];

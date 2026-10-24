@@ -190,13 +190,15 @@ rather than run on Valve's DLL.
 | `SteamUtils010` | `SetOverlayNotificationPosition`, `IsOverlayEnabled` | local | the overlay is in the broker: nothing to place, none shown |
 | `SteamUtils010` | `InitFilterText`, `FilterText` | call | input at most 4096 bytes, output buffer bounded |
 | `SteamMatchMaking009` | `CreateLobby` | call | **to review:** strangers can read a public lobby's data; at most 4 members; the type is logged, and Public becomes Friends only while Play with strangers is off (below) |
-| `SteamMatchMaking009` | `SetLobbyData`, `SetLobbyJoinable`, `LeaveLobby`, `GetNumLobbyMembers`, `GetLobbyMemberByIndex`, `GetLobbyOwner` | call | only a lobby the game made this session; key at most 255, value at most 8192 bytes |
+| `SteamMatchMaking009` | `JoinLobby` | call | **to review:** any lobby by id, as the game joins the host's own Steam lobby in a co-op join; that lobby learns this player's SteamID |
+| `SteamMatchMaking009` | `SetLobbyData`, `GetLobbyData`, `SetLobbyJoinable`, `LeaveLobby`, `GetNumLobbyMembers`, `GetLobbyMemberByIndex`, `GetLobbyOwner` | call | only a lobby the game made or entered this session (`LobbyCreated_t`, or a `LobbyEnter_t` that says it entered); key at most 255, value at most 8192 bytes |
 | `STEAMUSERSTATS_INTERFACE_VERSION012` | `RequestCurrentStats`, `GetAchievement` | call | name at most 128 |
 | `SteamInput006` | `GetControllerForGamepadIndex` | call | index 0-15; per-frame use unknown until a controller census |
 | `SteamClient020` | `GetISteam*`; the pipe and user calls | interface; local | the bridge's own objects; one pipe, one user |
 
-In the table, local and snapshot are both mode `hand`. Callbacks: the 16 ids the census saw. 20 methods are calls, 47
-are answered in the game, and the other 300 the nine interfaces declare are refused.
+In the table, local and snapshot are both mode `hand`. Callbacks: the 16 ids the census saw, and 504 (`LobbyEnter_t`)
+from the co-op census. 22 methods are calls, 47 are answered in the game, and the other 298 the nine interfaces declare
+are refused.
 
 **Cost per frame, from the census's rates (unmeasured in game):** `ReadP2PPacket` (1.00 per frame) is a return; the DLC
 answers (0.85) and `BLoggedOn` (0.024) are memory reads. None makes a system call, so an idle frame stays at the ring
@@ -392,6 +394,25 @@ Everything else was called 41 times or fewer:
   - Whether a controller was in use, and so whether Steam Input polls per frame.
   - A whole mission, and the social tab.
 
+### Co-op census (2026-10-24, two games on one PC, unsandboxed, census build)
+
+Two installations on one PC, one Steam account, their backends on a loopback link (docs/multiplayer.md has no step for
+it yet; it is a test set-up). One game joined the other from the social tab. What the joiner asked of Steam:
+- after the PlayFab join, #15 `LeaveLobby` (its own Steam lobby), #14 `JoinLobby` (the host's, call result 504
+  `LobbyEnter_t`), #19 `GetLobbyData` and #20 `SetLobbyData` on it, and #35 `GetLobbyOwner`;
+- SteamFriends #36 `GetLargeFriendAvatar` (the other player's avatar; still refused, so no avatar) and #43
+  `SetRichPresence`.
+
+Both games poll #17 `GetNumLobbyMembers` and #18 `GetLobbyMemberByIndex` 10 times a second each, in and out of a join:
+20 round trips a second in a sandboxed session, about 0.33 per frame at 60 frames a second (unmeasured in game).
+
+**No `SendP2PPacket`:** co-op's traffic is all Party, through the backend; the game only polls `ReadP2PPacket`.
+
+The join stalled there: on one Steam account the host can never see the joiner in its Steam lobby. Between two PCs the
+same calls would have been refused by the bridge (`JoinLobby` and `GetLobbyData` unlisted, the others `ownLobby` on a
+lobby the game had not made, 504 not passed on). Now `JoinLobby` is a call, 504 is passed on, and a lobby the game
+entered counts as its own (`broker_bridge.c` `RememberEntered`).
+
 ## Cost
 
 - **Idle frame** (`RunCallbacks`, about 400 a second in the census): one read of the ring's write position, compared
@@ -431,7 +452,8 @@ Every number here is unmeasured in game until phase 4.
    printable check, buffers and their bounds, out values, a CSteamID argument and the hidden-pointer result, the
    snapshot, a refused method that never reaches Steam, a lobby the game did not make, callbacks (and an id the table
    does not list), a call result, `ContextInit`, `ISteamClient`, an unknown interface, the game's lobby type and Play
-   with strangers, a NULL game-server interface, and that Valve's DLL never loads (43 checks).
+   with strangers, a co-op join (a lobby entered through `JoinLobby` becomes the game's, a refused entry does not), a
+   NULL game-server interface, and that Valve's DLL never loads (48 checks).
    Built 2026-10-23. Still to do: the next census, then the table's two review items (`SetRichPresence`, `CreateLobby`;
    `CreateLobby`'s type is now the broker's, above).
 4. **A low-integrity session:** the token and job, labelled folders, pipe labels, and the editor's saves through the
