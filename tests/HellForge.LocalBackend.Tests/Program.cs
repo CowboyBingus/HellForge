@@ -21,7 +21,7 @@ try
     // A web page in the player's browser is refused: another Host (DNS rebinding), or a browser's marks (Origin, Referer,
     // Sec-Fetch-*). A program on this PC is served, by 127.0.0.1 or localhost.
     {
-        await using var app = LocalBackend.Create(0, Path.Combine(root, "web-pages"), LoginMode.LocalSession);
+        await using var app = LocalBackend.Create(new BackendSettings(0, Path.Combine(root, "web-pages"), LoginMode.LocalSession));
         await app.StartAsync();
         try
         {
@@ -58,7 +58,7 @@ try
     foreach (var mode in new[] { LoginMode.RejectGmi, LoginMode.LocalSession })
     {
         var evidence = Path.Combine(root, mode.ToString());
-        await using var app = LocalBackend.Create(0, evidence, mode);
+        await using var app = LocalBackend.Create(new BackendSettings(0, evidence, mode));
         await app.StartAsync();
         try
         {
@@ -168,7 +168,7 @@ try
     {
         Check(!reopened.Created, "Existing profile was recreated.");
         var evidence = Path.Combine(root, "profile-server");
-        await using var app = LocalBackend.Create(0, evidence, LoginMode.LocalSession, true, reopened);
+        await using var app = LocalBackend.Create(new BackendSettings(0, evidence, LoginMode.LocalSession) { StartupFixtures = true, Profile = reopened });
         await app.StartAsync();
         try
         {
@@ -399,7 +399,7 @@ try
     using (var writable = ProfileStore.Open(profileDirectory))
     {
         var accountKeys = new AccountKeys { LocalId = 76561190000000002 };
-        await using var app = LocalBackend.Create(0, Path.Combine(root, "profile-writes"), LoginMode.LocalSession, true, writable, accountKeys: accountKeys);
+        await using var app = LocalBackend.Create(new BackendSettings(0, Path.Combine(root, "profile-writes"), LoginMode.LocalSession) { StartupFixtures = true, Profile = writable, AccountKeys = accountKeys });
         await app.StartAsync();
         try
         {
@@ -546,7 +546,7 @@ try
         Check(File.ReadAllText(profileFile) == text, "Invalid profile was overwritten: " + name);
     }
     var unpaired = false;
-    try { using var store = ProfileStore.Open(null); await using var app = LocalBackend.Create(0, Path.Combine(root, "unpaired"), LoginMode.LocalSession, false, store); }
+    try { using var store = ProfileStore.Open(null); await using var app = LocalBackend.Create(new BackendSettings(0, Path.Combine(root, "unpaired"), LoginMode.LocalSession) { Profile = store }); }
     catch (ArgumentException) { unpaired = true; }
     Check(unpaired, "Profile accepted without startup fixtures.");
     results.Add(new { mode = "profile", outcome = "passed", invalidEdits = invalidEdits.Length + 1 });
