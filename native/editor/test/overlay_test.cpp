@@ -162,8 +162,16 @@ static int SetLive(HfMod*, HfRef target, const HfField* field, const HfValue* va
  * HELLFORGE_EDITOR_TEST_VIEW=mods (the MODS view's screenshot), mods hold some: a Lua mod a damage row's armour
  * penetration (+12, 9 where an editor change holds 10), a code mod the projectile settings' velocity (+32). */
 static bool g_modsView, g_enemiesView; /* HELLFORGE_EDITOR_TEST_VIEW=enemies: a screenshot of an enemy's category at the end */
+/* HELLFORGE_EDITOR_TEST_LIVE_US=<n>: each get_live takes n microseconds, as a slow lookup in the mod loader can */
+static LONGLONG g_liveCostUs;
 static int GetLive(HfMod*, HfRef, const HfField* field, HfLiveValue* out)
 {
+    if (g_liveCostUs > 0)
+    {
+        LARGE_INTEGER f, start, now;
+        QueryPerformanceFrequency(&f); QueryPerformanceCounter(&start);
+        do QueryPerformanceCounter(&now); while ((now.QuadPart - start.QuadPart) * 1000000 / f.QuadPart < g_liveCostUs);
+    }
     out->now.type = out->base.type = field->type;
     out->now.number = field->type == HF_TYPE_U32 ? 600 : 640;
     out->base.number = 600;
@@ -556,7 +564,26 @@ int main(int argc, char** argv)
         };
         Key(window, VK_F6); pump(4);
         Type(window, "overseer"); pump(6);
-        Key(window, VK_RETURN); pump(10);
+        /* the enemy opened with its hundreds of fields, then two seconds of frames: with a slow get_live
+         * (HELLFORGE_EDITOR_TEST_LIVE_US), none may stall */
+        if (const char* cost = getenv("HELLFORGE_EDITOR_TEST_LIVE_US")) g_liveCostUs = atoll(cost);
+        Key(window, VK_RETURN);
+        LARGE_INTEGER f, before, after;
+        QueryPerformanceFrequency(&f);
+        double longest = 0;
+        int slow = 0;
+        for (int i = 0; i < 120; i++)
+        {
+            QueryPerformanceCounter(&before);
+            pump(1);
+            QueryPerformanceCounter(&after);
+            double ms = (double)(after.QuadPart - before.QuadPart) * 1000.0 / (double)f.QuadPart;
+            longest = ms > longest ? ms : longest;
+            slow += ms > 50;
+        }
+        printf("  enemies view: get_live %lld us; 120 frames, the longest %.0f ms, %d over 50 ms\n", g_liveCostUs, longest, slow);
+        if (g_liveCostUs > 0 && longest > 100) { puts("FAIL an enemy's page stalls the frame with a slow get_live"); failures++; }
+        g_liveCostUs = 0;
         char shot[MAX_PATH];
         snprintf(shot, sizeof shot, "%s", argv[2]);
         if (char* dot = strrchr(shot, '.')) snprintf(dot, (size_t)(shot + sizeof shot - dot), "-enemies.bmp");
