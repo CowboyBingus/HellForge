@@ -154,7 +154,10 @@ public static class StatsCatalog
 
         return items.Select(i => i with { Search = $"{i.Name} {i.Group} {NavLabel(i.Nav)} {string.Join(" ", i.Parts.Select(p => p.Target))} {i.Search}".ToLowerInvariant() })
             .OrderBy(i => Navs.Select(n => n.Id).ToList().IndexOf(i.Nav)).ThenBy(i => GroupRank(i.Group)).ThenBy(i => i.Group, StringComparer.Ordinal)
-            .ThenBy(i => i.Nav is "projectiles" or "damage" ? i.Name.Length : 0).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            .ThenBy(i => i.Nav is "projectiles" or "damage" ? i.Name.Length : 0)
+            // the mission difficulties by their level (1 to 11), not as text ("Difficulty 10" before "Difficulty 2")
+            .ThenBy(i => i.Nav == "difficulty" && int.TryParse(i.Parts[0].Target, NumberStyles.None, CultureInfo.InvariantCulture, out var level) ? level : 0)
+            .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     // A vehicle's mounts by what they are (HD2R Editor's mount_label): the Maelstrom's and the Bastion's guns, else the
