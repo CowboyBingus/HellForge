@@ -160,7 +160,9 @@ the cryo pod." Press STOP, then PLAY again: the next launch goes through.
 | "Mod file ... could not be held read-only for the session ..." | Another program (an editor, an archive tool) has that file in `mods` open for writing. Close it, then press PLAY. |
 | "WARNING: ... file(s) appeared in the mods folder during the session ..." (in the Console, after a session) | Something wrote into `mods` while the game ran. If you did not add them, delete the files it lists (in that session's `result.json`, `plantedMods`) and leave any switched-off mod off ([using mods](mods.md#the-mods-page)). |
 | "Port ..., HellForge's backend port, is used by another program on this PC." | Close the program using it (or restart the PC). The network block lets the game reach only that port. |
-| "The network block still lets the game reach every program on this PC ..." | Run Settings > Installation once: setup narrows the block to HellForge's backend. |
+| "The network block still lets the game reach every program on this PC: placing it again ..." | An installation from before 0.3.0: the session narrows the block to HellForge's backend, after one Windows prompt. Accept it. |
+| "The network block could not be narrowed ..." | The prompt was declined or the install failed (the reason is in brackets). Run Settings > Installation once: setup narrows the block. |
+| "A sandboxed session needs the network block narrowed ..." or "... needs the WFP network block ..." | A sandboxed game must not reach other programs on this PC. Run Settings > Installation once, or turn off Settings > Sandbox. |
 | "Cleanup failed." | Check the session logs before playing again. |
 
 ### The game could not be prepared or connected

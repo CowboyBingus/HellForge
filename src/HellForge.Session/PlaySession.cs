@@ -506,13 +506,47 @@ sealed class PlaySession(PlayOptions options)
         else if (wfpOnly)
         {
             result["networkBlock"] = "wfp";
-            // A block placed before it was narrowed to the backend's port still permits every loopback port.
+            // A block placed before it was narrowed to the backend's port still permits every loopback port: it is placed
+            // again for the backend's port alone (Install-WfpBlock.ps1, as setup does), with one Windows prompt. The backend
+            // already runs on that port (install.BackendPort is the computed one while the marker names none).
             var narrowed = !File.Exists(marker) || install.BlockedBackendPort() != null;
+            if (!narrowed)
+            {
+                result["networkBlockInstallReason"] = "the block predates its narrowing to the backend's port";
+                result["status"] = "awaiting_network_block_install";
+                Save();
+                Say("The network block still lets the game reach every program on this PC: placing it again for HellForge's backend alone. " +
+                    "Windows will ask for administrator consent once.");
+                var report = Path.Combine(run, "network-block-narrow.json");
+                var elevated = new ProcessStartInfo(Tools.PowerShell, $"-NoProfile -ExecutionPolicy Bypass -File \"{Path.Combine(Scripts, "Install-WfpBlock.ps1")}\" " +
+                    $"-InstallRoot \"{install.Root}\" -ReportPath \"{report}\" -BackendPort {install.ComputedBackendPort}")
+                    { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden };
+                string? why = null;
+                try { using var installer = Process.Start(elevated); installer?.WaitForExit(); }
+                catch (System.ComponentModel.Win32Exception) { why = "Windows administrator consent was not given"; }
+                if (Tools.ReadJson(report) is { } placed)
+                {
+                    result["networkBlockNarrow"] = placed.DeepClone();
+                    if (why == null && (string?)placed["status"] != "installed") why = (string?)placed["failure"] ?? "the install did not finish";
+                }
+                else why ??= "the install wrote no report";
+                narrowed = install.BlockedBackendPort() == new Uri((string)result["backendOrigin"]!).Port;
+                if (!narrowed && why == null) why = "the placed block names another port";
+                result["status"] = "preparing";
+                // A sandboxed game must not reach other programs on this PC; otherwise the session goes on as before.
+                if (!narrowed && options.Sandbox)
+                    throw new SessionFailure("A sandboxed session needs the network block narrowed to HellForge's backend, and it could not be placed again (" + why +
+                        "). Run Settings > Installation, or turn off Settings > Sandbox.");
+                if (!narrowed) Say("The network block could not be narrowed (" + why + "): the game can still reach every program on this PC. Run Settings > Installation to narrow it.");
+            }
             result["networkBlockNarrowed"] = narrowed;
-            if (!narrowed) Say("The network block still lets the game reach every program on this PC: run Settings > Installation to narrow it to HellForge's backend.");
         }
         else
         {
+            // Windows Firewall never filters loopback, so with its rules the game reaches every program on this PC.
+            if (options.Sandbox)
+                throw new SessionFailure("A sandboxed session needs the WFP network block, and this installation still has the older Windows Firewall rules. " +
+                    "Run Settings > Installation to place it, or turn off Settings > Sandbox.");
             result["networkBlock"] = "persistent";
             var blockProblems = BlockProblems();
             if (blockProblems.Length > 0)

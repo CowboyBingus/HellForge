@@ -134,7 +134,8 @@ never touch each other's blocks. On the connect layers the permit also names one
 (`InstallLayout.ComputedBackendPort`, 40000-46999 from the installation's path: below Windows' dynamic range, where
 Hyper-V, WSL and Docker reserve blocks) and passes it to `Install-WfpBlock.ps1 -BackendPort`, which records it in the
 marker (`network-block/wfp-block.json`, `"port"`); sessions start the backend on the marker's port. A marker without the
-port is a block from before the narrowing, which setup places again. A round trip installs 8 filters per program, reads
+port is a block from before the narrowing, which setup places again, and so does a session (one Windows prompt; a
+sandboxed session refuses to start without it). A round trip installs 8 filters per program, reads
 them back and removes them cleanly. An enforcement test showed that a blocked program gets WSAEACCES (10013) to
 192.0.2.1:443 and 10061 (not blocked) to loopback, the outcome the session's probe (OfflineControlNetworkProbe) checks.
 Setup's probe also connects to the next loopback port and requires 10013 there, which proves the narrowing.
