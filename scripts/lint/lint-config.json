@@ -27,7 +27,10 @@
     "native/mod-loader/stratagem_bounds.h",
     "native/mod-loader/stratagem_sites.h",
     "native/mod-sdk/hellforge_components.h",
-    "native/mod-sdk/hellforge_content.h"
+    "native/mod-sdk/hellforge_content.h",
+    "src/HellForge.Session/EarlyConstructor.cs",
+    "src/HellForge.Session/HostBoundedProcess.cs",
+    "src/HellForge.Session/LocalRoutingPatch.cs"
   ],
   "limits": {"cognitive": 15, "function_lines": 150, "parameters": 7, "stack_bytes": 16384, "module_lines": 1000,
              "clone_tokens": 100}

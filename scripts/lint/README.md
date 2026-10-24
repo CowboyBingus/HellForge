@@ -110,7 +110,9 @@ Exit codes: 0 means OK; 1 means new violations (`check`) or a refused update; 2 
   component under `native/`, each example mod.
 - **`units`:** a unit of its own, by `path`, or other `sources` for a discovered one.
 - **`exclude`:** paths relative to the repository (`fnmatch` patterns). Tests are not linted, as in Bingus, and nor are
-  generated files: the editor's image headers, the mod loader's generated tables and the SDK's generated headers.
+  generated files: the editor's image headers, the mod loader's generated tables and the SDK's generated headers;
+  nor the session runner's copies of `scripts/` experiments kept as sessions compiled them (`EarlyConstructor.cs`,
+  `HostBoundedProcess.cs`, `LocalRoutingPatch.cs`), since the `scripts/` originals are not linted either.
 - **`limits`:** any key may be left out; an unknown key stops the lint with exit code 2.
 
 ## Tests

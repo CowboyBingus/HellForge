@@ -30,7 +30,7 @@ public static class HellForgeLocalRoutingPatch {
     [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetThreadContext(IntPtr thread,IntPtr context);
     [DllImport("kernel32.dll",SetLastError=true)] static extern bool CloseHandle(IntPtr h);
     [DllImport("kernel32.dll",SetLastError=true)] static extern bool TerminateProcess(IntPtr p,uint code);
-    [DllImport("kernel32.dll",SetLastError=true,CharSet=CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr p,int flags,StringBuilder name,ref int size); // lint-ok: R14 verbatim compiled session copy (its sibling scripts/LocalRoutingPatch.cs); its P/Invokes are not merged with the independent, SHA-pinned EarlyConstructor.cs
+    [DllImport("kernel32.dll",SetLastError=true,CharSet=CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr p,int flags,StringBuilder name,ref int size);
     [DllImport("kernel32.dll",SetLastError=true)] static extern bool ReadProcessMemory(IntPtr p,IntPtr a,byte[] b,UIntPtr n,out UIntPtr read);
     [DllImport("kernel32.dll",SetLastError=true)] static extern bool WriteProcessMemory(IntPtr p,IntPtr a,byte[] b,UIntPtr n,out UIntPtr written);
     [DllImport("kernel32.dll",SetLastError=true)] static extern bool VirtualProtectEx(IntPtr p,IntPtr a,UIntPtr n,uint protection,out uint previous);
@@ -105,7 +105,7 @@ public static class HellForgeLocalRoutingPatch {
     // through 0xab5000 -> 0x13f76e0 -> 0x12b5710 -> state machine 0x12b6570).
     // Read-only: item catalogue state at P=[dll+0x347CEF8]. Finalize 0x136e6a0 demotes kind-10 records whose itemId has
     // no StratagemInfo row (rows [dll+0x37CB608], types 1..149) to category 0; the per-category index starts at P+0xD1CE4.
-    public static string DiagnoseCatalogue(int pid,string expectedDll){ // lint-ok: R10 verbatim compiled session copy; it reads live game memory by pinned offsets and is kept as compiled
+    public static string DiagnoseCatalogue(int pid,string expectedDll){
         IntPtr target=OpenProcess(0x0410,false,pid);if(target==IntPtr.Zero)throw Error("OpenProcess");
         try {
             long dll=FindModule(target,expectedDll);if(dll==0)return "module_not_loaded";
@@ -203,7 +203,7 @@ public static class HellForgeLocalRoutingPatch {
     public static PlayFabRedirect StartPlayFabRedirect(int pid,string expectedExe,string baseUrl,int deadlineMs){
         if(!Regex.IsMatch(baseUrl??"","^http://127\\.0\\.0\\.1:[0-9]{1,5}/playfab$"))throw new ArgumentException("Only a loopback /playfab prefix is accepted.");
         var state=new PlayFabRedirect();
-        var worker=new Thread(()=>{ // lint-ok: R10 verbatim compiled session copy; this background redirect edits a live game's memory and is kept as compiled
+        var worker=new Thread(()=>{
             IntPtr target=OpenProcess(0x0438,false,pid);
             if(target==IntPtr.Zero){state.Outcome="open_failed";return;}
             bool timer=timeBeginPeriod(1)==0;var clock=Stopwatch.StartNew();
@@ -240,7 +240,7 @@ public static class HellForgeLocalRoutingPatch {
         worker.IsBackground=true;worker.Start();
         return state;
     }
-    public static HellForgeLocalRoutingResult Apply(int pid,long startTicks,string expectedExe,string expectedDll,string url,int deadlineMs,bool applyGate=false){ // lint-ok: R10 verbatim compiled session copy; its suspend/recheck/write/readback order edits a live game's memory and is kept as compiled
+    public static HellForgeLocalRoutingResult Apply(int pid,long startTicks,string expectedExe,string expectedDll,string url,int deadlineMs,bool applyGate=false){
         if(IntPtr.Size!=8||pid==Process.GetCurrentProcess().Id)throw new InvalidOperationException("External x64 target required.");
         byte[] cave=CaveBytes(url);
         var r=new HellForgeLocalRoutingResult{ProcessId=pid,Url=url,Outcome="not_applied"};
@@ -269,7 +269,7 @@ public static class HellForgeLocalRoutingPatch {
                 Thread.Sleep(1);
             }
             r.DllBase="0x"+dll.ToString("x");
-            if(!ready){r.Outcome=dll==0?"module_not_observed":"decoded_bytes_not_observed";return r;} // lint-ok: R14 verbatim compiled session copy; its thread-freeze scaffolding is not merged with EarlyConstructor.cs, whose copy keeps different per-site checks
+            if(!ready){r.Outcome=dll==0?"module_not_observed":"decoded_bytes_not_observed";return r;}
             paused.Start();bool stable=false;
             for(int pass=0;pass<8&&paused.ElapsedMilliseconds<1500;pass++){
                 int added=0;process.Refresh();
