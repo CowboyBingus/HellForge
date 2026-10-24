@@ -23,7 +23,7 @@
                 <TextBlock FontSize="21" FontWeight="Black" LetterSpacing="1.5">
                   <Run Text="HELL" /><Run Text="FORGE" Foreground="{StaticResource AccentBrush}" />
                 </TextBlock>
-                <TextBlock Text="Local HELLDIVERS 2 · Steam co-op" Classes="muted" FontSize="11" Margin="0,2,0,0" />
+                <TextBlock Text="Local HELLDIVERS 2" Classes="muted" FontSize="11" Margin="0,2,0,0" />
               </StackPanel>
             </StackPanel>
             <Border Height="2" Background="{StaticResource AccentBrush}" Margin="0,20,0,0" Opacity="0.85" />
