@@ -461,6 +461,25 @@ int main(int argc, char** argv)
             printf("  notice: %d of %d pixels at the top centre are not the clear colour (the editor closed)\n", drawn, 400 * 80);
             if (drawn < 2000) { puts("FAIL the refused join's message is not on screen while the editor is closed"); failures++; }
         }
+        /* the host's side: a friend couldn't join, a small note in the top right corner */
+        if (frame == 291)
+        {
+            g_noticeNow.version = 2;
+            g_noticeNow.kind = HF_NOTICE_BRIEF;
+            snprintf(g_noticeNow.title, sizeof g_noticeNow.title, "Friend Joiner couldn't join");
+            snprintf(g_noticeNow.text, sizeof g_noticeNow.text, "Their gameplay mods don't match yours.\nMissing: Stratagem Compendium 1.2.0");
+            noticeAt = GetTickCount64();
+        }
+        if (frame == 296) while (GetTickCount64() - noticeAt < 300) Sleep(10);
+        if (frame == 297)
+        {
+            char shot[MAX_PATH] = "";
+            if (argc > 2) { snprintf(shot, sizeof shot, "%s", argv[2]); if (char* dot = strrchr(shot, '.')) snprintf(dot, (size_t)(shot + sizeof shot - dot), "-brief.bmp"); }
+            RECT corner = {(LONG)width - 400, 30, (LONG)width - 40, 70};
+            int drawn = Screenshot(argc > 2 ? shot : NULL, width, height, &corner);
+            printf("  brief notice: %d of %d pixels in the top right corner are not the clear colour\n", drawn, 360 * 40);
+            if (drawn < 2000) { puts("FAIL the host's brief notice is not in the top right corner"); failures++; }
+        }
         /* to the objects, the next one back, to its fields, three rows down (past the category header, the projectile swap
          * and the part header), 1200, F9 */
         if (frame == 320 || frame == 330) Key(window, VK_TAB);

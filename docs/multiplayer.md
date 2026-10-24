@@ -68,8 +68,9 @@ do (see [The join gate](#the-join-gate)).
 
 With "Local PlayFab" on (`--local-playfab`, settings key `localPlayFab`), the session runner redirects the game's
 PlayFab web API to the local backend (`HellForgeLocalRoutingPatch.StartPlayFabRedirect` in
-`src/HellForge.Session/LocalRoutingPatch.cs`: heap data only). It waits for the engine to format the PlayFab URL and
-replaces it with `http://127.0.0.1:<port>/playfab`; three instruction checks pin the layout. With it on, the session
+`src/HellForge.Session/LocalRoutingPatch.cs`: heap data only). It waits for the engine to format the PlayFab URL, for as long as the game
+runs (a start-up dialog such as the GPU driver warning can hold the game for minutes), and replaces it with
+`http://127.0.0.1:<port>/playfab`; three instruction checks pin the layout. With it on, the session
 does not pass `-ClearPlatformMatchmaking`.
 
 With "Lobby and session through Steam friends" on (`--multiplayer`, settings key `sdkShims`), the session runner:
@@ -161,7 +162,8 @@ zipped mod writes into its own folder. The joiner's backend also sends its gamep
 session's `modlist.txt`, HellForge.Core's `ModlistDiff`), so the refusal can name the mods that differ. The host sends
 `lobby.refused` [reason, up to 6 lines for the joiner's game]. Both backends turn it into notices ("Couldn't join
 <host>" for the joiner, "<friend> couldn't join" for the host) and post them to their game over the live-edit pipe
-(`notice`), and the in-game editor draws them over the game. Backends from before the list send only the reason; they
+(`notice`), and the in-game editor draws them over the game: the joiner's as a panel, the host's (kind `brief`,
+`HF_NOTICE_BRIEF`) as a small note in the top right corner. Backends from before the list send only the reason; they
 still interoperate.
 
 Once a join is accepted, the host sends `war.clock`, and the joiner's backend adopts the host's war time. A time below

@@ -69,9 +69,10 @@ public sealed class MultiplayerHost : IAsyncDisposable
         Lobby.HostedChanged += () => Task.Run(WritePeers);
         Lobby.PeerAdmitted += ListPeer;
         Lobby.LocalJoinStarted += (owner, _) => { ListPeer(owner); Task.Run(WritePeers); };
-        // A refused join, in both games (the in-game editor shows it over the game): the joiner's says why, the host's who.
+        // A refused join, in both games (the in-game editor shows it over the game): the joiner's says why, the host's who,
+        // briefly, in a corner.
         Lobby.Refused += (peer, lines) => Stats?.Notice("error", "Couldn't join " + FriendName(peer), lines);
-        Lobby.RefusedFriend += (peer, lines) => Stats?.Notice("info", FriendName(peer) + " couldn't join", lines);
+        Lobby.RefusedFriend += (peer, lines) => Stats?.Notice("brief", FriendName(peer) + " couldn't join", lines);
         Party = new PartyService(transport, pipes.SendParty, Log, Lobby.InHostedLobby) { Kick = Lobby.Kick };
         // A kick (the game's PFLobbyForceRemoveMember, or its Party kick): the kicked machine's game traffic stops here, and
         // its player is told in game.

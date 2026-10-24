@@ -91,7 +91,7 @@ static void ApiNotice(HfMod* mod, HfNotice* out)
 static void SetNotice(char** f, int n)
 {
     AcquireSRWLockExclusive(&g_sessionLock);
-    g_notice.kind = !strcmp(f[0], "error") ? HF_NOTICE_ERROR : HF_NOTICE_INFO;
+    g_notice.kind = !strcmp(f[0], "error") ? HF_NOTICE_ERROR : !strcmp(f[0], "brief") ? HF_NOTICE_BRIEF : HF_NOTICE_INFO;
     snprintf(g_notice.title, sizeof g_notice.title, "%s", n > 1 ? f[1] : "");
     size_t used = 0;
     g_notice.text[0] = 0;
@@ -103,7 +103,7 @@ static void SetNotice(char** f, int n)
     }
     if (used >= sizeof g_notice.text) used = sizeof g_notice.text - 1;
     g_notice.version++;
-    Note("notice (%s): %s%s%s", g_notice.kind == HF_NOTICE_ERROR ? "error" : "info", g_notice.title, used ? ": " : "", g_notice.text);
+    Note("notice (%s): %s%s%s", g_notice.kind == HF_NOTICE_ERROR ? "error" : g_notice.kind == HF_NOTICE_BRIEF ? "brief" : "info", g_notice.title, used ? ": " : "", g_notice.text);
     ReleaseSRWLockExclusive(&g_sessionLock);
 }
 
