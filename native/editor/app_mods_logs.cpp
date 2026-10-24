@@ -305,9 +305,9 @@ void DrawLogs(float y0, float h)
     g_cv.Text("LOGS", 20, y0 + 24, T(20, TEXT, ui::TITLE));
     g_cv.Text(g_logs.path.empty() ? "This HellForge does not say where its logs are (update HellForge)." : Narrow(g_logs.path),
         20, y0 + 47, T(SZ_SMALL, g_logs.path.empty() ? ERROR_ : FAINT, ui::BODY, ui::LEFT, W - 480));
-    if (Button("OPEN LOG FILE", W - 216, y0 + 16, 196, 34, g_logs.path.empty() ? DISABLED : NORMAL, ui::Id("logfile")) && !g_logs.path.empty())
+    if (Button("OPEN LOG FILE", {W - 216, y0 + 16, 196, 34}, g_logs.path.empty() ? DISABLED : NORMAL, ui::Id("logfile")) && !g_logs.path.empty())
         if (!OpenWith(L"\"" + g_logs.path + L"\"")) Toast("Open it yourself: " + Narrow(g_logs.path), PENDING);
-    if (Button("SHOW IN FOLDER", W - 424, y0 + 16, 196, 34, g_logs.path.empty() ? DISABLED : NORMAL, ui::Id("logfolder")) && !g_logs.path.empty())
+    if (Button("SHOW IN FOLDER", {W - 424, y0 + 16, 196, 34}, g_logs.path.empty() ? DISABLED : NORMAL, ui::Id("logfolder")) && !g_logs.path.empty())
         if (!OpenWith(L"/select,\"" + g_logs.path + L"\"")) Toast("Open it yourself: " + Narrow(g_logs.path), PENDING);
     /* the source (HellForge's log or the editor's), the filters, following the end */
     float fx = 20, fy = y0 + 68;

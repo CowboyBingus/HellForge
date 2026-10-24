@@ -208,7 +208,8 @@ std::vector<std::string> Wrapped(const std::string& text, float max, float size)
 void Arrow(float x, float cy, bool down, ImU32 colour);
 float Chip(const std::string& text, float x, float cy, ImU32 fg, ImU32 bg, bool right, int z = 3);
 enum Style { NORMAL, PRIMARY, DANGER, DISABLED };
-bool Button(const std::string& label, float x, float y, float w, float h, Style style, uint64_t id, int z = 3);
+struct Area { float x, y, w, h; }; /* a box in panel units: its corner and size */
+bool Button(const std::string& label, const Area& a, Style style, uint64_t id, int z = 3);
 void Logo(float x, float y, float s);
 float DrawMarks(const Marks& m, float x, float cy, float size);
 bool DrawIcon(const Object* object, float x, float y, float size, int z = 4);

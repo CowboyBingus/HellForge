@@ -225,10 +225,10 @@ void DrawFields(float y0, float h)
     if (DrawIcon(object, x0 + 20, y0 + 8, 48)) hx = x0 + 80;
     bool anyOpen = PageOpen(object);
     float bw = 142;
-    if (Button(anyOpen ? "COLLAPSE ALL" : "EXPAND ALL", x0 + w - bw - 14, y0 + 12, bw, 28, NORMAL, ui::Id("pageopen"))) SetPageOpen(object, !anyOpen);
+    if (Button(anyOpen ? "COLLAPSE ALL" : "EXPAND ALL", {x0 + w - bw - 14, y0 + 12, bw, 28}, NORMAL, ui::Id("pageopen"))) SetPageOpen(object, !anyOpen);
     float rw = 132;
     bool changed = !ItemChanges(object).empty();
-    if (Button("RESET ITEM", x0 + w - bw - rw - 24, y0 + 12, rw, 28, changed && !Locked() ? DANGER : DISABLED, ui::Id("resetitem")) && changed) ResetItem(object);
+    if (Button("RESET ITEM", {x0 + w - bw - rw - 24, y0 + 12, rw, 28}, changed && !Locked() ? DANGER : DISABLED, ui::Id("resetitem")) && changed) ResetItem(object);
     g_cv.Text(object->name, hx, y0 + 24, T(20, TEXT, ui::TITLE, ui::LEFT, w - 70 - bw - rw - (hx - x0)));
     int edited = 0;
     for (const Row* row : object->rows) { RowView v = ViewOf(row); if (v.source == STAGED || v.source == EDITED) edited++; }
@@ -449,10 +449,10 @@ void DrawFooter(float y, float h)
     bool resettable = !SavedRows().empty() || pending > 0;
     float bw = 196;
     bx -= bw;
-    if (Button("RESET TO DEFAULTS", bx, by, bw, bh, resettable && !Locked() ? DANGER : DISABLED, ui::Id("reset"))) StageResetAll();
+    if (Button("RESET TO DEFAULTS", {bx, by, bw, bh}, resettable && !Locked() ? DANGER : DISABLED, ui::Id("reset"))) StageResetAll();
     bw = 110; bx -= bw + 10;
-    if (Button("DISCARD", bx, by, bw, bh, pending > 0 && !Locked() ? NORMAL : DISABLED, ui::Id("discard"))) Discard();
+    if (Button("DISCARD", {bx, by, bw, bh}, pending > 0 && !Locked() ? NORMAL : DISABLED, ui::Id("discard"))) Discard();
     bw = 150; bx -= bw + 10;
-    if (Button(pending > 0 ? "APPLY  " + std::to_string(pending) : "APPLY", bx, by, bw, bh, pending > 0 && !Locked() ? PRIMARY : DISABLED, ui::Id("apply"))) Apply();
+    if (Button(pending > 0 ? "APPLY  " + std::to_string(pending) : "APPLY", {bx, by, bw, bh}, pending > 0 && !Locked() ? PRIMARY : DISABLED, ui::Id("apply"))) Apply();
 }
 } // namespace editorapp

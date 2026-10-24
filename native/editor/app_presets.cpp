@@ -395,9 +395,9 @@ void DrawPresets(float y0, float h)
     g_cv.Text("HD2R Editor presets (.hd2rpreset.json) in the editor's presets folder. IMPORT stages their values for APPLY.",
         20, y0 + 47, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, W - 520));
     float bx = W - 20;
-    bx -= 150; if (Button("EXPORT", bx, y0 + 16, 150, 34, NORMAL, ui::Id("presetexport"))) ExportPreset();
-    bx -= 160; if (Button("OPEN FOLDER", bx, y0 + 16, 150, 34, NORMAL, ui::Id("presetfolder"))) OpenPresetFolder();
-    bx -= 130; if (Button("REFRESH", bx, y0 + 16, 120, 34, NORMAL, ui::Id("presetscan"))) ScanPresets();
+    bx -= 150; if (Button("EXPORT", {bx, y0 + 16, 150, 34}, NORMAL, ui::Id("presetexport"))) ExportPreset();
+    bx -= 160; if (Button("OPEN FOLDER", {bx, y0 + 16, 150, 34}, NORMAL, ui::Id("presetfolder"))) OpenPresetFolder();
+    bx -= 130; if (Button("REFRESH", {bx, y0 + 16, 120, 34}, NORMAL, ui::Id("presetscan"))) ScanPresets();
     float hy = y0 + 66;
     if (g_presetResult.shown)
     {
@@ -429,7 +429,7 @@ void DrawPresets(float y0, float h)
         }
     };
     o.after = [&](int i, float x, float y, float lw, float rh) {
-        if (g_presets[i].error.empty() && Button("IMPORT", x + lw - 116, y + 4, 100, rh - 8, PRIMARY, ui::Id("presetimport", (uint64_t)i)))
+        if (g_presets[i].error.empty() && Button("IMPORT", {x + lw - 116, y + 4, 100, rh - 8}, PRIMARY, ui::Id("presetimport", (uint64_t)i)))
         { g_preset = i; ImportPreset(g_presets[i]); }
     };
     List(o);

@@ -265,10 +265,10 @@ static void DrawTrust(const HfSyncMod& mod)
     bool armed = TrustArmed();
     const char* label = TrustDownloads(g_sync.trust) ? "TRUST AND DOWNLOAD" : "TRUST";
     float bx = x + w - 24 - 150;
-    if (Button("CANCEL", bx, y + h - 66, 150, 30, NORMAL, ui::Id("synctrustno"), 11)) { g_sync.trust = -1; Sound(sounds::BACK); return; }
+    if (Button("CANCEL", {bx, y + h - 66, 150, 30}, NORMAL, ui::Id("synctrustno"), 11)) { g_sync.trust = -1; Sound(sounds::BACK); return; }
     float pw = std::max(150.0f, g_cv.Measure(label, SZ_TAB, ui::TITLE) + 40);
     bx -= 12 + pw;
-    if (Button(label, bx, y + h - 66, pw, 30, armed ? DANGER : DISABLED, ui::Id("synctrustyes"), 11) && armed)
+    if (Button(label, {bx, y + h - 66, pw, 30}, armed ? DANGER : DISABLED, ui::Id("synctrustyes"), 11) && armed)
     {
         g_host.api->log(g_host.mod, "editor: mod sync: the player trusts %s", mod.id);
         AnswerSync(HF_SYNC_TRUST, mod.id);
@@ -331,15 +331,15 @@ void DrawSync()
         float bx = rx + rw - 102, by = ry + (rh - 24) / 2;
         if (SyncBlockable(mod))
         {
-            if (Button("BLOCK", bx, by, 78, 24, DANGER, ui::Id("syncblock", (uint64_t)i), 12) && SyncArmed()) { AnswerSync(HF_SYNC_BLOCK, mod.id); return; }
+            if (Button("BLOCK", {bx, by, 78, 24}, DANGER, ui::Id("syncblock", (uint64_t)i), 12) && SyncArmed()) { AnswerSync(HF_SYNC_BLOCK, mod.id); return; }
             bx -= 86;
         }
         if (SyncTrustable(mod))
         {
-            if (Button("TRUST", bx, by, 78, 24, SyncArmed() ? NORMAL : DISABLED, ui::Id("synctrust", (uint64_t)i), 12) && SyncArmed()) { AskTrust(i); return; }
+            if (Button("TRUST", {bx, by, 78, 24}, SyncArmed() ? NORMAL : DISABLED, ui::Id("synctrust", (uint64_t)i), 12) && SyncArmed()) { AskTrust(i); return; }
             bx -= 86;
         }
-        if (SyncGettable(mod) && Button("GET IT", bx, by, 78, 24, SyncArmed() ? NORMAL : DISABLED, ui::Id("syncget", (uint64_t)i), 12) && SyncArmed())
+        if (SyncGettable(mod) && Button("GET IT", {bx, by, 78, 24}, SyncArmed() ? NORMAL : DISABLED, ui::Id("syncget", (uint64_t)i), 12) && SyncArmed())
             AnswerSync(HF_SYNC_OPEN, mod.id);
     };
     List(o);
@@ -363,14 +363,14 @@ void DrawSync()
     if (second[0])
     {
         bx -= 150;
-        if (Button(second, bx, y + h - 66, 150, 30, NORMAL, ui::Id("syncsecond"), 11) && SyncArmed()) AnswerSync(HF_SYNC_DECLINE);
+        if (Button(second, {bx, y + h - 66, 150, 30}, NORMAL, ui::Id("syncsecond"), 11) && SyncArmed()) AnswerSync(HF_SYNC_DECLINE);
         bx -= 12;
     }
     if (primary[0])
     {
         float pw = std::max(150.0f, g_cv.Measure(primary, SZ_TAB, ui::TITLE) + 40);
         bx -= pw;
-        if (Button(g_sync.sent ? (answer == HF_SYNC_RESTART ? "RESTARTING..." : "STARTING...") : primary, bx, y + h - 66, pw, 30,
+        if (Button(g_sync.sent ? (answer == HF_SYNC_RESTART ? "RESTARTING..." : "STARTING...") : primary, {bx, y + h - 66, pw, 30},
                 g_sync.sent || !SyncArmed() ? DISABLED : bad ? NORMAL : PRIMARY, ui::Id("syncprimary"), 11) && SyncArmed())
             AnswerSync(answer);
     }

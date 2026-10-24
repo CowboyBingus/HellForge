@@ -53,7 +53,7 @@ float Chip(const std::string& text, float x, float cy, ImU32 fg, ImU32 bg, bool 
     return w;
 }
 
-bool Button(const std::string& label, float x, float y, float w, float h, Style style, uint64_t id, int z)
+bool Button(const std::string& label, const Area& a, Style style, uint64_t id, int z)
 {
     bool hovered = g_cv.Hovered() == id;
     ImU32 bg, fg, edge;
@@ -61,10 +61,10 @@ bool Button(const std::string& label, float x, float y, float w, float h, Style 
     else if (style == DANGER) { bg = hovered ? ERROR_SOFT : PANEL; fg = ERROR_; edge = ERROR_; }
     else if (style == DISABLED) { bg = PANEL; fg = FAINT; edge = LINE_STRONG; }
     else { bg = hovered ? HOVER : PANEL; fg = TEXT; edge = LINE_STRONG; }
-    g_cv.Rect(x, y, w, h, bg, z);
-    g_cv.Frame(x, y, w, h, edge, z + 1);
-    g_cv.Text(label, x + w / 2, y + h / 2, T(SZ_TAB, fg, ui::TITLE, ui::CENTER, 0, z + 3));
-    return g_cv.Hit(x, y, w, h, id) && style != DISABLED;
+    g_cv.Rect(a.x, a.y, a.w, a.h, bg, z);
+    g_cv.Frame(a.x, a.y, a.w, a.h, edge, z + 1);
+    g_cv.Text(label, a.x + a.w / 2, a.y + a.h / 2, T(SZ_TAB, fg, ui::TITLE, ui::CENTER, 0, z + 3));
+    return g_cv.Hit(a.x, a.y, a.w, a.h, id) && style != DISABLED;
 }
 
 /* The HD2R Editor's mark (four corner brackets and three slider bars), when HellForge's icon is not there. */
@@ -120,83 +120,110 @@ float DrawMarks(const Marks& m, float x, float cy, float size)
 /* An object's icon, fitted into a square: the game's HUD silhouette of a weapon or throwable; a stratagem's icon as the
  * game draws it (its category layer in the category's colour, its white layer white); a booster as it is. A stratagem
  * with no icon is a plain square in its colour (never made-up art). False when there is nothing to draw. */
-bool DrawIcon(const Object* object, float x, float y, float size, int z)
+/* An icon fitted into the square at (x, y), its aspect kept. */
+static void FitIcon(const icons::Icon* icon, ImU32 colour, int layer, float x, float y, float size)
 {
-    if (!icons::Texture()) return false;
-    Tone tone = ToneOf(object->tone);
-    auto fit = [&](const icons::Icon* icon, ImU32 colour, int layer) {
-        float aspect = (float)icon->width / (float)icon->height, w = size, h = size;
-        if (aspect > 1) h = size / aspect; else w = size * aspect;
-        g_cv.Image(icons::Texture(), ImVec2(x + (size - w) / 2, y + (size - h) / 2), ImVec2(w, h), icon->uv0, icon->uv1, colour, layer);
-    };
-    if (object->icon == "mod")
-    {
-        const icons::Icon* icon = icons::Find(icons::MOD, object->sprite);
-        if (icon == nullptr) return false;
-        fit(icon, IM_COL32_WHITE, z);
-        return true;
-    }
-    if (object->icon == "stratagem")
-    {
-        const std::string& name = object->sprite.empty() ? object->name : object->sprite; /* a mod's copy: its page's */
-        const icons::Icon* layer = icons::Find(icons::STRATAGEM, name);
-        const icons::Icon* white = icons::Find(icons::STRATAGEM_WHITE, name);
-        if (layer == nullptr || white == nullptr) return false;
-        fit(layer, tone.colour ? tone.colour : GOLD, z);
-        fit(white, C(255, 255, 238, 255), z + 1);
-        return true;
-    }
+    float aspect = (float)icon->width / (float)icon->height, w = size, h = size;
+    if (aspect > 1) h = size / aspect; else w = size * aspect;
+    g_cv.Image(icons::Texture(), ImVec2(x + (size - w) / 2, y + (size - h) / 2), ImVec2(w, h), icon->uv0, icon->uv1, colour, layer);
+}
+
+/* A stratagem's icon as the game draws it: its category layer in its category's colour, its white layer white. */
+static bool DrawStratagemIcon(const Object* object, ImU32 colour, float x, float y, float size, int z)
+{
+    const std::string& name = object->sprite.empty() ? object->name : object->sprite; /* a mod's copy: its page's */
+    const icons::Icon* layer = icons::Find(icons::STRATAGEM, name);
+    const icons::Icon* white = icons::Find(icons::STRATAGEM_WHITE, name);
+    if (layer == nullptr || white == nullptr) return false;
+    FitIcon(layer, colour, z, x, y, size);
+    FitIcon(white, C(255, 255, 238, 255), z + 1, x, y, size);
+    return true;
+}
+
+/* The one icon of a mod's own image, a booster or passive, a weapon or throwable (nullptr when it is not there), and
+ * the colour it is drawn in; false when the object is none of those. */
+static bool KindIcon(const Object* object, const icons::Icon** icon, ImU32* colour)
+{
+    if (object->icon == "mod") { *icon = icons::Find(icons::MOD, object->sprite); *colour = IM_COL32_WHITE; return true; }
     if (object->icon == "booster" || object->icon == "passive")
     {
-        const icons::Icon* icon = icons::Find(object->icon == "booster" ? icons::BOOSTER : icons::PASSIVE, object->sprite.empty() ? object->name : object->sprite);
-        if (icon == nullptr) return false;
-        fit(icon, object->icon == "booster" ? IM_COL32_WHITE : PERK, z);
+        *icon = icons::Find(object->icon == "booster" ? icons::BOOSTER : icons::PASSIVE, object->sprite.empty() ? object->name : object->sprite);
+        *colour = object->icon == "booster" ? IM_COL32_WHITE : PERK;
         return true;
     }
     if (object->icon == "weapon" || object->icon == "throwable")
     {
-        const icons::Icon* icon = icons::Find(object->icon == "throwable" ? icons::THROWABLE : icons::WEAPON, object->name);
+        *icon = icons::Find(object->icon == "throwable" ? icons::THROWABLE : icons::WEAPON, object->name);
+        *colour = ICON;
+        return true;
+    }
+    return false;
+}
+
+bool DrawIcon(const Object* object, float x, float y, float size, int z)
+{
+    if (!icons::Texture()) return false;
+    Tone tone = ToneOf(object->tone);
+    if (object->icon == "stratagem") return DrawStratagemIcon(object, tone.colour ? tone.colour : GOLD, x, y, size, z);
+    const icons::Icon* icon;
+    ImU32 colour;
+    if (KindIcon(object, &icon, &colour))
+    {
         if (icon == nullptr) return false;
-        fit(icon, ICON, z);
+        FitIcon(icon, colour, z, x, y, size);
         return true;
     }
     if (tone.colour) { g_cv.Rect(x + size * 0.18f, y + size * 0.18f, size * 0.64f, size * 0.64f, tone.colour, z); return true; }
     return false;
 }
 
-
 static uint64_t RowId(const std::string& key, int i) { return ui::Id(key, (uint64_t)i + 1); }
+
+/* The selection kept in view: scrolled to whenever it changed (the list's own scroll left alone otherwise). */
+static void KeepInView(const ListOpts& o, int& scroll, int rows)
+{
+    if (o.selected < 0) return;
+    auto seen = g_seen.find(o.key);
+    if (seen != g_seen.end() && seen->second == o.selected) return;
+    g_seen[o.key] = o.selected;
+    if (o.selected < scroll) scroll = o.selected;
+    if (o.selected >= scroll + rows) scroll = o.selected - rows + 1;
+}
+
+/* the scrollbar being dragged */
+static void DragScroll(const ListOpts& o, int& scroll, int maxScroll)
+{
+    if (g_drag.key != o.key) return;
+    if (!ImGui::IsMouseDown(0)) { g_drag.key.clear(); return; }
+    float ux, uy;
+    g_cv.ToUnits(ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y, &ux, &uy);
+    float f = (uy - g_drag.trackY - g_drag.thumb / 2) / std::max(1.0f, g_drag.trackH - g_drag.thumb);
+    scroll = (int)floorf(std::clamp(f, 0.0f, 1.0f) * maxScroll + 0.5f);
+}
+
+/* The scrollbar of a list longer than its rows: drawn thin, grabbed wide. */
+static void Scrollbar(const ListOpts& o, int scroll, int rows, int maxScroll)
+{
+    float trackY = o.y + 2, trackH = o.h - 4;
+    float thumb = std::max(24.0f, trackH * rows / o.count), t = (float)scroll / std::max(1, maxScroll);
+    bool dragging = g_drag.key == o.key;
+    g_cv.Rect(o.x + o.w - 4, trackY, 3, trackH, LINE, o.layer);
+    g_cv.Rect(o.x + o.w - (dragging ? 6 : 4), trackY + (trackH - thumb) * t, dragging ? 5.0f : 3.0f, thumb, (o.focused || dragging) ? GOLD : LINE_STRONG, o.layer + 1);
+    if (g_cv.Hit(o.x + o.w - 14, o.y, 14, o.h, ui::Id(o.key, 8888)))
+    {
+        g_drag.key = o.key; g_drag.trackY = trackY; g_drag.trackH = trackH; g_drag.thumb = thumb;
+    }
+}
 
 void List(const ListOpts& o)
 {
     int rows = std::max(1, (int)floorf(o.h / o.rowH));
     int& scroll = g_scroll[o.key];
-    std::string seenKey = o.key;
-    if (o.selected >= 0)
-    {
-        auto seen = g_seen.find(seenKey);
-        if (seen == g_seen.end() || seen->second != o.selected)
-        {
-            g_seen[seenKey] = o.selected;
-            if (o.selected < scroll) scroll = o.selected;
-            if (o.selected >= scroll + rows) scroll = o.selected - rows + 1;
-        }
-    }
+    KeepInView(o, scroll, rows);
     int maxScroll = std::max(0, o.count - rows);
     float wheel = g_cv.Scroll(o.x, o.y, o.w, o.h, ui::Id(o.key, 7777));
     if (wheel != 0) scroll -= (int)(wheel * 3);
-    /* the scrollbar being dragged */
-    if (g_drag.key == o.key)
-    {
-        if (!ImGui::IsMouseDown(0)) g_drag.key.clear();
-        else
-        {
-            float ux, uy;
-            g_cv.ToUnits(ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y, &ux, &uy);
-            float f = (uy - g_drag.trackY - g_drag.thumb / 2) / std::max(1.0f, g_drag.trackH - g_drag.thumb);
-            scroll = (int)floorf(std::clamp(f, 0.0f, 1.0f) * maxScroll + 0.5f);
-        }
-    }
+    DragScroll(o, scroll, maxScroll);
     scroll = std::clamp(scroll, 0, maxScroll);
     for (int i = scroll; i < std::min(o.count, scroll + rows); i++)
     {
@@ -207,17 +234,6 @@ void List(const ListOpts& o)
         if (o.rightClick && g_cv.RightClicked(id)) o.rightClick(i);
         if (o.after) o.after(i, o.x, y, o.w, o.rowH);
     }
-    if (o.count > rows)
-    {
-        float trackY = o.y + 2, trackH = o.h - 4;
-        float thumb = std::max(24.0f, trackH * rows / o.count), t = (float)scroll / std::max(1, maxScroll);
-        bool dragging = g_drag.key == o.key;
-        g_cv.Rect(o.x + o.w - 4, trackY, 3, trackH, LINE, o.layer);
-        g_cv.Rect(o.x + o.w - (dragging ? 6 : 4), trackY + (trackH - thumb) * t, dragging ? 5.0f : 3.0f, thumb, (o.focused || dragging) ? GOLD : LINE_STRONG, o.layer + 1);
-        if (g_cv.Hit(o.x + o.w - 14, o.y, 14, o.h, ui::Id(o.key, 8888)))
-        {
-            g_drag.key = o.key; g_drag.trackY = trackY; g_drag.trackH = trackH; g_drag.thumb = thumb;
-        }
-    }
+    if (o.count > rows) Scrollbar(o, scroll, rows, maxScroll);
 }
 } // namespace editorapp

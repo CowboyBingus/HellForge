@@ -55,7 +55,7 @@ void DrawChanges(float y0, float h)
     else
         g_cv.Text("Values the editors saved into Local Stats (also the launcher's STATS page), and pending ones.   " + std::to_string(saved) + " saved, " +
             std::to_string(PendingCount()) + " pending, " + std::to_string(g_errors.size()) + " failed", 20, y0 + 47, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, W - 300));
-    if (Button("REVERT ALL", W - 216, y0 + 16, 196, 34, !Locked() && (saved > 0 || PendingCount() > 0) ? DANGER : DISABLED, ui::Id("revertall"))) StageResetAll();
+    if (Button("REVERT ALL", {W - 216, y0 + 16, 196, 34}, !Locked() && (saved > 0 || PendingCount() > 0) ? DANGER : DISABLED, ui::Id("revertall"))) StageResetAll();
     float hy = y0 + 66;
     g_cv.Rect(0, hy, W, 22, HEADER, 2);
     g_cv.Text("OBJECT", 20, hy + 11, T(SZ_TINY, FAINT, ui::TITLE));
@@ -85,7 +85,7 @@ void DrawChanges(float y0, float h)
     };
     o.after = [&](int i, float x, float y, float lw, float rh) {
         if (Locked()) return; /* the host's: nothing to reset here */
-        if (Button(list[i].state == 1 ? "UNDO" : "RESET", x + lw - 96, y + 4, 80, rh - 8, list[i].state == 1 ? NORMAL : DANGER, ui::Id("changereset", (uint64_t)i)))
+        if (Button(list[i].state == 1 ? "UNDO" : "RESET", {x + lw - 96, y + 4, 80, rh - 8}, list[i].state == 1 ? NORMAL : DANGER, ui::Id("changereset", (uint64_t)i)))
             Revert(list[i].row);
     };
     List(o);
@@ -100,11 +100,11 @@ void DrawSettings(float y0, float h)
     g_cv.Text("Interface size (text and everything else)", x, y, T(SZ_LABEL, DIM));
     int index = 0;
     for (int i = 0; i < UI_SCALE_COUNT; i++) if (UI_SCALES[i] == g_uiScale) index = i;
-    if (Button("-", x + 400, y - 13, 30, 26, index > 0 ? NORMAL : DISABLED, ui::Id("scaledown"))) { g_uiScale = UI_SCALES[index - 1]; SaveSettings(); }
+    if (Button("-", {x + 400, y - 13, 30, 26}, index > 0 ? NORMAL : DISABLED, ui::Id("scaledown"))) { g_uiScale = UI_SCALES[index - 1]; SaveSettings(); }
     char percent[16];
     snprintf(percent, sizeof percent, "%d%%", (int)floorf(g_uiScale * 100 + 0.5f));
     g_cv.Text(percent, x + 470, y, T(SZ_LABEL, TEXT, ui::BODY, ui::CENTER));
-    if (Button("+", x + 510, y - 13, 30, 26, index + 1 < UI_SCALE_COUNT ? NORMAL : DISABLED, ui::Id("scaleup"))) { g_uiScale = UI_SCALES[index + 1]; SaveSettings(); }
+    if (Button("+", {x + 510, y - 13, 30, 26}, index + 1 < UI_SCALE_COUNT ? NORMAL : DISABLED, ui::Id("scaleup"))) { g_uiScale = UI_SCALES[index + 1]; SaveSettings(); }
     if (floorf(g_scaleNow * 100 + 0.5f) < floorf(g_uiScale * 100 + 0.5f))
     {
         snprintf(percent, sizeof percent, "%d%%", (int)floorf(g_scaleNow * 100 + 0.5f));
@@ -182,7 +182,7 @@ void DrawPicker()
         if (!note.empty()) g_cv.Text(note, tx, ry + below, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, rw - (tx - rx) - 24, 12));
     };
     List(o);
-    if (Button("CANCEL", x + w - 24 - 150, y + h - 40, 150, 30, NORMAL, ui::Id("pickercancel"), 11)) g_picker.on = false;
+    if (Button("CANCEL", {x + w - 24 - 150, y + h - 40, 150, 30}, NORMAL, ui::Id("pickercancel"), 11)) g_picker.on = false;
     /* the highlighted option's warnings, spelled out (HD2R Editor's) */
     std::string warning;
     if (PickerHas(g_picker.index))
@@ -209,7 +209,7 @@ void DrawErrors()
     g_cv.Rect(x, y, w, 3, ERROR_, 10);
     float tw = g_cv.Text("ERRORS", x + 24, y + 30, T(18, ERROR_, ui::TITLE, ui::LEFT, 0, 11));
     g_cv.Text(n == 1 ? "1 field was refused" : std::to_string(n) + " fields were refused", x + 36 + tw, y + 31, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, w - 300, 11));
-    if (Button("\xC3\x97", x + w - 44, y + 12, 30, 30, NORMAL, ui::Id("errorsclose"), 11)) { g_errorsPopup.on = false; Sound(sounds::BACK); }
+    if (Button("\xC3\x97", {x + w - 44, y + 12, 30, 30}, NORMAL, ui::Id("errorsclose"), 11)) { g_errorsPopup.on = false; Sound(sounds::BACK); }
     float hy = y + 52;
     g_cv.Rect(x + 1, hy, w - 2, 22, HEADER, 10);
     g_cv.Text("OBJECT \xC2\xB7 FIELD", x + 24, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::LEFT, 0, 11));
@@ -236,7 +236,7 @@ void DrawErrors()
     };
     o.after = [&](int i, float rx, float ry, float rw, float rh) {
         bool marked = PendingOf(list[i]) != nullptr;
-        if (Button(marked ? "UNDO" : "RESET", rx + rw - 102, ry + (rh - 24) / 2, 78, 24, marked ? NORMAL : DANGER, ui::Id("errorreset", (uint64_t)i), 12))
+        if (Button(marked ? "UNDO" : "RESET", {rx + rw - 102, ry + (rh - 24) / 2, 78, 24}, marked ? NORMAL : DANGER, ui::Id("errorreset", (uint64_t)i), 12))
             Revert(list[i]);
     };
     List(o);
@@ -244,7 +244,7 @@ void DrawErrors()
     float dy = y + h - detail - 44;
     g_cv.Rect(x + 12, dy, w - 24, 1, LINE, 10);
     if (g_errorsPopup.index < n) g_cv.Text(g_errors[list[g_errorsPopup.index]], x + 24, dy + 18, T(SZ_SMALL, DIM, ui::BODY, ui::LEFT, w - 48, 11));
-    if (Button("CLOSE", x + w - 24 - 150, y + h - 40, 150, 30, NORMAL, ui::Id("errorsdone"), 11)) { g_errorsPopup.on = false; Sound(sounds::BACK); }
+    if (Button("CLOSE", {x + w - 24 - 150, y + h - 40, 150, 30}, NORMAL, ui::Id("errorsdone"), 11)) { g_errorsPopup.on = false; Sound(sounds::BACK); }
     g_cv.Text("\xE2\x86\x91\xE2\x86\x93 select   Enter open the field   Del reset / undo   Esc close", x + 24, y + h - 25, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, 0, 11));
 }
 } // namespace editorapp
