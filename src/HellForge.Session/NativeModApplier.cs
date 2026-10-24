@@ -163,10 +163,11 @@ public static class NativeModApplier
     public static long FindEntityRegion(nint process, EntityProfile profile)
     {
         long found = 0, address = 0x10000;
+        var header = Convert.FromHexString(profile.MapHeader);
         while (VirtualQueryEx(process, address, out var info, Marshal.SizeOf<MemoryInfo>()) != 0)
         {
             var next = info.BaseAddress + info.RegionSize;
-            if (IsCandidateRegion(info, profile) && IsEntityRegion(process, info.BaseAddress, profile))
+            if (IsCandidateRegion(info, profile) && StartsWith(process, info.BaseAddress, header))
             {
                 if (found != 0) return 0; // Two candidates: not as reviewed.
                 found = info.BaseAddress;
@@ -182,9 +183,10 @@ public static class NativeModApplier
         info.State == 0x1000 && info.Type == 0x20000 && info.BaseAddress == info.AllocationBase && info.Protect is 2 or 4 &&
         info.RegionSize == profile.EntityRegionSize;
 
-    static bool IsEntityRegion(nint process, long region, EntityProfile profile)
+    // Whether the region starts with the map header (decoded once, before the search).
+    static bool StartsWith(nint process, long region, byte[] header)
     {
-        try { return Read(process, region, 28).AsSpan().SequenceEqual(Convert.FromHexString(profile.MapHeader)); }
+        try { return Read(process, region, 28).AsSpan().SequenceEqual(header); }
         catch (Win32Exception) { return false; }
     }
 
