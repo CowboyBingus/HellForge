@@ -153,10 +153,12 @@ static void TestServe(void)
     CHECK(GameChannelConnect(&game, L"test-serve", 2000), "serve: the game connects and gets the ring");
 
     uint8_t running = 0;
-    uint32_t size = 0, status = 99;
-    CHECK(GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &running, 1, &size, &status) &&
-        status == BRIDGE_STATUS_OK && size == 1 && running == 1, "serve: IsSteamRunning answered by the broker");
-    CHECK(GameChannelCall(&game, 777, NULL, 0, NULL, 0, &size, &status) && status == BRIDGE_STATUS_UNKNOWN,
+    uint32_t size = 0;
+    GameChannelReply answer = { &running, 1, 0, 99 };
+    CHECK(GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &answer) &&
+        answer.status == BRIDGE_STATUS_OK && answer.size == 1 && running == 1, "serve: IsSteamRunning answered by the broker");
+    GameChannelReply unknown = { NULL, 0, 0, 99 };
+    CHECK(GameChannelCall(&game, 777, NULL, 0, &unknown) && unknown.status == BRIDGE_STATUS_UNKNOWN,
         "serve: an unknown function is refused, the channel stays up");
 
     /* malformed: a call too short to name its function */
@@ -178,7 +180,7 @@ static void TestServe(void)
         "serve: an oversized message is read to its end and answered as malformed");
 
     running = 0;
-    CHECK(GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &running, 1, &size, &status) && running == 1,
+    CHECK(GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &answer) && running == 1,
         "serve: calls still work after both");
 
     /* the pump runs between calls: its callback reaches the ring */
@@ -281,10 +283,10 @@ static void TestDeadBroker(void)
     CHECK(GameChannelConnect(&game, L"test-dead", 2000), "dead broker: connected");
     Join(thread, &b);
     uint8_t running = 1;
-    uint32_t size = 0, status = 0;
-    CHECK(!GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &running, 1, &size, &status) && game.dead,
+    GameChannelReply answer = { &running, 1, 0, 0 };
+    CHECK(!GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &answer) && game.dead,
         "dead broker: the call fails and the channel is marked dead");
-    CHECK(!GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &running, 1, &size, &status), "dead broker: later calls fail at once");
+    CHECK(!GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &answer), "dead broker: later calls fail at once");
     GameChannelClose(&game);
 }
 
