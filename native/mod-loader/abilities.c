@@ -186,13 +186,6 @@ static uint32_t ApiAddAbility(HfMod* mod, const HfAbility* def)
     return a->id;
 }
 
-/* A sound in the world at the entity, as the game posts a weapon's (0x614A16): the source on the entity's unit's root
- * node (the Wwise plugin's API +0x590: (world, unit, node)) and its game object (+0x5A0: (world, source), -1 when the
- * source is gone), posted with +0x338. Asked for at every post, as the game asks before it posts: nothing is kept
- * across posts, so a source never outlives its unit here. With no unit, on the world's default source (+0x4148: heard
- * everywhere, as the in-game editor's menu sounds are). The unit: the scene graph's ([[game + 0x3326308] + 0x18] +0x748)
- * for the entity descriptor's +0xC. (The helldivers2.exe+0x626296 fault once laid at a unit source's door is the
- * game's own, on quitting.) */
 /* The game object of the source on the entity's unit's root node; NULL when it has no unit or its source is gone. */
 static void* AbilityUnitObject(uintptr_t game, uintptr_t api, uintptr_t world, uint32_t entity)
 {
@@ -212,6 +205,14 @@ static void* AbilityUnitObject(uintptr_t game, uintptr_t api, uintptr_t world, u
     }
     return object;
 }
+
+/* A sound in the world at the entity, as the game posts a weapon's (0x614A16): the source on the entity's unit's root
+ * node (the Wwise plugin's API +0x590: (world, unit, node)) and its game object (+0x5A0: (world, source), -1 when the
+ * source is gone), posted with +0x338. Asked for at every post, as the game asks before it posts: nothing is kept
+ * across posts, so a source never outlives its unit here. With no unit, on the world's default source (+0x4148: heard
+ * everywhere, as the in-game editor's menu sounds are). The unit: the scene graph's ([[game + 0x3326308] + 0x18] +0x748)
+ * for the entity descriptor's +0xC. (The helldivers2.exe+0x626296 fault once laid at a unit source's door is the
+ * game's own, on quitting.) */
 static void AbilitySound(uint32_t entity, uint32_t event)
 {
     if (event == 0) return;
@@ -276,9 +277,6 @@ static uint8_t* LinkRecord(uint32_t remote, int* shared)
     return record;
 }
 
-/* The remote's link marked "no link" for the countdown (its laser launches nothing meanwhile, here: once the laser-on byte
- * replicates, a machine without the mark would launch its copy at once, setting the explosive off a second time). 1 when
- * marked: a silo's link, or the table's record already marked by another countdown here. */
 /* The table's record counted among the shared marks for this countdown: one more on its mark, else a spare mark when it
  * is a silo's link. 0 when it is neither, or no mark is spare. */
 static int MarkShared(HeldLaunch* h, uint8_t* record, uint32_t magic)
@@ -297,6 +295,10 @@ static int MarkShared(HeldLaunch* h, uint8_t* record, uint32_t magic)
     h->sharedRecord = record;
     return 1;
 }
+
+/* The remote's link marked "no link" for the countdown (its laser launches nothing meanwhile, here: once the laser-on byte
+ * replicates, a machine without the mark would launch its copy at once, setting the explosive off a second time). 1 when
+ * marked: a silo's link, or the table's record already marked by another countdown here. */
 static int MarkLink(HeldLaunch* h)
 {
     int shared;
@@ -524,15 +526,6 @@ static void LaunchHeld(const Ability* a, HeldLaunch* h)
     NoteLaunched(a, h, missile, plausible);
 }
 
-/* A silo countdown's tick: on the remote, it fired; on its missile, the hold, then the launch.
- * Co-op: the silo, its missile and its remote belong to the machine that called the silo in (the host's ids on a
- * friend's machine), and the countdown runs on every machine its start reaches. Only the machine with authority over the
- * missile at the last tick launches it (a migration can move it mid-countdown: the slot is made then if there is none);
- * the others keep the link marked until the launch arrives with the missile's state (their laser's link runs on every
- * machine, 0x9C0769, and launches a missile not yet launched here), and SiloFrame frees the slot then. Engine 0.1.19's
- * launch on every machine set the explosive off once per machine (0x645940 starts 2088 wherever it runs). The remote's
- * own fire runs on the machine with authority over the remote (whose holder fires it); the others' copies of its ability
- * start nothing (a second start would restart the missile's countdown on its owner, 0x7CB01F). */
 /* A silo countdown's tick on the remote: its fire (tick 0) starts the countdown where this machine has authority over it. */
 static uint8_t RemoteTick(const Ability* a, uint32_t remote, uint32_t tick, int authority)
 {
@@ -567,6 +560,16 @@ static void CountdownOverElsewhere(const Ability* a, HeldLaunch* h, uint32_t mis
         h != NULL ? "link kept marked until then" : "no countdown slot here");
     CoopDiagMissile(missile, "countdown over without authority");
 }
+
+/* A silo countdown's tick: on the remote, it fired; on its missile, the hold, then the launch.
+ * Co-op: the silo, its missile and its remote belong to the machine that called the silo in (the host's ids on a
+ * friend's machine), and the countdown runs on every machine its start reaches. Only the machine with authority over the
+ * missile at the last tick launches it (a migration can move it mid-countdown: the slot is made then if there is none);
+ * the others keep the link marked until the launch arrives with the missile's state (their laser's link runs on every
+ * machine, 0x9C0769, and launches a missile not yet launched here), and SiloFrame frees the slot then. Engine 0.1.19's
+ * launch on every machine set the explosive off once per machine (0x645940 starts 2088 wherever it runs). The remote's
+ * own fire runs on the machine with authority over the remote (whose holder fires it); the others' copies of its ability
+ * start nothing (a second start would restart the missile's countdown on its owner, 0x7CB01F). */
 static uint8_t LinkedLaunchTick(const Ability* a, uint32_t entity, uint32_t tick, int authority)
 {
     if (!g_launchReady) return 1;
@@ -589,12 +592,6 @@ static uint8_t LinkedLaunchTick(const Ability* a, uint32_t entity, uint32_t tick
     return 1;
 }
 
-/* Every frame on the game thread: frees the countdown slots whose last tick will not come here, or came without authority
- * (the game drops a removed missile's abilities with no last tick, 0x54A380), giving the remote its link back: the
- * missile gone; launched (its launched byte +0x36, which is what the laser's link checks, set here or as another
- * machine's launch reached it); or long past its hold (with authority, three holds and 10 s, in case the game slows;
- * without, 5 s: the owner's launch is on its way). A countdown over without authority whose missile then migrated here
- * unlaunched is launched here. */
 /* A countdown slot freed (why: what became of its missile), its remote given its link back. */
 static void FreeSiloSlot(HeldLaunch* h, const char* why, int64_t seeking, int authority)
 {
@@ -623,6 +620,13 @@ static void SiloSlotFrame(HeldLaunch* h, uintptr_t missiles, ULONGLONG now)
     if (why == NULL) return;
     FreeSiloSlot(h, why, seeking, authority);
 }
+
+/* Every frame on the game thread: frees the countdown slots whose last tick will not come here, or came without authority
+ * (the game drops a removed missile's abilities with no last tick, 0x54A380), giving the remote its link back: the
+ * missile gone; launched (its launched byte +0x36, which is what the laser's link checks, set here or as another
+ * machine's launch reached it); or long past its hold (with authority, three holds and 10 s, in case the game slows;
+ * without, 5 s: the owner's launch is on its way). A countdown over without authority whose missile then migrated here
+ * unlaunched is launched here. */
 static void SiloFrame(HfMod* mod, float dt, void* user)
 {
     (void)mod;

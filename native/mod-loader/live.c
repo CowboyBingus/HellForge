@@ -350,8 +350,6 @@ static int ApiSyncMod(HfMod* mod, uint32_t index, HfSyncMod* out)
     return 1;
 }
 
-/* SDK 14, sync_answer: the player's answer to the offer of that version, queued for the backend. 0 when another offer
- * came since, none stands, or no backend is connected. */
 static const char* SyncAnswerWord(uint32_t answer)
 {
     return answer == HF_SYNC_ACCEPT ? "accept" : answer == HF_SYNC_DECLINE ? "decline" : answer == HF_SYNC_RESTART ? "restart" :
@@ -378,6 +376,8 @@ static int LiveQueue(const char* line, int length)
     return queued;
 }
 
+/* SDK 14, sync_answer: the player's answer to the offer of that version, queued for the backend. 0 when another offer
+ * came since, none stands, or no backend is connected. */
 static int ApiSyncAnswer(HfMod* mod, uint32_t version, uint32_t answer, const char* modId)
 {
     (void)mod;
