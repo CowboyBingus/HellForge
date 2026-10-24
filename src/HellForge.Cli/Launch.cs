@@ -333,6 +333,7 @@ static class Launch
         NoSession();
         var enabled = on switch { "yes" => true, "no" => false, _ => throw new ArgumentException("--on takes yes or no.") };
         Find(install, id);
+        if (id == ModCatalog.LocalStatsId && !enabled) throw new InvalidDataException("Local Stats is always on: it holds the in-game editor's saved changes (reset them in the editor).");
         ModSettings.SetEnabled(install.Mods, id, enabled);
         return new { id, enabled };
     }

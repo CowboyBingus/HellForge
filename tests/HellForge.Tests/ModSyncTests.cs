@@ -684,6 +684,9 @@ static class ModSyncTests
             Patch(Path.Combine(install.Mods, "local-stats", "data", "9ba626afa44a3aa3.patch_0"), ResourceTypes.Texture);
             Write(Path.Combine(install.Mods, "mine"), ModCatalog.ManifestName, Manifest("test.mine", "1", ",\"native\":{\"networkFieldTypes\":[{\"name\":\"remaining\",\"expect\":{\"kind\":1,\"bits\":8,\"min\":0},\"bits\":9}]}"));
             ModSettings.SetEnabled(install.Mods, "test.ammo", false);
+            // switched off before the Mods page stopped listing it: Local Stats is on all the same
+            ModSettings.SetEnabled(install.Mods, ModCatalog.LocalStatsId, false);
+            check(ModCatalog.Load(install.Mods).Mods.Single(m => m.Id == ModCatalog.LocalStatsId).Enabled, "Local Stats is always on.");
             var texture = host.Mods.Single(m => m.Id == "test.texture");
             var partial = SyncedStore.Partial(install.Mods, texture.Id, texture.Hash);
             CopyFiles(texture, partial);

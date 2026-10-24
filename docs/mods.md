@@ -64,8 +64,9 @@ The page saves its switches, order and pack options in `mods/hellforge-mods.json
 
 Drag a row within its group to change the order, or use Move up and Move down. The bottom mod loads first and the top
 one wins, as in other mod managers: where two mods change the same thing, the higher one's change stays. Mods new to the
-page go to the top of their group. The in-game editor's Local Stats (your saved editor changes, tagged YOUR EDITS) stays
-on top, so it applies last.
+page go to the top of their group. The in-game editor's saved changes (Local Stats) are not on the page: they are always
+on, load on top of every mod so they apply last, and friends never need to match them. Reset a change in the editor to
+undo it.
 
 ## Playing with friends
 

@@ -145,7 +145,8 @@ public static partial class ModCatalog
                 }
                 else mod = Parse(folder, profile);
                 mod = mod with { Archive = archive };
-                mods.Add(settings.Disabled.Contains(mod.Id) ? mod with { Enabled = false } : mod);
+                // Local Stats (the in-game editor's saved changes) is always on: the Mods page does not list it
+                mods.Add(settings.Disabled.Contains(mod.Id) && mod.Id != LocalStatsId ? mod with { Enabled = false } : mod);
             }
             catch (Exception error) when (error is InvalidDataException or JsonException or IOException)
             {

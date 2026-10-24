@@ -28,13 +28,12 @@ public partial class MainWindow
     DispatcherTimer? modsChanged;
 
     // A row being dragged: its group's rows (top first), where it was, and where it would go.
-    sealed class ModDrag(string id, StackPanel panel, List<(ModManifest Mod, Border Row)> rows, int from, int pinned)
+    sealed class ModDrag(string id, StackPanel panel, List<(ModManifest Mod, Border Row)> rows, int from)
     {
         public string Id { get; } = id;
         public StackPanel Panel { get; } = panel;
         public List<(ModManifest Mod, Border Row)> Rows { get; } = rows;
         public int From { get; } = from;
-        public int Pinned { get; } = pinned; // rows at the top that stay there (Local Stats)
         public int To { get; set; } = from;
     }
 
@@ -123,14 +122,16 @@ public partial class MainWindow
             ModsSummary.Text = "Could not read the mods folder: " + Privacy.Scrub(error.Message);
             return;
         }
+        // Local Stats is the in-game editor's (its saved changes, always on, never compared): not listed, so nobody thinks
+        // friends must match it
+        mods = mods.Where(m => m.Id != ModCatalog.LocalStatsId).ToList();
         var active = ModCatalog.Active(mods);
         ModsSummary.Text = mods.Count == 0 && problems.Count == 0
             ? "No mods yet. Add mods... takes HellForge mods (their .zip, .rar or .7z, or a folder mod's hellforge-mod.json) and cosmetic packs (.zip, .rar, .7z or the pack's manifest.json), and copies them into the mods folder."
             : $"{active.Count} of {mods.Count} mod{(mods.Count == 1 ? "" : "s")} on. Drag a mod to change the order: the bottom one loads first, the top one wins. " +
               "Changes apply to the next session" + (modsLocked ? "; the running session keeps the mods it started with." : ".");
-        // what friends compare (ModCatalog.Digest): not Local Stats, since in co-op everyone plays with the host's
-        var gameplay = active.Count(m => m.Gameplay && m.Id != ModCatalog.LocalStatsId);
-        var ownStats = active.Any(m => m.Id == ModCatalog.LocalStatsId) ? " Your Local Stats is not compared: in co-op everyone plays with the host's." : "";
+        // what friends compare (ModCatalog.Digest)
+        var gameplay = active.Count(m => m.Gameplay);
         string compared;
         try
         {
@@ -142,7 +143,7 @@ public partial class MainWindow
             // a file in a mod's folder that another program holds (issue 18): the list still shows
             compared = "Modlist code unavailable: a mod's file could not be read (" + Privacy.Scrub(error.Message) + "). Close the program using it, then Refresh.";
         }
-        ModsDigestText.Text = compared + ownStats;
+        ModsDigestText.Text = compared;
 
         // the folder's problems, and what the last Add mods refused (until the next one)
         var notices = problems.Concat(modsRefused.Select(p => "Not added: " + p)).ToList();
@@ -340,7 +341,6 @@ public partial class MainWindow
 
     Border ModRow(ModManifest mod, int number, StackPanel panel, List<(ModManifest Mod, Border Row)> rows, List<ModManifest> all)
     {
-        var pinned = mod.Id == ModCatalog.LocalStatsId;
         var grid = new Grid { ColumnDefinitions = new("Auto,Auto,Auto,Auto,*,Auto,Auto"), RowDefinitions = new("Auto,Auto") };
         var row = new Border
         {
@@ -348,16 +348,15 @@ public partial class MainWindow
             Padding = new(6, 8, 8, 8), Child = grid, Opacity = mod.Enabled ? 1 : 0.55
         };
 
-        // the row drags within its group (Local Stats stays on top: the editor's saved changes apply last); the handle
-        // marks it
+        // the row drags within its group; the handle marks it
         var handle = new TextBlock
         {
-            Text = pinned ? "" : "⠿", FontSize = 18, Width = 22, Foreground = Grey, TextAlignment = TextAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center, Cursor = pinned ? Cursor.Default : new Cursor(StandardCursorType.SizeNorthSouth),
+            Text = "⠿", FontSize = 18, Width = 22, Foreground = Grey, TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center, Cursor = new Cursor(StandardCursorType.SizeNorthSouth),
             Background = Brushes.Transparent
         };
-        ToolTip.SetTip(handle, pinned ? "Your editor changes stay on top: they apply last." : "Drag the mod to change the load order: higher wins.");
-        if (!pinned) Draggable(row, mod, panel, rows, all);
+        ToolTip.SetTip(handle, "Drag the mod to change the load order: higher wins.");
+        Draggable(row, mod, panel, rows, all);
         grid.Children.Add(handle);
 
         var place = new TextBlock { Text = number.ToString(), Width = 26, FontSize = 12, Foreground = Grey, TextAlignment = TextAlignment.Right,
@@ -410,9 +409,9 @@ public partial class MainWindow
         grid.Children.Add(tags);
 
         var menu = new Button { Content = "⋮", Classes = { "flat" }, FontSize = 18, Padding = new(10, 0), Margin = new(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
-            Flyout = ModMenu(mod, pinned, rows, all) };
+            Flyout = ModMenu(mod, rows, all) };
         ToolTip.SetTip(menu, "More: build, zip, open its folder, remove.");
-        row.ContextFlyout = ModMenu(mod, pinned, rows, all);
+        row.ContextFlyout = ModMenu(mod, rows, all);
         Grid.SetColumn(menu, 6);
         grid.Children.Add(menu);
 
@@ -432,8 +431,7 @@ public partial class MainWindow
     {
         var tags = new List<(string, string)>();
         if (build?.Colour == Red) tags.Add(("DID NOT COMPILE", "#FF6054"));
-        if (mod.Id == ModCatalog.LocalStatsId) tags.Add(("YOUR EDITS", "#FFC72C"));
-        else if (BundledMods.ShippedFiles(mod.Folder) != null) tags.Add(("BUNDLED", "#9AA0A8"));
+        if (BundledMods.ShippedFiles(mod.Folder) != null) tags.Add(("BUNDLED", "#9AA0A8"));
         if (mod.Pack != null) tags.Add(("PACK", "#4FA3FF"));
         if (mod.Lua) tags.Add(("LUA", "#F2A541"));
         if (mod.HasCode) tags.Add(("CODE", "#E05591"));
@@ -604,33 +602,30 @@ public partial class MainWindow
     }
 
     // The ⋮ menu (and the row's right click): details, order, build, zip, folder, remove.
-    MenuFlyout ModMenu(ModManifest mod, bool pinned, List<(ModManifest Mod, Border Row)> rows, List<ModManifest> all)
+    MenuFlyout ModMenu(ModManifest mod, List<(ModManifest Mod, Border Row)> rows, List<ModManifest> all)
     {
         var menu = new MenuFlyout();
         var details = new MenuItem { Header = modsExpanded.Contains(mod.Id) ? "Hide details" : "Details" };
         details.Click += (_, _) => { if (!modsExpanded.Remove(mod.Id)) modsExpanded.Add(mod.Id); RefreshMods(); };
         menu.Items.Add(details);
-        if (!pinned)
+        // the group's rows are all there once the menu opens (this row is made before it joins them)
+        int At() => rows.FindIndex(r => r.Mod.Id == mod.Id);
+        var up = new MenuItem { Header = "Move up" };
+        var down = new MenuItem { Header = "Move down" };
+        menu.Opening += (_, _) =>
         {
-            // the group's rows are all there once the menu opens (this row is made before it joins them)
-            int At() => rows.FindIndex(r => r.Mod.Id == mod.Id);
-            var up = new MenuItem { Header = "Move up" };
-            var down = new MenuItem { Header = "Move down" };
-            menu.Opening += (_, _) =>
-            {
-                up.IsEnabled = !modsLocked && At() > rows.Count(r => r.Mod.Id == ModCatalog.LocalStatsId);
-                down.IsEnabled = !modsLocked && At() >= 0 && At() < rows.Count - 1;
-            };
-            up.Click += (_, _) => MoveMod(rows, At(), At() - 1, all);
-            down.Click += (_, _) => MoveMod(rows, At(), At() + 2, all);
-            menu.Items.Add(up);
-            menu.Items.Add(down);
-        }
+            up.IsEnabled = !modsLocked && At() > 0;
+            down.IsEnabled = !modsLocked && At() >= 0 && At() < rows.Count - 1;
+        };
+        up.Click += (_, _) => MoveMod(rows, At(), At() - 1, all);
+        down.Click += (_, _) => MoveMod(rows, At(), At() + 2, all);
+        menu.Items.Add(up);
+        menu.Items.Add(down);
         menu.Items.Add(new Separator());
         // BUILD for a mod with sources; ZIP and REMOVE for the player's own mods (not the ones HellForge ships, which come
-        // back by themselves, nor Local Stats, the editors' saved changes); ZIP not for a zip, which is one already, nor a
+        // back by themselves); ZIP not for a zip, which is one already, nor a
         // cosmetic pack, which is shared as its author made it
-        var own = paths.InstallRoot != null && mod.Id != ModCatalog.LocalStatsId && BundledMods.ShippedFiles(mod.Folder) == null;
+        var own = paths.InstallRoot != null && BundledMods.ShippedFiles(mod.Folder) == null;
         if (Sdk != null && mod.HasSource) menu.Items.Add(BuildItem(mod));
         if (own && mod.Archive == null && mod.Pack == null) menu.Items.Add(ZipItem(mod));
         var folder = new MenuItem { Header = "Open folder" };
@@ -687,7 +682,7 @@ public partial class MainWindow
                 if (Math.Abs(y - start.Y) < 5 || modsLocked) return;
                 var from = rows.FindIndex(r => r.Mod.Id == mod.Id);
                 if (from < 0) { pressed = null; return; }
-                modDrag = new(mod.Id, panel, rows, from, rows.Count(r => r.Mod.Id == ModCatalog.LocalStatsId));
+                modDrag = new(mod.Id, panel, rows, from);
                 e.Pointer.Capture(row);
                 // the row being moved lights up in the accent colours
                 row.Background = DragFill;
@@ -695,7 +690,7 @@ public partial class MainWindow
             }
             if (modDrag is not { } drag || drag.Id != mod.Id) return;
             var to = drag.Rows.Count(r => r.Row.Bounds.Top + r.Row.Bounds.Height / 2 < y);
-            drag.To = Math.Max(to, drag.Pinned);
+            drag.To = to;
             // the line shows where it lands, its own place too (just above or below itself: nothing moves)
             for (var i = 0; i < drag.Rows.Count; i++) drag.Rows[i].Row.BoxShadow = default;
             if (drag.To < drag.Rows.Count) drag.Rows[drag.To].Row.BoxShadow = DropAbove;
