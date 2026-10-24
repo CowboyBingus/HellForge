@@ -50,7 +50,7 @@ static partial class ModSyncTests
             SessionFile = ModSyncSession.PathIn(new InstallLayout(folder));
             void Note(string line) { lock (Log) Log.Add(line); }
             Lobby = new LobbyService(transport, Inbox.Add, Note, own.Digest);
-            Sync = new ModSync(transport, Mods, own, Run, evidence, SessionFile, peer => "Player " + LobbyService.EntityId(peer), Note, verified) { Display = Shown };
+            Sync = new ModSync(transport, new ModSyncPaths(Mods, Run, evidence, SessionFile), own, peer => "Player " + LobbyService.EntityId(peer), Note, verified) { Display = Shown };
             Lobby.ModsRefused = Sync.OfferMods;
             Sync.Expected = Lobby.JoinedRecently;
             transport.Received += (peer, bytes) =>
