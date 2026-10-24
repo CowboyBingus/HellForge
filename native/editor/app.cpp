@@ -409,7 +409,7 @@ void AddModContent()
             HfLiveValue value;
             return api->get_live(g_host.mod, ref, &field, &value) != 0;
         };
-        Object* o = g_catalog.AddCopy(*like, std::string("mod/") + s.name, name, std::string("mod:") + s.name, s.name, remap, nav, keep);
+        Object* o = g_catalog.AddCopy(*like, {std::string("mod/") + s.name, name, std::string("mod:") + s.name, s.name, nav}, remap, keep);
         if (o == nullptr) { api->log(g_host.mod, "editor: %s: none of its page's fields are its own", s.name); continue; }
         o->detail = std::string("Added by ") + s.mod;
         if (s.icon != nullptr && s.folder != nullptr)
