@@ -161,7 +161,7 @@ static int SetLive(HfMod*, HfRef target, const HfField* field, const HfValue* va
 /* every field holds 640, its base 600; whole-number fields (references among them) hold their base. With
  * HELLFORGE_EDITOR_TEST_VIEW=mods (the MODS view's screenshot), mods hold some: a Lua mod a damage row's armour
  * penetration (+12, 9 where an editor change holds 10), a code mod the projectile settings' velocity (+32). */
-static bool g_modsView;
+static bool g_modsView, g_enemiesView; /* HELLFORGE_EDITOR_TEST_VIEW=enemies: a screenshot of an enemy's category at the end */
 static int GetLive(HfMod*, HfRef, const HfField* field, HfLiveValue* out)
 {
     out->now.type = out->base.type = field->type;
@@ -275,6 +275,7 @@ int main(int argc, char** argv)
     g_api.notice = Notice;
     g_api.sync_state = SyncState; g_api.sync_mod = SyncMod; g_api.sync_answer = SyncAnswer;
     g_modsView = getenv("HELLFORGE_EDITOR_TEST_VIEW") != NULL && !strcmp(getenv("HELLFORGE_EDITOR_TEST_VIEW"), "mods");
+    g_enemiesView = getenv("HELLFORGE_EDITOR_TEST_VIEW") != NULL && !strcmp(getenv("HELLFORGE_EDITOR_TEST_VIEW"), "enemies");
     /* the editor's folder in a mods folder of the test's own: its catalogue and icons, and Local Stats next to it */
     char mods[MAX_PATH], stats[MAX_PATH];
     GetTempPathA(MAX_PATH, mods);
@@ -540,6 +541,28 @@ int main(int argc, char** argv)
             if (drawn < 1000) { puts("FAIL the editor's window is not on screen"); failures++; }
             free(pixels); DeleteObject(bitmap); DeleteDC(memory); ReleaseDC(NULL, screen);
         }
+    }
+    /* HELLFORGE_EDITOR_TEST_VIEW=enemies, a screenshot only: an Illuminate enemy found in the SEARCH view (F6 from BROWSE)
+     * and opened in its category, with the faction emblems on the category, the rows and the header; the run ends there */
+    if (g_enemiesView && catalogued && argc > 2)
+    {
+        auto pump = [&](int n) {
+            for (int i = 0; i < n; i++)
+            {
+                MSG message;
+                while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
+                chain->Present(1, 0);
+            }
+        };
+        Key(window, VK_F6); pump(4);
+        Type(window, "overseer"); pump(6);
+        Key(window, VK_RETURN); pump(10);
+        char shot[MAX_PATH];
+        snprintf(shot, sizeof shot, "%s", argv[2]);
+        if (char* dot = strrchr(shot, '.')) snprintf(dot, (size_t)(shot + sizeof shot - dot), "-enemies.bmp");
+        Screenshot(shot, width, height);
+        printf("%s overlay: the enemies view's screenshot (%s)\n", failures ? "FAIL" : "PASS", shot);
+        return failures ? 1 : 0;
     }
     /* the change: applied through set_live, then saved into Local Stats (a second after it, from a frame) */
     if (catalogued)

@@ -294,5 +294,10 @@
     "SUPPLEMENTAL ADRENALINE": "0xB6F70694E795E2D9",
     "TRUE GRIT": "0x06974150D5198CC3",
     "UNFLINCHING": "0x17208F22C9F98ADC"
+  },
+  "factions": {
+    "automatons": "0xFAD9C776C98DCC7D",
+    "illuminate": "0xADD2ECC40DEE7C3E",
+    "terminids": "0x69DF23FFCA2CBB8D"
   }
 }

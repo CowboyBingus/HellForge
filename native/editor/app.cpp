@@ -60,6 +60,14 @@ Tone ToneOf(const std::string& tone)
     if (tone == "support") return {C(74, 172, 232, 255), C(74, 172, 232, 40)};
     return {0, 0};
 }
+/* An enemy faction's colour, the HD2R Editor's (its emblem, the game's HUD icon, is drawn in it); 0 for any other category. */
+ImU32 FactionColour(const std::string& category)
+{
+    if (category == "terminids") return C(255, 201, 45, 255);
+    if (category == "automatons") return C(255, 80, 80, 255);
+    if (category == "illuminate") return C(183, 116, 255, 255);
+    return 0;
+}
 const float SZ_TITLE = 22, SZ_TAB = 15, SZ_HEADING = 13, SZ_LABEL = 15, SZ_SMALL = 13, SZ_TINY = 12;
 const float PANEL_W = 1260, PANEL_H = 930, PANEL_MIN_H = 660;
 const float UI_SCALES[] = {0.9f, 1.0f, 1.1f, 1.25f, 1.4f, 1.5f};
@@ -1085,8 +1093,9 @@ float DrawMarks(const Marks& m, float x, float cy, float size)
 }
 
 /* An object's icon, fitted into a square: the game's HUD silhouette of a weapon or throwable; a stratagem's icon as the
- * game draws it (its category layer in the category's colour, its white layer white); a booster as it is. A stratagem
- * with no icon is a plain square in its colour (never made-up art). False when there is nothing to draw. */
+ * game draws it (its category layer in the category's colour, its white layer white); a booster as it is; an enemy its
+ * faction's emblem in the faction's colour. A stratagem with no icon is a plain square in its colour (never made-up art).
+ * False when there is nothing to draw. */
 bool DrawIcon(const Object* object, float x, float y, float size, int z = 4)
 {
     if (!icons::Texture()) return false;
@@ -1125,6 +1134,13 @@ bool DrawIcon(const Object* object, float x, float y, float size, int z = 4)
         const icons::Icon* icon = icons::Find(object->icon == "throwable" ? icons::THROWABLE : icons::WEAPON, object->name);
         if (icon == nullptr) return false;
         fit(icon, ICON, z);
+        return true;
+    }
+    if (ImU32 faction = FactionColour(object->category))
+    {
+        const icons::Icon* icon = icons::Find(icons::FACTION, object->category);
+        if (icon == nullptr) return false;
+        fit(icon, faction, z);
         return true;
     }
     if (tone.colour) { g_cv.Rect(x + size * 0.18f, y + size * 0.18f, size * 0.64f, size * 0.64f, tone.colour, z); return true; }
@@ -3260,8 +3276,17 @@ void DrawCategories(float y0, float h)
         else if (g_cv.Hovered() == id) g_cv.Rect(8, y, CAT_W - 16, rh, HOVER, 2);
         if (tone.colour && !selected) g_cv.Rect(8, y + 9, 3, rh - 18, tone.colour, 3);
         float cw = g_cv.Text(std::to_string(g_catalog.Of(nav.id).size()), CAT_W - 20, y + rh / 2, T(SZ_SMALL, FAINT, ui::BODY, ui::RIGHT));
+        /* an enemy faction's emblem left of its count, then the markers */
+        float right = CAT_W - 28 - cw;
+        const icons::Icon* emblem = FactionColour(nav.id) && icons::Texture() ? icons::Find(icons::FACTION, nav.id) : nullptr;
+        if (emblem != nullptr)
+        {
+            const float size = 20;
+            g_cv.Image(icons::Texture(), right - size, y + (rh - size) / 2, size, size, emblem->uv0, emblem->uv1, FactionColour(nav.id), 4);
+            right -= size + 6;
+        }
         auto found = marks.navs.find(nav.id);
-        float mx = DrawMarks(found != marks.navs.end() ? found->second : Marks{}, CAT_W - 28 - cw, y + rh / 2, 26);
+        float mx = DrawMarks(found != marks.navs.end() ? found->second : Marks{}, right, y + rh / 2, 26);
         g_cv.Text(item.label, 22, y + rh / 2, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, std::min(CAT_W - 80, mx - 30)));
         if (g_cv.Hit(8, y, CAT_W - 16, rh, id)) { SelectCategory(i); g_focus = CATEGORIES; }
     }
