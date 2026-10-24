@@ -32,6 +32,8 @@
     "src/HellForge.Session/HostBoundedProcess.cs",
     "src/HellForge.Session/LocalRoutingPatch.cs"
   ],
+  "severity": {"R10": "warning", "R11": "warning", "R12": "error", "R13": "error", "R14": "error",
+               "R15": "warning"},
   "limits": {"cognitive": 15, "function_lines": 150, "parameters": 7, "stack_bytes": 16384, "module_lines": 1000,
              "clone_tokens": 100}
 }

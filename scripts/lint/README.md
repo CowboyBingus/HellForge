@@ -5,7 +5,9 @@ is, how large each file is, and which code is duplicated. It is Bingus Shared Ru
 R10-R15 of its `lint.py` and `metrics.py`), ported to these languages, with the same rule numbers, commands, baseline
 and `lint-ok` comments. Bingus's R1-R9 are about Lua's shared state and do not apply here.
 
-It needs Python 3.10 or newer and nothing else: it tokenizes and parses the sources itself and never runs a compiler.
+It needs Python 3.10 or newer (CI runs 3.10) and nothing else: it tokenizes and parses the sources itself and never
+runs a compiler. On Windows run it with `py -3` (a bare `python` can open the Microsoft Store's alias instead); on
+Linux and macOS, with `python3`.
 
 | File | What |
 | --- | --- |
@@ -25,6 +27,9 @@ It needs Python 3.10 or newer and nothing else: it tokenizes and parses the sour
 | R13 `stack-size` (C, C++) | A function whose fixed-size local arrays of scalar or pointer type take more than 16 KiB together (`static` ones do not count) | Native code runs on the game's threads, with unknown stack headroom in hooks and detours, and a stack overflow kills the game. Make the buffer `static`, or allocate it once. |
 | R14 `duplicated-code` | A run of at least 100 tokens that also occurs elsewhere, in the same file or another file of the same language family (C#; C and C++) | A fix made in one copy misses the other. Share one copy. |
 | R15 `module-size` | A source file of more than 1000 code lines | A long file mixes concerns. |
+
+**Severity.** For `check`, R12, R13 and R14 are errors and R10, R11 and R15 are warnings (`severity` in
+`lint-config.json`). What that means is under "The baseline" below.
 
 **Cognitive complexity** follows SonarSource's 2017 definition:
 - `if`, `switch` (statements and C#'s switch expressions), `for`, `foreach`, `while`, `do`, `catch` and `?:` each add
@@ -58,7 +63,8 @@ lambda: where it starts), R14 on the first line of the duplicated run, and R15 o
   `FOR_EACH(x) { }`) and adds nothing.
 - **Unbalanced brackets are a parse error** (exit code 2).
 - **Stack size:** sizes are known for C's and Windows' scalar types and pointers, and `MAX_PATH`. Arrays of structs, and
-  sizes that use other names (`buf[COUNT]`), are not counted.
+  sizes that use other names (`buf[COUNT]`), are not counted. A size is C integer arithmetic (`+ - * / << >>` and
+  brackets) with no exponent (`9**9` is no size), and values from 2^64 on are refused.
 - **C# nullable types:** `T?` before a name and `=`, `;`, `,`, `)`, `{` or `=>`, or before `>`, `,`, `)`, `]`, `;` or `=`,
   is not a `?:`.
 
@@ -67,12 +73,12 @@ lambda: where it starts), R14 on the first line of the duplicated run, and R15 o
 From the repository root:
 
 ```
-python scripts/lint/lint.py                         # unit x rule table
-python scripts/lint/lint.py scan --list             # every violation, with its detail
-python scripts/lint/lint.py scan --json             # machine-readable output
-python scripts/lint/lint.py check                   # exit 1 when anything is new or worse than the baseline
-python scripts/lint/lint.py update                  # rewrite the baseline after fixes; refuses increases
-python scripts/lint/lint.py update --allow-increase # accept increases: reviewed ones
+py -3 scripts/lint/lint.py                         # unit x rule table
+py -3 scripts/lint/lint.py scan --list             # every violation, with its detail
+py -3 scripts/lint/lint.py scan --json             # machine-readable output
+py -3 scripts/lint/lint.py check                   # what a change adds against the baseline (CI runs this)
+py -3 scripts/lint/lint.py update                  # rewrite the baseline after fixes; refuses increases
+py -3 scripts/lint/lint.py update --allow-increase # accept increases: reviewed ones
 ```
 
 Options:
@@ -81,16 +87,32 @@ Options:
 - `--config`, `--baseline` and `--root` choose other files and the folder config paths start from (default: the
   repository).
 
-**The baseline.**
-- Identity: (unit, file, rule, line text with whitespace collapsed), with the measured value: complexity, lines,
-  parameters, bytes, duplicated tokens or file lines.
-- A known function that gets worse fails `check` (`baseline 16, now 17`); one that improves, or goes, is reported as
-  "fixed - run update".
-- Editing a violating line gives it a new identity: `check` reports it as NEW and the old line as fixed. Fix it or mark
-  it `lint-ok`. Otherwise, after review, accept it with `update --allow-increase`.
+## The baseline
+
+`lint-baseline.json` lists the violations the code has today, so the lint can run on code written before it. `check`
+compares a scan with it:
+
+- **Identity:** (unit, file, rule, function), with the measured value: complexity, lines, parameters, bytes,
+  duplicated tokens or file lines. R14's function is the one its run starts in (none at file scope); R15's identity is
+  the file. A changed signature line, an added parameter or a moved function keeps the identity; a renamed function, or
+  one moved to another file, has a new one.
+- **Same names:** functions that share a name in one file (overloads, lambdas in one method) share an identity. Their
+  values are paired largest first, and the ones without a counterpart are new or gone.
+- **What fails:** a violation of an error rule (R12, R13, R14) that the baseline does not have: new code over a limit,
+  or an existing function pushed over one for the first time. A duplicated run counts at both of its copies.
+- **What warns:** the same for a warning rule (R10, R11, R15), and any known violation that grew (`known, grew:
+  baseline 16, now 17`). Warnings do not fail `check`.
+- **What is fixed:** a known violation that got smaller or went is listed as "lower - run update"; `update` then
+  lowers the baseline.
+- Each error and warning names its line, function and detail, and ends with a pointer here and to `lint-ok`. In GitHub
+  Actions each one is also an annotation on its line in the pull request.
+- Then: fix it (the "Why" column above says how), or, when the code is right as it is, mark the reported line
+  `// lint-ok: R<n> <reason>`. A reviewed increase is accepted with `update --allow-increase`, which rewrites the
+  baseline with what the scan found.
 - `update` keeps the entries of units outside `--only`.
 
-Exit codes: 0 means OK; 1 means new violations (`check`) or a refused update; 2 means a configuration or parse error.
+Exit codes: 0 means OK (warnings allowed); 1 means errors (`check`) or a refused update; 2 means a configuration or
+parse error, or a baseline of an older format (regenerate it with `update --allow-increase`).
 
 ## Configuration
 
@@ -101,6 +123,7 @@ Exit codes: 0 means OK; 1 means new violations (`check`) or a refused update; 2 
   "units": [{"name": "c-mod-template", "path": "templates/c-mod"}],
   "default_sources": ["**/*.cs", "**/*.c", "**/*.h", "**/*.cpp"],
   "exclude": ["**/bin/**", "**/obj/**", "**/test/**", "**/tests/**", "native/editor/ui_logo.h"],
+  "severity": {"R10": "warning", "R11": "warning", "R12": "error", "R13": "error", "R14": "error", "R15": "warning"},
   "limits": {"cognitive": 15, "function_lines": 150, "parameters": 7, "stack_bytes": 16384, "module_lines": 1000,
              "clone_tokens": 100}
 }
@@ -113,25 +136,28 @@ Exit codes: 0 means OK; 1 means new violations (`check`) or a refused update; 2 
   generated files: the editor's image headers, the mod loader's generated tables and the SDK's generated headers;
   nor the session runner's copies of `scripts/` experiments kept as sessions compiled them (`EarlyConstructor.cs`,
   `HostBoundedProcess.cs`, `LocalRoutingPatch.cs`), since the `scripts/` originals are not linted either.
+- **`severity`:** `error` or `warning` per rule, for `check`; a rule left out keeps its default (above).
 - **`limits`:** any key may be left out; an unknown key stops the lint with exit code 2.
 
 ## Tests
 
 ```
-python -m unittest discover -s scripts/lint/tests -v
+py -3 -m unittest discover -s scripts/lint/tests -v
 ```
 
 - `test_structure.py`: the tokenizer (directives and their comments, `#if` branches, every string form), which
   constructs are functions in each language, cognitive complexity against SonarSource's examples (`sumOfPrimes` scores
   7, a `switch` 1), `else`, boolean runs, `?:` and C#'s nullable `?`, loops, `catch`, recursion, lambdas measured
-  alone, macro blocks, code lines, stack bytes and duplicated code.
+  alone, macro blocks, code lines, stack bytes and array sizes, and duplicated code.
 - `test_lint.py`: every rule exactly at its limit (silent) beside one just over it (reported), `lint-ok`, R14 within a
-  language family and across units, R15, the baseline ratchet, `--only`, and the command line's errors.
+  language family and across units, R15, the baseline (an error rule and a warning rule, growth, a changed
+  signature and first line, a rename, overloads, a fix, an older format, the severity setting, GitHub
+  annotations), `--only`, and the command line's errors.
 
 ## In CI
 
-The "Structure lint" job of `.github/workflows/ci.yml` runs these tests and then `check` on every pull request into
-`dev` or `main` and every push to `dev`, on Linux (the repository's `.gitattributes` keeps every source LF, so the lint
-reads the same bytes on any platform). A pull request that adds a violation or makes a known one worse fails it. It
-blocks merging once "Structure lint" is a required check of the `dev` and `main` rulesets, beside "Build and test"
-(Settings, Rules, Rulesets: "Require status checks to pass").
+The "Structure lint" job of `.github/workflows/ci.yml` runs these tests and then `check` with Python 3.10 on every pull
+request into `dev` or `main` and every push to `dev`, on Linux (the repository's `.gitattributes` keeps every source LF,
+so the lint reads the same bytes on any platform). It fails on errors, as above; warnings show as annotations and in
+its log. It blocks merging once "Structure lint" is a required check of the `dev` and `main` rulesets, beside "Build
+and test" (Settings, Rules, Rulesets: "Require status checks to pass").
