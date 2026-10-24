@@ -123,6 +123,11 @@ public sealed class LobbyService
     // listing is looked at again. The game's lobby search from this machine's DLL: lobby.find [op, entity id, entity type,
     // filter, sort, result count], answered with lobby.found. Both are called under this service's lock.
     public event Action? HostedChanged;
+    // A friend's machine admitted to a lobby hosted here, raised under this service's lock BEFORE any game hears of the
+    // member: a sandboxed host's Steam broker lets the game's P2P reach only listed peers, and the host's game sends to a
+    // joiner the moment it hears of it (MultiplayerHost.ListPeer). A handler must not take this service's or the Party
+    // service's lock.
+    public event Action<ulong>? PeerAdmitted;
     public Action<Frame>? Find { get; set; }
     public sealed record Hosted(string Id, string ConnectionString, uint MaxMembers, int Members, int Access, bool Locked, bool LocalOwner,
         IReadOnlyDictionary<string, string> SearchProperties, Privacy Privacy = Privacy.FriendsOnly);
@@ -573,6 +578,7 @@ public sealed class LobbyService
                 var member = new LobbyMember(memberId, frame.Text(2), node) { Properties = memberProperties };
                 lobby.Members.Add(member);
                 if (node != LocalNode) lobby.Admitted.Add(node);
+                if (node != LocalNode) PeerAdmitted?.Invoke(node);
                 log($"{(node == LocalNode ? "A local player" : "A friend")} joined lobby {lobby.Id} ({lobby.Members.Count} members).");
                 Send(node, Snapshot(new Frame("lobby.result").Add(op).Add("join").Add(0), lobby));
                 // A friend's backend adopts this war time, so both games see the same war.

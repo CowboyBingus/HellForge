@@ -428,6 +428,11 @@ reaches only the game's **co-op peers**, so the game has no way to send to any o
   and reach its members.
   - The backend writes its lobby and Party peers to `run/backend/p2p-peers.txt` (`MultiplayerHost.PeersFileName`), at
     once when a lobby changes or a join starts, and on each heartbeat. The low-integrity game cannot write that folder.
+  - A friend admitted to a lobby hosted here, and the host of a lobby this game joins, are written in **before** the
+    game hears of them (`LobbyService.PeerAdmitted`, `MultiplayerHost.ListPeer`; 2026-10-24). The host's game sends the
+    moment it hears of a joiner, so the file must already list it; before, the file was written a few milliseconds
+    after the announcement. A peer listed that way stays in the file until the lobby or Party lists it too (at most
+    30 s), and a kick takes it out at once.
   - The broker reads the file when its time stamp moves, and again at once when a SteamID is not in it: a host sends
     within a second of a join, seconds before the joiner enters its Steam lobby.
 - **Out:** `SendP2PPacket` (at most 7000 bytes, channels 0-7), `AcceptP2PSessionWithUser` and `GetP2PSessionState` to a
