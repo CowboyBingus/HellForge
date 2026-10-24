@@ -178,8 +178,8 @@ int g_change;
 struct LiveState { bool read = false; double now = 0, base = 0; std::string mod; ULONGLONG at = 0; };
 std::map<const Row*, LiveState> g_live;
 /* A live read is a lookup in the mod loader under its lock, a long one for some fields: an enemy page reads 300 at
- * once, and they all go stale together. The reads drawing asks for share LIVE_BUDGET_US a frame (HolderTick has its
- * own); the rest wait for a later frame, which also spreads their next refresh. A fresh read (after an edit) is never
+ * once, and they all go stale together. The reads drawing asks for share LIVE_BUDGET_US a frame (HolderTick gets what
+ * they leave of it, after the page); the rest wait for a later frame, which also spreads their next refresh. A fresh read (after an edit) is never
  * held back. Frame() logs a frame that was slow anyway. */
 const LONGLONG LIVE_BUDGET_US = 1500;
 struct { unsigned frame = 0; LONGLONG ticks = 0; int reads = 0, held = 0; } g_liveFrame;
@@ -303,8 +303,8 @@ bool Locked() { return g_hostStats; }
 /* HellForge's messages for the player (SDK 12, HfApi notice; docs/mods.md "Playing with friends"): why a friend's lobby
  * refused this game's join, or why a friend could not join this one. Each new one shows over the game for a while, the
  * editor open or not (Overlay draws it while the window is closed). */
-struct { uint32_t version = 0; bool error = false; std::string title; std::vector<std::string> lines; ULONGLONG at = 0; } g_notice;
-const ULONGLONG NOTICE_ERROR_MS = 20000, NOTICE_INFO_MS = 12000, NOTICE_FADE_MS = 800;
+struct { uint32_t version = 0; bool error = false, brief = false; std::string title; std::vector<std::string> lines; ULONGLONG at = 0; } g_notice;
+const ULONGLONG NOTICE_ERROR_MS = 20000, NOTICE_INFO_MS = 12000, NOTICE_BRIEF_MS = 6000, NOTICE_FADE_MS = 800;
 bool HasNotice() { return g_host.api->size >= offsetof(HfApi, notice) + sizeof(void*) && g_host.api->notice != nullptr; }
 void ReadNotice()
 {
@@ -316,8 +316,10 @@ void ReadNotice()
     now.text[sizeof now.text - 1] = 0;
     g_notice.version = now.version;
     g_notice.error = now.kind == HF_NOTICE_ERROR;
+    g_notice.brief = now.kind == HF_NOTICE_BRIEF;
     g_notice.title = now.title;
-    for (char& c : g_notice.title) if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A'); /* a heading, as the editor's (UTF-8 kept) */
+    if (!g_notice.brief) /* a heading, as the editor's (UTF-8 kept); a brief one keeps the friend's name as it is */
+        for (char& c : g_notice.title) if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
     g_notice.lines.clear();
     for (const char *p = now.text, *end; *p; p = *end ? end + 1 : end)
     {
@@ -328,7 +330,7 @@ void ReadNotice()
     g_notice.at = GetTickCount64();
     if (g_notice.error) Sound(sounds::ERROR_);
 }
-ULONGLONG NoticeMs() { return g_notice.error ? NOTICE_ERROR_MS : NOTICE_INFO_MS; }
+ULONGLONG NoticeMs() { return g_notice.error ? NOTICE_ERROR_MS : g_notice.brief ? NOTICE_BRIEF_MS : NOTICE_INFO_MS; }
 ImU32 Faded(ImU32 colour, float alpha) { return (colour & 0x00FFFFFF) | ((ImU32)((float)(colour >> 24) * alpha + 0.5f) << 24); }
 /* A line broken into lines at most max units wide, at word ends (a word wider than that is cut with "..."). */
 std::vector<std::string> Wrapped(const std::string& text, float max, float size)
@@ -360,6 +362,19 @@ void DrawNotice()
     if (age >= total) return;
     float alpha = age + NOTICE_FADE_MS > total ? (float)(total - age) / (float)NOTICE_FADE_MS : 1.0f;
     ImU32 accent = g_notice.error ? ERROR_ : GOLD;
+    if (g_notice.brief) /* a small note in the top right corner: the title and the first line (the host's "<friend> couldn't join") */
+    {
+        float bw = std::min(440.0f, g_cv.width - 40), bx = floorf(g_cv.width - g_cv.ox - bw - 24), by = 24 - g_cv.oy;
+        bool line = !g_notice.lines.empty();
+        float bh = line ? 58 : 36;
+        g_cv.Rect(bx - 3, by - 3, bw + 6, bh + 6, Faded(SHADOW, alpha), 13);
+        g_cv.Rect(bx, by, bw, bh, Faded(PANEL_ALT, alpha), 13);
+        g_cv.Frame(bx, by, bw, bh, Faded(LINE_STRONG, alpha), 14);
+        g_cv.Rect(bx, by, 3, bh, Faded(accent, alpha), 14);
+        g_cv.Text(g_notice.title, bx + 16, by + 18, T(SZ_LABEL, Faded(TEXT, alpha), ui::BODY, ui::LEFT, bw - 32, 15));
+        if (line) g_cv.Text(g_notice.lines[0], bx + 16, by + 40, T(SZ_SMALL, Faded(DIM, alpha), ui::BODY, ui::LEFT, bw - 32, 15));
+        return;
+    }
     float w = std::min(860.0f, g_cv.width - 40), x = floorf(g_cv.width / 2 - g_cv.ox - w / 2), y = 36 - g_cv.oy;
     std::vector<std::string> lines;
     size_t lead = 0; /* the first line's rows, brighter: what happened; the rest say why */
@@ -947,7 +962,7 @@ void StageResetAll()
 
 /* ---- holders: the mod whose value each catalogue row holds (get_live / get_stat name it), read a few rows a frame so
  * the objects' and categories' marks and the MODS view know them without stalling the game: every frame from the
- * session's start, open or not (Tick: 0.5 ms of reads; 1.5 ms more while the editor draws), a pass over the catalogue
+ * session's start, open or not (Tick: 0.5 ms of reads; while the editor draws, what the page's reads leave of their 1.5 ms), a pass over the catalogue
  * every 10 s. What a pass finds shows in the marks within half a second. ---- */
 std::map<const Row*, std::string> g_holders;
 size_t g_holderNext;
@@ -3902,7 +3917,6 @@ void DrawErrors();
 
 void Draw()
 {
-    HolderTick(1500);
     g_cv.Rect(-4, -4, PANEL_W + 8, g_panelH + 8, SHADOW, 0);
     g_cv.Rect(0, 0, PANEL_W, g_panelH, PANEL, 0);
     int errors = (int)g_errors.size(), active = (int)SavedRows().size();
@@ -3922,6 +3936,9 @@ void Draw()
     DrawPicker();
     DrawErrors();
     DrawSync();
+    /* the holders read after the page, with what its own reads left of the frame's budget: what is on screen comes first */
+    LONGLONG used = LiveFrame().ticks * 1000000 / QpcFrequency();
+    if (used < LIVE_BUDGET_US) HolderTick(LIVE_BUDGET_US - used);
 }
 
 /* The picker of a choice row (the HD2R Editor's pickers): its options with their icons and notes, a dialog over the panel. */

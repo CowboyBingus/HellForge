@@ -1450,6 +1450,9 @@ static void LiveFixture(void)
     strcpy(line, "notice\t18\tinfo\tA title only");
     LiveRequest(line, reply, sizeof reply); ApiNotice(NULL, &notice);
     assert(notice.version == 2 && notice.kind == HF_NOTICE_INFO && !strcmp(notice.title, "A title only") && notice.text[0] == 0);
+    strcpy(line, "notice	19	brief	FRIEND TWO couldn't join	Their gameplay mods don't match yours.");
+    LiveRequest(line, reply, sizeof reply); ApiNotice(NULL, &notice);
+    assert(notice.version == 3 && notice.kind == HF_NOTICE_BRIEF && !strcmp(notice.text, "Their gameplay mods don't match yours."));
 
     for (int i = 0; i < g_fakeRecordCount; i++) free(g_fakeRecords[i].bytes);
     g_fakeRecordCount = g_componentCount = g_editCount = 0;

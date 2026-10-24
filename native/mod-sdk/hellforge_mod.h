@@ -473,9 +473,11 @@ typedef struct HfSession
 
 /* SDK 12: HellForge's latest message for the player (notice), as the session's backend posts it: why a friend's lobby
  * refused this game's join, or why a friend could not join this one. A title and up to 8 lines (UTF-8, '\n' between
- * them); version changes with every new one, 0 before the first. The in-game editor shows each over the game. */
+ * them); version changes with every new one, 0 before the first. The in-game editor shows each over the game: a brief
+ * one (that a friend couldn't join this game's lobby) as a small note in the corner, its title and first line. */
 #define HF_NOTICE_INFO 0u
 #define HF_NOTICE_ERROR 1u
+#define HF_NOTICE_BRIEF 2u
 typedef struct HfNotice
 {
     uint32_t version;

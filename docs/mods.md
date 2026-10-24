@@ -77,7 +77,8 @@ When a friend's code is not the host's, the join is refused and both games say w
 
 - The joiner sees "Couldn't join <host>" for 20 seconds, with each mod that differs: one the host has and they do not,
   one only they have, another version, or the same version with other files.
-- The host sees "<friend> couldn't join" for 12 seconds, with the same list from their side.
+- The host sees a small note in the top right corner for 6 seconds: "<friend> couldn't join" and the reason in one line
+  (the full list is in the host's `backend/multiplayer.log`).
 
 A different HellForge version is reported the same way, and the joiner is told when a lobby is full or locked. The
 bundled in-game editor draws these notices. With it switched off, only the logs say why: `backend/multiplayer.log` in

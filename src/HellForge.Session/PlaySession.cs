@@ -687,8 +687,9 @@ sealed class PlaySession(PlayOptions options)
         Save();
         job.Resume();
         // Opt-in: the engine's PlayFab web API base URL is redirected (heap data only) to the backend's local PlayFab
-        // stand-in; started before the slow edits so the URL is replaced right after the engine formats it.
-        var playFab = options.LocalPlayFab ? HellForgeLocalRoutingPatch.StartPlayFabRedirect(job.Process.Id, exe, (string)result["backendOrigin"]! + "/playfab", 180000) : null;
+        // stand-in; started before the slow edits so the URL is replaced right after the engine formats it, however long
+        // the game takes to get there.
+        var playFab = options.LocalPlayFab ? HellForgeLocalRoutingPatch.StartPlayFabRedirect(job.Process.Id, exe, (string)result["backendOrigin"]! + "/playfab", -1) : null;
         if (modNative)
         {
             var pid = job.Process.Id;

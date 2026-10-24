@@ -275,7 +275,7 @@ public sealed class StatsShare : IAsyncDisposable
     }
 
     // A message for the player, which the in-game editor shows over the game (a refused join: MultiplayerHost); kind
-    // "error" or "info". Not kept: a game that is not connected does not get it.
+    // "error", "info" or "brief" (a note in the corner). Not kept: a game that is not connected does not get it.
     public void Notice(string kind, string title, IReadOnlyList<string> lines)
     {
         if (!live.Connected || live.Mismatched) { log($"Notice not shown, the game is not connected: {title}"); return; }
