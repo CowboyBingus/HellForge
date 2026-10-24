@@ -622,8 +622,6 @@ static void EntityLoaderDetour(void* state)
     SelfCheck("after loading");
 }
 
-/* <session>/arsenal.tsv: every armory item with its loadout id, armory type, entity and text, as the game names it (for
- * mod authors choosing a base). */
 /* An armory entry's line of arsenal.tsv (snprintf's result). */
 static int ArsenalLine(const uint8_t* entry, int type, char* line, size_t size)
 {
@@ -639,6 +637,8 @@ static int ArsenalLine(const uint8_t* entry, int type, char* line, size_t size)
     return snprintf(line, size, "%08x\t%d\t%016llx\t%s\t%s\n", id, type, (unsigned long long)entity, d ? d : "", m ? m : "");
 }
 
+/* <session>/arsenal.tsv: every armory item with its loadout id, armory type, entity and text, as the game names it (for
+ * mod authors choosing a base). */
 static void WriteArsenal(void)
 {
     if (g_logs[0] == 0 || g_armory == NULL) return;

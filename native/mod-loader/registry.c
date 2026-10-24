@@ -445,9 +445,6 @@ static uint32_t ApiAddWeapon(HfMod* mod, const HfWeapon* def)
     return id;
 }
 
-/* A new entity of any kind (SDK 4, HfEntity): a copy of a vanilla entity under the mod's name, sharing its component
- * records except the ones it owns (own_components) and, given a unit, its unit record. No loadout, armory or catalogue
- * entry: a Pelican, a turret... It is added with the weapons when the entity data loads (RegisterWeapons). */
 /* Whether an entity of this name can be added now; logged when not. */
 static int EntityAddable(HfMod* mod, const HfEntity* def, const char* name)
 {
@@ -489,6 +486,9 @@ static void EntityText(const HfEntity* def, const char* name, Weapon* w)
     if (def->designation != NULL) snprintf(w->designation, sizeof w->designation, "%s", def->designation);
 }
 
+/* A new entity of any kind (SDK 4, HfEntity): a copy of a vanilla entity under the mod's name, sharing its component
+ * records except the ones it owns (own_components) and, given a unit, its unit record. No loadout, armory or catalogue
+ * entry: a Pelican, a turret... It is added with the weapons when the entity data loads (RegisterWeapons). */
 static uint64_t ApiAddEntity(HfMod* mod, const HfEntity* def)
 {
     if (mod == NULL || def == NULL || def->size < offsetof(HfEntity, own_components) + sizeof def->own_components)
@@ -570,10 +570,6 @@ static int CopiesBase(uint64_t entity)
     return 0;
 }
 
-/* An entity's record in the component table the game reads now: HellForge's copy when the registry moved the table
- * (so a vanilla entity's record there is the one the game uses, not the original in the loaded region), else the game's
- * own. Only the entity's one index row counts, and a record other entities share only with `shared`. *used 0 when the
- * entity state is not there (no game.dll: the caller falls back to the profile's region). */
 /* Whether the game's own table of component c has the profile's header (its index, then the reviewed 28 bytes). */
 static int TableHeaderMatches(const Component* c, const uint8_t* table)
 {
@@ -614,6 +610,10 @@ static int RecordShared(const Component* c, const uint8_t* table, uint64_t resou
     return 0;
 }
 
+/* An entity's record in the component table the game reads now: HellForge's copy when the registry moved the table
+ * (so a vanilla entity's record there is the one the game uses, not the original in the loaded region), else the game's
+ * own. Only the entity's one index row counts, and a record other entities share only with `shared`. *used 0 when the
+ * entity state is not there (no game.dll: the caller falls back to the profile's region). */
 static uintptr_t CurrentTableRecord(const Component* c, uint64_t resource, uint32_t* stride, int shared, int* used)
 {
     *used = 0;
@@ -630,11 +630,6 @@ static uintptr_t CurrentTableRecord(const Component* c, uint64_t resource, uint3
     return (uintptr_t)table + (uintptr_t)c->indices * 16u + (uintptr_t)selected * c->stride;
 }
 
-/* The record size of component table c, for a copy that owns all its base's records (HfEntity.own_all), or 0 when it
- * is not known for certain: the profile's component, else the table's shape among every table of the build's entity data
- * (component_sizes.h), its index slots and its size (index rows, then whole records padded to 16 bytes; a table with
- * more after its records matches none). When several record sizes fit, the one whose record count is the number of
- * records the index rows reach. */
 /* Whether `records` records of `size` bytes, padded to 16, are the table's record bytes. */
 static int RecordsFit(uint32_t records, uint32_t size, uint64_t recordBytes)
 {
@@ -702,6 +697,11 @@ static uint32_t ShapeStride(const uint8_t* table, uint32_t slots, uint64_t recor
     return reaches != UINT32_MAX ? reaches : 0;
 }
 
+/* The record size of component table c, for a copy that owns all its base's records (HfEntity.own_all), or 0 when it
+ * is not known for certain: the profile's component, else the table's shape among every table of the build's entity data
+ * (component_sizes.h), its index slots and its size (index rows, then whole records padded to 16 bytes; a table with
+ * more after its records matches none). When several record sizes fit, the one whose record count is the number of
+ * records the index rows reach. */
 static uint32_t ComponentStride(uint8_t* state, uint32_t c)
 {
     for (int i = 0; i < g_ownedCount; i++) if (g_owned[i].component == c) return g_owned[i].stride;
@@ -715,9 +715,6 @@ static uint32_t ComponentStride(uint8_t* state, uint32_t c)
     return known ? stride : ShapeStride(table, slots, recordBytes); /* else by shape */
 }
 
-/* A record of the weapon's own in component table c: HellForge's copy of the table (made once per load: the vanilla table,
- * then room for REG_MAX_WEAPONS records after every vanilla byte), a copy of the base's record placed after the vanilla
- * records, and the weapon's index row naming it. Returns the new record (or the one it has already), or NULL. */
 /* HellForge's copy of component table c, made at its first own record (the game's table is pointed at it), or NULL. */
 static OwnedTable* OwnedCopy(uint8_t* state, uint32_t c, uint32_t stride, uint32_t slots, uint8_t* table)
 {
@@ -739,6 +736,9 @@ static OwnedTable* OwnedCopy(uint8_t* state, uint32_t c, uint32_t stride, uint32
     return owned;
 }
 
+/* A record of the weapon's own in component table c: HellForge's copy of the table (made once per load: the vanilla table,
+ * then room for REG_MAX_WEAPONS records after every vanilla byte), a copy of the base's record placed after the vanilla
+ * records, and the weapon's index row naming it. Returns the new record (or the one it has already), or NULL. */
 static uint8_t* OwnRecord(uint8_t* state, uint32_t c, uint32_t stride, uint64_t baseEntity, uint64_t entity)
 {
     uint32_t slots = SlotsOf(c);

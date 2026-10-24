@@ -651,6 +651,7 @@ static int ApiSubscribe(HfMod* mod, uint32_t kind, HfListener listener, void* us
 #include "events.c"
 #include "stats.c"
 #include "fields.c" /* after stats.c: it reports conflicts with stats edits */
+#include "fields_live.c" /* right after fields.c: its live edits */
 #include "refs.c"
 #include "passives.c"
 #include "perks.c"
