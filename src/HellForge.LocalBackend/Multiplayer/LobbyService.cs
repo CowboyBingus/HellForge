@@ -185,6 +185,10 @@ public sealed class LobbyService
         foreach (var action in work) action();
     }
 
+    // Why this machine's game may not join a lobby owned by that machine (lines for the player), or null: a stranger's
+    // while Play with strangers is off (MultiplayerHost). The join is answered at once, and Refused says why.
+    public Func<ulong, IReadOnlyList<string>?>? JoinRefusal { get; set; }
+
     ulong LocalId => transport?.LocalId ?? 0;
     public static string EntityId(ulong node) => node.ToString("X", CultureInfo.InvariantCulture);
     public static bool TryNode(string entityId, out ulong node) =>
@@ -396,6 +400,13 @@ public sealed class LobbyService
                     return;
                 }
                 if (owner == LocalId) { Handle(LocalNode, frame); return; }
+                if (JoinRefusal?.Invoke(owner) is { } why)
+                {
+                    log($"Did not join {parts[1]} of {EntityId(owner)}: " + string.Join(" ", why));
+                    Answer(LocalNode, op, "join", LobbyNotJoinable, parts[1]);
+                    Refused?.Invoke(owner, why);
+                    return;
+                }
                 lobbyId = parts[1];
                 remote[lobbyId] = owner;
                 joining[owner] = DateTime.UtcNow;

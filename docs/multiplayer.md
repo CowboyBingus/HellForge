@@ -31,8 +31,12 @@ reaches PlayFab, Arrowhead's services or vanilla players' sessions.
    [Stats in co-op](#stats-in-co-op) says what each way means for what other players see.
 5. When the host leaves, the lobby closes for everyone, as HD2's host ends the session. If you were playing with the
    host's stats, your own come back.
-6. The game's own Privacy setting (Options) decides who may join a lobby you host:
-   - **Public:** any HellForge player. The lobby is listed for other HellForge players, who see it on the Galactic Map
+6. Who may reach you at all is "Play with strangers" (Settings > MULTIPLAYER), off by default: off, only your Steam
+   friends reach your backend, and the Galactic Map shows your friends' public lobbies only. See
+   [Play with strangers](#play-with-strangers) for what turning it on risks.
+7. The game's own Privacy setting (Options) decides who may join a lobby you host:
+   - **Public:** with Play with strangers on, any HellForge player; with it off, your Steam friends only, and the lobby is
+     not listed. The lobby is listed for other HellForge players, who see it on the Galactic Map
      and can join it from there. It shows its players' names and the host's Steam account id. Lobbies a player could
      not join (a blocked mod, mods to install by hand, or a host who shares edited stats unless shown) are left off
      their map. A Steam friend's lobby is shown even when it runs code mods HellForge has not checked (when the friend
@@ -43,12 +47,12 @@ reaches PlayFab, Arrowhead's services or vanilla players' sessions.
 
    Changing the setting during a session never removes anyone: players already in the lobby stay, and a player who was
    in it (whose game crashed, say) may come back. A refused player's game says why ("The host's lobby is Friends only").
-7. To keep your Public lobbies off other players' Galactic Map, turn off "List my Public lobbies on other HellForge
+8. To keep your Public lobbies off other players' Galactic Map, turn off "List my Public lobbies on other HellForge
    players' Galactic Map" on the launcher's Mods page (MOD SYNC card). It is on by default. Your Public lobby then still
    takes anyone who joins it, but players who are not your friends cannot find it.
-8. Invitations from the game's social menu reach Steam friends running HellForge, and the invited player may join even
+9. Invitations from the game's social menu reach Steam friends running HellForge, and the invited player may join even
    an Invite only lobby.
-9. When the host kicks a player, that player's game leaves the lobby and says "Removed from <host>'s lobby", their game
+10. When the host kicks a player, that player's game leaves the lobby and says "Removed from <host>'s lobby", their game
    traffic is cut off at once, and they cannot join that lobby again while it lasts.
 
 Each session's logs hold `backend/multiplayer.log` (the backend's side of co-op) and `coop-diagnostics.log` (what this
@@ -364,6 +368,48 @@ On the 2 MiB/s link, a small frame the host sends every 50 ms down the same link
 most 360 ms (40 ms of that is the one-way delay). A fixed window of 16 chunks would queue 2 MiB there, a second.
 
 `DownloadWindow`'s growth, cuts, floor and ceiling are checked on their own as well.
+### Trust: what another player's mods can reach
+
+Mod sync and public lobbies bring mods from people a player may not know. What limits them:
+- **What downloads by itself** is only what HellForge checks itself (data specs, schema stats, network field types),
+  read from the bytes received, with the same rule for every host. Code and raw data need the verified list, or,
+  from a Steam friend, the player's own trust after a warning ([Mod sync](#mod-sync)).
+- **Synced mods load only in the synced session.** They sit in `mods/.synced`, which normal sessions never load, and
+  the player's own Mods page never changes.
+- **The copy is off the internet.** The network block lets the copied game reach only this PC (loopback).
+- **The game cannot start other programs.** The session runner puts the game in a job whose active-process limit is 1
+  (`HostBoundedProcess`). That costs the game's crash reporter, already blocked from the network, and the DLSS updater
+  Steam's overlay starts. The Crash dump setting lifts the limit, because the loader starts `HellForge.Cli` to write
+  the dump; so does `HELLFORGE_ALLOW_CHILD_PROCESSES=1`, for diagnosing. The session's `result.json` says which
+  (`childProcesses`).
+- **HellForge's own programs stay as they are.** For the session, every file of the installation's `app` folder is held
+  read-only, as the game copy's are: nothing the game runs can replace the launcher, the session runner, the backend
+  or the stand-ins for the next start (`appFilesHeld` in `result.json`).
+
+- **Only programs on this PC reach the backend.** Its loopback HTTP answers a request only when its `Host` is
+  `127.0.0.1`, `localhost` or `[::1]` (with any port; matched exactly, so `LOCALHOST` is refused) and it carries none of
+  a browser's marks (`Origin`, `Referer`, any `Sec-Fetch-*`). Anything else gets 403 with
+  `{"errorCode": "HELLFORGE_NOT_FROM_THIS_PC"}` and `web_page_rejected` in `requests.jsonl`, before its body is read:
+  a web page in the player's browser cannot call it, by a form, a fetch or DNS rebinding. The game, the session runner
+  and the launcher send none of these marks.
+- **Records are bounded both ways** (`Multiplayer/RecordGuard.cs`). The game's own lobby record, live state and profile
+  objects are rebuilt before friends or the directory get them, and friends' and strangers' before the game reads them:
+  a lobby record keeps only the fields the game uploads (its players only theirs), every value has a depth, list
+  length and text length (lobby records 16 KiB, 256 characters of text; profile objects 64 KiB, 4096), keys are at
+  most 64 characters, and control characters are taken out of text. A stranger's listing is not unpacked past 64 KiB.
+  One field is longer than other text: `seed`, the selected mission (below), kept only in its exact layout.
+  The local PlayFab keeps at most 32 objects of 16 KiB each per entity, 16 entities. These are bounds, not a closed
+  channel: code in the game can still send a few KB of text in its record's fields (a player name, the state) to
+  friends and the public listing on every change.
+- **A host's stats files are rebuilt before the editor reads them.** A joiner's backend writes `host-stats.json`,
+  `host-mod-stats.json` and `host-mounts.json` only as JSON objects within RecordGuard's host-file limits (1 MiB, depth
+  6, 8192 items, keys of 256 characters for `mod:` categories, text of 256), written out by System.Text.Json, so the
+  in-game editor's native JSON reader never parses what the host sent. A file that is not JSON is left out; values
+  past a limit are left out and counted in `multiplayer.log`.
+
+What this does not stop: code in the game runs with the player's own Windows permissions. It can read their files,
+write those outside HellForge's held folders, and reach other programs of the same user. That is why code from
+another player downloads only when HellForge has verified it, or when the player trusts the friend it comes from.
 
 ### Public lobbies (the lobby directory)
 
@@ -374,13 +420,15 @@ with edited stats. The lobby stand-in sends the game's `PFMultiplayerFindLobbies
 searches the directory and evaluates the game's filter, drops lobbies the player could not join, and answers
 `lobby.found`. The map's records come from the listings (`POST /lobby/accounts`).
 
-The Steam link accepts someone who is not a Steam friend only while it deals with them (`StrangerGate.cs`):
+All of this needs [Play with strangers](#play-with-strangers): off, the Steam link accepts no one who is not a Steam
+friend. On, it accepts someone who is not a Steam friend only while it deals with them (`StrangerGate.cs`):
 - while a lobby is listed (and Steam holds the listing);
 - a member or host of a lobby here;
 - a machine a lobby here expects back;
 - a mod download.
 
-A lobby is listed only while it is Public and the player's `"listPublic"` switch is on (the Mods page; on by default).
+A lobby is listed only while it is Public, the player's `"listPublic"` switch is on (the Mods page; on by default) and
+Play with strangers is on.
 
 A stranger's listing is checked before anything of it reaches the game (`DirectoryService.Valid`, `LobbyRecords.cs`).
 One that breaks any of the following is left out whole:
@@ -391,8 +439,27 @@ One that breaks any of the following is left out whole:
 - a record rebuilt from the schema of the game's own record builder (game.dll 0x12CB190). Known fields must be of the
   right kind and in range: at most 4 players, names of at most 32 characters, account ids that are numbers, at most one
   host, who must be the listing's. Unknown fields are dropped.
+- a `seed` in the exact layout below, if the record has one.
 
 The published record is rebuilt from the same schema, with every account id but the host's at 0.
+
+**The selected mission (`seed`) is what puts a lobby on the map.** The game's `PUT /lobby` carries `"seed"` only once
+the host has selected a mission. It is the mission as fixed-width lowercase hex, version `f3fb` (game.dll encoder
+`0xFC3E20`; the host's lobby key 10 holds the same string). The Galactic Map's planet scan decodes it (`0xFC39F0`) and
+draws a scanned lobby's squad marker ("1/4") and hover card from it: no seed, no marker, even when the search found the
+lobby and its record arrived. Until 2026-10-24 neither `RecordGuard`, whose field list came from an upload made before
+any mission was selected, nor `LobbyRecords`, which allowed 32 characters, kept it. So no listed lobby showed on
+another player's map.
+
+The decoder writes the string's arrays into a 0xE8-byte struct on the stack without checking their counts, so a forged
+seed could overflow it. `MissionSeed.Valid` keeps one only in the `f3fb` layout:
+- version `f3fb`, then 58 hex digits of fixed fields;
+- four arrays, each a count byte then its entries: u32 (at most 32), bytes (8), bytes (3), bytes (2), then a byte;
+- an array of u32 (at most 4), two bytes, and a last array of u32 (at most 8);
+- nothing after it, and at most 458 digits in all.
+
+A host's seed for a D1 mission is 102 digits. A record with any other seed loses it (between friends and in this
+machine's own listing), and a stranger's listing with one is left out.
 
 Which lobbies a search shows is mod sync's rule (`ModSync.Joinable`), and it uses the plan a join would make
 (`ModSyncPlan`):
@@ -420,6 +487,27 @@ shown" was the searching player's own lobby, not the friend's:
 
 `HELLFORGE_TEST_STRANGERS=1` makes a backend treat friends as strangers, for testing with two friends' PCs. Details and
 open questions: [Step 7](#step-7-public-lobbies-on-the-galactic-map-2026-10-22).
+
+### Play with strangers
+
+Off by default, in `mods/hellforge-mods.json` (`playWithStrangers`): the launcher's Settings > MULTIPLAYER switch, or
+`HellForge.Cli settings --strangers yes|no` ([external-launchers.md](external-launchers.md#profiles-and-settings)). The
+backend reads it again within 2 s of a change, also during a session, and never more than once per 2 s however many
+frames strangers send (`Multiplayer/StrangerSetting.cs`).
+
+Off:
+- every frame from someone who is not a Steam friend is dropped (`StrangerGate`; logged once a minute per machine),
+  and the Steam link accepts no session from them;
+- this machine's public lobby is not listed ("Directory: this machine's public lobby is not listed: Play with strangers
+  is off" in `multiplayer.log`);
+- a Galactic Map search shows friends' listings only, and only the one each friend's backend vouches for (see
+  "Listings' hosts" under [step 7](#step-7-public-lobbies-on-the-galactic-map-2026-10-22));
+- a join to a stranger's lobby is answered at once as not joinable, and the in-game editor shows why ("Couldn't join").
+
+On, strangers' games send this one data nobody checks for them: HellForge is open source, anti-cheat is off and a
+modified build can lie about its mods, so a flaw in the game's network code could let a stranger run code on this PC
+(lockdown plan item 10). The launcher's warning says so. Until the game runs sandboxed ([steam-bridge.md](steam-bridge.md)),
+play with strangers only when that risk is acceptable.
 
 ### The join gate
 
@@ -881,8 +969,10 @@ it in [Playing with other mods](mods.md). Protocol `hellforge-mp-7`.
     session with `--mod-sync <file>` (`mods-stage --sync`).
   - That session plays the host's mods, each found by id and content hash, in the host's order. If they do not make
     the host's modlist digest, it plays the player's own mods and reports why.
-- **Still to do:** a launcher prompt for sessions without the in-game editor. Now: rejoining by itself after the
-  restart, the other item, is built ([Step 9](#step-9-rejoining-after-a-mod-sync-2026-10-23)).
+  - With the in-game editor switched off, the launcher shows the offer from `mod-sync.json` on its Play page
+    (`ModSyncPrompt.cs`, `ModSyncOffer`), TRUST and GET IT included, and writes the answer to
+    `<run>/backend/mod-sync-answer.json`, which the backend takes within a second, as the game's `syncanswer`.
+- Rejoining by itself after the restart is built ([Step 9](#step-9-rejoining-after-a-mod-sync-2026-10-23)).
 
 **To test on two PCs:**
 1. The host enables a content mod (a data patch or stats mod) and a code mod that is not on the verified list, with a
@@ -941,11 +1031,23 @@ Built 2026-10-22 and tested on one PC only.
     searches' results stay valid after their batch.
   - The game's two searches per scan (about 30 ms apart) share one directory search; nothing older than 500 ms is
     reused.
+- **Listings' hosts** (since 2026-10-23). Steam does not say who made a lobby to someone who
+  is not in it (`GetLobbyOwner` gave 0 for all 50 of the app's public lobbies in a search, 2026-10-23), so a listing's
+  host is its own `hf.host`: anyone can list under another player's id, with that
+  player's lobby id too (the game's own Steam lobby shows it). What holds anyway:
+  - a join goes to the host a listing names, over Steam's authenticated link, and that host refuses a lobby it does not
+    hold (`LobbyNotFound`); whoever made the listing hears nothing;
+  - listings that claim one host or one lobby with different data are all left out, except one a friend's backend
+    vouches for against ones it does not; copies of the same data count once (`DirectoryService.Unambiguous`). The
+    cost: anyone can hide a listed lobby from strangers by copying it with other data;
+  - a backend vouches for its listing by sending friends its digest (`DirectoryData.Digest`, SHA-256 of the data) as
+    the fifth field of `presence` (`FriendPresence.Vouches`; the last two digests count). With Play with strangers off,
+    a friend's listing is shown only while that friend vouches for it.
 - **The map's records:** `POST /lobby/accounts` answers, after friends, for the hosts the last searches found (for 2
     minutes), with the listing's record, its lobby id and connection string. `GET /lobby/<id>` and
     `GET /lobby/<id>/live` answer from the local, a friend's or a found lobby. `PUT /lobby/<id>/live` is stored and
     listed. The game has not been seen calling the GET routes; an unknown lobby is a 404 (`lobby_unknown`).
-- **Strangers** (`StrangerGate`):
+- **Strangers** (`StrangerGate`), only with [Play with strangers](#play-with-strangers) on:
   - The Steam link accepts a session from someone who is not a Steam friend only while this machine lists a lobby, or
     when it deals with them: a member of a lobby hosted here, the host of a lobby joined or being joined from here, or
     a mod download.
@@ -967,7 +1069,8 @@ Built 2026-10-22 and tested on one PC only.
   - `HellForge.SdkShimGen smoke-lobby-search <stand-ins> <HellForge.LocalBackend.dll>`: two backends over loopback UDP
     sharing a folder directory (`--directory`), and two lobby stand-ins through the PlayFab C API. The friend's
     search finds the host's lobby about 0.35 s after it is listed, joins with the connection string it found, and
-    stops finding it about 0.35 s after the host leaves. It runs twice: as friends, then as strangers
+    stops finding it about 0.35 s after the host leaves. Both backends get a `--mods` folder with Play with strangers
+    on (off, nothing would be listed). It runs twice: as friends, then as strangers
     (`HELLFORGE_TEST_STRANGERS`, below). As strangers the join passes the gate, no presence is swapped, and the map's
     record for the host is the listing's (names kept, other account ids 0).
 - **Test mode for two friends' PCs: `HELLFORGE_TEST_STRANGERS=1`.** A backend started with it treats every Steam
@@ -976,30 +1079,57 @@ Built 2026-10-22 and tested on one PC only.
   - the stranger gate applies;
   - Steam sessions are accepted only by the directory's rule.
 
-  `multiplayer.log` says "Test mode (HELLFORGE_TEST_STRANGERS)". Set it on both PCs before starting the launcher
+  `multiplayer.log` says "Test mode (HELLFORGE_TEST_STRANGERS)". Play with strangers must be on as well on both PCs
+  (it is off by default, and test mode does not turn it on). Set the variable on both PCs before starting the launcher
   (the session runner and the backend inherit it), for example in Command Prompt:
   `set HELLFORGE_TEST_STRANGERS=1` then `start "" "<installation>\HellForge.exe"`. Steam itself still sees two friends;
   nothing in the directory depends on that.
+- **The map, on one PC (2026-10-24, two installations, [multi-instance.md](multi-instance.md)):**
+  - **The marker.** A lobby whose host is in a mission shows as a squad marker with the hover card: host name, level,
+    mission and objective. A lobby with no mission selected shows none; the marker needs the record's `seed` (above).
+    A host on its ship with a mission selected uploads a seed too, but that was not tried. A host with no mission selected also lists difficulty 0 (`number_key5`), which the map's search (the
+    map's own difficulty window) leaves out as "the game's filter".
+  - **Friends.** A planet scan leaves out lobbies of the player's Steam friends: they show under Social instead. So
+    two friends test the map with `HELLFORGE_TEST_STRANGERS=1`.
+  - **Joining.** Selecting the marker joins: the loadout screen of the host's mission comes up within seconds. After
+    Ready Up the joiner drops into the mission in progress (hellpod, "Allied Destroyer joining squadron"), and the host
+    sees it. Ready Up does nothing while all four stratagem slots are empty (the loadout screen's own rule).
 - **Not yet known:**
-  - whether the Galactic Map shows a marker and hover card from these records (which string keys the map lists);
-  - whether the hover card works with the other members' account ids at 0;
-  - Steam's search rate limits;
-  - the map's exact filter string (now logged).
+  - whether the hover card works with the other members' account ids at 0 (only solo hosts so far);
+  - the card's elapsed time on the surface: it reads 0m 0s, because no host has uploaded `PUT /lobby/<id>/live`.
+- **Steam's search rate (soak, 2026-10-23, one PC, live Steam):** a search shaped like the directory's (the protocol
+  key, a slot free, worldwide, at most 50) for one Invisible lobby of the soak's own. Steam failed none and always
+  found that lobby:
+  - 60 searches at the map's rate (every 10 s, 10 minutes), half of them in 175 ms or less, the slowest 231 ms;
+  - 60 at one a second;
+  - 359 back to back in a minute (358 a minute, 60 times the map's rate), the slowest 192 ms.
+
+  No limit was reached. A new lobby was found 0.84 s after it was made.
 
 **To test on two PCs that are not Steam friends** (or two friends' PCs with `HELLFORGE_TEST_STRANGERS=1` on both):
-1. Both turn on multiplayer and Local PlayFab. The host opens a Public lobby on a planet.
-2. The other player opens the Galactic Map on that planet. Check:
-   - a marker and a hover card with the host's name;
+1. Both turn on multiplayer, Local PlayFab and Play with strangers (Settings > MULTIPLAYER). The host opens a Public
+   lobby, selects a mission on a planet and deploys. An idle host on the ground can be killed (one was, about 11
+   minutes in), and with no one alive the mission fails. `multiplayer.log` says "Play with strangers is on".
+2. The other player opens the Galactic Map on that planet, at the host's difficulty. Check:
+   - a squad marker ("1/4") and a hover card with the host's name and mission;
    - `multiplayer.log` "Directory: search ... shown", with the reasons for any lobby left out;
    - the stand-in log's `PFMultiplayerFindLobbies: filter "..."`.
-3. JOIN from the map. Check:
+3. Select the marker, pick stratagems, Ready Up. Check:
    - the join is admitted (the host's log has no "Dropped ... not a Steam friend");
-   - the mission plays.
+   - the joiner drops into the mission, and the mission plays.
    Then with different mods: the MOD SYNC prompt shows.
 4. The host turns Invite Only, or the lobby fills: within a scan or two the marker goes. The other player, already in
    the lobby, stays; a new one is refused ("The host's lobby is Invite only").
 5. The host edits a stat (F8, APPLY): the lobby disappears from the other player's map until "Show public lobbies
    whose host plays with edited stats" is on.
+6. The host turns Play with strangers off: within a few seconds the listing goes ("not listed: Play with strangers is
+   off"). The other player turns it off: the map shows no stranger's lobby, and a join already on screen is refused
+   with "Couldn't join".
+7. The game's own Steam lobby ([steam-bridge.md](steam-bridge.md#the-games-own-steam-lobby)). Both PCs sandboxed
+   (`--sandbox`), Play with strangers on, and on the host `HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY=1`, which makes the
+   broker keep the game's Public Steam lobby Friends only anyway (`steam-broker.log`: "Steam gets 1"). The other
+   player joins from the map. If the join and the mission work, the broker can keep the lobby Friends only with
+   strangers on too.
 
 ### Step 8: privacy, invitations and kicks (2026-10-23)
 

@@ -26,9 +26,9 @@ static class DirectoryTests
         public readonly string Mods;
         public readonly List<string> Log = [];
         public bool Edited;
-        public bool ListPublic = true;
+        public bool ListPublic = true, Strangers = true;
 
-        public Node(InMemoryNetwork network, MemoryLobbyDirectory listings, ulong id, string folder, ModSet own)
+        public Node(InMemoryNetwork network, MemoryLobbyDirectory listings, ulong id, string folder, ModSet own, ILobbyDirectory? directory = null)
         {
             Mods = System.IO.Directory.CreateDirectory(Path.Combine(folder, "mods")).FullName;
             var run = System.IO.Directory.CreateDirectory(Path.Combine(folder, "run", "backend")).FullName;
@@ -36,7 +36,8 @@ static class DirectoryTests
             void Note(string line) { lock (Log) Log.Add(line); }
             Lobby = new LobbyService(transport, Inbox.Add, Note, own.Digest);
             Sync = new ModSync(transport, Mods, own, Path.GetDirectoryName(run)!, run, ModSyncSession.PathIn(new InstallLayout(folder)), _ => "Player", Note, (_, _) => false);
-            Directory = new DirectoryService(listings.For(id), Lobby, Presence, id, Inbox.Add, Note, Sync, () => Edited, autoPublish: false, listPublic: () => ListPublic);
+            Directory = new DirectoryService(directory ?? listings.For(id), Lobby, Presence, id, Inbox.Add, Note, Sync, () => Edited, autoPublish: false, listPublic: () => ListPublic,
+                strangersAllowed: () => Strangers);
             transport.Received += (peer, bytes) =>
             {
                 var frame = Frame.Decode(bytes);
@@ -50,6 +51,26 @@ static class DirectoryTests
             var got = Inbox.TryTake(out var frame, TimeSpan.FromSeconds(5));
             check(got && frame!.Type == type, $"expected {type}, got {(got ? frame!.Type : "nothing")}");
             return frame!;
+        }
+    }
+
+    // Steam's directory as anyone can use it: a listing's host is read from its own hf.host (SteamLobbyDirectory.Read), so
+    // a listing can be published under another player's id. Claims are such listings, found beside the honest ones.
+    sealed class ClaimingDirectory(ILobbyDirectory honest) : ILobbyDirectory
+    {
+        public readonly List<Dictionary<string, string>> Claims = [];
+
+        public void Publish(DirectoryListing? listing) => honest.Publish(listing);
+
+        public async Task<IReadOnlyList<DirectoryListing>> SearchAsync(DirectoryQuery query, CancellationToken cancellation)
+        {
+            var found = new List<DirectoryListing>(await honest.SearchAsync(query, cancellation));
+            lock (Claims)
+                foreach (var data in Claims)
+                    if (ulong.TryParse(data.GetValueOrDefault(DirectoryKeys.Host), NumberStyles.None, CultureInfo.InvariantCulture, out var host) &&
+                        DirectoryData.Matches(new DirectoryListing(host, data), query))
+                        found.Add(new DirectoryListing(host, data));
+            return found;
         }
     }
 
@@ -86,7 +107,8 @@ static class DirectoryTests
         var network = new InMemoryNetwork();
         var listings = new MemoryLobbyDirectory();
         var host = new Node(network, listings, HostId, Path.Combine(root, "host"), hostSet);
-        var guest = new Node(network, listings, GuestId, Path.Combine(root, "guest"), new ModSet("none", []));
+        var claims = new ClaimingDirectory(listings.For(GuestId));
+        var guest = new Node(network, listings, GuestId, Path.Combine(root, "guest"), new ModSet("none", []), claims);
         var now = DateTime.UtcNow;
 
         // A public lobby is listed with what a search needs; the game's record comes once it is uploaded.
@@ -152,6 +174,39 @@ static class DirectoryTests
         check((await guest.Directory.SearchAsync("b1", MapFilter, 50)).Int(2) == 0, "A lobby running a blocked mod is hidden.");
         ModSettings.SetBlocked(guest.Mods, "test.ammo", false);
 
+        // Play with strangers off: this machine's lobby is not listed; a search shows friends' listings only; a join to a
+        // stranger's lobby is refused at once, with why.
+        host.Strangers = false;
+        host.Directory.Publish(now + TimeSpan.FromSeconds(20));
+        check(listings.All.Count == 0 && !host.Directory.Listing && host.Log.Any(l => l.Contains("Play with strangers is off")),
+            "Strangers off: the host's lobby is not listed.");
+        host.Strangers = true;
+        host.Directory.Publish(now + TimeSpan.FromSeconds(21));
+        check(listings.All.Count == 1 && host.Directory.Listing, "On again: listed at once.");
+        await Task.Delay(SameSearchPause);
+        guest.Strangers = false;
+        check((await guest.Directory.SearchAsync("x1", MapFilter, 50)).Int(2) == 0 && guest.Log.Any(l => l.Contains("Play with strangers is off")),
+            "Strangers off: a stranger's listing is not shown.");
+        guest.Presence.SetFriends([new FriendPresence.Friend(HostId, "Host")]);
+        await Task.Delay(SameSearchPause);
+        check((await guest.Directory.SearchAsync("x2a", MapFilter, 50)).Int(2) == 0 && guest.Log.Any(l => l.Contains("not published by them")),
+            "A friend's listing their backend has not vouched for is not shown (anyone can list under a friend's id).");
+        check(host.Presence.LocalListing == DirectoryData.Digest(listings.All.Single().Data), "The host's presence carries its listing's digest.");
+        guest.Presence.SetFriendLobby(HostId, lobbyId, connection, new JsonObject(), host.Presence.LocalListing);
+        await Task.Delay(SameSearchPause);
+        check((await guest.Directory.SearchAsync("x2", MapFilter, 50)).Int(2) == 1, "A friend's listing they vouch for is.");
+        guest.Presence.SetFriends([]);
+        guest.Presence.ClearFriendLobby(HostId);
+        guest.Strangers = true;
+        IReadOnlyList<string>? told = null;
+        guest.Lobby.Refused += (_, lines) => told = lines;
+        guest.Lobby.JoinRefusal = peer => peer == HostId ? ["Not a friend, and Play with strangers is off."] : null;
+        guest.Lobby.FromLocal(MultiplayerTests.Join("x3", GuestId, connection));
+        check(guest.Next("lobby.result", check).Text(2) == LobbyService.LobbyNotJoinable.ToString() && told?.Single().Contains("Play with strangers") == true &&
+            !host.Lobby.InHostedLobby(GuestId), "A join to a stranger's lobby is refused here, with why, and never sent.");
+        guest.Lobby.JoinRefusal = null;
+        await Task.Delay(SameSearchPause);
+
         // A lobby running unverified code the guest lacks (a valid listing of its own: a GUID, its host's record): a Steam
         // friend's is shown, since joining brings the MOD SYNC prompt with TRUST (the first two-PC test's case); a
         // stranger's needs its mods installed by hand and is left out, and the search log says so.
@@ -188,6 +243,7 @@ static class DirectoryTests
         listings.For(OtherId).Publish(null);
 
         await Hostile(listings, host, guest, check);
+        await Claimed(listings, claims, network, host, guest, check);
 
         // The player's switch: off, the Public lobby is not listed; on again, it is.
         host.ListPublic = false;
@@ -282,6 +338,115 @@ static class DirectoryTests
         _ = host;
     }
 
+    // Listings under another player's id, which Steam does not stop (ClaimingDirectory): a join goes to the host a listing
+    // names, never to whoever made it; listings claiming one host or lobby are left out unless the host vouches for its own;
+    // with Play with strangers off, a friend's listing is shown only as their backend vouches for it.
+    static async Task Claimed(MemoryLobbyDirectory listings, ClaimingDirectory claims, InMemoryNetwork network, Node host, Node guest, Action<bool, string> check)
+    {
+        var genuine = new Dictionary<string, string>(listings.All.Single(l => l.Host == HostId).Data);
+        var (lobbyId, connection) = (genuine[DirectoryKeys.LobbyId], genuine[DirectoryKeys.Connection]);
+
+        // The digest a friend vouches with: the same for the same data in any order, another for any other value.
+        var digest = DirectoryData.Digest(genuine);
+        var reversed = genuine.Reverse().ToDictionary(d => d.Key, d => d.Value, StringComparer.Ordinal);
+        var changed = new Dictionary<string, string>(genuine) { [DirectoryKeys.Members] = "2" };
+        check(digest.Length == 64 && DirectoryData.Digest(reversed) == digest && DirectoryData.Digest(changed) != digest &&
+            DirectoryData.Digest(new Dictionary<string, string> { ["ab"] = "c" }) != DirectoryData.Digest(new Dictionary<string, string> { ["a"] = "bc" }),
+            "A listing's digest follows its data, not its order.");
+        var presence = new Frame("presence").Add("{}").Add(lobbyId).Add(connection).Add("{}");
+        check(MultiplayerHost.ListingOf(presence) == null && MultiplayerHost.ListingOf(new Frame("presence").Add("{}").Add(lobbyId).Add(connection).Add("{}").Add(digest)) == digest &&
+            MultiplayerHost.ListingOf(new Frame("presence").Add("{}").Add(lobbyId).Add(connection).Add("{}").Add(digest.ToUpperInvariant())) == null &&
+            MultiplayerHost.ListingOf(new Frame("presence").Add("{}").Add(lobbyId).Add(connection).Add("{}").Add("../" + digest[3..])) == null,
+            "A presence frame's listing digest: 64 lowercase hex digits, or none.");
+
+        var claimant = network.Join(OtherId);
+        var heard = 0;
+        claimant.Received += (_, _) => Interlocked.Increment(ref heard);
+        async Task<List<string>> Search(string op)
+        {
+            await Task.Delay(SameSearchPause);
+            return Shown(await guest.Directory.SearchAsync(op, MapFilter, 50));
+        }
+        void Claim(params Dictionary<string, string>[] data) { lock (claims.Claims) { claims.Claims.Clear(); claims.Claims.AddRange(data); } }
+        bool Logged(string text) { lock (guest.Log) return guest.Log.Any(l => l.Contains(text)); }
+        void HostLists(bool listed)
+        {
+            host.ListPublic = listed;
+            host.Directory.Publish(DateTime.UtcNow);
+        }
+
+        // A whole listing under the host's id, with a lobby of its own: nothing in it is out of place.
+        var fakeLobby = Guid.NewGuid().ToString("D");
+        var fakeConnection = LobbyService.ConnectionPrefix + fakeLobby + ";" + LobbyService.EntityId(HostId);
+        var fake = new Dictionary<string, string>(genuine) { [DirectoryKeys.LobbyId] = fakeLobby, [DirectoryKeys.Connection] = fakeConnection };
+        check(DirectoryService.Valid(new DirectoryListing(HostId, fake), out _, out _, out _, out _, out var why), "The claimed listing is well formed: " + why);
+        Claim(fake);
+        var shown = await Search("c1");
+        check(!shown.Contains(lobbyId) && !shown.Contains(fakeLobby) && Logged("2 left out: another listing claims its host or lobby"),
+            "Beside the host's own listing, neither is shown: " + string.Join(", ", shown));
+
+        // The host not listing: the claimed listing alone cannot be told from the host's, but a join to it goes to the host,
+        // which holds no such lobby, and nothing reaches whoever made it.
+        HostLists(false);
+        shown = await Search("c2");
+        check(shown.SequenceEqual([fakeLobby]), "Alone, the claimed listing is shown: " + string.Join(", ", shown));
+        guest.Lobby.FromLocal(MultiplayerTests.Join("c3", GuestId, fakeConnection));
+        var joined = guest.Next("lobby.result", check);
+        check(joined.Text(1) == "join" && joined.Text(2) == LobbyService.LobbyNotFound.ToString(CultureInfo.InvariantCulture) && !host.Lobby.InHostedLobby(GuestId) &&
+            Volatile.Read(ref heard) == 0, $"A join to it is refused by the host it names ({joined.Text(2)}), and its maker hears nothing ({heard} frames).");
+        HostLists(true);
+
+        // The host's own lobby with other data (another host name on the map): beside the host's, neither is shown. With
+        // the host's backend vouching for its own, that one is, and the map's record is the host's.
+        var record = JsonNode.Parse(Record(HostId))!.AsObject();
+        record["players"]![0]!["playerName"] = "Impostor";
+        var altered = new Dictionary<string, string>(genuine);
+        DirectoryData.Put(altered, DirectoryKeys.Record, DirectoryData.Pack(DirectoryService.Public(record, HostId).ToJsonString()));
+        Claim(altered);
+        shown = await Search("c4");
+        check(!shown.Contains(lobbyId), "A listing copying the host's lobby with other data hides both: " + string.Join(", ", shown));
+        guest.Presence.SetFriendLobby(HostId, lobbyId, connection, new JsonObject(), host.Presence.LocalListing);
+        shown = await Search("c5");
+        check(shown.SequenceEqual([lobbyId]) && guest.Directory.HostName(HostId) == "Host Diver",
+            $"Vouched for, the host's own is shown, with its record ({guest.Directory.HostName(HostId)}).");
+
+        // Play with strangers off: the friend's vouched listing is shown; one under their id they did not publish is not,
+        // also alone.
+        guest.Strangers = false;
+        guest.Presence.SetFriends([new FriendPresence.Friend(HostId, "Host")]);
+        shown = await Search("c6");
+        check(shown.SequenceEqual([lobbyId]), "Strangers off: the friend's own listing is shown: " + string.Join(", ", shown));
+        HostLists(false);
+        Claim(fake);
+        shown = await Search("c7");
+        check(shown.Count == 0 && Logged("not published by them"), "Strangers off: a listing under a friend's id they did not publish is not: " + string.Join(", ", shown));
+        HostLists(true);
+        guest.Strangers = true;
+        guest.Presence.SetFriends([]);
+        guest.Presence.ClearFriendLobby(HostId);
+
+        // An exact copy of the host's listing counts once.
+        Claim(new Dictionary<string, string>(genuine));
+        shown = await Search("c8");
+        check(shown.SequenceEqual([lobbyId]) && Logged("a copy of another listing"), "A copy of a listing counts once: " + string.Join(", ", shown));
+        Claim();
+        await Task.Delay(SameSearchPause);
+    }
+
+    // The lobby ids a lobby.found answer shows, in order.
+    static List<string> Shown(Frame found)
+    {
+        var ids = new List<string>();
+        var index = 3;
+        for (var i = 0; i < found.Int(2); i++)
+        {
+            ids.Add(found.Text(index));
+            index += 6;
+            found.Properties(ref index);
+        }
+        return ids;
+    }
+
     // Searches within DirectoryService.SameSearch share one directory search; tests that change listings wait it out.
     static readonly TimeSpan SameSearchPause = DirectoryService.SameSearch + TimeSpan.FromMilliseconds(100);
 
@@ -339,7 +504,8 @@ static class DirectoryTests
         var transport = network.Join(HostId);
         var listing = false;
         var related = new HashSet<ulong>();
-        var gate = new StrangerGate(transport, () => listing, peer => related.Contains(peer), _ => { });
+        // Play with strangers is on: the existing behavior.
+        var gate = new StrangerGate(transport, () => listing, peer => related.Contains(peer), () => true, _ => { });
         var join = new Frame("lobby.join").Add("op");
         check(gate.Admit(GuestId, new Frame("presence")) && gate.Admit(GuestId, new Frame("party.message")), "Friends: everything.");
         check(!gate.Admit(OtherId, new Frame("presence")) && !gate.Admit(OtherId, new Frame("party.message")) && !gate.Admit(OtherId, join) &&
@@ -350,5 +516,11 @@ static class DirectoryTests
         related.Add(OtherId);
         check(gate.Admit(OtherId, new Frame("party.message")) && gate.Admit(OtherId, new Frame("account.key")) && !gate.Admit(OtherId, new Frame("presence.hello")),
             "A stranger in a lobby here: its game's traffic, never presence.");
+
+        // Play with strangers is off: all strangers refused, friends still pass.
+        var closed = new StrangerGate(transport, () => true, _ => true, () => false, _ => { });
+        check(closed.Admit(GuestId, new Frame("presence")), "Friends still pass with strangers off.");
+        check(!closed.Admit(OtherId, join) && !closed.Admit(OtherId, new Frame("peer.ping")),
+            "Strangers refused entirely when Play with strangers is off.");
     }
 }

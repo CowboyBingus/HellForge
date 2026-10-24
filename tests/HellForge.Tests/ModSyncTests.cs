@@ -180,6 +180,11 @@ static class ModSyncTests
             ModSettings.SetShare(mods, true);
             state = ModSettings.Read(mods);
             check(state.Blocked.Count == 0 && state.Share && state.Disabled.Count == 1, "Unblocked and sharing again.");
+            check(!ModSettings.PlayWithStrangers(mods), "Play with strangers is off by default.");
+            ModSettings.SetPlayWithStrangers(mods, true);
+            check(ModSettings.PlayWithStrangers(mods), "Play with strangers can be turned on.");
+            ModSettings.SetPlayWithStrangers(mods, false);
+            check(!ModSettings.PlayWithStrangers(mods), "Play with strangers can be turned back off.");
         });
 
         test("Mod sync: the plan finds what the joiner has, downloads content and verified code, and refuses blocked, unverified and other HellForge's mods", () =>
@@ -535,6 +540,68 @@ static class ModSyncTests
             check(!Directory.Exists(Path.Combine(SyncedStore.Root(install.Mods), SyncedStore.PartialFolder)) && Directory.Exists(stored), "Clean empties the downloads' folder only.");
         });
 
+        test("Mod sync: a launcher reads the backend's offer and writes an answer the backend takes once; anything else is refused", () =>
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root, "sync-launcher", "backend")).FullName;
+            check(ModSyncOffer.Read(folder) == null && ModSyncOffer.TakeAnswer(folder) == null, "Nothing there yet.");
+            File.WriteAllText(Path.Combine(folder, ModSyncOffer.FileName), new JsonObject
+            {
+                ["version"] = 3, ["state"] = "offer", ["host"] = "Host", ["bytes"] = 2048, ["done"] = 0, ["message"] = "m",
+                ["mods"] = new JsonArray(new JsonObject { ["id"] = "test.a", ["name"] = "A", ["version"] = "1", ["class"] = "raw", ["action"] = "manual", ["bytes"] = 10, ["url"] = "https://example.com/a" },
+                    new JsonObject { ["id"] = "test.b", ["name"] = "B", ["version"] = "1", ["class"] = "code", ["action"] = "trust", ["bytes"] = 5, ["url"] = "javascript:alert(1)" })
+            }.ToJsonString());
+            var offer = ModSyncOffer.Read(folder);
+            check(offer is { Version: 3, State: "offer", Host: "Host", Bytes: 2048 } && offer.Mods[0] is { Id: "test.a", Class: "raw", Action: "manual", Url: "https://example.com/a" } &&
+                offer.Mods[1] is { Action: "trust", Url: null }, "The offer reads; only an https:// address is kept.");
+            File.WriteAllText(Path.Combine(folder, ModSyncOffer.FileName), "{\"version\":");
+            check(ModSyncOffer.Read(folder) == null, "A half-written offer reads as none.");
+            ModSyncOffer.Answer(folder, 3, "accept");
+            check(ModSyncOffer.TakeAnswer(folder) is ["syncanswer", "3", "accept"] && ModSyncOffer.TakeAnswer(folder) == null, "An answer is taken once.");
+            ModSyncOffer.Answer(folder, 4, "block", "test.a");
+            check(ModSyncOffer.TakeAnswer(folder) is ["syncanswer", "4", "block", "test.a"], "A block names its mod.");
+            ModSyncOffer.Answer(folder, 4, "trust", "test.b");
+            check(ModSyncOffer.TakeAnswer(folder) is ["syncanswer", "4", "trust", "test.b"], "TRUST names its mod.");
+            ModSyncOffer.Answer(folder, 4, "open", "test.a");
+            check(ModSyncOffer.TakeAnswer(folder) is ["syncanswer", "4", "open", "test.a"], "GET IT names its mod.");
+            reject(() => ModSyncOffer.Answer(folder, 4, "trust"));
+            reject(() => ModSyncOffer.Answer(folder, 4, "open"));
+            reject(() => ModSyncOffer.Answer(folder, 4, "steal"));
+            reject(() => ModSyncOffer.Answer(folder, 4, "block"));
+            reject(() => ModSyncOffer.Answer(folder, 4, "accept", "test.a"));
+            reject(() => ModSyncOffer.Answer(folder, 4, "block", "../x"));
+            foreach (var bad in new[] { "{\"version\":-1,\"answer\":\"accept\"}", "{\"version\":1,\"answer\":\"run\"}", "{\"version\":1,\"answer\":\"block\"}", "[]", "{" })
+            {
+                File.WriteAllText(Path.Combine(folder, ModSyncOffer.AnswerFileName), bad);
+                check(ModSyncOffer.TakeAnswer(folder) == null && !File.Exists(Path.Combine(folder, ModSyncOffer.AnswerFileName)), "Refused and removed: " + bad);
+            }
+        });
+
+        test("Mod sync: the store keeps the 20 mods used most recently, never one the starting session plays, and old partial downloads go", () =>
+        {
+            var mods = Path.Combine(root, "sync-prune", "mods");
+            var store = SyncedStore.Root(mods);
+            var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            string Stored(int i)
+            {
+                var folder = Directory.CreateDirectory(Path.Combine(store, $"test.m{i:00}@{i:x16}")).FullName;
+                File.WriteAllText(Path.Combine(folder, SyncedStore.RecordName), new JsonObject { ["hash"] = new string('a', 64), ["id"] = $"test.m{i:00}",
+                    ["synced"] = start.AddHours(i).ToString("o", System.Globalization.CultureInfo.InvariantCulture) }.ToJsonString());
+                return folder;
+            }
+            var folders = Enumerable.Range(0, 23).Select(Stored).ToList();
+            var old = Directory.CreateDirectory(Path.Combine(store, ".partial", "test.old@0000000000000000")).FullName;
+            Directory.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddDays(-2));
+            var fresh = Directory.CreateDirectory(Path.Combine(store, ".partial", "test.fresh@0000000000000000")).FullName;
+            SyncedStore.Touch(folders[5]); // played just now: the newest
+            var removed = SyncedStore.Prune(mods, [folders[0]]);
+            check(removed.Order(StringComparer.Ordinal).SequenceEqual([".partial/test.old@0000000000000000", Path.GetFileName(folders[1]), Path.GetFileName(folders[2])]),
+                "Removed: " + string.Join(", ", removed));
+            check(Directory.Exists(folders[0]) && Directory.Exists(folders[5]) && !Directory.Exists(folders[1]) && !Directory.Exists(folders[2]) && Directory.Exists(fresh) &&
+                Directory.GetDirectories(store).Count(d => !Path.GetFileName(d).StartsWith('.')) == 21, "The 20 newest stay, and the one in use.");
+            check(SyncedStore.Prune(mods, [folders[0]]).Count == 0, "A second pass removes nothing.");
+            check(SyncedStore.Prune(Path.Combine(root, "sync-prune", "none"), []).Count == 0, "No store, nothing to do.");
+        });
+
         test("Mod sync: only safe paths a digest would count can be written by a download", () =>
         {
             foreach (var good in new[] { "hellforge-mod.json", "data/9ba626afa44a3aa3.patch_0", "src/a b/c.cpp", "images/icon.png" })
@@ -565,6 +632,13 @@ static class ModSyncTests
             var installed = SyncedStore.Install(install.Mods, texture, partial, TextureVerified);
             check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == installed && !Directory.Exists(partial), "Installed and found by hash.");
             check(new ModLocator(install.Mods).Find(texture.Id, texture.Hash) == installed, "The locator finds the store's copy.");
+            // the store stays writable during sessions: a file the mod does not count makes the copy another mod
+            var planted = Path.Combine(installed, "data", "planted.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(planted)!);
+            File.WriteAllText(planted, "code");
+            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == null, "A stored copy with a file added is not found.");
+            File.Delete(planted);
+            check(SyncedStore.Find(install.Mods, texture.Id, texture.Hash) == installed, "Found again once the file is gone.");
             check(ModCatalog.Load(install.Mods).Mods.Count == 0, "Normal sessions never load the store.");
             check(ModSets.ContentHash(ModCatalog.Parse(installed, EntityProfile.Current)) == texture.Hash, "The stored mod rehashes to the host's.");
 

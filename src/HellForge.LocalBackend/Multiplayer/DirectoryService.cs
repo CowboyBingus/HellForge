@@ -6,6 +6,8 @@ using System.Text.RegularExpressions;
 namespace HellForge.LocalBackend.Multiplayer;
 
 // The Galactic Map's public lobbies through the lobby directory (LobbyDirectory.cs; docs/multiplayer.md step 7).
+// Both only while the player has turned on "Play with strangers" (ModSettings.PlayWithStrangers, off by default): off, nothing
+// is listed and a search shows friends' listings only (a stranger's lobby could not be joined: StrangerGate).
 //   publish: the public lobby this machine's game hosts is listed while it can be joined (privacy Public: lobby
 //            property "19" / number_key6 0, LobbyService.PrivacyOf; not locked, not full) and the player lists it (the
 //            Mods page's "listPublic", on by default), with its search properties, the game's lobby record (PUT /lobby,
@@ -21,6 +23,9 @@ namespace HellForge.LocalBackend.Multiplayer;
 //            lobby id, the connection string naming the listing's host, 1 to 4 members of at most 2 to 8), only search
 //            keys string_key1..30 / number_key1..30 within PlayFab's limits (LobbyService.SearchValue), at most 30, and its
 //            records rebuilt from the schema (LobbyRecords): a listing breaking any of it is left out whole.
+//   claims:  a listing's host is its own claim on Steam. Listings claiming one host or lobby with different data are left
+//            out (Unambiguous), and with Play with strangers off a friend's listing is shown only when that friend's
+//            backend vouches for its exact data (the digest in its presence, FriendPresence.Vouches).
 public sealed partial class DirectoryService : IAsyncDisposable
 {
     public static readonly TimeSpan PublishInterval = TimeSpan.FromSeconds(5), FoundFor = TimeSpan.FromMinutes(2), SameSearch = TimeSpan.FromMilliseconds(500);
@@ -43,7 +48,9 @@ public sealed partial class DirectoryService : IAsyncDisposable
     readonly Func<bool> editedStats;
     readonly Func<bool>? listPublic;
     bool unlistedLogged;
+    readonly Func<bool>? strangersAllowed;
     readonly object gate = new();
+    bool loggedOff;
     readonly Timer timer;
     readonly CancellationTokenSource stop = new();
     Dictionary<string, string>? published;
@@ -55,9 +62,11 @@ public sealed partial class DirectoryService : IAsyncDisposable
 
     // autoPublish: the listing follows the lobby by itself (every second, and soon after a change); tests call Publish.
     public DirectoryService(ILobbyDirectory directory, LobbyService lobby, FriendPresence presence, ulong localId, Action<Frame> toLocal, Action<string> log,
-        ModSync? sync, Func<bool> editedStats, bool autoPublish = true, Func<bool>? listPublic = null)
+        ModSync? sync, Func<bool> editedStats, bool autoPublish = true, Func<bool>? listPublic = null,
+        Func<bool>? strangersAllowed = null)
     {
         this.listPublic = listPublic;
+        this.strangersAllowed = strangersAllowed;
         this.directory = directory;
         this.lobby = lobby;
         this.presence = presence;
@@ -89,6 +98,17 @@ public sealed partial class DirectoryService : IAsyncDisposable
     public void Publish(DateTime now)
     {
         var desired = Desired();
+        if (desired != null && strangersAllowed?.Invoke() == false)
+        {
+            desired = null;
+            lock (gate)
+                if (!loggedOff)
+                {
+                    loggedOff = true;
+                    log("Directory: this machine's public lobby is not listed: Play with strangers is off (the launcher's Multiplayer settings).");
+                }
+        }
+        else if (desired != null) lock (gate) loggedOff = false;
         lock (gate)
         {
             if (desired == null && published == null) return;
@@ -100,6 +120,8 @@ public sealed partial class DirectoryService : IAsyncDisposable
             if (desired == null) log("Directory: this machine's lobby is no longer listed.");
             else if (appeared) log($"Directory: listed lobby {desired[DirectoryKeys.LobbyId]} ({desired.Count} keys).");
         }
+        // friends get it with the lobby (outside this lock: the presence's lock calls into this service's)
+        presence.SetLocalListing(desired == null ? null : DirectoryData.Digest(desired));
     }
 
     static bool Same(Dictionary<string, string> a, Dictionary<string, string> b) => a.Count == b.Count && a.All(p => b.TryGetValue(p.Key, out var v) && v == p.Value);
@@ -180,11 +202,16 @@ public sealed partial class DirectoryService : IAsyncDisposable
         var answer = new Frame("lobby.found").Add(op).Add(0);
         var kept = new List<DirectoryListing>();
         var refused = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var listing in listings)
+        var strangers = strangersAllowed?.Invoke() != false;
+        var friends = strangers ? [] : presence.Friends.Select(f => f.SteamId).ToHashSet();
+        foreach (var (listing, vouched) in Unambiguous(listings, refused))
         {
             // (Steam's search finds this machine's own listing too: counted, so "1 listed, 0 shown" never hides why)
             if (listing.Host == localId) { Count(refused, "this machine's own lobby"); continue; }
             if (!Valid(listing, out var props, out var members, out var max, out var locked, out var malformed)) { Count(refused, "malformed (" + malformed + ")"); continue; }
+            if (!strangers && !friends.Contains(listing.Host)) { Count(refused, "a stranger's (Play with strangers is off)"); continue; }
+            // a friend's id on a listing their backend did not publish: a stranger's (Unambiguous)
+            if (!strangers && !vouched) { Count(refused, "under a friend's id, not published by them (Play with strangers is off)"); continue; }
             if (!filter.Matches(props, members, max, locked)) { Count(refused, "the game's filter"); continue; }
             if (sync != null && !sync.Joinable(listing, out var why)) { Count(refused, why); continue; }
             kept.Add(listing);
@@ -205,6 +232,34 @@ public sealed partial class DirectoryService : IAsyncDisposable
     }
 
     static void Count(Dictionary<string, int> reasons, string why) => reasons[why] = reasons.GetValueOrDefault(why) + 1;
+
+    // On Steam a listing's host is the listing's own claim (SteamLobbyDirectory.Read): anyone can list under another
+    // player's id, with that player's lobby id (the game's own Steam lobby shows it). A join still goes to the host the
+    // listing names, which refuses a lobby it does not hold. Listings that claim one host or one lobby with different data
+    // cannot be told apart, so all of them are left out, except one a friend's backend vouches for (FriendPresence.Vouches)
+    // against ones it does not; copies of the same data count once. Vouched: whether the listing's host vouches for it.
+    List<(DirectoryListing Listing, bool Vouched)> Unambiguous(IReadOnlyList<DirectoryListing> listings, Dictionary<string, int> refused)
+    {
+        var distinct = new List<(DirectoryListing Listing, bool Vouched)>();
+        var digests = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var listing in listings)
+        {
+            var digest = DirectoryData.Digest(listing.Data);
+            if (!digests.Add(digest)) { Count(refused, "a copy of another listing"); continue; }
+            distinct.Add((listing, presence.Vouches(listing.Host, digest)));
+        }
+        static string LobbyOf(DirectoryListing listing) => listing.Data.GetValueOrDefault(DirectoryKeys.LobbyId) ?? "";
+        var byHost = distinct.GroupBy(d => d.Listing.Host).ToDictionary(g => g.Key, g => g.ToList());
+        var byLobby = distinct.GroupBy(d => LobbyOf(d.Listing), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+        var unambiguous = new List<(DirectoryListing Listing, bool Vouched)>();
+        foreach (var entry in distinct)
+        {
+            var rivals = byHost[entry.Listing.Host].Concat(byLobby[LobbyOf(entry.Listing)]).Where(r => !ReferenceEquals(r.Listing, entry.Listing)).ToList();
+            if (rivals.Count == 0 || entry.Vouched && rivals.All(r => !r.Vouched)) unambiguous.Add(entry);
+            else Count(refused, "another listing claims its host or lobby");
+        }
+        return unambiguous;
+    }
 
     // The game sends two searches about 30 ms apart per scan: one directory search serves both (not longer: a listing that
     // appeared or went would be missed; the smoke test saw 3 s of stale results with a 3 s window).
@@ -254,11 +309,14 @@ public sealed partial class DirectoryService : IAsyncDisposable
         return why.Length == 0;
     }
 
+    // A record is a few KB: a stranger's is not unpacked or parsed past RecordUnpackBytes.
+    public const int RecordUnpackBytes = 64 << 10;
+
     // A packed JSON object, or (null, true) when the listing has none; (null, false) when it is not one.
     static (JsonObject? Value, bool Ok) Json(IReadOnlyDictionary<string, string> data, string key)
     {
         if (!data.ContainsKey(key)) return (null, true);
-        try { return DirectoryData.Unpack(DirectoryData.Get(data, key)) is { } text && JsonNode.Parse(text) is JsonObject value ? (value, true) : (null, false); }
+        try { return DirectoryData.Unpack(DirectoryData.Get(data, key), RecordUnpackBytes) is { } text && JsonNode.Parse(text) is JsonObject value ? (value, true) : (null, false); }
         catch (JsonException) { return (null, false); }
     }
 
@@ -303,6 +361,7 @@ public sealed partial class DirectoryService : IAsyncDisposable
         stop.Cancel();
         await timer.DisposeAsync();
         lock (gate) if (published != null) directory.Publish(null);
+        presence.SetLocalListing(null);
         stop.Dispose();
     }
 }

@@ -51,6 +51,13 @@ packs, Lua mods and mods that say they are cosmetic; friends need not have the s
 Changes apply to the next session. While a session runs, the page is locked and the session keeps the mods it started
 with.
 
+While a session runs, its mod files are held read-only, so nothing the game runs can change a mod that loads as yours
+next time. HellForge's own files stay writable: the page's settings file, Local Stats, the in-game editor's settings,
+presets and the host's files beside it, and the mod sync downloads in `mods/.synced` (each checked again, by its hash,
+whenever a session would use it). When the session ends, anything else that appeared in `mods/` is listed in the
+Console, and a new mod, or a mod whose folder gained files, is switched off until you switch it on here. Only switch it
+on again if you put those files there.
+
 The page saves its switches, order and pack options in `mods/hellforge-mods.json`.
 
 ## Load order
@@ -86,7 +93,8 @@ In co-op every player keeps their own Local Stats (the in-game editor's saved ch
 Joining a lobby whose host runs other gameplay mods does not just fail. The host's backend refuses the join (above) and
 sends its mod set with the refusal. A **MOD SYNC** prompt then shows over the game by itself, without the editor
 window behind it (the in-game editor draws it). It holds the mouse and keyboard until it is answered, and lists each of
-the host's mods and what happens to it:
+the host's mods and what happens to it. With the in-game editor switched off on the Mods page, the launcher's Play page
+shows the same prompt instead, with the same buttons (BLOCK is the in-game prompt's only):
 
 | Shown as | Meaning |
 |---|---|
@@ -167,8 +175,15 @@ unverified anyway, and they may be your unreleased sources. Your backend serves 
 in total, so your own game keeps its link. Turn it off with "Let players who join me download my gameplay mods" on the
 Mods page.
 
-**Downloaded mods.** The Mods page shows how many there are and how much space they take, with a button that deletes
-them all.
+**Downloaded mods.** HellForge keeps the 20 used most recently (played, or downloaded) and removes older ones when a
+session starts, never one that session plays. The Mods page shows how many there are and how much space they take,
+with a button that deletes them all.
+
+**What mod sync does not cover.**
+- Settings a mod keeps outside its own folder are neither compared nor downloaded, so they can differ between host and
+  joiner.
+- A mod that writes into its own folder while it runs changes its own files, and with them its content hash. A synced
+  copy that does so no longer matches the host's, and the next sync falls back to your own mods.
 
 **Public lobbies on the Galactic Map.** The map lists other HellForge players' public lobbies, except the ones you could
 not join:

@@ -17,7 +17,7 @@ try
             verify-game --game <game folder> [--cache <file>]
             install-game --manifest <appmanifest_553850.acf> --destination <game folder>
             create-install --root <folder>
-            prepare-session --install <folder> --profile <name>
+            prepare-session --install <folder> --profile <name> [--user-data <root>]
             migrate --install <folder> --from <artifacts/host-startup> [--appdata <folder>]
             mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>] [--modset <file>] [--sync <mod sync session file>]
             build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> [--steam-data <Steam's game data folder>] --out <folder>]
@@ -83,7 +83,7 @@ try
         "crash-dump" => ["--pid", "--thread", "--pointers", "--out"],
         "install-game" => ["--manifest", "--destination"],
         "create-install" => ["--root"],
-        "prepare-session" => ["--install", "--profile"],
+        "prepare-session" => ["--install", "--profile", "--user-data"],
         "migrate" => ["--install", "--from", "--appdata"],
         "mods-stage" => ["--install", "--plan", "--logs", "--progress", "--modset", "--sync"],
         "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--out"],
@@ -199,7 +199,7 @@ try
             var install = new InstallLayout(Required("--install"));
             if (!install.Exists) throw new InvalidDataException($"{install.Root} is not a HellForge installation.");
             var vanilla = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Arrowhead", "Helldivers2");
-            var prepared = GameSettings.PrepareSession(install, Required("--profile"), vanilla);
+            var prepared = GameSettings.PrepareSession(install, Required("--profile"), vanilla, options.GetValueOrDefault("--user-data"));
             Console.WriteLine(JsonSerializer.Serialize(prepared, CopyPreparer.JsonOptions));
             return prepared.Problems.Count == 0 ? 0 : 2;
         case "mods-stage":
@@ -223,12 +223,17 @@ try
                     var (synced, syncProblem) = sync.Resolve(modInstall.Mods, mods);
                     if (synced != null) (loadOrder, syncedWith) = (synced, sync.HostName.Length > 0 ? sync.HostName : sync.Host);
                     else modProblems.Add("Mod sync: playing your own mods, because " + syncProblem);
+                    foreach (var mod in loadOrder.Where(m => m.Folder.StartsWith(SyncedStore.Root(modInstall.Mods), StringComparison.OrdinalIgnoreCase)))
+                        SyncedStore.Touch(mod.Folder);
                 }
                 catch (Exception error) when (error is InvalidDataException or IOException or System.Text.Json.JsonException)
                 {
                     modProblems.Add("Mod sync: playing your own mods, because the sync file could not be read (" + error.Message + ").");
                 }
             }
+            // The synced store keeps the mods used most recently (SyncedStore.Keep), this session's among them.
+            foreach (var pruned in SyncedStore.Prune(modInstall.Mods, loadOrder.Select(m => m.Folder)))
+                Console.Error.WriteLine("Mod sync: removed the downloaded mod " + pruned + ", used least recently.");
             // Mods with a data spec get their data built from the copy's game data first (once per game data and spec);
             // a mod whose data cannot be built is not loaded.
             var (active, dataProblems) = ModDataCache.Prepare(modInstall, loadOrder, Console.Error.WriteLine);

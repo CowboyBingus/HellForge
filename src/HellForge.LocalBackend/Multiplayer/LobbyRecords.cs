@@ -13,14 +13,16 @@ namespace HellForge.LocalBackend.Multiplayer;
 // The fields are those the game's record builder writes (game.dll 0x12CB190.., PUT /lobby; strings, integers and booleans
 // told apart by the JSON writer's slots +0xE8, +0xF8, +0x108 and 0x1749B10 for startTime) and those FriendPresence
 // completes for the parser (0x1053F60): numSessionMembers, completedObjectives, planetType, transitionTarget, missionId.
+// "seed" is written only once a mission is selected, and is kept only in its exact layout (MissionSeed).
 public static class LobbyRecords
 {
     public const int MaxPlayers = 4, MaxNameLength = 32, MaxMissions = 16;
-    enum Kind { Integer, Long, Bool, Text, Hash, AccountIds, Players, Missions }
+    enum Kind { Integer, Long, Bool, Text, Hash, Seed, AccountIds, Players, Missions }
 
     static readonly Dictionary<string, (Kind Kind, long Min, long Max)> Fields = new(StringComparer.Ordinal)
     {
-        ["buildGameHash"] = (Kind.Hash, 0, 64), ["seed"] = (Kind.Text, 0, 32),
+        // seed: the selected mission, which the map draws a scanned lobby's marker from (MissionSeed)
+        ["buildGameHash"] = (Kind.Hash, 0, 64), ["seed"] = (Kind.Seed, 0, MissionSeed.MaxLength),
         ["numLobbyMembers"] = (Kind.Integer, 0, 8), ["numSessionMembers"] = (Kind.Integer, 0, 8), ["privacyMode"] = (Kind.Integer, 0, 3),
         ["difficulty"] = (Kind.Integer, 0, 20), ["state"] = (Kind.Integer, int.MinValue, int.MaxValue), ["sosBeacons"] = (Kind.Integer, int.MinValue, int.MaxValue),
         ["gameModeProgress"] = (Kind.Integer, int.MinValue, int.MaxValue), ["operationProgress"] = (Kind.Integer, int.MinValue, int.MaxValue),
@@ -84,6 +86,8 @@ public static class LobbyRecords
                 if (text.Length > max || text.Any(char.IsControl) || kind == Kind.Hash && !text.All(char.IsAsciiLetterOrDigit)) return null;
                 return JsonValue.Create(text);
             }
+            case Kind.Seed:
+                return value?.GetValueKind() == JsonValueKind.String && value.GetValue<string>() is var seed && MissionSeed.Valid(seed) ? JsonValue.Create(seed) : null;
             case Kind.AccountIds when max == 0:
                 return Account(value, host);
             case Kind.AccountIds:

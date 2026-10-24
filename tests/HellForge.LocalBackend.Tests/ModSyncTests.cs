@@ -169,11 +169,16 @@ static partial class ModSyncTests
             "The next session plays the host's mods: " + problem);
         File.Delete(signal);
 
-        // Joined again with everything here: nothing to download, a restart is enough.
+        // Joined again with everything here: nothing to download, a restart is enough. Answered from the launcher (a game
+        // without the in-game editor): its file is taken within a second or two.
         var again = Refused(host, guest, check, "c", "offer");
         check(again.Bytes == 0 && again.Items.All(i => i.Action == SyncAction.Have) && again.Message.Contains("Restart"), "Ready: " + again.Message);
-        guest.Sync.Answer(["syncanswer", again.Version.ToString(), "decline"]);
-        check(guest.Shown.Next(check, "none").Items.Count == 0, "Declined: the offer closes.");
+        var written = ModSyncOffer.Read(Path.Combine(guest.Run, "backend"));
+        check(written != null && written.Version == again.Version && written.State == "offer" && written.Mods.Count == again.Items.Count &&
+            written.Mods.All(m => m.Action == "have"), "The launcher reads the offer the backend wrote.");
+        ModSyncOffer.Answer(Path.Combine(guest.Run, "backend"), again.Version, "decline");
+        check(guest.Shown.Next(check, "none").Items.Count == 0 && !File.Exists(Path.Combine(guest.Run, "backend", ModSyncOffer.AnswerFileName)),
+            "Declined from the launcher: the offer closes and the answer is taken.");
 
         // Blocking a mod from the offer: saved, and the lobby is shown as blocked.
         foreach (var mod in hostSet.Mods.Where(m => m.Id != "test.ammo")) Directory.Delete(SyncedStore.Find(guest.Mods, mod.Id, mod.Hash)!, recursive: true);
