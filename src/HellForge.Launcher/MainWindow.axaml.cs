@@ -152,10 +152,13 @@ public partial class MainWindow : Window
         };
 
         // Development: HELLFORGE_LAUNCHER_SHOT=<file.png> shows the play page as a session builds its mods (2 of 5), saves
-        // it as a picture and closes (a look at the launcher without a session).
+        // it as a picture and closes (a look at the launcher without a session). HELLFORGE_LAUNCHER_SHOT_PAGE=<1-5> shows that
+        // page instead (3: Mods).
         if (Environment.GetEnvironmentVariable("HELLFORGE_LAUNCHER_SHOT") is { Length: > 0 } shot)
             Opened += async (_, _) =>
             {
+                if (int.TryParse(Environment.GetEnvironmentVariable("HELLFORGE_LAUNCHER_SHOT_PAGE"), out var page) && page is >= 1 and <= 5)
+                    Nav.SelectedIndex = page - 1;
                 RenderSteps(BuildStep, false, 0.4);
                 SetStatus("Compiling mods (3 of 5)...", Phase.Busy, "Building Stratagem Compendium from its sources.");
                 BootProgress.IsVisible = true;

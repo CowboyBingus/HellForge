@@ -172,7 +172,7 @@ offered again. Unblock it on the launcher's Mods page (MOD SYNC card).
 minutes after their first refused join (joining again does not extend it), and at most your mods' size twice over.
 Mods that run code or carry data HellForge cannot check go only to your Steam friends: a stranger could not take them
 unverified anyway, and they may be your unreleased sources. Your backend serves at most 1 MB/s per player and 2 MB/s
-in total, so your own game keeps its link. Turn it off with "Let players who join me download my gameplay mods" on the
+in total, so your own game keeps its link. Turn it off with "Share my gameplay mods with players who join" on the
 Mods page.
 
 **Downloaded mods.** HellForge keeps the 20 used most recently (played, or downloaded) and removes older ones when a
@@ -191,12 +191,12 @@ not join:
 - lobbies running mods that would have to be installed by hand (a Steam friend's mods that wait for your trust still
   show);
 - lobbies whose host plays with edited stats (Local Stats, the in-game editor's values or arm swaps). Joiners play with
-  the host's stats, so these are hidden unless "Show public lobbies whose host plays with edited stats" is on.
+  the host's stats, so these are hidden unless "Show lobbies whose host shares edited stats" is on.
 
 Lobbies with other mods you can download still show. Joining one shows the MOD SYNC prompt.
 
 Only lobbies whose host set Privacy to Public are listed. To keep your own Public lobbies off other players' maps, turn
-off "List my Public lobbies on other HellForge players' Galactic Map" on the Mods page. Who may join each privacy
+off "List my Public lobbies on the Galactic Map" on the Mods page. Who may join each privacy
 setting is in [multiplayer.md](multiplayer.md#how-co-op-works-for-players).
 
 For mod authors, the prompt is the SDK 14 calls `sync_state`, `sync_mod` and `sync_answer`

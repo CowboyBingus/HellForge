@@ -175,63 +175,81 @@ public partial class MainWindow
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(new TextBlock { Text = "MOD SYNC", Classes = { "h2" }, Margin = new(0) });
         panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Classes = { "muted" }, Text =
-            "Joining a lobby whose host runs other gameplay mods offers to download them and restart with the host's mods. " +
-            "Only what HellForge checks itself downloads from any host: stats, network field types, and data specs that don't replace values. " +
-            "Mods that run code (a DLL, sources or Lua) or carry data HellForge cannot check (data patches, raw stats, component writes, " +
-            "data specs that replace values) download only from a Steam friend, and only when HellForge has verified that exact version " +
-            "or you trusted it on the prompt; others you install yourself (a mod's GET IT shows where, when its author gave one)." });
-        var share = new ToggleSwitch { IsChecked = settings.Share, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
-        share.IsCheckedChanged += (_, _) =>
+            "Join players who run other gameplay mods: HellForge downloads the host's mods and restarts the game with them." });
+        // What downloads from whom (ModSyncPlan), folded away: the rules matter once, the switches every day.
+        var rules = new StackPanel { Spacing = 4, Margin = new(12, 0, 0, 4), IsVisible = false };
+        foreach (var rule in new[]
         {
-            try { ModSettings.SetShare(modsFolder, share.IsChecked == true); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the mod sync setting: " + error.Message, Red); }
-        };
-        var shareRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        shareRow.Children.Add(share);
-        shareRow.Children.Add(new TextBlock { Text = "Let players who join me download my gameplay mods (those with code or unchecked data: Steam friends only)",
-            VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(shareRow);
-        // Joiners of a host who shares edited stats play with them: such public lobbies are hidden on the Galactic Map unless shown.
-        var edited = new ToggleSwitch { IsChecked = settings.ShowEditedStats, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
-        edited.IsCheckedChanged += (_, _) =>
+            "From any host: what HellForge checks itself (stats, network field types, data specs that don't replace values).",
+            "From a Steam friend only: mods that run code (a DLL, sources or Lua) or carry data HellForge cannot check (data patches, raw stats, " +
+                "component writes, data specs that replace values), and only when HellForge has verified that exact version or you trusted it on the prompt.",
+            "Anything else you install yourself: a mod's GET IT button shows where, when its author gave a link."
+        })
+            rules.Children.Add(new TextBlock { Text = "•  " + rule, TextWrapping = TextWrapping.Wrap, Classes = { "muted" } });
+        var rulesButton = new Button { Content = "How downloads are checked ▸", Classes = { "flat" }, Padding = new(0), HorizontalAlignment = HorizontalAlignment.Left };
+        rulesButton.Click += (_, _) =>
         {
-            try { ModSettings.SetShowEditedStats(modsFolder, edited.IsChecked == true); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the mod sync setting: " + error.Message, Red); }
+            rules.IsVisible = !rules.IsVisible;
+            rulesButton.Content = rules.IsVisible ? "How downloads are checked ▾" : "How downloads are checked ▸";
         };
-        // Hosting: a Public lobby is listed on other HellForge players' Galactic Map unless this is off (DirectoryService).
-        var listed = new ToggleSwitch { IsChecked = settings.ListPublic, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
-        listed.IsCheckedChanged += (_, _) =>
-        {
-            try { ModSettings.SetListPublic(modsFolder, listed.IsChecked == true); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the public lobby setting: " + error.Message, Red); }
-        };
-        var listedRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        listedRow.Children.Add(listed);
-        listedRow.Children.Add(new TextBlock { Text = "List my Public lobbies on other HellForge players' Galactic Map", VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(listedRow);
-        var editedRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        editedRow.Children.Add(edited);
-        editedRow.Children.Add(new TextBlock { Text = "Show public lobbies whose host shares edited stats (you would play with theirs)", VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(editedRow);
-        // Hosting: friends keep their own in-game editor changes unless this is on (StatsShare); either way every game loads
-        // the packages the others' changes need (AssetShare).
-        var hostStats = new ToggleSwitch { IsChecked = settings.HostStats, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
-        hostStats.IsCheckedChanged += (_, _) =>
-        {
-            try { ModSettings.SetHostStats(modsFolder, hostStats.IsChecked == true); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save the shared stats setting: " + error.Message, Red); }
-        };
-        var hostStatsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        hostStatsRow.Children.Add(hostStats);
-        hostStatsRow.Children.Add(new TextBlock { Text = "When I host, everyone plays with my editor changes (off: each player keeps their own)",
-            VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(hostStatsRow);
+        panel.Children.Add(rulesButton);
+        panel.Children.Add(rules);
 
-        panel.Children.Add(new TextBlock { Text = settings.Blocked.Count == 0
-            ? "No blocked mods. BLOCK on the in-game MOD SYNC prompt hides lobbies that run a mod."
-            : "Blocked: lobbies running these mods are not offered.", TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(Section("When I host"));
+        panel.Children.Add(SettingSwitch("Share my gameplay mods with players who join", "Mods that run code or carry unchecked data go to Steam friends only.",
+            settings.Share, on => ModSettings.SetShare(modsFolder, on), "the mod sync setting"));
+        // a Public lobby is listed on other HellForge players' Galactic Map unless this is off (DirectoryService)
+        panel.Children.Add(SettingSwitch("List my Public lobbies on the Galactic Map", "Other HellForge players can find and join them there.",
+            settings.ListPublic, on => ModSettings.SetListPublic(modsFolder, on), "the public lobby setting"));
+        // friends keep their own in-game editor changes unless this is on (StatsShare); either way every game loads the
+        // packages the others' changes need (AssetShare)
+        panel.Children.Add(SettingSwitch("Everyone plays with my editor changes", "Off: each player keeps their own changes.",
+            settings.HostStats, on => ModSettings.SetHostStats(modsFolder, on), "the shared stats setting"));
+
+        panel.Children.Add(Section("When I join"));
+        // joiners of a host who shares edited stats play with them: such public lobbies are hidden on the Galactic Map unless shown
+        panel.Children.Add(SettingSwitch("Show lobbies whose host shares edited stats", "You would play with the host's changes, not your own.",
+            settings.ShowEditedStats, on => ModSettings.SetShowEditedStats(modsFolder, on), "the mod sync setting"));
+
+        // Trusted (TRUST on the in-game prompt): each exact mod, who hosted it and when. Untrusting it deletes its downloaded
+        // copy too, so no synced session runs it again unless it is trusted (or verified) again.
+        panel.Children.Add(Section(settings.Trusted.Count == 0 ? "Trusted mods" : $"Trusted mods ({settings.Trusted.Count})"));
+        panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Classes = { "muted" }, Text = settings.Trusted.Count == 0
+            ? "None. TRUST on the in-game MOD SYNC prompt lets a Steam friend's mod download that HellForge has not verified."
+            : "These exact versions download from Steam friends without HellForge's check. They run their own code on your PC." });
+        foreach (var trusted in settings.Trusted)
+        {
+            var row = new DockPanel();
+            var untrust = new Button { Content = "Untrust", Classes = { "flat" }, IsEnabled = !modsLocked, VerticalAlignment = VerticalAlignment.Center };
+            ToolTip.SetTip(untrust, "Take the trust back and delete the copy downloaded from your friend.");
+            untrust.Click += (_, _) =>
+            {
+                try
+                {
+                    ModSettings.Untrust(modsFolder, trusted.Id, trusted.Hash);
+                    SyncedStore.Forget(modsFolder, trusted.Id, trusted.Hash);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not untrust " + trusted.Id + ": " + error.Message, Red); }
+                RefreshMods();
+            };
+            DockPanel.SetDock(untrust, Dock.Right);
+            row.Children.Add(untrust);
+            var since = DateTime.TryParse(trusted.Since, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var when)
+                ? "  ·  " + when.ToLocalTime().ToString("yyyy-MM-dd") : "";
+            // the host's name without its Steam account id ("Riggs (11000010838EA1C)"), which the tooltip keeps
+            var from = System.Text.RegularExpressions.Regex.Replace(trusted.From, @"\s*\([0-9A-Fa-f]{6,}\)$", "");
+            var text = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(new TextBlock { Text = $"{trusted.Name} {trusted.Version}", TextWrapping = TextWrapping.Wrap });
+            text.Children.Add(new TextBlock { Text = $"from {from}{since}", Classes = { "muted" }, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            ToolTip.SetTip(text, $"{trusted.Id}, from {trusted.From}. Content hash {trusted.Hash}");
+            row.Children.Add(text);
+            panel.Children.Add(row);
+        }
+
+        panel.Children.Add(Section("Blocked mods"));
+        panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Classes = { "muted" }, Text = settings.Blocked.Count == 0
+            ? "None. BLOCK on the in-game MOD SYNC prompt hides lobbies that run a mod."
+            : "Lobbies running these mods are not offered." });
         foreach (var id in settings.Blocked.Order(StringComparer.Ordinal))
         {
             var row = new DockPanel();
@@ -248,41 +266,11 @@ public partial class MainWindow
             panel.Children.Add(row);
         }
 
-        // Trusted (TRUST on the in-game prompt): each exact mod, who hosted it and when. Untrusting it deletes its downloaded
-        // copy too, so no synced session runs it again unless it is trusted (or verified) again.
-        panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Text = settings.Trusted.Count == 0
-            ? "No trusted mods. TRUST on the in-game MOD SYNC prompt lets a Steam friend's mod that HellForge has not verified download."
-            : "Trusted: these exact versions download from Steam friends though HellForge has not verified them. They run their own code on your PC." });
-        foreach (var trusted in settings.Trusted)
-        {
-            var row = new DockPanel();
-            var untrust = new Button { Content = "Untrust", Classes = { "flat" }, IsEnabled = !modsLocked };
-            ToolTip.SetTip(untrust, "Take the trust back and delete the copy downloaded from your friend.");
-            untrust.Click += (_, _) =>
-            {
-                try
-                {
-                    ModSettings.Untrust(modsFolder, trusted.Id, trusted.Hash);
-                    SyncedStore.Forget(modsFolder, trusted.Id, trusted.Hash);
-                }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not untrust " + trusted.Id + ": " + error.Message, Red); }
-                RefreshMods();
-            };
-            DockPanel.SetDock(untrust, Dock.Right);
-            row.Children.Add(untrust);
-            var since = DateTime.TryParse(trusted.Since, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var when)
-                ? " on " + when.ToLocalTime().ToString("yyyy-MM-dd") : "";
-            var text = new TextBlock { Text = $"{trusted.Name} {trusted.Version} ({trusted.Id})  ·  from {trusted.From}{since}", VerticalAlignment = VerticalAlignment.Center,
-                TextWrapping = TextWrapping.Wrap };
-            ToolTip.SetTip(text, "Content hash " + trusted.Hash);
-            row.Children.Add(text);
-            panel.Children.Add(row);
-        }
-
         var store = SyncedStore.Root(modsFolder);
         var stored = Directory.Exists(store) ? Directory.GetDirectories(store).Where(d => !Path.GetFileName(d).StartsWith('.')).ToList() : [];
         if (stored.Count > 0)
         {
+            panel.Children.Add(Section("Downloaded mods"));
             long bytes = 0;
             try { bytes = stored.Sum(d => Directory.GetFiles(d, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length)); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
@@ -296,11 +284,33 @@ public partial class MainWindow
             };
             DockPanel.SetDock(clear, Dock.Right);
             row.Children.Add(clear);
-            row.Children.Add(new TextBlock { Text = $"{stored.Count} mod{(stored.Count == 1 ? "" : "s")} downloaded from hosts ({bytes / 1048576.0:0.0} MB), used only when you play with their mods.",
-                TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(new TextBlock { Text = $"{stored.Count} mod{(stored.Count == 1 ? "" : "s")} from hosts ({bytes / 1048576.0:0.0} MB), used only when you play with their mods.",
+                TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Classes = { "muted" } });
             panel.Children.Add(row);
         }
         ModsList.Children.Add(new Border { Classes = { "card" }, Child = panel });
+    }
+
+    // A part of a card under its title: a small heading with room above it.
+    static TextBlock Section(string title) => new() { Text = title, FontWeight = FontWeight.SemiBold, Margin = new(0, 10, 0, 0) };
+
+    // A switch with its label and a one-line hint under it, saved as it changes (what names the setting in a failure).
+    Control SettingSwitch(string label, string hint, bool isChecked, Action<bool> save, string what)
+    {
+        var toggle = new ToggleSwitch { IsChecked = isChecked, OnContent = null, OffContent = null, MinWidth = 0, VerticalAlignment = VerticalAlignment.Top };
+        toggle.IsCheckedChanged += (_, _) =>
+        {
+            try { save(toggle.IsChecked == true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save " + what + ": " + error.Message, Red); }
+        };
+        var text = new StackPanel { Spacing = 1, Margin = new(8, 4, 0, 0) };
+        text.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap });
+        text.Children.Add(new TextBlock { Text = hint, Classes = { "muted" }, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+        var row = new DockPanel();
+        DockPanel.SetDock(toggle, Dock.Left);
+        row.Children.Add(toggle);
+        row.Children.Add(text);
+        return row;
     }
 
     void AddModGroup(List<ModManifest> all, List<ModManifest> group, string title, string hint, string empty, ref int number)

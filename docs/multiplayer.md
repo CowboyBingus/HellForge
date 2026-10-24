@@ -25,8 +25,8 @@ reaches PlayFab, Arrowhead's services or vanilla players' sessions.
 4. In a friend's lobby, every player keeps their own in-game editor changes and can keep making them. HellForge
    loads what each player's changes need on every machine (a vehicle's swapped weapon, a pod's pickup), so friends
    don't see missing assets. The editor's header shows "JOINED · <name> · YOUR OWN STATS", and the host's shows
-   "HOSTING · EVERYONE KEEPS THEIR OWN". A host can instead have everyone play with the host's changes: "When I host,
-   everyone plays with my editor changes" on the launcher's Mods page (MOD SYNC card). Then a joiner's editor turns
+   "HOSTING · EVERYONE KEEPS THEIR OWN". A host can instead have everyone play with the host's changes: "Everyone plays
+   with my editor changes" under "When I host" on the launcher's Mods page (MOD SYNC card). Then a joiner's editor turns
    grey and read-only, with "READ-ONLY · HOST: <name>", and the host's shows "HOSTING · FRIENDS PLAY WITH YOUR STATS".
    [Stats in co-op](#stats-in-co-op) says what each way means for what other players see.
 5. When the host leaves, the lobby closes for everyone, as HD2's host ends the session. If you were playing with the
@@ -47,8 +47,8 @@ reaches PlayFab, Arrowhead's services or vanilla players' sessions.
 
    Changing the setting during a session never removes anyone: players already in the lobby stay, and a player who was
    in it (whose game crashed, say) may come back. A refused player's game says why ("The host's lobby is Friends only").
-8. To keep your Public lobbies off other players' Galactic Map, turn off "List my Public lobbies on other HellForge
-   players' Galactic Map" on the launcher's Mods page (MOD SYNC card). It is on by default. Your Public lobby then still
+8. To keep your Public lobbies off other players' Galactic Map, turn off "List my Public lobbies on the Galactic
+   Map" on the launcher's Mods page (MOD SYNC card). It is on by default. Your Public lobby then still
    takes anyone who joins it, but players who are not your friends cannot find it.
 9. Invitations from the game's social menu reach Steam friends running HellForge, and the invited player may join even
    an Invite only lobby.
@@ -516,7 +516,7 @@ taken to be SteamID64s; unanswered ids are logged.
 ### Stats in co-op
 
 By default every player keeps their own Local Stats, and joiners can edit as the host can. A host may share its stats
-instead (ModSettings `hostStats`, the Mods page switch "When I host, everyone plays with my editor changes"); then
+instead (ModSettings `hostStats`, the Mods page switch "Everyone plays with my editor changes", under "When I host"); then
 everyone in its lobby plays with the host's. Protocol `hellforge-mp-8`. How host's stats were first built is under
 [step 5](#step-5-stats-in-co-op-the-hosts-values-everywhere-2026-10-17), and the per-player default under
 [step 10](#step-10-every-players-own-stats-and-the-lobbys-assets-2026-10-23).
@@ -1200,7 +1200,7 @@ playing with the host's stats). What it does is in [Stats in co-op](#stats-in-co
 [Assets in co-op](#assets-in-co-op). HD2Runtime's own synced asset loading (its `hd2as` lobby key,
 `docs/asset-loading.md`) was never proven live; this is HellForge's over its backends' channel.
 
-**To test on two PCs** (A hosts, B joins; both with the "When I host ..." switch off, the default):
+**To test on two PCs** (A hosts, B joins; both with the "Everyone plays with my editor changes" switch off, the default):
 1. B swaps a vehicle's weapon in the in-game editor (Mounted Weapons) to one A's loadout never brings, and APPLY. A
    swaps a hellpod's payload the same way. Check that each editor stays editable, with "JOINED · <A> · YOUR OWN STATS"
    on B's and "HOSTING · EVERYONE KEEPS THEIR OWN" on A's.
