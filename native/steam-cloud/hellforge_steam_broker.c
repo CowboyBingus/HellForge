@@ -90,6 +90,27 @@ static int InitSteam(void)
     return g_steam.hPipe != 0;
 }
 
+/* Several installations on one PC (HELLFORGE_MULTI_INSTANCE=1, a test set-up; the session runner's environment): the
+ * game is HELLFORGE_IDENTITY (named HELLFORGE_PERSONA, else "Diver <last digits>"), and its own Steam lobby is kept with
+ * the other instances' in <HELLFORGE_DIRECTORY_FOLDER>\steam-lobbies. */
+static void MultiInstance(BrokerBridge* bridge)
+{
+    wchar_t multi[8], identity[32], folder[520], persona[64];
+    if (GetEnvironmentVariableW(L"HELLFORGE_MULTI_INSTANCE", multi, 8) != 1 || multi[0] != L'1') return;
+    DWORD folderLength = GetEnvironmentVariableW(L"HELLFORGE_DIRECTORY_FOLDER", folder, 480);
+    if (!GetEnvironmentVariableW(L"HELLFORGE_IDENTITY", identity, 32) || folderLength == 0 || folderLength >= 480)
+    {
+        fprintf(stderr, "broker: several installations need HELLFORGE_IDENTITY and HELLFORGE_DIRECTORY_FOLDER; the account's own Steam lobby is used\n");
+        return;
+    }
+    wcscat(folder, L"\\steam-lobbies");
+    uint64_t id = wcstoull(identity, NULL, 10);
+    char name[128];
+    if (GetEnvironmentVariableW(L"HELLFORGE_PERSONA", persona, 64) > 0 && WideCharToMultiByte(CP_UTF8, 0, persona, -1, name, sizeof name, NULL, NULL) > 0) { }
+    else snprintf(name, sizeof name, "Diver %04llu", (unsigned long long)(id % 10000));
+    if (!BrokerBridgeMultiInstance(bridge, folder, id, name)) fprintf(stderr, "broker: several installations: not set up (identity or folder)\n");
+}
+
 int wmain(int argc, wchar_t* argv[])
 {
     if (argc < 3 || wcslen(argv[1]) == 0 || wcslen(argv[1]) > 64)
@@ -128,6 +149,8 @@ int wmain(int argc, wchar_t* argv[])
         BrokerBridgeSnapshot(&bridge, ch); /* ready before the game's first frame */
         BrokerBridgeWatchStrangers(&bridge, argc >= 5 && argv[4][0] != L'\0' ? argv[4] : NULL);
         BrokerBridgeWatchPeers(&bridge, argc >= 6 && argv[5][0] != L'\0' ? argv[5] : NULL);
+        MultiInstance(&bridge);
+        BrokerBridgeSnapshot(&bridge, ch); /* with this instance's identity, when it has one */
         steam = bridge.steam;
     }
 
@@ -144,6 +167,7 @@ int wmain(int argc, wchar_t* argv[])
     int why = BrokerServe(ch, &steam, game);
     fprintf(stderr, "broker: %s; %u callback(s) dropped, %u call(s) refused\n",
         why == BROKER_END_SHUTDOWN ? "shutdown" : why == BROKER_END_GAME_GONE ? "the game exited" : "the pipe closed", ch->dropped, bridge.refusals);
+    BrokerLobbiesClose(bridge.localLobbies); /* the game is gone: it leaves the local lobbies it was in */
 
     BrokerChannelClose(ch);
     free(ch);

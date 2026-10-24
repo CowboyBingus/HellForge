@@ -4,6 +4,7 @@
 #pragma once
 #include "bridge_broker.h"
 #include "broker_dispatch.h"
+#include "broker_lobby.h"
 
 #define BROKER_SNAPSHOT_MS 1000
 #define BROKER_MAX_LOBBIES 16
@@ -36,6 +37,12 @@ typedef struct BrokerBridge {
     FILETIME peersStamp;
     DWORD peersChecked;
     uint32_t p2pDropped;            /* packets not passed on: from someone else, too large, or the ring full */
+
+    /* several installations on one PC (BrokerBridgeMultiInstance): the game's own Steam lobby kept locally, and the
+     * SteamID and name the snapshot gives the game instead of the account's */
+    BrokerLobbies* localLobbies;
+    uint64_t identity;
+    char persona[128];
     int strangers;
     FILETIME strangersStamp;
     DWORD strangersChecked;
@@ -60,6 +67,11 @@ void BrokerBridgeWatchStrangers(BrokerBridge* b, const wchar_t* modsFolder);
  * peers, decimal, one a line; written as they change), and the members of a lobby the game made or entered. Without
  * the file, only those members. Call before serving. */
 void BrokerBridgeWatchPeers(BrokerBridge* b, const wchar_t* peersFile);
+
+/* Several installations on one PC (HELLFORGE_MULTI_INSTANCE=1): the game is this SteamID and name, and its own Steam
+ * lobby is kept with the other instances' in that folder (broker_lobby.h). Call before serving; 0 when the id is not a
+ * SteamID64 or the folder cannot be used. */
+int BrokerBridgeMultiInstance(BrokerBridge* b, const wchar_t* lobbyFolder, uint64_t identity, const char* persona);
 
 /* Play with strangers in a settings file's text: a top-level "playWithStrangers": true. */
 int BrokerStrangersIn(const char* json, size_t length);
