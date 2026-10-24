@@ -231,6 +231,9 @@ class Baseline(unittest.TestCase):
         code, out = self.repo.run('check')
         self.assertEqual(code, 2)
         self.assertIn('format 1', out)
+        self.assertEqual(self.repo.run('update')[0], 2)
+        self.assertEqual(self.repo.run('update', '--allow-increase')[0], 0)  # replaced by a format 2 baseline
+        self.assertEqual(json.loads(self.repo.baseline.read_text(encoding='utf-8'))['format'], 2)
 
     def test_severity_config(self):
         self.repo.close()

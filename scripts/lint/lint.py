@@ -306,11 +306,14 @@ def load_config(path: Path, root: Path, overrides: list[str], only: list[str]) -
 
 # ----------------------------------------------------------------------------- baseline
 
-def read_baseline(path: Path) -> dict[Key, list[int]]:
+def read_baseline(path: Path, replacing: bool = False) -> dict[Key, list[int]]:
+    """The baseline's entries; with `replacing` (update --allow-increase), one of an older format reads as empty."""
     if not path.exists():
         return {}
     try:
         data = json.loads(path.read_text(encoding='utf-8'))
+        if data.get('format') != BASELINE_FORMAT and replacing:
+            return {}
         if data.get('format') != BASELINE_FORMAT:
             raise LintError(f'{path.name} is baseline format {data.get("format")}, this lint reads format '
                             f'{BASELINE_FORMAT} (keyed by function): regenerate it with `update --allow-increase`')
@@ -466,7 +469,7 @@ def command_check(result: Scan, config: Config, args) -> int:
 
 
 def command_update(result: Scan, config: Config, args) -> int:
-    baseline = read_baseline(args.baseline)
+    baseline = read_baseline(args.baseline, replacing=args.allow_increase)
     scope = {unit.name for unit in result.units}
     changes, _ = compare(baseline, by_key(result.violations), scope)
     increases = [c for c in changes if c.kind in ('new', 'grew')]
