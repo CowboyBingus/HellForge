@@ -24,8 +24,17 @@ static class EditorTests
             check(noIcon.Count == 0, "Every weapon, throwable and strike has a HUD sprite: " + string.Join(", ", noIcon));
             var groupOf = new Dictionary<string, string> { ["weapon"] = "weapons", ["throwable"] = "throwables", ["stratagem"] = "stratagems", ["booster"] = "boosters" };
             groupOf["passive"] = "passives";
-            check(objects.Where(o => o["icon"] != null).All(o => sprites[groupOf[o["icon"]!.GetValue<string>()]].ContainsKey(o["sprite"]?.GetValue<string>() ?? o["name"]!.GetValue<string>())),
+            groupOf["difficulty"] = "difficulties";
+            // level 11's icon is its mod's (the game has none), the others the game's
+            check(objects.Where(o => o["icon"] != null && !(o["icon"]!.GetValue<string>() == "difficulty" && o["sprite"]?.GetValue<string>() == "11"))
+                .All(o => sprites[groupOf[o["icon"]!.GetValue<string>()]].ContainsKey(o["sprite"]?.GetValue<string>() ?? o["name"]!.GetValue<string>())),
                 "An icon names a sprite of its group.");
+            var difficulties = objects.Where(o => o["category"]!.GetValue<string>() == "difficulty").ToList();
+            check(difficulties.Select(o => o["name"]!.GetValue<string>()).Take(3).SequenceEqual(["D1 · Trivial", "D2 · Easy", "D3 · Medium"]) &&
+                difficulties.All(o => o["icon"]?.GetValue<string>() == "difficulty"), "Mission difficulties are D1 to D11, in order, with their icons.");
+            var roster = objects.First(o => o["id"]!.GetValue<string>() == "rosters/automatons/row_1");
+            check(roster["subtitle"]!.GetValue<string>() == "Automatons · Row 1" && roster["group"]!.GetValue<string>() == "Automatons" &&
+                roster["faction"]!.GetValue<string>() == "automatons", "A roster row shows its roster and row, its faction's chip and emblem.");
 
             var rows = 0;
             foreach (var o in objects)

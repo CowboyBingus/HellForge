@@ -10,7 +10,7 @@
 namespace icons
 {
 /* the kinds of game-icons.bin (EditorIcons.cs), then the editor's own */
-enum Kind { WEAPON = 0, THROWABLE = 1, STRATAGEM = 2, STRATAGEM_WHITE = 3, BOOSTER = 4, PASSIVE = 5, MOD = 6, FACTION = 7, MARK = 16 };
+enum Kind { WEAPON = 0, THROWABLE = 1, STRATAGEM = 2, STRATAGEM_WHITE = 3, BOOSTER = 4, PASSIVE = 5, MOD = 6, FACTION = 7, DIFFICULTY = 8, MARK = 16 };
 struct Icon { ImVec2 uv0, uv1; int width, height; };
 
 /* Reads game-icons.bin (when there is one; version 1 or 2) and lays every image out in the atlas. Returns how many game

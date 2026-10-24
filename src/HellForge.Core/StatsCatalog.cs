@@ -16,6 +16,9 @@ public sealed record StatsItem(string Id, string Name, string Nav, string? Group
     public string Search { get; init; } = "";
     // An entity's faction (StatsTarget.Faction), for its emblem in the editor.
     public string? Faction { get; init; }
+    // The editor's second line under the item's name, where it is not its group (a roster row's "Automatons · Row 1";
+    // the group still picks its filter chip).
+    public string? Line { get; init; }
 }
 public sealed record StatsRow(StatsPart Part, string Key, StatsField Field, string Label)
 {
@@ -123,11 +126,16 @@ public static class StatsCatalog
         // a demolition template's force.
         foreach (var (name, target) in Section("difficulty"))
             items.Add(new("difficulty/" + name, target.Label ?? name, "difficulty", null, null, [Part("difficulty", name, "Difficulty")]));
+        // a roster row as the HD2R Editor shows it: the enemy's name, its faction's emblem and filter chip, and its roster
+        // and row ("automatons/row_1": "Automatons · Row 1") under the name
         foreach (var (name, target) in Section("rosters"))
-            items.Add(new("rosters/" + name, target.Label ?? name, "rosters", Humanize(target.Family ?? "other"), name, [Part("rosters", name, "Roster row")])
-                { Search = name });
+        {
+            var (roster, row) = name.Split('/') is [var r, var w] ? (r, w.StartsWith("row_", StringComparison.Ordinal) ? w[4..] : w) : (name, "");
+            items.Add(new("rosters/" + name, target.Label ?? name, "rosters", FactionLabel(target.Family), name, [Part("rosters", name, "Roster row")])
+                { Search = name, Faction = target.Family, Line = Humanize(roster) + (row.Length > 0 ? " · Row " + row : "") });
+        }
         foreach (var (name, target) in Section("compositions"))
-            items.Add(new("compositions/" + name, target.Label ?? name, "compositions", Humanize(target.Family ?? "other"), Humanize(target.Class ?? ""),
+            items.Add(new("compositions/" + name, target.Label ?? name, "compositions", FactionLabel(target.Family), Humanize(target.Class ?? ""),
                 [Part("compositions", name, "Composition")]) { Search = name + " " + target.Class });
         foreach (var (name, target) in Section("demolition"))
             items.Add(new("demolition/" + name, target.Label ?? name, "demolition", null, null, [Part("demolition", name, "Demolition template")])
@@ -426,6 +434,13 @@ public static class StatsCatalog
     static readonly Dictionary<string, string> Words = new(StringComparer.Ordinal)
     {
         ["ap"] = "AP", ["rpm"] = "RPM", ["hp"] = "HP", ["id"] = "ID", ["ui"] = "UI", ["fov"] = "FOV", ["aoe"] = "AoE", ["ems"] = "EMS", ["mg"] = "MG"
+    };
+
+    // A faction's name for players (the roster pages' filter chips); "Other" for none.
+    public static string FactionLabel(string? faction) => faction switch
+    {
+        "terminids" => "Terminids", "automatons" => "Automatons", "illuminate" => "Illuminate", "super_earth" => "Super Earth",
+        null or "" => "Other", _ => Humanize(faction),
     };
 
     public static string Humanize(string text)
