@@ -168,7 +168,7 @@ void DrawPicker()
         else if (hovered) g_cv.Rect(rx + 8, ry + 2, rw - 16, rh - 4, HOVER, 10);
         float tx = rx + 22;
         const icons::Icon* icon = option.icon.empty() ? nullptr : icons::Find(icons::PASSIVE, option.icon);
-        if (icon != nullptr && icons::Texture()) { g_cv.Image(icons::Texture(), rx + 18, ry + 6, rh - 12, rh - 12, icon->uv0, icon->uv1, PERK, 11); tx = rx + 18 + rh; }
+        if (icon != nullptr && icons::Texture()) { g_cv.Image(icons::Texture(), ImVec2(rx + 18, ry + 6), ImVec2(rh - 12, rh - 12), icon->uv0, icon->uv1, PERK, 11); tx = rx + 18 + rh; }
         float top = row->pick.empty() ? 16 : 13, below = row->pick.empty() ? 34 : 29;
         float right = rx + rw - 20;
         if (option.value == v.value) right -= Chip("CURRENT", right, ry + top, GOLD, GOLD_WASH, true, 12) + 6;

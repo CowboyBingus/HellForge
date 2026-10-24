@@ -12,7 +12,7 @@ void DrawHeader(int errors, int active)
     g_cv.Rect(0, 0, PANEL_W, h, HEADER, 1);
     g_cv.Rect(0, h - 1, PANEL_W, 1, LINE_STRONG, 2);
     const icons::Icon* logo = icons::Logo();
-    if (logo != nullptr && icons::Texture()) g_cv.Image(icons::Texture(), 14, 9, 40, 40, logo->uv0, logo->uv1, IM_COL32_WHITE, 4);
+    if (logo != nullptr && icons::Texture()) g_cv.Image(icons::Texture(), ImVec2(14, 9), ImVec2(40, 40), logo->uv0, logo->uv1, IM_COL32_WHITE, 4);
     else Logo(18, 15, 28);
     float x = 62;
     x += g_cv.Text("HELLFORGE", x, h / 2, T(SZ_TITLE, TEXT, ui::TITLE));

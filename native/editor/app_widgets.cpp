@@ -39,8 +39,8 @@ std::vector<std::string> Wrapped(const std::string& text, float max, float size)
 void Arrow(float x, float cy, bool down, ImU32 colour)
 {
     const float t = 2.2f;
-    if (down) g_cv.Chevron(x + 1, cy - 3, x + 6, cy + 2.5f, x + 11, cy - 3, colour, 3, t);
-    else g_cv.Chevron(x + 3.5f, cy - 5.5f, x + 9, cy, x + 3.5f, cy + 5.5f, colour, 3, t);
+    if (down) g_cv.Chevron(ImVec2(x + 1, cy - 3), ImVec2(x + 6, cy + 2.5f), ImVec2(x + 11, cy - 3), colour, 3, t);
+    else g_cv.Chevron(ImVec2(x + 3.5f, cy - 5.5f), ImVec2(x + 9, cy), ImVec2(x + 3.5f, cy + 5.5f), colour, 3, t);
 }
 
 /* ---- drawing helpers ---- */
@@ -89,7 +89,7 @@ static bool DrawMark(int mark, float x, float y, float size, ImU32 colour)
 {
     const icons::Icon* icon = icons::Mark(mark);
     if (icon == nullptr || !icons::Texture()) return false;
-    g_cv.Image(icons::Texture(), x, y, size, size, icon->uv0, icon->uv1, colour, 5);
+    g_cv.Image(icons::Texture(), ImVec2(x, y), ImVec2(size, size), icon->uv0, icon->uv1, colour, 5);
     return true;
 }
 
@@ -127,7 +127,7 @@ bool DrawIcon(const Object* object, float x, float y, float size, int z)
     auto fit = [&](const icons::Icon* icon, ImU32 colour, int layer) {
         float aspect = (float)icon->width / (float)icon->height, w = size, h = size;
         if (aspect > 1) h = size / aspect; else w = size * aspect;
-        g_cv.Image(icons::Texture(), x + (size - w) / 2, y + (size - h) / 2, w, h, icon->uv0, icon->uv1, colour, layer);
+        g_cv.Image(icons::Texture(), ImVec2(x + (size - w) / 2, y + (size - h) / 2), ImVec2(w, h), icon->uv0, icon->uv1, colour, layer);
     };
     if (object->icon == "mod")
     {
