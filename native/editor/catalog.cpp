@@ -170,6 +170,7 @@ bool Load(const std::wstring& path, Catalog* out, std::string* error)
             object->search = o.GetString("search");
             object->tone = o.GetString("tone");
             object->faction = o.GetString("faction");
+            object->group = o.GetString("group");
             object->notOffered = o.GetString("notOffered");
             object->sprite = o.GetString("sprite");
             object->detail = o.GetString("detail");
@@ -189,6 +190,7 @@ bool Load(const std::wstring& path, Catalog* out, std::string* error)
                                     Row& row = out->rows.back();
                                     row.object = object.get();
                                     row.label = r.GetString("label");
+                                    row.difficulty = (int)r.GetNumber("difficulty");
                                     row.category = r.GetString("cat");
                                     row.target = r.GetString("target");
                                     row.key = r.GetString("key");

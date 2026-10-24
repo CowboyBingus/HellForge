@@ -20,6 +20,7 @@ struct Row
     std::string component;                    /* set_live / get_live: the component record or settings table ("" none) */
     uint64_t ref = 0;                         /* the target: an entity's resource id or a table row id */
     uint32_t offset = 0;                      /* an entity delta's is its data offset (past 65535) */
+    int difficulty = 0;                       /* a roster row's weight at that difficulty: its icon beside the label (0 none) */
     uint32_t size = 0;                        /* a whole-row copy's bytes (choice "rowcopy") */
     uint32_t type = 0;                        /* HF_TYPE_F32, _U32 or _I32 */
     bool hasMin = false, hasMax = false;
@@ -71,6 +72,7 @@ struct Object
 {
     std::string id, name, category, subtitle, icon, search, tone; /* tone: offensive, defensive, support or none */
     std::string faction;                      /* an entity's: terminids, automatons, illuminate, super_earth or none */
+    std::string group;                        /* the filter chip it is under, where the line under its name (subtitle) is not it */
     std::string notOffered;                   /* why HD2R Editor offers no projectile swap for it, or "" */
     std::string sprite, detail;               /* its icon by another name (an armor perk's passive); what it is */
     std::vector<Category> page;

@@ -44,6 +44,8 @@ public static class EditorCatalog
     {
         ["primary"] = ["Assault Rifle", "Marksman Rifle", "Submachine Gun", "Shotgun", "Explosive", "Energy-Based", "Special"],
         ["secondary"] = ["Pistol", "Melee", "Special"],
+        // the HD2R Editor's filter by faction (StatsCatalog.FactionLabel)
+        ["rosters"] = ["Terminids", "Automatons", "Illuminate", "Super Earth", "Unknown"],
     };
     const string Sep = " · ";
 
@@ -566,13 +568,20 @@ public static class EditorCatalog
         // A weapon HD2R Editor offers no projectile swap for: why (shown on its page).
         var refused = item.Parts.Where(p => p.Category == "weapons" && !StatsSchema.Current.Targets["weapons"][p.Target].Fields.Keys.Any(k => k.EndsWith(".projectile", StringComparison.Ordinal)))
             .Select(p => ReferenceData.Value["refused"]![p.Target]).FirstOrDefault(r => r != null);
+        // a mission difficulty: its level's icon and "D10 · Super Helldive" (the game's icons, levels 1 to 10; level 11's
+        // is its mod's)
+        var level = item.Nav == "difficulty" ? item.Parts[0].Target : null;
         return new JsonObject
         {
-            ["id"] = item.Id, ["name"] = item.Name, ["category"] = category, ["subtitle"] = item.Group,
-            ["icon"] = Icon(item, main), ["tone"] = tone, ["search"] = item.Search, ["page"] = page,
+            ["id"] = item.Id, ["name"] = level != null && item.Name.StartsWith("Difficulty ", StringComparison.Ordinal) ? "D" + item.Name["Difficulty ".Length..] : item.Name,
+            ["category"] = category, ["subtitle"] = item.Line ?? item.Group,
+            // the filter chip it is under, where the line under its name is not it (a roster row's faction)
+            ["group"] = item.Line != null ? item.Group : null,
+            ["icon"] = level != null ? "difficulty" : Icon(item, main), ["tone"] = tone, ["search"] = item.Search, ["page"] = page,
             ["notOffered"] = refused?.GetValue<string>(),
-            // an armor perk: its passive's icon (by the game's name), and what it does (HD2R Editor's "Perk details")
-            ["sprite"] = item.Nav == "perks" ? PerkSprite(item.Name) : null,
+            // an armor perk: its passive's icon (by the game's name), and what it does (HD2R Editor's "Perk details");
+            // a difficulty: its level
+            ["sprite"] = item.Nav == "perks" ? PerkSprite(item.Name) : level,
             // an entity's faction, whose emblem the editor draws (the HD2R Editor's: the Helldivers' is Super Earth's)
             ["faction"] = item.Faction switch
             {
@@ -693,6 +702,12 @@ public static class EditorCatalog
         var pick = Pick(f);
         if (pick != null) json["pick"] = pick;
         if (StatsCatalog.Unlimited(f)) { json["unlimited"] = true; json["label"] = row.Label + " (next launch)"; } /* UINT32_MAX: unlimited, -1 in the stats file */
+        // a roster row's weight at one difficulty: "D10 weight", with that difficulty's icon beside it (the HD2R Editor's)
+        if (row.Part.Category == "rosters" && System.Text.RegularExpressions.Regex.Match(row.Key, @"^spawn\.weight_(\d+)$") is { Success: true } weight)
+        {
+            json["difficulty"] = int.Parse(weight.Groups[1].Value, CultureInfo.InvariantCulture);
+            json["label"] = "D" + weight.Groups[1].Value + " weight";
+        }
         var slot = System.Text.RegularExpressions.Regex.Match(row.Key, @"^(.*?)status_([1-4])_(type|strength)$");
         if (slot.Success && f.Kind == "DamageInfo") { json["slot"] = int.Parse(slot.Groups[2].Value, CultureInfo.InvariantCulture); json["slots"] = slot.Groups[1].Value; }
         if (pick == "explosion" && ReferenceData.Value["payload"]!["excluded"]![$"{row.Part.Category}/{row.Part.Target}/{row.Key}"] is JsonArray excluded)

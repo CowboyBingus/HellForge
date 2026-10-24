@@ -71,10 +71,12 @@ ImU32 FactionColour(const std::string& faction)
 }
 /* The faction whose emblem an object shows: an entity's own (structures and other entities too), else its page's. */
 const std::string& FactionOf(const Object* object) { return object->faction.empty() ? object->category : object->faction; }
-/* An object on a page of entities, where most rows have an emblem (Structures, Other Entities; the factions' pages). */
+/* An object on a page where most rows have an icon (Structures, Other Entities, the factions', the rosters', the mission
+ * difficulties'): a row without one keeps its room, so the names line up. */
 bool EntityPage(const Object* object)
 {
-    return object->category == "structures" || object->category == "entities" || FactionColour(object->category) != 0;
+    return object->category == "structures" || object->category == "entities" || object->category == "rosters" ||
+        object->category == "difficulty" || FactionColour(object->category) != 0;
 }
 const float SZ_TITLE = 22, SZ_TAB = 15, SZ_HEADING = 13, SZ_LABEL = 15, SZ_SMALL = 13, SZ_TINY = 12;
 const float PANEL_W = 1260, PANEL_H = 930, PANEL_MIN_H = 660;
@@ -1149,6 +1151,13 @@ bool DrawIcon(const Object* object, float x, float y, float size, int z = 4)
         fit(white, C(255, 255, 238, 255), z + 1);
         return true;
     }
+    if (object->icon == "difficulty")
+    {
+        const icons::Icon* icon = icons::Find(icons::DIFFICULTY, object->sprite);
+        if (icon == nullptr) return false;
+        fit(icon, IM_COL32_WHITE, z);
+        return true;
+    }
     if (object->icon == "booster" || object->icon == "passive")
     {
         const icons::Icon* icon = icons::Find(object->icon == "booster" ? icons::BOOSTER : icons::PASSIVE, object->sprite.empty() ? object->name : object->sprite);
@@ -1272,7 +1281,7 @@ std::vector<Object*> Objects()
     std::string q = Lower(g_search.text);
     for (Object* o : list)
     {
-        if (group != "All" && o->subtitle != group) continue;
+        if (group != "All" && (o->group.empty() ? o->subtitle : o->group) != group) continue;
         if (!q.empty() && (Lower(o->name) + " " + Lower(o->subtitle) + " " + o->search).find(q) == std::string::npos) continue;
         out.push_back(o);
     }
@@ -3478,6 +3487,19 @@ void DrawFields(float y0, float h)
         else if (hovered) g_cv.Rect(x + 6, y + 1, lw - 12, rowH - 2, HOVER, 2);
         float lx = FX_LABEL + (item.depth > 0 ? (item.depth + 1) * INDENT : 0);
         if (row == nullptr) { g_cv.Text(item.note, x + lx, cy, T(SZ_SMALL, item.detail ? FAINT : PENDING, ui::BODY, ui::LEFT, lw - lx - 24)); return; }
+        /* a roster row's weight at one difficulty: that difficulty's icon in front of its label (the HD2R Editor's); one
+         * without an icon (level 11 without its mod) keeps level 1's room, so the labels line up */
+        if (row->difficulty > 0 && icons::Texture())
+        {
+            const icons::Icon* badge = icons::Find(icons::DIFFICULTY, std::to_string(row->difficulty));
+            const icons::Icon* room = badge != nullptr ? badge : icons::Find(icons::DIFFICULTY, "1");
+            if (room != nullptr)
+            {
+                float bh = rowH - 12, bw = bh * (float)room->width / (float)room->height;
+                if (badge != nullptr) g_cv.Image(icons::Texture(), x + lx, cy - bh / 2, bw, bh, badge->uv0, badge->uv1, IM_COL32_WHITE, 4);
+                lx += bw + 8;
+            }
+        }
         bool locked = !LockOf(row).empty(), blocked = !SlotBlock(row).empty();
         RowView v = ViewOf(row);
         std::string def = v.hasBase ? Format(row, v.base) : "\xE2\x80\x94";
@@ -4159,6 +4181,7 @@ void Layout(float width, float height, float* ox, float* oy, float* s)
 }
 } // namespace
 
+static std::wstring IconFile(const std::string& folder, const std::string& resource);
 void Init(const Host& host)
 {
     g_host = host;
@@ -4173,6 +4196,10 @@ void Init(const Host& host)
     if (g_catalogOk && g_catalog.build != host.api->build_id())
     { g_catalogOk = false; g_catalogError = "editor-catalog.json is for game build " + g_catalog.build + ", the game runs " + host.api->build_id(); }
     int iconCount = icons::Load(folder + L"\\game-icons.bin");
+    /* level 11's icon: the game has none, the bundled Hell Forge difficulty brings its own (its data spec's image) */
+    if (!host.modsFolder.empty())
+        if (std::wstring file = IconFile(host.modsFolder + "\\hell-forge", "skyeshade/hell_forge/icons/hell_forge"); !file.empty())
+            icons::AddImage(icons::DIFFICULTY, "11", file);
     std::string error;
     localstats::SetModFile(folder + L"\\mod-stats.json");
     if (!host.modsFolder.empty() && !localstats::Load(host.modsFolder, &error)) Toast("Local Stats: " + error, ERROR_);

@@ -585,6 +585,8 @@ int main(int argc, char** argv)
         printf("  enemies view: get_live %lld us; 120 frames, the longest %.0f ms, %d over 50 ms\n", g_liveCostUs, longest, slow);
         if (g_liveCostUs > 0 && longest > 100) { puts("FAIL an enemy's page stalls the frame with a slow get_live"); failures++; }
         g_liveCostUs = 0;
+        /* HELLFORGE_EDITOR_TEST_EXPAND=1: its page's first header opened (Tab to the fields, Right), for its rows */
+        if (getenv("HELLFORGE_EDITOR_TEST_EXPAND")) { Key(window, VK_TAB); pump(4); Key(window, VK_RIGHT); pump(10); }
         char shot[MAX_PATH];
         snprintf(shot, sizeof shot, "%s", argv[2]);
         if (char* dot = strrchr(shot, '.')) snprintf(dot, (size_t)(shot + sizeof shot - dot), "-enemies.bmp");
