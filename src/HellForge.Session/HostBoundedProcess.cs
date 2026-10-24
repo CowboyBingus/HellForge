@@ -16,7 +16,7 @@ public sealed class HostBoundedProcess : IDisposable {
     public bool DeadlineExpired {get;private set;}
     // singleProcess: the job holds the game alone (an active-process limit of 1), so it cannot start other programs.
     // token: when non-zero, CreateProcessAsUser with this token (a lowered integrity level); the caller owns the handle.
-    public HostBoundedProcess(string executable,string arguments,string workingDirectory,string profile,int seconds,bool singleProcess=false,IntPtr token=default) {
+    public HostBoundedProcess(string executable,string arguments,string workingDirectory,string profile,int seconds,bool singleProcess=false,IntPtr token=default) { // lint-ok: R10 verbatim compiled session copy (its sibling scripts/HostBoundedProcess.cs); the create-suspended/assign-to-job/verify order is kept as compiled
         // 0 means no deadline (play sessions); the job still kills the game when its owner exits.
         if(seconds<0||seconds>330)throw new ArgumentOutOfRangeException("seconds");
         var pi=new PI();IntPtr env=IntPtr.Zero;

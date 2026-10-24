@@ -33,7 +33,7 @@ public static class HellForgeHostEarlyConstructorExperiment {
     [DllImport("kernel32.dll")] static extern uint GetProcessIdOfThread(IntPtr h);
     [DllImport("kernel32.dll",SetLastError=true)] static extern uint SuspendThread(IntPtr h);
     [DllImport("kernel32.dll",SetLastError=true)] static extern uint ResumeThread(IntPtr h);
-    [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetThreadContext(IntPtr h,IntPtr context);
+    [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetThreadContext(IntPtr h,IntPtr context); // lint-ok: R14 verbatim compiled copy of the SHA-pinned experiment (scripts/EarlyConstructorExperiment.cs); its P/Invokes are not merged with the independent LocalRoutingPatch.cs
     [DllImport("kernel32.dll",SetLastError=true)] static extern bool ReadProcessMemory(IntPtr p,IntPtr a,byte[] b,UIntPtr n,out UIntPtr read);
     [DllImport("kernel32.dll",SetLastError=true)] static extern bool WriteProcessMemory(IntPtr p,IntPtr a,byte[] b,UIntPtr n,out UIntPtr written);
     [DllImport("kernel32.dll",SetLastError=true)] static extern bool VirtualProtectEx(IntPtr p,IntPtr a,UIntPtr n,uint protection,out uint previous);
@@ -64,7 +64,7 @@ public static class HellForgeHostEarlyConstructorExperiment {
     public static HellForgeHostEarlyResult ApplyFixture(int pid,long startTicks,long allocation,string mode) {return Apply(pid,startTicks,allocation,mode,true,false);}
     public static HellForgeHostEarlyResult ApplySteamGame(int pid,long startTicks,string mode) {return Apply(pid,startTicks,0,mode,false,true);}
     public static HellForgeHostEarlyResult ApplySteamFixture(int pid,long startTicks,long allocation,string mode) {return Apply(pid,startTicks,allocation,mode,true,true);}
-    static HellForgeHostEarlyResult Apply(int pid,long startTicks,long allocation,string mode,bool fixture,bool steamGuest) {
+    static HellForgeHostEarlyResult Apply(int pid,long startTicks,long allocation,string mode,bool fixture,bool steamGuest) { // lint-ok: R10 verbatim compiled copy of the SHA-pinned experiment (scripts/EarlyConstructorExperiment.cs); its suspend/recheck/write/readback order edits a live game's memory and is cross-checked in game, so it is kept as compiled
         if(false||IntPtr.Size!=8||pid==Process.GetCurrentProcess().Id)throw new InvalidOperationException("External guest x64 target required.");
         if(mode!="SameBytes"&&mode!="SkipConstructor"&&mode!="SkipConstructorAndMainCheck")throw new ArgumentException("Unknown fixed mode.");
         if(fixture&&allocation<=0)throw new ArgumentException("A valid fixture allocation is required.");
@@ -105,7 +105,7 @@ public static class HellForgeHostEarlyConstructorExperiment {
                 Thread.Sleep(1);
             }
             r.ImageBase="0x"+imageBase.ToString("x");
-            if(!boundaryReady){if(!r.BytesReady)r.Outcome="loaded_bytes_not_observed";return r;}
+            if(!boundaryReady){if(!r.BytesReady)r.Outcome="loaded_bytes_not_observed";return r;} // lint-ok: R14 verbatim compiled copy of the SHA-pinned experiment; its thread-freeze scaffolding is not merged with LocalRoutingPatch.cs, whose copy keeps different per-site checks
             // Freeze a stable thread set, then recheck all assumptions atomically with respect to those threads.
             paused.Start();bool stable=false;
             for(int pass=0;pass<8&&paused.ElapsedMilliseconds<1500;pass++) {
