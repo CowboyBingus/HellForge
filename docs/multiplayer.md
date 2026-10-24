@@ -397,6 +397,7 @@ Mod sync and public lobbies bring mods from people a player may not know. What l
   a lobby record keeps only the fields the game uploads (its players only theirs), every value has a depth, list
   length and text length (lobby records 16 KiB, 256 characters of text; profile objects 64 KiB, 4096), keys are at
   most 64 characters, and control characters are taken out of text. A stranger's listing is not unpacked past 64 KiB.
+  One field is longer than other text: `seed`, the selected mission (below), kept only in its exact layout.
   The local PlayFab keeps at most 32 objects of 16 KiB each per entity, 16 entities. These are bounds, not a closed
   channel: code in the game can still send a few KB of text in its record's fields (a player name, the state) to
   friends and the public listing on every change.
@@ -438,8 +439,27 @@ One that breaks any of the following is left out whole:
 - a record rebuilt from the schema of the game's own record builder (game.dll 0x12CB190). Known fields must be of the
   right kind and in range: at most 4 players, names of at most 32 characters, account ids that are numbers, at most one
   host, who must be the listing's. Unknown fields are dropped.
+- a `seed` in the exact layout below, if the record has one.
 
 The published record is rebuilt from the same schema, with every account id but the host's at 0.
+
+**The selected mission (`seed`) is what puts a lobby on the map.** The game's `PUT /lobby` carries `"seed"` only once
+the host has selected a mission. It is the mission as fixed-width lowercase hex, version `f3fb` (game.dll encoder
+`0xFC3E20`; the host's lobby key 10 holds the same string). The Galactic Map's planet scan decodes it (`0xFC39F0`) and
+draws a scanned lobby's squad marker ("1/4") and hover card from it: no seed, no marker, even when the search found the
+lobby and its record arrived. Until 2026-10-24 neither `RecordGuard`, whose field list came from an upload made before
+any mission was selected, nor `LobbyRecords`, which allowed 32 characters, kept it. So no listed lobby showed on
+another player's map.
+
+The decoder writes the string's arrays into a 0xE8-byte struct on the stack without checking their counts, so a forged
+seed could overflow it. `MissionSeed.Valid` keeps one only in the `f3fb` layout:
+- version `f3fb`, then 58 hex digits of fixed fields;
+- four arrays, each a count byte then its entries: u32 (at most 32), bytes (8), bytes (3), bytes (2), then a byte;
+- an array of u32 (at most 4), two bytes, and a last array of u32 (at most 8);
+- nothing after it, and at most 458 digits in all.
+
+A host's seed for a D1 mission is 102 digits. A record with any other seed loses it (between friends and in this
+machine's own listing), and a stranger's listing with one is left out.
 
 Which lobbies a search shows is mod sync's rule (`ModSync.Joinable`), and it uses the plan a join would make
 (`ModSyncPlan`):
@@ -1064,10 +1084,19 @@ Built 2026-10-22 and tested on one PC only.
   (the session runner and the backend inherit it), for example in Command Prompt:
   `set HELLFORGE_TEST_STRANGERS=1` then `start "" "<installation>\HellForge.exe"`. Steam itself still sees two friends;
   nothing in the directory depends on that.
+- **The map, on one PC (2026-10-24, two installations, [multi-instance.md](multi-instance.md)):**
+  - **The marker.** A lobby whose host is in a mission shows as a squad marker with the hover card: host name, level,
+    mission and objective. A lobby with no mission selected shows none; the marker needs the record's `seed` (above).
+    A host on its ship with a mission selected uploads a seed too, but that was not tried. A host with no mission selected also lists difficulty 0 (`number_key5`), which the map's search (the
+    map's own difficulty window) leaves out as "the game's filter".
+  - **Friends.** A planet scan leaves out lobbies of the player's Steam friends: they show under Social instead. So
+    two friends test the map with `HELLFORGE_TEST_STRANGERS=1`.
+  - **Joining.** Selecting the marker joins: the loadout screen of the host's mission comes up within seconds. After
+    Ready Up the joiner drops into the mission in progress (hellpod, "Allied Destroyer joining squadron"), and the host
+    sees it. Ready Up does nothing while all four stratagem slots are empty (the loadout screen's own rule).
 - **Not yet known:**
-  - whether the Galactic Map shows a marker and hover card from these records (which string keys the map lists);
-  - whether the hover card works with the other members' account ids at 0;
-  - the map's exact filter string (now logged).
+  - whether the hover card works with the other members' account ids at 0 (only solo hosts so far);
+  - the card's elapsed time on the surface: it reads 0m 0s, because no host has uploaded `PUT /lobby/<id>/live`.
 - **Steam's search rate (soak, 2026-10-23, one PC, live Steam):** a search shaped like the directory's (the protocol
   key, a slot free, worldwide, at most 50) for one Invisible lobby of the soak's own. Steam failed none and always
   found that lobby:
@@ -1079,14 +1108,15 @@ Built 2026-10-22 and tested on one PC only.
 
 **To test on two PCs that are not Steam friends** (or two friends' PCs with `HELLFORGE_TEST_STRANGERS=1` on both):
 1. Both turn on multiplayer, Local PlayFab and Play with strangers (Settings > MULTIPLAYER). The host opens a Public
-   lobby on a planet. `multiplayer.log` says "Play with strangers is on".
-2. The other player opens the Galactic Map on that planet. Check:
-   - a marker and a hover card with the host's name;
+   lobby, selects a mission on a planet and deploys. An idle host on the ground can be killed (one was, about 11
+   minutes in), and with no one alive the mission fails. `multiplayer.log` says "Play with strangers is on".
+2. The other player opens the Galactic Map on that planet, at the host's difficulty. Check:
+   - a squad marker ("1/4") and a hover card with the host's name and mission;
    - `multiplayer.log` "Directory: search ... shown", with the reasons for any lobby left out;
    - the stand-in log's `PFMultiplayerFindLobbies: filter "..."`.
-3. JOIN from the map. Check:
+3. Select the marker, pick stratagems, Ready Up. Check:
    - the join is admitted (the host's log has no "Dropped ... not a Steam friend");
-   - the mission plays.
+   - the joiner drops into the mission, and the mission plays.
    Then with different mods: the MOD SYNC prompt shows.
 4. The host turns Invite Only, or the lobby fills: within a scan or two the marker goes. The other player, already in
    the lobby, stays; a new one is refused ("The host's lobby is Invite only").
