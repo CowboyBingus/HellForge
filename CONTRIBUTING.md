@@ -21,9 +21,10 @@ not submit the game's files or code taken from the game, or code from other proj
 - **`main`** holds releases. It changes only by a release pull request from `dev`, once that release has been checked
   (the checklist in `.github/PULL_REQUEST_TEMPLATE/release.md`); a pull request into `main` from any other branch fails
   its checks.
-- **Checks:** every pull request runs CI (`.github/workflows/ci.yml`): the build, where warnings are errors, and
-  `scripts/Test.ps1`'s checks. A pull request is merged once they pass. The engine and the in-game editor are built and
-  tested on a maintainer's PC, since they need the game's files.
+- **Checks:** every pull request runs CI (`.github/workflows/ci.yml`): the structure lint (`scripts/lint/lint.py check`,
+  [scripts/lint/README.md](scripts/lint/README.md)), the build, where warnings are errors, and `scripts/Test.ps1`'s
+  checks. A pull request is merged once they pass. The engine and the in-game editor are built and tested on a
+  maintainer's PC, since they need the game's files.
 - **Launchers:** if you change a `HellForge.Cli` command, an option or its JSON output, update
   [docs/external-launchers.md](docs/external-launchers.md) in the same pull request and say so in it. Launchers built
   on the CLI read that page.
