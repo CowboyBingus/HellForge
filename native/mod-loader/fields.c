@@ -1101,10 +1101,10 @@ static uint64_t StratagemNamed(const char* name)
     return 0;
 }
 
-static uint64_t ProjectileNamed(const char* name)
+static uint64_t ProjectileTypeNamed(const char* name)
 {
-    for (uint32_t i = 0; i < g_projectileCount; i++) if (!strcmp(g_projectiles[i].name, name)) return g_projectiles[i].type;
-    return 0;
+    const Projectile* added = ProjectileNamed(name); /* projectiles.c */
+    return added != NULL ? added->type : 0;
 }
 
 static uint64_t DamageNamed(const char* name)
@@ -1125,7 +1125,7 @@ static uint64_t ApiFind(uint32_t kind, const char* name)
     case HF_KIND_ENTITY: return ModEntityNamed(name, 0);
     case HF_KIND_ITEM: return ModEntityNamed(name, 1);
     case HF_KIND_STRATAGEM: return StratagemNamed(name);
-    case HF_KIND_PROJECTILE: return ProjectileNamed(name);
+    case HF_KIND_PROJECTILE: return ProjectileTypeNamed(name);
     case HF_KIND_DAMAGE: return DamageNamed(name);
     }
     return 0;
