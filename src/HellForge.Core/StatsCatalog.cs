@@ -14,6 +14,8 @@ public sealed record StatsPart(string Category, string Target, string Title);
 public sealed record StatsItem(string Id, string Name, string Nav, string? Group, string? Subtitle, IReadOnlyList<StatsPart> Parts)
 {
     public string Search { get; init; } = "";
+    // An entity's faction (StatsTarget.Faction), for its emblem in the editor.
+    public string? Faction { get; init; }
 }
 public sealed record StatsRow(StatsPart Part, string Key, StatsField Field, string Label)
 {
@@ -115,7 +117,7 @@ public static class StatsCatalog
             var nav = target.Family is "terminids" or "automatons" or "illuminate" or "structures" ? target.Family : "entities";
             var unnamed = name.StartsWith("unnamed_entity", StringComparison.Ordinal);
             items.Add(new("enemies/" + name, target.Label ?? name, nav, unnamed ? "Unnamed" : null, unnamed ? name : null, [Part("enemies", name, "Entity")])
-                { Search = name });
+                { Search = name, Faction = target.Faction });
         }
         // The HD2R Editor's Spawning pages: a difficulty's budgets, an enemy's spawn weights, a squad composition (by faction),
         // a demolition template's force.
@@ -152,7 +154,10 @@ public static class StatsCatalog
 
         return items.Select(i => i with { Search = $"{i.Name} {i.Group} {NavLabel(i.Nav)} {string.Join(" ", i.Parts.Select(p => p.Target))} {i.Search}".ToLowerInvariant() })
             .OrderBy(i => Navs.Select(n => n.Id).ToList().IndexOf(i.Nav)).ThenBy(i => GroupRank(i.Group)).ThenBy(i => i.Group, StringComparer.Ordinal)
-            .ThenBy(i => i.Nav is "projectiles" or "damage" ? i.Name.Length : 0).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            .ThenBy(i => i.Nav is "projectiles" or "damage" ? i.Name.Length : 0)
+            // the mission difficulties by their level (1 to 11), not as text ("Difficulty 10" before "Difficulty 2")
+            .ThenBy(i => i.Nav == "difficulty" && int.TryParse(i.Parts[0].Target, NumberStyles.None, CultureInfo.InvariantCulture, out var level) ? level : 0)
+            .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     // A vehicle's mounts by what they are (HD2R Editor's mount_label): the Maelstrom's and the Bastion's guns, else the

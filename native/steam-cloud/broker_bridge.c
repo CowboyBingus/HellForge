@@ -251,31 +251,16 @@ static int Listed(const BrokerBridge* b, uint64_t id)
     return 0;
 }
 
-/* A member of a lobby the game made or entered (Steam's answer, or the local lobby's). */
-static int LobbyMember(BrokerBridge* b, uint64_t id)
-{
-    typedef int32_t (*CountFn)(void*, uint64_t);
-    typedef uint64_t (*MemberFn)(void*, uint64_t, int32_t);
-    CountFn count = (CountFn)Resolve(&b->api, "SteamAPI_ISteamMatchmaking_GetNumLobbyMembers");
-    MemberFn member = (MemberFn)Resolve(&b->api, "SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex");
-    void* matchmaking = Self(&b->api, "SteamAPI_SteamMatchmaking_v009");
-    if (!count || !member || !matchmaking) return 0;
-    for (int i = 0; i < b->lobbyCount; i++)
-    {
-        int32_t n = count(matchmaking, b->lobbies[i]);
-        for (int32_t j = 0; j < n && j < 64; j++) if (member(matchmaking, b->lobbies[i], j) == id) return 1;
-    }
-    return 0;
-}
-
-/* One of the game's co-op peers. A join is often seconds old when the host first sends, so a miss reads the backend's
- * file again at once. */
+/* One of the game's co-op peers: a SteamID the backend lists, nothing else. A member of a lobby the game entered is not
+ * enough (reviewed 2026-10-24): JoinLobby takes any lobby id, so a compromised game could enter any lobby it knows and
+ * reach its members. The backend lists a join's peers before the game sees the join; a join is often seconds old when
+ * the host first sends, so a miss reads the backend's file again at once. */
 static int P2PPeer(const BrokerApi* api, uint64_t id)
 {
     BrokerBridge* b = Of(api);
     if (!id) return 0;
     LoadPeers(b, 0);
-    if (Listed(b, id) || LobbyMember(b, id)) return 1;
+    if (Listed(b, id)) return 1;
     LoadPeers(b, 1);
     return Listed(b, id);
 }

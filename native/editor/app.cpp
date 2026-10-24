@@ -60,6 +60,22 @@ Tone ToneOf(const std::string& tone)
     if (tone == "support") return {C(74, 172, 232, 255), C(74, 172, 232, 40)};
     return {0, 0};
 }
+/* A faction's colour, the HD2R Editor's (its emblem, the game's HUD icon, is drawn in it); 0 for anything else. */
+ImU32 FactionColour(const std::string& faction)
+{
+    if (faction == "terminids") return C(255, 201, 45, 255);
+    if (faction == "automatons") return C(255, 80, 80, 255);
+    if (faction == "illuminate") return C(183, 116, 255, 255);
+    if (faction == "super_earth") return C(95, 195, 245, 255);
+    return 0;
+}
+/* The faction whose emblem an object shows: an entity's own (structures and other entities too), else its page's. */
+const std::string& FactionOf(const Object* object) { return object->faction.empty() ? object->category : object->faction; }
+/* An object on a page of entities, where most rows have an emblem (Structures, Other Entities; the factions' pages). */
+bool EntityPage(const Object* object)
+{
+    return object->category == "structures" || object->category == "entities" || FactionColour(object->category) != 0;
+}
 const float SZ_TITLE = 22, SZ_TAB = 15, SZ_HEADING = 13, SZ_LABEL = 15, SZ_SMALL = 13, SZ_TINY = 12;
 const float PANEL_W = 1260, PANEL_H = 930, PANEL_MIN_H = 660;
 const float UI_SCALES[] = {0.9f, 1.0f, 1.1f, 1.25f, 1.4f, 1.5f};
@@ -159,6 +175,20 @@ struct { std::string text; int index = 0; } g_gsearch;
 int g_change;
 struct LiveState { bool read = false; double now = 0, base = 0; std::string mod; ULONGLONG at = 0; };
 std::map<const Row*, LiveState> g_live;
+/* A live read is a lookup in the mod loader under its lock, a long one for some fields: an enemy page reads 300 at
+ * once, and they all go stale together. The reads drawing asks for share LIVE_BUDGET_US a frame (HolderTick has its
+ * own); the rest wait for a later frame, which also spreads their next refresh. A fresh read (after an edit) is never
+ * held back. Frame() logs a frame that was slow anyway. */
+const LONGLONG LIVE_BUDGET_US = 1500;
+struct { unsigned frame = 0; LONGLONG ticks = 0; int reads = 0, held = 0; } g_liveFrame;
+LONGLONG QpcFrequency() { static LARGE_INTEGER f; if (f.QuadPart == 0) QueryPerformanceFrequency(&f); return f.QuadPart; }
+LONGLONG QpcNow() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart; }
+/* This frame's live reads so far (reset when the frame changes). */
+decltype(g_liveFrame)& LiveFrame()
+{
+    if (g_liveFrame.frame != g_frame) g_liveFrame = {g_frame, 0, 0, 0};
+    return g_liveFrame;
+}
 struct { std::string key; float trackY = 0, trackH = 0, thumb = 0; int count = 0, rows = 0; } g_drag;
 unsigned g_markVersion = 1;
 
@@ -369,7 +399,8 @@ void SendPassives()
     g_host.api->set_passives(g_host.mod, g_choice[0] < 0 ? HF_PASSIVE_KIT : (uint32_t)g_choice[0], g_choice[1] < 0 ? HF_PASSIVE_KIT : (uint32_t)g_choice[1]);
 }
 
-LiveState& Live(const Row* row, bool fresh = false)
+/* budgeted: the read shares the frame's LIVE_BUDGET_US (drawing); HolderTick reads within its own budget */
+LiveState& Live(const Row* row, bool fresh = false, bool budgeted = true)
 {
     LiveState& s = g_live[row];
     if (IsApLabel(row))
@@ -377,7 +408,7 @@ LiveState& Live(const Row* row, bool fresh = false)
         s.read = true; s.now = s.base = 0; s.mod.clear();
         for (const Row* t : TraitRows(row))
         {
-            const LiveState& ts = Live(t, fresh);
+            const LiveState& ts = Live(t, fresh, budgeted);
             if (ts.read && ts.now != 0 && row->OptionOf(ts.now)) s.now = ts.now;
             if (ts.read && ts.base != 0 && row->OptionOf(ts.base)) s.base = ts.base;
             if (ts.read && !ts.mod.empty()) s.mod = ts.mod;
@@ -391,23 +422,27 @@ LiveState& Live(const Row* row, bool fresh = false)
         return s;
     }
     ULONGLONG now = GetTickCount64();
-    if (row->Live() && HasGetLive() && (fresh || s.at == 0 || now - s.at > 400))
+    bool live = row->Live() && HasGetLive(), stat = !row->Live() && row->Stat() && HasGetStat();
+    if ((!live && !stat) || !(fresh || s.at == 0 || now - s.at > 400)) return s;
+    auto& frame = LiveFrame();
+    if (budgeted && !fresh && frame.ticks >= QpcFrequency() * LIVE_BUDGET_US / 1000000) { frame.held++; return s; }
+    LONGLONG start = QpcNow();
+    HfLiveValue value;
+    if (live)
     {
         HfField field = FieldOf(row);
-        HfLiveValue value;
         s.read = g_host.api->get_live(g_host.mod, row->ref, &field, &value) != 0;
-        if (s.read) { s.now = value.now.number; s.base = value.base.number; s.mod = value.mod ? value.mod : ""; }
-        s.at = now;
     }
-    else if (!row->Live() && row->Stat() && HasGetStat() && (fresh || s.at == 0 || now - s.at > 400))
+    else
     {
         /* applied at boot: the value the game holds now, and its base (the Local Stats mod's edit undone) */
         HfStat stat{row->statKind.c_str(), row->statComponent.c_str(), row->statResource, row->statRecord, row->offset, row->type};
-        HfLiveValue value;
         s.read = g_host.api->get_stat(g_host.mod, &stat, &value) != 0;
-        if (s.read) { s.now = value.now.number; s.base = value.base.number; s.mod = value.mod ? value.mod : ""; }
-        s.at = now;
     }
+    if (s.read) { s.now = value.now.number; s.base = value.base.number; s.mod = value.mod ? value.mod : ""; }
+    s.at = now;
+    frame.ticks += QpcNow() - start;
+    frame.reads++;
     return s;
 }
 
@@ -940,7 +975,7 @@ void HolderTick(LONGLONG microseconds)
     {
         const Row* row = &g_catalog.rows[g_holderNext++];
         if (!row->choice.empty() || IsApLabel(row) || (!row->Live() && !row->Stat())) continue;
-        const LiveState& live = Live(row);
+        const LiveState& live = Live(row, false, false);
         std::string holder = live.read ? live.mod : "";
         auto found = g_holders.find(row);
         if (holder.empty() && found != g_holders.end()) { g_holders.erase(found); g_holderChanged = true; }
@@ -1085,8 +1120,9 @@ float DrawMarks(const Marks& m, float x, float cy, float size)
 }
 
 /* An object's icon, fitted into a square: the game's HUD silhouette of a weapon or throwable; a stratagem's icon as the
- * game draws it (its category layer in the category's colour, its white layer white); a booster as it is. A stratagem
- * with no icon is a plain square in its colour (never made-up art). False when there is nothing to draw. */
+ * game draws it (its category layer in the category's colour, its white layer white); a booster as it is; an entity its
+ * faction's emblem in the faction's colour. A stratagem with no icon is a plain square in its colour (never made-up art).
+ * False when there is nothing to draw. */
 bool DrawIcon(const Object* object, float x, float y, float size, int z = 4)
 {
     if (!icons::Texture()) return false;
@@ -1125,6 +1161,13 @@ bool DrawIcon(const Object* object, float x, float y, float size, int z = 4)
         const icons::Icon* icon = icons::Find(object->icon == "throwable" ? icons::THROWABLE : icons::WEAPON, object->name);
         if (icon == nullptr) return false;
         fit(icon, ICON, z);
+        return true;
+    }
+    if (ImU32 faction = FactionColour(FactionOf(object)))
+    {
+        const icons::Icon* icon = icons::Find(icons::FACTION, FactionOf(object));
+        if (icon == nullptr) return false;
+        fit(icon, faction, z);
         return true;
     }
     if (tone.colour) { g_cv.Rect(x + size * 0.18f, y + size * 0.18f, size * 0.64f, size * 0.64f, tone.colour, z); return true; }
@@ -3260,8 +3303,17 @@ void DrawCategories(float y0, float h)
         else if (g_cv.Hovered() == id) g_cv.Rect(8, y, CAT_W - 16, rh, HOVER, 2);
         if (tone.colour && !selected) g_cv.Rect(8, y + 9, 3, rh - 18, tone.colour, 3);
         float cw = g_cv.Text(std::to_string(g_catalog.Of(nav.id).size()), CAT_W - 20, y + rh / 2, T(SZ_SMALL, FAINT, ui::BODY, ui::RIGHT));
+        /* an enemy faction's emblem left of its count, then the markers */
+        float right = CAT_W - 28 - cw;
+        const icons::Icon* emblem = FactionColour(nav.id) && icons::Texture() ? icons::Find(icons::FACTION, nav.id) : nullptr;
+        if (emblem != nullptr)
+        {
+            const float size = 20;
+            g_cv.Image(icons::Texture(), right - size, y + (rh - size) / 2, size, size, emblem->uv0, emblem->uv1, FactionColour(nav.id), 4);
+            right -= size + 6;
+        }
         auto found = marks.navs.find(nav.id);
-        float mx = DrawMarks(found != marks.navs.end() ? found->second : Marks{}, CAT_W - 28 - cw, y + rh / 2, 26);
+        float mx = DrawMarks(found != marks.navs.end() ? found->second : Marks{}, right, y + rh / 2, 26);
         g_cv.Text(item.label, 22, y + rh / 2, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, std::min(CAT_W - 80, mx - 30)));
         if (g_cv.Hit(8, y, CAT_W - 16, rh, id)) { SelectCategory(i); g_focus = CATEGORIES; }
     }
@@ -3340,7 +3392,8 @@ void DrawObjects(float y0, float h)
         }
         else if (hovered) g_cv.Rect(x + 8, y + 2, w - 16, rh - 4, HOVER, 2);
         float tx = x + 22;
-        if (DrawIcon(object, x + 18, y + 5, rh - 10)) tx = x + 18 + rh;
+        /* a page of entities keeps the emblem's room on every row, those of no known faction too, so the names line up */
+        if (DrawIcon(object, x + 18, y + 5, rh - 10) || EntityPage(object)) tx = x + 18 + rh;
         g_cv.Text(object->name, tx, y + 15, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, w - 56 - (tx - x)));
         g_cv.Text(object->subtitle, tx, y + 31, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, w - 56 - (tx - x)));
         auto found = marks.objects.find(object);
@@ -3365,7 +3418,8 @@ void DrawFields(float y0, float h)
     if (Button("RESET ITEM", x0 + w - bw - rw - 24, y0 + 12, rw, 28, changed && !Locked() ? DANGER : DISABLED, ui::Id("resetitem")) && changed) ResetItem(object);
     g_cv.Text(object->name, hx, y0 + 24, T(20, TEXT, ui::TITLE, ui::LEFT, w - 70 - bw - rw - (hx - x0)));
     int edited = 0;
-    for (const Row* row : object->rows) { RowView v = ViewOf(row); if (v.source == STAGED || v.source == EDITED) edited++; }
+    /* staged or saved (ViewOf's STAGED or EDITED), without its live value: an enemy's 300 fields every frame */
+    for (const Row* row : object->rows) { double saved; if ((!Locked() && PendingOf(row)) || Saved(row, &saved)) edited++; }
     std::string sub = (object->subtitle.empty() ? "" : object->subtitle + "   ") + std::to_string(object->rows.size()) + " fields" +
         (edited > 0 ? "   " + std::to_string(edited) + " edited" : "");
     g_cv.Text(sub, hx, y0 + 47, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, w - 40 - (hx - x0)));
@@ -4273,8 +4327,21 @@ float PixelScale(float width, float height)
     return s;
 }
 
+/* A frame of the editor's longer than 100 ms, in its log (at most every 5 s): how long, and its live reads. */
+void NoteSlowFrame(LONGLONG start)
+{
+    static ULONGLONG noted;
+    double ms = (double)(QpcNow() - start) * 1000.0 / (double)QpcFrequency();
+    if (ms < 100 || GetTickCount64() - noted < 5000) return;
+    noted = GetTickCount64();
+    auto& frame = LiveFrame();
+    g_host.api->log(g_host.mod, "editor: a slow frame, %.0f ms: %d live read(s) in %.1f ms, %d left for later frames", ms, frame.reads,
+        (double)frame.ticks * 1000.0 / (double)QpcFrequency(), frame.held);
+}
+
 void Frame(ImDrawList* list, float width, float height, float dt)
 {
+    LONGLONG started = QpcNow();
     g_time += dt;
     g_frame++;
     ReadSession();
@@ -4291,6 +4358,7 @@ void Frame(ImDrawList* list, float width, float height, float dt)
     DrawNotice();
     if (g_cv.Clicked()) Sound(sounds::CLICK);
     g_cv.End();
+    NoteSlowFrame(started);
 }
 
 bool NoticeShown() { return g_notice.version != 0 && GetTickCount64() - g_notice.at < NoticeMs(); }

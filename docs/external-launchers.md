@@ -125,12 +125,13 @@ temporary file and then a rename, as HellForge does.
 launcher. It never changes `launcher-settings.json`.
 
 To change them for good, use `settings`. It takes the same options as `play` (`--profile`, `--war`, `--local-playfab`,
-`--multiplayer`, `--engine-log`, `--crash-dump`, `--game-options`), saves the ones given, checks them as `play` would,
+`--multiplayer`, `--engine-log`, `--crash-dump`, `--sandbox`, `--game-options`), saves the ones given, checks them as `play` would,
 and prints every setting:
 
 ```json
 {"profile": "default", "war": "live", "localPlayFab": true, "multiplayer": true, "engineLog": true, "crashDump": false,
- "gameOptions": "", "playWithStrangers": false, "file": "<installation>\\launcher-settings.json"}
+ "gameOptions": "", "sandbox": false, "steamBridge": true, "playWithStrangers": false,
+ "file": "<installation>\\launcher-settings.json"}
 ```
 
 `settings --strangers yes|no` also turns Play with strangers on or off (off by default; see
@@ -144,7 +145,8 @@ lists and creates profiles; `settings --profile <name>` selects one.
 
 ```
 HellForge.Cli.exe play [--profile <name>] [--war live | frozen | open] [--local-playfab yes | no] [--multiplayer yes | no]
-                       [--engine-log yes | no] [--crash-dump yes | no] [--game-options "<launch options>"] [--wait yes] [--dry-run yes]
+                       [--engine-log yes | no] [--crash-dump yes | no] [--sandbox yes | no] [--game-options "<launch options>"]
+                       [--wait yes] [--dry-run yes]
 ```
 
 | Option | Default (the launcher's setting) | Meaning |
@@ -155,6 +157,7 @@ HellForge.Cli.exe play [--profile <name>] [--war live | frozen | open] [--local-
 | `--multiplayer` | `yes` | co-op with Steam friends |
 | `--engine-log` | `yes` | the game's own log, copied into the session's logs |
 | `--crash-dump` | `no` | a full memory dump if the game crashes (large) |
+| `--sandbox` | `no` | the game at low integrity, with Steam through the Steam broker ([steam-bridge.md](steam-bridge.md)); only with an engine built with the Steam bridge (`settings` prints `steamBridge`), experimental |
 | `--game-options` | the launcher's launch options | options for the game's command line, as Steam takes them; options a session sets itself are refused |
 | `--dry-run yes` | | prints the session runner's command line and starts nothing |
 

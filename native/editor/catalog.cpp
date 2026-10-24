@@ -169,6 +169,7 @@ bool Load(const std::wstring& path, Catalog* out, std::string* error)
             object->icon = o.GetString("icon");
             object->search = o.GetString("search");
             object->tone = o.GetString("tone");
+            object->faction = o.GetString("faction");
             object->notOffered = o.GetString("notOffered");
             object->sprite = o.GetString("sprite");
             object->detail = o.GetString("detail");

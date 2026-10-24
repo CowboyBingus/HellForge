@@ -573,6 +573,13 @@ public static class EditorCatalog
             ["notOffered"] = refused?.GetValue<string>(),
             // an armor perk: its passive's icon (by the game's name), and what it does (HD2R Editor's "Perk details")
             ["sprite"] = item.Nav == "perks" ? PerkSprite(item.Name) : null,
+            // an entity's faction, whose emblem the editor draws (the HD2R Editor's: the Helldivers' is Super Earth's)
+            ["faction"] = item.Faction switch
+            {
+                "terminids" or "automatons" or "illuminate" or "super_earth" => item.Faction,
+                "helldivers" => "super_earth",
+                _ => null
+            },
             ["detail"] = item.Nav == "perks" ? PerkDetail(item, page.Count) : null,
         };
     }

@@ -154,6 +154,14 @@ public static partial class ProfileStore
     public static bool LoadCrashDump(ISessionPaths paths) =>
         SessionFiles.ReadJson(paths.SettingsFile) is { } settings && SessionFiles.Text(settings, "crashDump") == "true";
 
+    // Off unless chosen (experimental in the 0.3.0 betas): the game at low integrity, with Steam through the session's
+    // Steam broker (HellForge.Session play --sandbox, docs/steam-bridge.md).
+    public static bool LoadSandbox(ISessionPaths paths) =>
+        SessionFiles.ReadJson(paths.SettingsFile) is { } settings && SessionFiles.Text(settings, "sandbox") == "true";
+    public static void SaveSandbox(ISessionPaths paths, bool enabled) =>
+        Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadWar(paths), LoadEngineLog(paths), LoadCrashDump(paths),
+            LoadLaunchOptions(paths), sandbox: enabled);
+
     // The game's launch options, as typed (GameLaunchOptions); empty unless set.
     public static string LoadLaunchOptions(ISessionPaths paths) =>
         SessionFiles.ReadJson(paths.SettingsFile) is { } settings ? SessionFiles.Text(settings, "launchOptions") : "";
@@ -183,13 +191,14 @@ public static partial class ProfileStore
         Save(paths, LoadSelected(paths), LoadLocalPlayFab(paths), LoadSdkShims(paths), LoadWar(paths), LoadEngineLog(paths), LoadCrashDump(paths), text);
 
     static void Save(ISessionPaths paths, string name, bool localPlayFab, bool sdkShims, string war, bool engineLog, bool crashDump, string launchOptions,
-        uint? seed = null)
+        uint? seed = null, bool? sandbox = null)
     {
         try
         {
             var subfactionSeed = (seed ?? LoadSubfactionSeed(paths)).ToString(CultureInfo.InvariantCulture);
+            var sandboxed = sandbox ?? LoadSandbox(paths);
             Directory.CreateDirectory(paths.HostRoot);
-            File.WriteAllText(paths.SettingsFile, JsonSerializer.Serialize(new { selectedProfile = name, localPlayFab, sdkShims, war, liveWar = war == WarLive, engineLog, crashDump, launchOptions, subfactionSeed }, WriteOptions) + "\n");
+            File.WriteAllText(paths.SettingsFile, JsonSerializer.Serialize(new { selectedProfile = name, localPlayFab, sdkShims, war, liveWar = war == WarLive, engineLog, crashDump, launchOptions, subfactionSeed, sandbox = sandboxed }, WriteOptions) + "\n");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }  // Only a convenience.
     }

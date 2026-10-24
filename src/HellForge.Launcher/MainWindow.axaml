@@ -23,7 +23,7 @@
                 <TextBlock FontSize="21" FontWeight="Black" LetterSpacing="1.5">
                   <Run Text="HELL" /><Run Text="FORGE" Foreground="{StaticResource AccentBrush}" />
                 </TextBlock>
-                <TextBlock Text="Local HELLDIVERS 2 · Steam co-op" Classes="muted" FontSize="11" Margin="0,2,0,0" />
+                <TextBlock Text="Local HELLDIVERS 2" Classes="muted" FontSize="11" Margin="0,2,0,0" />
               </StackPanel>
             </StackPanel>
             <Border Height="2" Background="{StaticResource AccentBrush}" Margin="0,20,0,0" Opacity="0.85" />
@@ -337,6 +337,17 @@
                            Text="Off: only Steam friends reach your backend. On: your public lobby is listed on the Galactic Map for HellForge players who are not your friends, and you can join theirs." />
                 <TextBlock x:Name="StrangersWarning" Foreground="#FFA235" TextWrapping="Wrap"
                            Text="Strangers' games send yours data you cannot check: a modified game can lie about its mods, and a flaw in the game's network code could let it run code on your PC. Turn this on only if you accept that risk. It applies within a few seconds, also during a session." />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="SANDBOX" Classes="h2" />
+                <CheckBox x:Name="SandboxBox" Content="Run the game sandboxed (experimental)" />
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="The game runs at Windows' low integrity level: code running inside it (a mod, or code that a crafted file or another player's game got it to run) cannot write your files, change other programs or start any. Steam reaches the game through HellForge's Steam broker, which passes only the calls the game needs. The game has no Steam overlay then (chat, Steam's invite dialog, screenshots); invitations from the game's social menu still work. Applies to the next session." />
+                <TextBlock x:Name="SandboxUnavailable" Foreground="#FFA235" TextWrapping="Wrap" IsVisible="False"
+                           Text="This HellForge was built without the Steam bridge, so the game cannot run sandboxed." />
               </StackPanel>
             </Border>
 

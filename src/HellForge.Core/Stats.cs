@@ -45,6 +45,9 @@ public sealed record StatsTarget(Dictionary<string, StatsField> Fields, Dictiona
     public string? Family { get; init; }
     // The name the editor shows, where the target's key is not one (an entity's: "Bile Titan - Strider").
     [System.Text.Json.Serialization.JsonIgnore] public string? Label { get; init; }
+    // An entity's faction (mappings/entities.json: terminids, automatons, illuminate, super_earth, helldivers or
+    // unresolved), whatever page it is on: the editor draws its emblem on structures and other entities too.
+    [System.Text.Json.Serialization.JsonIgnore] public string? Faction { get; init; }
     // Fields it no longer offers because they never reached the game (a fired entity's unused projectile row): a stats
     // file naming one still loads, and that edit is skipped.
     [System.Text.Json.Serialization.JsonIgnore] public Dictionary<string, string> Retired { get; } = new(StringComparer.Ordinal);
@@ -167,6 +170,7 @@ public sealed record StatsSchema(int Format, string Build, string GameDllSha256,
                 Family = e.Value.GetProperty("category").GetString(),
                 Label = e.Value.GetProperty("label").GetString(),
                 Class = e.Value.GetProperty("kind").GetString(),
+                Faction = Text(e.Value, "faction"),
             };
         }
         schema.Targets["enemies"] = enemies;

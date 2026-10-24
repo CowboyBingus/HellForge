@@ -253,8 +253,14 @@ public static partial class SteamBridge
         var result = (ret.Kind == "string" ? 2 + ReturnedString : ret.Size) + m.Params.Sum(p => p.Kind switch { Kind.Buffer => p.Max, Kind.Out or Kind.OutSteamId or Kind.OutBytes => p.Size, _ => 0 });
         if (args > MaxMessage || result > MaxMessage) throw new InvalidDataException($"{where}: {Math.Max(args, result)} bytes do not fit one message.");
         foreach (var rangeName in Names(m.Rule, "range").Concat(Names(m.Rule, "ownLobby")).Concat(Names(m.Rule, "printable")).Concat(Names(m.Rule, "logged"))
-            .Concat(Names(m.Rule, "adjust")).Concat(Names(m.Rule, "p2pPeer")))
+            .Concat(Names(m.Rule, "adjust")).Concat(Names(m.Rule, "p2pPeer")).Concat(Names(m.Rule, "refusedStrings")))
             if (m.Params.All(p => p.Name != rangeName)) throw new InvalidDataException($"{where}: the table names {rangeName}, which is not a parameter.");
+        foreach (var refused in Names(m.Rule, "refusedStrings"))
+        {
+            if (m.Params.First(p => p.Name == refused).Kind != Kind.InString) throw new InvalidDataException($"{where}: only a string can have refused texts ({refused}).");
+            if (RefusedTexts(m, refused).Any(t => t.Length == 0 || !t.All(c => c is >= ' ' and <= '~' and not '"' and not '\\')))
+                throw new InvalidDataException($"{where}: {refused}'s refused texts must be printable, without quotes or backslashes.");
+        }
         foreach (var adjusted in Names(m.Rule, "adjust"))
             if (m.Params.First(p => p.Name == adjusted).Kind != Kind.Value) throw new InvalidDataException($"{where}: only an integer parameter can be adjusted ({adjusted}).");
     }
@@ -265,6 +271,12 @@ public static partial class SteamBridge
     static IEnumerable<string> Names(JsonElement? rule, string section) =>
         rule is { } r && r.TryGetProperty(section, out var s)
             ? s.ValueKind == JsonValueKind.Array ? s.EnumerateArray().Select(x => x.GetString()!) : s.EnumerateObject().Select(x => x.Name)
+            : [];
+
+    // "refusedStrings": {"<parameter>": ["<text>", ...]}, texts the parameter may not be (ASCII case ignored)
+    static IEnumerable<string> RefusedTexts(Method m, string parameter) =>
+        m.Rule is { } r && r.TryGetProperty("refusedStrings", out var s) && s.TryGetProperty(parameter, out var texts)
+            ? texts.EnumerateArray().Select(x => x.GetString() ?? "")
             : [];
 
     // ---- C ----
@@ -458,6 +470,8 @@ public static partial class SteamBridge
                     s.AppendLine($"        if (!api->ownLobby(api, {p.Name})) return api->refuse(api, \"{m.Class}::{m.Name}: not a lobby the game made\");");
                 if (Names(m.Rule, "printable").Contains(p.Name))
                     s.AppendLine($"        if ({p.Name} && !BridgePrintable({p.Name})) return api->refuse(api, \"{m.Class}::{m.Name}: {p.Name} is not printable\");");
+                foreach (var text in RefusedTexts(m, p.Name))
+                    s.AppendLine($"        if ({p.Name} && BridgeSameText({p.Name}, \"{text}\")) return api->refuse(api, \"{m.Class}::{m.Name}: {p.Name} {text} is refused\");");
                 if (Names(m.Rule, "logged").Contains(p.Name))
                     s.AppendLine($"        api->log(api, \"{m.Class}::{m.Name} {p.Name}\", {p.Name});");
                 if (Names(m.Rule, "p2pPeer").Contains(p.Name))

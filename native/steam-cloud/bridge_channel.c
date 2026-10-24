@@ -362,6 +362,8 @@ int GameChannelCall(GameChannel* ch, uint32_t function, const void* args, uint32
     if (!ch->lockReady) return 0;
     uint8_t buf[BRIDGE_MSG_BUF];
     if (argsSize > sizeof buf - 12) return 0;
+    LARGE_INTEGER start, end;
+    QueryPerformanceCounter(&start);
     EnterCriticalSection(&ch->lock);
     int ok = 0;
     if (!ch->dead && ch->pipe != INVALID_HANDLE_VALUE)
@@ -385,9 +387,33 @@ int GameChannelCall(GameChannel* ch, uint32_t function, const void* args, uint32
             }
         }
         if (!ok) ch->dead = 1;
+        QueryPerformanceCounter(&end);
+        uint64_t ticks = (uint64_t)(end.QuadPart - start.QuadPart);
+        GameChannelCost* cost = &ch->cost;
+        cost->calls++;
+        cost->ticks += ticks;
+        if (ticks > cost->maxTicks) cost->maxTicks = ticks;
+        for (int i = 0; i < BRIDGE_COST_FUNCTIONS; i++)
+            if (cost->byFunction[i].calls == 0 || cost->byFunction[i].function == function)
+            {
+                cost->byFunction[i].function = function;
+                cost->byFunction[i].calls++;
+                cost->byFunction[i].ticks += ticks;
+                break;
+            }
     }
     LeaveCriticalSection(&ch->lock);
     return ok;
+}
+
+void GameChannelTakeCost(GameChannel* ch, GameChannelCost* out)
+{
+    memset(out, 0, sizeof *out);
+    if (!ch->lockReady) return;
+    EnterCriticalSection(&ch->lock);
+    *out = ch->cost;
+    memset(&ch->cost, 0, sizeof ch->cost);
+    LeaveCriticalSection(&ch->lock);
 }
 
 int GameChannelReadCallback(GameChannel* ch, uint32_t* callbackId, void* data, uint32_t capacity, uint32_t* dataSize)

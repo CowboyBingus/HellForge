@@ -93,11 +93,17 @@ if(-not $SteamApi){
 }
 Assert-Hash $SteamApi $steamApiPin 'steam_api64.dll'
 # SDK 1.55's steam_api.json: the version whose steam_api64.dll is the pinned one (docs/steam-bridge.md). Without it the
-# package has no bridge build and no broker, and a sandboxed session refuses to start.
+# package has no bridge build and no broker, and a sandboxed session refuses to start. The pin is of the file with LF
+# line ends: Valve's zip has CRLF, and a copy may have either, so CR LF counts as LF (the generator reads it as JSON).
 $steamSdkPin='80A6C2196F6048749EE35A141C91083B29613FD7C56C2207C9FC73EF87566547'
 if(-not $SteamSdk){$SteamSdk=Join-Path $project 'tools/steamworks-sdk-1.55/public/steam/steam_api.json'}
 $bridge=Test-Path -LiteralPath $SteamSdk
-if($bridge){Assert-Hash $SteamSdk $steamSdkPin 'steam_api.json (Steamworks SDK 1.55)'}
+if($bridge){
+    $sdkText=[IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $SteamSdk).Path)
+    $sdkLf=[Text.Encoding]::UTF8.GetBytes([Text.Encoding]::UTF8.GetString($sdkText).Replace("`r`n","`n"))
+    $sdkHash=-join ([Security.Cryptography.SHA256]::Create().ComputeHash($sdkLf)|ForEach-Object {$_.ToString('X2')})
+    if($sdkHash -ne $steamSdkPin){throw ('steam_api.json (Steamworks SDK 1.55) does not match its pin: '+$SteamSdk)}
+}
 else{Write-Warning ('No Steamworks SDK 1.55 at '+$SteamSdk+': building without the Steam bridge.')}
 
 dotnet build (Join-Path $project 'src/HellForge.SdkShimGen/HellForge.SdkShimGen.csproj') --nologo -v q

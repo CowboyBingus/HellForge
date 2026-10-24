@@ -1,6 +1,6 @@
 # HellForge roadmap
 
-What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-24 for HellForge 0.3.0-dev.4.
+What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-24 for HellForge 0.3.0-dev.6.
 Nothing here has a date, and stability comes first.
 
 ## At a glance
@@ -17,6 +17,8 @@ Nothing here has a date, and stability comes first.
 | Linux | Experimental | Runs under Proton; co-op and Steam Deck untested |
 | Public lobbies, privacy, invites, kicking | Testing | Built for 0.3.0; needs two-PC tests |
 | Faster mod sync | Testing | Built for 0.3.0 |
+| Lockdown: strangers off by default, narrowed network block, mods held read-only | Testing | Built for 0.3.0-dev.5 (PR 24); needs in-game tests |
+| Sandbox (the game at low integrity, Steam through a broker) | Experimental | Built for 0.3.0-dev.5, off by default (Settings > Sandbox); a mission, a controller and two-PC co-op untested |
 | Host-leaves fix | Next | Planned |
 | Co-op tools for mods | Next | Planned |
 | Cyberstan missions | Testing | Built for 0.3.0-dev.4 (All planets open); difficulty 11 left |
@@ -39,7 +41,7 @@ subfactions, custom missions, and mod content in progression. The [SDK roadmap](
 The rest of this page goes through each item. Contributors will find more detail in [engine-roadmap.md](engine-roadmap.md)
 (session runner, local backend, mod loader, stand-ins) and [sdk-roadmap.md](sdk-roadmap.md) (the mod SDK).
 
-Versions: HellForge 0.3.0-dev.4, engine 0.1.32, mod SDK 15.
+Versions: HellForge 0.3.0-dev.6, engine 0.1.34, mod SDK 15.
 
 ## Done in 0.2.0-beta
 

@@ -52,6 +52,8 @@ public sealed class MultiplayerHost : IAsyncDisposable
     readonly string peersFile;
     readonly object peersGate = new();
     string? peersWritten;
+    readonly Dictionary<ulong, DateTime> pinned = []; /* ListPeer's, under peersGate */
+    static readonly TimeSpan PinnedFor = TimeSpan.FromSeconds(30);
 
     MultiplayerHost(string pipeName, string link, string modDigest, string evidenceDirectory, WarClock? warClock, AccountKeys? accountKeys,
         FriendPresence? presence, string? modList)
@@ -63,9 +65,10 @@ public sealed class MultiplayerHost : IAsyncDisposable
         transport = CreateTransport(link, Log);
         pipes = new PipeHost(pipeName, Log);
         Lobby = new LobbyService(transport, pipes.SendLobby, Log, modDigest, warClock, modList);
-        // off the lobby service's lock
+        // off the lobby service's lock; a peer admitted or joined is listed before its game hears of it (ListPeer)
         Lobby.HostedChanged += () => Task.Run(WritePeers);
-        Lobby.LocalJoinStarted += (_, _) => Task.Run(WritePeers);
+        Lobby.PeerAdmitted += ListPeer;
+        Lobby.LocalJoinStarted += (owner, _) => { ListPeer(owner); Task.Run(WritePeers); };
         // A refused join, in both games (the in-game editor shows it over the game): the joiner's says why, the host's who.
         Lobby.Refused += (peer, lines) => Stats?.Notice("error", "Couldn't join " + FriendName(peer), lines);
         Lobby.RefusedFriend += (peer, lines) => Stats?.Notice("info", FriendName(peer) + " couldn't join", lines);
@@ -73,6 +76,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
         // A kick (the game's PFLobbyForceRemoveMember, or its Party kick): the kicked machine's game traffic stops here, and
         // its player is told in game.
         Lobby.Kicked += Party.Expel;
+        Lobby.Kicked += peer => { lock (peersGate) pinned.Remove(peer); Task.Run(WritePeers); }; /* out of the P2P peers at once */
         Lobby.KickedByHost += peer => Stats?.Notice("error", "Removed from " + FriendName(peer) + "'s lobby",
             ["The host removed you from their lobby.", "You can't join that lobby again while it lasts."]);
         pipes.Lobby = Lobby;
@@ -233,21 +237,50 @@ public sealed class MultiplayerHost : IAsyncDisposable
         throw new ArgumentException("--link must be none, steam:<steam_api64.dll> or udp:<id>:<port>:<peer>=<port>,...");
     }
 
-    // The co-op peers file (PeersFileName), written whole when the set changed.
+    // The co-op peers file (PeersFileName), written whole when the set changed: the lobby and Party peers, and the peers
+    // listed ahead of them (ListPeer) until those list them too or PinnedFor has passed, so a list read just before an
+    // admission cannot take the new peer out again.
     void WritePeers()
     {
         try
         {
-            var text = string.Concat(Lobby.Peers().Concat(Party.Peers()).Distinct().Order().Select(p => p.ToString(CultureInfo.InvariantCulture) + "\n"));
+            var listed = Lobby.Peers().Concat(Party.Peers()).ToHashSet();
             lock (peersGate)
             {
-                if (text == peersWritten) return;
-                File.WriteAllText(peersFile + ".partial", text);
-                File.Move(peersFile + ".partial", peersFile, overwrite: true);
-                peersWritten = text;
+                foreach (var (peer, since) in pinned.ToList())
+                    if (listed.Contains(peer) || DateTime.UtcNow - since > PinnedFor) pinned.Remove(peer);
+                WriteListed(listed.Concat(pinned.Keys));
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Log("Could not write the co-op peers for Steam P2P: " + error.Message); }
+    }
+
+    // A peer into the file at once, before this machine's game hears of it: a friend admitted to a lobby hosted here
+    // (LobbyService.PeerAdmitted, under that service's lock, so only peersGate is taken here), or the host of a lobby this
+    // game joins. The host's game sends to a joiner the moment it hears of the join, and the broker passes only listed peers.
+    void ListPeer(ulong peer)
+    {
+        try
+        {
+            lock (peersGate)
+            {
+                pinned[peer] = DateTime.UtcNow;
+                var written = (peersWritten ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(line => ulong.Parse(line, NumberStyles.None, CultureInfo.InvariantCulture));
+                WriteListed(written.Append(peer));
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Log("Could not write the co-op peers for Steam P2P: " + error.Message); }
+    }
+
+    // Under peersGate.
+    void WriteListed(IEnumerable<ulong> peers)
+    {
+        var text = string.Concat(peers.Distinct().Order().Select(p => p.ToString(CultureInfo.InvariantCulture) + "\n"));
+        if (text == peersWritten) return;
+        File.WriteAllText(peersFile + ".partial", text);
+        File.Move(peersFile + ".partial", peersFile, overwrite: true);
+        peersWritten = text;
     }
 
     // Pings every friend this machine shares a lobby or network with; a friend unheard for PeerTimeout is gone.

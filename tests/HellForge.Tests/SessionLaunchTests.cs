@@ -52,6 +52,27 @@ static class SessionLaunchTests
                 "--open-war", "--game-options", "-windowed"]), "Open war, launch options: " + string.Join(" ", open));
             var frozen = SessionRunner.Arguments(paths, profile, new(false, false, ProfileStore.WarFrozen, false, false, []));
             check(!frozen.Contains("--live-war") && !frozen.Contains("--open-war"), "The frozen war needs nothing.");
+            var sandboxed = SessionRunner.Arguments(paths, profile, new(false, false, ProfileStore.WarFrozen, false, false, [], Sandbox: true));
+            check(sandboxed[^1] == "--sandbox" && !frozen.Contains("--sandbox"), "Sandboxed only when chosen: " + string.Join(" ", sandboxed));
+        });
+
+        test("The sandbox is off unless chosen, and offered only by an engine built with the Steam bridge", () =>
+        {
+            var paths = Install("launch-sandbox");
+            check(!ProfileStore.LoadSandbox(paths), "Off without a settings file.");
+            ProfileStore.SaveCrashDump(paths, true);
+            check(!ProfileStore.LoadSandbox(paths), "Saving another choice keeps it off.");
+            ProfileStore.SaveSandbox(paths, true);
+            ProfileStore.SaveWar(paths, ProfileStore.WarOpen);
+            check(ProfileStore.LoadSandbox(paths) && ProfileStore.LoadCrashDump(paths), "Chosen, it stays on through other choices.");
+            ProfileStore.SaveSandbox(paths, false);
+            check(!ProfileStore.LoadSandbox(paths), "Switched off again.");
+            var shims = Directory.CreateDirectory(Path.Combine(paths.Install.App, "sdk-shims")).FullName;
+            check(!SessionRunner.HasSteamBridge(paths), "No stand-ins' build.json: no bridge.");
+            File.WriteAllText(Path.Combine(shims, "build.json"), """{"standIns": {}}""");
+            check(!SessionRunner.HasSteamBridge(paths), "Built without the Steamworks SDK: no bridge.");
+            File.WriteAllText(Path.Combine(shims, "build.json"), """{"standIns": {}, "steamBridge": "AB12"}""");
+            check(SessionRunner.HasSteamBridge(paths), "Built with it.");
         });
 
         test("A session's run folder is the one the session runner named after it started, not an earlier one", () =>

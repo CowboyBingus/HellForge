@@ -301,6 +301,9 @@ public sealed class StatsShare : IAsyncDisposable
         await applying.WaitAsync();
         try
         {
+            // this game's own files as they are now, not as the last tick read them: a join (the host's values) can come
+            // before the first tick, and its own changes would then not give way
+            ReadMine();
             string? host, own;
             string sessionRole, sessionHost;
             bool sessionShared;
