@@ -19,6 +19,16 @@ static const Row* ApSlot(const Row* row, double value)
     return nullptr;
 }
 
+/* a donor projectile: the weapon's own round is not what it fires any more, so its pending values go */
+static void DropOwnRound(const Row* row, double value)
+{
+    int dropped = 0;
+    for (const Row* r : row->object->rows)
+        if (r->fires == row->key && r->target == row->target && g_pending.erase(r)) dropped++;
+    if (dropped) Toast(std::to_string(dropped) + " pending change" + (dropped == 1 ? "" : "s") + " to its own round dropped: it fires " +
+        RefLabel(row, value) + " now", PENDING);
+}
+
 void Stage(const Row* row, double value)
 {
     if (RefuseLocked()) return;
@@ -33,15 +43,7 @@ void Stage(const Row* row, double value)
     if (applied.has && Same(row, value, applied.value)) g_pending.erase(row);
     else g_pending[row] = {value, false};
     g_markVersion++;
-    /* a donor projectile: the weapon's own round is not what it fires any more, so its pending values go */
-    if (row->pick == "projectile" && applied.hasBase && !Same(row, value, applied.base))
-    {
-        int dropped = 0;
-        for (const Row* r : row->object->rows)
-            if (r->fires == row->key && r->target == row->target && g_pending.erase(r)) dropped++;
-        if (dropped) Toast(std::to_string(dropped) + " pending change" + (dropped == 1 ? "" : "s") + " to its own round dropped: it fires " +
-            RefLabel(row, value) + " now", PENDING);
-    }
+    if (row->pick == "projectile" && applied.hasBase && !Same(row, value, applied.base)) DropOwnRound(row, value);
 }
 
 /* Stages a field's reset: it shows its default now, and goes back to it on APPLY (DISCARD takes it back). Only a field
@@ -58,24 +60,32 @@ bool StageReset(const Row* row)
     return true;
 }
 
-/* A mount slot's or hellpod row's choice to the game (its option's entity, or a count), or back to its vanilla one. */
 static bool HasCopyRow() { return g_host.api->size >= offsetof(HfApi, copy_row) + sizeof(void*) && g_host.api->copy_row != nullptr; }
+
+/* The option the arm swaps shown hold for the row (the host's while joined), or nullptr. */
+static const Row::Option* ChosenOption(const Row* row)
+{
+    auto chosen = Mounts().find(MountKey(row));
+    return chosen != Mounts().end() ? row->OptionOf(chosen->second) : nullptr;
+}
+
+/* another explosion's settings over the row (SDK 9 copy_row), or its own back */
+static void SendRowCopy(const Row* row)
+{
+    const Row::Option* o = ChosenOption(row);
+    uint64_t from = o == nullptr || o == &row->options[0] ? 0 : (uint64_t)o->value;
+    if (!HasCopyRow() || g_host.api->copy_row(g_host.mod, row->component.c_str(), row->ref, from, row->offset, row->size) == 0)
+        SetError(row, HasCopyRow() ? Refusal("HellForge refused the copy") : "this HellForge has no copy_row");
+    else ClearError(row);
+}
+
+/* A mount slot's or hellpod row's choice to the game (its option's entity, or a count), or back to its vanilla one. */
 void SendMount(const Row* row)
 {
-    if (row->choice == "rowcopy") /* another explosion's settings over the row (SDK 9 copy_row), or its own back */
-    {
-        auto chosen = Mounts().find(MountKey(row));
-        const Row::Option* o = chosen != Mounts().end() ? row->OptionOf(chosen->second) : nullptr;
-        uint64_t from = o == nullptr || o == &row->options[0] ? 0 : (uint64_t)o->value;
-        if (!HasCopyRow() || g_host.api->copy_row(g_host.mod, row->component.c_str(), row->ref, from, row->offset, row->size) == 0)
-            SetError(row, HasCopyRow() ? Refusal("HellForge refused the copy") : "this HellForge has no copy_row");
-        else ClearError(row);
-        return;
-    }
+    if (row->choice == "rowcopy") { SendRowCopy(row); return; }
     bool wide = row->type == HF_TYPE_U64;
     HfField field{row->component.c_str(), g_layout, (uint16_t)row->offset, (uint16_t)(wide ? 8 : 4), row->type, 0};
-    auto chosen = Mounts().find(MountKey(row));
-    const Row::Option* o = chosen != Mounts().end() ? row->OptionOf(chosen->second) : nullptr;
+    const Row::Option* o = ChosenOption(row);
     int applies;
     if (o == nullptr || o == &row->options[0]) applies = g_host.api->set_live(g_host.mod, row->ref, &field, nullptr, row->shared ? HF_LIVE_SHARED : 0);
     else
@@ -129,31 +139,18 @@ static void ResetRow(const Row* row)
     g_markVersion++;
 }
 
-static void ApplyRow(const Row* row, double value)
+/* An arm swap, pod or row copy kept in the settings (its first option, the vehicle's own, is not kept) and sent. */
+static void ApplyMount(const Row* row, double value)
 {
-    if (IsMount(row))
-    {
-        if (!row->options.empty() && value == row->options[0].value) g_mounts.erase(MountKey(row));
-        else g_mounts[MountKey(row)] = value;
-        SendMount(row);
-        SaveSettings();
-        return;
-    }
-    if (!row->choice.empty())
-    {
-        g_choice[ChoiceIndex(row)] = value;
-        SendPassives();
-        SaveSettings();
-        return;
-    }
-    LiveState& live = Live(row, true);
-    if ((row->Live() || row->Stat()) && live.read && Same(row, value, live.base)) { ResetRow(row); return; }
-    for (const Row* s : g_catalog.Siblings(row))
-    {
-        double v;
-        if (s != row && localstats::Get(s->category, s->target, s->key, &v)) localstats::Remove(s->category, s->target, s->key);
-    }
-    localstats::Set(row->category, row->target, row->key, row->unlimited && value == 4294967295.0 ? -1 : value, row->Whole());
+    if (!row->options.empty() && value == row->options[0].value) g_mounts.erase(MountKey(row));
+    else g_mounts[MountKey(row)] = value;
+    SendMount(row);
+    SaveSettings();
+}
+
+/* A value to the running game: set_live, or set_stat for a field the stats pass writes at boot. */
+static void SendValue(const Row* row, double value)
+{
     if (row->Live())
     {
         HfField field = FieldOf(row);
@@ -169,9 +166,29 @@ static void ApplyRow(const Row* row, double value)
         if (g_host.api->set_stat(g_host.mod, &stat, &v, 0) == 0) SetError(row, Refusal("HellForge refused it (saved for the next boot)"));
         else ClearError(row);
     }
-    for (const Row* s : g_catalog.Siblings(row)) g_live[s].at = 0;
 }
 
+static void ApplyRow(const Row* row, double value)
+{
+    if (IsMount(row)) { ApplyMount(row, value); return; }
+    if (!row->choice.empty())
+    {
+        g_choice[ChoiceIndex(row)] = value;
+        SendPassives();
+        SaveSettings();
+        return;
+    }
+    LiveState& live = Live(row, true);
+    if ((row->Live() || row->Stat()) && live.read && Same(row, value, live.base)) { ResetRow(row); return; }
+    for (const Row* s : g_catalog.Siblings(row))
+    {
+        double v;
+        if (s != row && localstats::Get(s->category, s->target, s->key, &v)) localstats::Remove(s->category, s->target, s->key);
+    }
+    localstats::Set(row->category, row->target, row->key, row->unlimited && value == 4294967295.0 ? -1 : value, row->Whole());
+    SendValue(row, value);
+    for (const Row* s : g_catalog.Siblings(row)) g_live[s].at = 0;
+}
 
 void Apply()
 {
@@ -236,6 +253,15 @@ static ULONGLONG g_holderPass, g_holderMarked;
 static bool g_holderChanged;
 bool g_holdersRead;
 
+/* The mod a row's value is held by now (get_live / get_stat name it), into the holders. */
+static void NoteHolder(const Row* row)
+{
+    const LiveState& live = Live(row);
+    std::string holder = live.read ? live.mod : "";
+    auto found = g_holders.find(row);
+    if (holder.empty() && found != g_holders.end()) { g_holders.erase(found); g_holderChanged = true; }
+    else if (!holder.empty() && (found == g_holders.end() || found->second != holder)) { g_holders[row] = holder; g_holderChanged = true; }
+}
 
 void HolderTick(LONGLONG microseconds)
 {
@@ -258,11 +284,7 @@ void HolderTick(LONGLONG microseconds)
     {
         const Row* row = &g_catalog.rows[g_holderNext++];
         if (!row->choice.empty() || IsApLabel(row) || (!row->Live() && !row->Stat())) continue;
-        const LiveState& live = Live(row);
-        std::string holder = live.read ? live.mod : "";
-        auto found = g_holders.find(row);
-        if (holder.empty() && found != g_holders.end()) { g_holders.erase(found); g_holderChanged = true; }
-        else if (!holder.empty() && (found == g_holders.end() || found->second != holder)) { g_holders[row] = holder; g_holderChanged = true; }
+        NoteHolder(row);
         QueryPerformanceCounter(&now);
         if (now.QuadPart - start.QuadPart > budget) break;
     }
@@ -270,6 +292,20 @@ void HolderTick(LONGLONG microseconds)
 
 /* ---- markers (what an object, a category or a header holds) ---- */
 static MarkCache g_marks;
+
+/* values a mod holds: its mark (a Lua mod's purple) on every object and category showing them */
+static void MarkHolders()
+{
+    for (auto& [row, holder] : g_holders)
+        for (const Row* s : g_catalog.Siblings(row))
+        {
+            bool lua = IsLuaHolder(holder);
+            Marks& o = g_marks.objects[s->object];
+            Marks& n = g_marks.navs[s->object->category];
+            (lua ? o.lua : o.mod) = true;
+            (lua ? n.lua : n.mod) = true;
+        }
+}
 
 const MarkCache& Markers()
 {
@@ -290,16 +326,7 @@ const MarkCache& Markers()
     /* content a mod added (a custom stratagem): the mod's mark on it and its category, as on its fields */
     for (auto& o : g_catalog.objects)
         if (o->id.rfind("mod/", 0) == 0) { g_marks.objects[o.get()].mod = true; g_marks.navs[o->category].mod = true; }
-    /* values a mod holds: its mark (a Lua mod's purple) on every object and category showing them */
-    for (auto& [row, holder] : g_holders)
-        for (const Row* s : g_catalog.Siblings(row))
-        {
-            bool lua = IsLuaHolder(holder);
-            Marks& o = g_marks.objects[s->object];
-            Marks& n = g_marks.navs[s->object->category];
-            (lua ? o.lua : o.mod) = true;
-            (lua ? n.lua : n.mod) = true;
-        }
+    MarkHolders();
     for (auto& e : g_errors) { g_marks.objects[e.first->object].error = true; g_marks.navs[e.first->object->category].error = true; }
     for (auto& p : g_pending) mark(p.first, 1);
     for (const Row* row : SavedRows()) mark(row, 2);
@@ -307,6 +334,15 @@ const MarkCache& Markers()
     g_marks.stats = stats;
     g_marks.errors = g_errorsVersion;
     return g_marks;
+}
+
+/* The mod holding a row's value: as last read (get_live), else as the holders' pass found it; "" none. */
+static std::string HolderOf(const Row* row)
+{
+    auto live = g_live.find(row);
+    std::string holder = live != g_live.end() ? live->second.mod : "";
+    if (holder.empty()) { auto h = g_holders.find(row); if (h != g_holders.end()) holder = h->second; }
+    return holder;
 }
 
 Marks RowsMarks(const std::vector<const Row*>& rows)
@@ -318,57 +354,74 @@ Marks RowsMarks(const std::vector<const Row*>& rows)
         if (g_errors.count(row)) m.error = true;
         if (PendingOf(row)) m.pending = true;
         if (Saved(row, &v)) m.editor = true;
-        auto live = g_live.find(row);
-        std::string holder = live != g_live.end() ? live->second.mod : "";
-        if (holder.empty()) { auto h = g_holders.find(row); if (h != g_holders.end()) holder = h->second; }
+        std::string holder = HolderOf(row);
         if (!holder.empty()) (IsLuaHolder(holder) ? m.lua : m.mod) = true;
     }
     return m;
 }
 
 /* ---- editing a value ---- */
+/* Whether the picker's filter (lower case) matches the text (an empty one matches everything). */
+static bool Matches(const std::string& filter, const std::string& text) { return filter.empty() || Lower(text).find(filter) != std::string::npos; }
+
+/* A choice row's options, under their groups' headings (a pod's pickups by kind). */
+static void FillChoices(const Row* row, const std::string& filter, std::vector<PickEntry>& out)
+{
+    std::string group;
+    for (auto& o : row->options)
+    {
+        if (!Matches(filter, o.label + " " + o.group + " " + o.note)) continue;
+        if (!o.group.empty() && o.group != group) { group = o.group; out.push_back({true, 0, group}); } /* a pod's pickups by kind */
+        out.push_back({false, o.value, o.label, o.note, o.icon});
+    }
+}
+
+/* A field with named values: its options, the game's own one said. */
+static void FillValues(const Row* row, const std::string& filter, std::vector<PickEntry>& out)
+{
+    RowView v = ViewOf(row, false);
+    for (auto& o : row->options)
+        if (Matches(filter, o.label)) out.push_back({false, o.value, o.label, v.hasBase && o.value == v.base ? "the game's own" : ""});
+}
+
+/* The catalogue's references a reference row offers, under their groups' headings: all but its own and those it
+ * leaves out. */
+static void FillCatalogue(const Row* row, const std::string& filter, double own, std::vector<PickEntry>& out)
+{
+    auto list = g_catalog.references.find(row->pick);
+    if (list == g_catalog.references.end()) return;
+    std::string group;
+    for (auto& o : list->second)
+    {
+        if (o.value == own || !Matches(filter, o.label + " " + o.group + " " + o.note)) continue;
+        if (std::find(row->exclude.begin(), row->exclude.end(), o.value) != row->exclude.end()) continue;
+        if (o.group != group) { group = o.group; out.push_back({true, 0, group}); }
+        out.push_back({false, o.value, o.label, o.note, "", o.warnings});
+    }
+}
+
+/* A reference row's: its own, none (an empty slot), then the catalogue's references. */
+static void FillReferences(const Row* row, const std::string& filter, std::vector<PickEntry>& out)
+{
+    RowView v = ViewOf(row, false);
+    double own = v.hasBase ? v.base : v.value;
+    std::string what = row->pick == "status" ? "applies" : row->pick == "explosion" ? "sets off" : "fires";
+    std::string ownLabel = (row->pick == "projectile" ? "Own projectile: " : row->pick == "explosion" ? "Own explosion: " : "Own status: ") + RefLabel(row, own);
+    if (Matches(filter, ownLabel)) out.push_back({false, own, ownLabel, "what it " + what + " in the game's own data"});
+    if (row->pick != "projectile" && own != 0 && Matches(filter, row->pick == "status" ? "Empty" : "None"))
+        out.push_back({false, 0, row->pick == "status" ? "Empty" : "None", row->pick == "status" ? "an empty slot" : "no explosion"});
+    FillCatalogue(row, filter, own, out);
+}
+
 void PickerFill()
 {
     const Row* row = g_picker.row;
     auto& out = g_picker.entries;
     out.clear();
     std::string filter = Lower(g_picker.filter);
-    auto match = [&](const std::string& text) { return filter.empty() || Lower(text).find(filter) != std::string::npos; };
-    if (!row->choice.empty())
-    {
-        std::string group;
-        for (auto& o : row->options)
-        {
-            if (!match(o.label + " " + o.group + " " + o.note)) continue;
-            if (!o.group.empty() && o.group != group) { group = o.group; out.push_back({true, 0, group}); } /* a pod's pickups by kind */
-            out.push_back({false, o.value, o.label, o.note, o.icon});
-        }
-        return;
-    }
-    if (row->Valued())
-    {
-        RowView v = ViewOf(row, false);
-        for (auto& o : row->options)
-            if (match(o.label)) out.push_back({false, o.value, o.label, v.hasBase && o.value == v.base ? "the game's own" : ""});
-        return;
-    }
-    RowView v = ViewOf(row, false);
-    double own = v.hasBase ? v.base : v.value;
-    std::string what = row->pick == "status" ? "applies" : row->pick == "explosion" ? "sets off" : "fires";
-    std::string ownLabel = (row->pick == "projectile" ? "Own projectile: " : row->pick == "explosion" ? "Own explosion: " : "Own status: ") + RefLabel(row, own);
-    if (match(ownLabel)) out.push_back({false, own, ownLabel, "what it " + what + " in the game's own data"});
-    if (row->pick != "projectile" && own != 0 && match(row->pick == "status" ? "Empty" : "None"))
-        out.push_back({false, 0, row->pick == "status" ? "Empty" : "None", row->pick == "status" ? "an empty slot" : "no explosion"});
-    auto list = g_catalog.references.find(row->pick);
-    if (list == g_catalog.references.end()) return;
-    std::string group;
-    for (auto& o : list->second)
-    {
-        if (o.value == own || !match(o.label + " " + o.group + " " + o.note)) continue;
-        if (std::find(row->exclude.begin(), row->exclude.end(), o.value) != row->exclude.end()) continue;
-        if (o.group != group) { group = o.group; out.push_back({true, 0, group}); }
-        out.push_back({false, o.value, o.label, o.note, "", o.warnings});
-    }
+    if (!row->choice.empty()) FillChoices(row, filter, out);
+    else if (row->Valued()) FillValues(row, filter, out);
+    else FillReferences(row, filter, out);
 }
 
 /* Whether `i` is an entry of the list (a filter that matches nothing leaves it empty and the index -1). */
@@ -425,7 +478,6 @@ void BeginEdit(const Row* row, const std::string& text, bool fresh)
     g_edit.buffer = !text.empty() ? text : v.has ? Format(row, v.value) : "";
 }
 
-
 static bool Parse(const Row* row, const std::string& text, double* out, std::string* error)
 {
     std::string t = text;
@@ -437,6 +489,16 @@ static bool Parse(const Row* row, const std::string& text, double* out, std::str
     return Valid(row, v, out, error);
 }
 
+/* Why a number does not fit the row's storage, or nullptr. */
+static const char* StorageError(const Row* row, double v)
+{
+    if (row->type == HF_TYPE_U32 && (v < 0 || v > 4294967295.0)) return v < 0 ? "Must not be negative." : "Number is too large.";
+    if (row->type == HF_TYPE_I32 && (v < -2147483648.0 || v > 2147483647.0)) return "Number is too large.";
+    if (row->type == HF_TYPE_F32 && fabs(v) > 3.4e38) return "Number is too large.";
+    if (row->type == HF_TYPE_U8 && (v < 0 || v > 255)) return "Allowed range: 0 to 255.";
+    return nullptr;
+}
+
 /* A number as the row takes it (whole, in range, fitting its storage), or false with *error. */
 bool Valid(const Row* row, double v, double* out, std::string* error)
 {
@@ -444,10 +506,7 @@ bool Valid(const Row* row, double v, double* out, std::string* error)
     if (row->Whole() && v != floor(v)) { *error = "Whole numbers only."; return false; }
     if ((row->hasMin && v < row->min) || (row->hasMax && v > row->max))
     { *error = "Allowed range: " + Format(row, row->hasMin ? row->min : -INFINITY) + " to " + Format(row, row->max); return false; }
-    if (row->type == HF_TYPE_U32 && (v < 0 || v > 4294967295.0)) { *error = v < 0 ? "Must not be negative." : "Number is too large."; return false; }
-    if (row->type == HF_TYPE_I32 && (v < -2147483648.0 || v > 2147483647.0)) { *error = "Number is too large."; return false; }
-    if (row->type == HF_TYPE_F32 && fabs(v) > 3.4e38) { *error = "Number is too large."; return false; }
-    if (row->type == HF_TYPE_U8 && (v < 0 || v > 255)) { *error = "Allowed range: 0 to 255."; return false; }
+    if (const char* why = StorageError(row, v)) { *error = why; return false; }
     if (row->Valued() && row->OptionOf(v) == nullptr) { *error = "not one of its values"; return false; }
     *out = v;
     return true;
@@ -464,30 +523,50 @@ void CommitEdit()
     Stage(g_edit.row, v);
 }
 
-void Nudge(const Row* row, int direction, bool shift, bool ctrl)
+/* mission uses (HD2R Editor's): left from 1 is unlimited, left from unlimited is the most (100); false when the nudge is
+ * neither of those */
+static bool NudgeUses(const Row* row, double value, int direction)
 {
-    if (!row->pick.empty() || !LockOf(row).empty() || !SlotBlock(row).empty()) return;
-    RowView v = ViewOf(row);
-    /* mission uses (HD2R Editor's): left from 1 is unlimited, left from unlimited is the most (100) */
-    if (row->unlimited && v.value == 4294967295.0) { if (direction < 0) Stage(row, row->hasMax ? row->max : 100); return; }
-    if (row->unlimited && direction < 0 && v.value <= (row->hasMin ? row->min : 1)) { Stage(row, 4294967295.0); return; }
-    if (!row->choice.empty() || row->Valued())
-    {
-        int n = (int)row->options.size(), at = 0;
-        for (int i = 0; i < n; i++) if (row->options[i].value == v.value) at = i;
-        Stage(row, row->options[(at + direction + n) % n].value);
-        return;
-    }
-    if (!v.has) return;
-    double step = row->Whole() ? 1 : v.value == 0 ? 0.1 : pow(10, floor(log10(fabs(v.value))) - 1);
+    if (value == 4294967295.0) { if (direction < 0) Stage(row, row->hasMax ? row->max : 100); return true; }
+    if (direction < 0 && value <= (row->hasMin ? row->min : 1)) { Stage(row, 4294967295.0); return true; }
+    return false;
+}
+
+/* The next or the previous option, round the list. */
+static void NudgeOption(const Row* row, double value, int direction)
+{
+    int n = (int)row->options.size(), at = 0;
+    for (int i = 0; i < n; i++) if (row->options[i].value == value) at = i;
+    Stage(row, row->options[(at + direction + n) % n].value);
+}
+
+/* A nudge's step: a tenth of the value's magnitude (whole numbers 1); Shift ten times that, Ctrl a tenth. */
+static double NudgeStep(const Row* row, double value, bool shift, bool ctrl)
+{
+    double step = row->Whole() ? 1 : value == 0 ? 0.1 : pow(10, floor(log10(fabs(value))) - 1);
     if (shift) step *= 10;
     if (ctrl) step = row->Whole() ? 1 : step / 10;
-    double next = v.value + direction * step;
+    return step;
+}
+
+/* A nudged number as the row takes it: whole, in its range, not negative in a u32. */
+static double InRange(const Row* row, double next)
+{
     if (row->Whole()) next = llround(next);
     if (row->hasMin) next = std::max(next, row->min);
     if (row->hasMax) next = std::min(next, row->max);
     if (row->type == HF_TYPE_U32) next = std::max(next, 0.0);
-    Stage(row, next);
+    return next;
+}
+
+void Nudge(const Row* row, int direction, bool shift, bool ctrl)
+{
+    if (!row->pick.empty() || !LockOf(row).empty() || !SlotBlock(row).empty()) return;
+    RowView v = ViewOf(row);
+    if (row->unlimited && NudgeUses(row, v.value, direction)) return;
+    if (!row->choice.empty() || row->Valued()) { NudgeOption(row, v.value, direction); return; }
+    if (!v.has) return;
+    Stage(row, InRange(row, v.value + direction * NudgeStep(row, v.value, shift, ctrl)));
 }
 
 /* Reverts a field: its pending change (or pending reset) dropped, else a reset staged. */
