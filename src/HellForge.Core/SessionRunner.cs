@@ -37,7 +37,12 @@ public sealed class SessionRunner
         if (options.SdkShims) arguments.Add("--multiplayer");
         // the galactic war (ProfileStore.LoadWar): the live war through the mirror, or the all-planets war; the frozen war needs nothing
         if (options.War == ProfileStore.WarLive) arguments.AddRange(["--live-war", Path.Combine(paths.HostRoot, "live-war.json")]);
-        else if (options.War == ProfileStore.WarOpen) arguments.Add("--open-war");
+        else if (options.War == ProfileStore.WarOpen)
+        {
+            arguments.Add("--open-war");
+            // its subfaction seed (0, the default layout, needs nothing)
+            if (ProfileStore.LoadSubfactionSeed(paths) is var seed and not 0) arguments.AddRange(["--war-seed", seed.ToString(CultureInfo.InvariantCulture)]);
+        }
         if (options.EngineLog) arguments.Add("--engine-log");
         // the player's launch options, for the session runner to add to the game's command line (GameLaunchOptions)
         if (options.GameOptions.Count > 0) arguments.AddRange(["--game-options", GameLaunchOptions.CommandLine(options.GameOptions)]);

@@ -21,7 +21,10 @@ namespace HellForge.LocalBackend;
 // Predator Strain, Jet Brigade, the Illuminate's...). A planet keeps the frozen war's subfaction effects of its new enemy
 // and loses another enemy's; each sector then gets one of its enemy's subfactions or none, picked by a stable hash of the
 // sector's name (the same on every machine of a lobby, which each build their missions' tags themselves). An Illuminate
-// sector always gets one: every Illuminate squad needs an Illuminate tag (HD2Mods research/subfactions).
+// sector always gets one: every Illuminate squad needs an Illuminate tag (HD2Mods research/subfactions). A subfaction
+// seed (the launcher's, backend --war-seed) other than 0 deals every sector's anew from that seed, the frozen war's
+// included: a player who dislikes the layout rolls another. In co-op the host's war decides (whether a joiner with another
+// seed loads the host's subfaction enemies is to be tested: each game builds its missions' tags from its own war).
 //
 // An enemy's home world (warInfo homeWorlds: Cyberstan, the Automatons') has no operations of its own from its campaign:
 // the game strips its map's drop points (game.dll 0x12D88FB), and its operations come from its regions instead (the
@@ -57,7 +60,7 @@ public static class OpenWar
         return data.RootElement.GetProperty("sectors").EnumerateObject().ToDictionary(s => int.Parse(s.Name, System.Globalization.CultureInfo.InvariantCulture), s => s.Value.GetString()!);
     }
 
-    public static JsonElement Status(JsonElement warInfo, JsonElement status, IReadOnlyDictionary<int, string>? sectors = null)
+    public static JsonElement Status(JsonElement warInfo, JsonElement status, IReadOnlyDictionary<int, string>? sectors = null, uint seed = 0)
     {
         sectors ??= Sectors();
         var planets = warInfo.GetProperty("planetInfos");
@@ -142,7 +145,7 @@ public static class OpenWar
             int index = (int)e!["index"]!, id = (int)e["galacticEffectId"]!;
             if (subfactions.TryGetValue(id, out var of) && of != 0)
             {
-                if (!now.TryGetValue(index, out var holder) || holder != of) continue; /* another enemy's */
+                if (seed != 0 || !now.TryGetValue(index, out var holder) || holder != of) continue; /* another enemy's, or dealt anew */
                 has.Add(index);
             }
             effects.Add((JsonNode)new JsonObject { ["index"] = index, ["galacticEffectId"] = id });
@@ -153,7 +156,8 @@ public static class OpenWar
             var choices = subfactions.Where(s => s.Value == holder).Select(s => s.Key).OrderBy(id => id).ToList();
             if (choices.Count == 0) continue;
             var key = sectors.TryGetValue(index, out var sector) ? sector : "planet " + index;
-            var pick = (int)(StableHash(key + "/" + holder) % (uint)(choices.Count + (holder == Illuminate ? 0 : 1)));
+            var pick = (int)(StableHash(key + "/" + holder + (seed != 0 ? "/" + seed.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")) %
+                (uint)(choices.Count + (holder == Illuminate ? 0 : 1)));
             if (pick < choices.Count) effects.Add((JsonNode)new JsonObject { ["index"] = index, ["galacticEffectId"] = choices[pick] });
         }
         node["planetActiveEffects"] = effects;

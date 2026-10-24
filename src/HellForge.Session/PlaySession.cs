@@ -610,7 +610,11 @@ sealed class PlaySession(PlayOptions options)
         if (options.Template != null) { start.ArgumentList.Add("--profile-template"); start.ArgumentList.Add(options.Template); }
         // Follows the live galactic war read-only through the community mirror; fetched before the backend is ready.
         // The all-planets war (every planet but Super Earth a liberation) takes the live war's place.
-        if (options.OpenWar) { start.ArgumentList.Add("--war"); start.ArgumentList.Add("open"); result["war"] = "open"; }
+        if (options.OpenWar)
+        {
+            start.ArgumentList.Add("--war"); start.ArgumentList.Add("open"); result["war"] = "open";
+            if (options.WarSeed != 0) { start.ArgumentList.Add("--war-seed"); start.ArgumentList.Add(options.WarSeed.ToString(System.Globalization.CultureInfo.InvariantCulture)); result["warSeed"] = options.WarSeed; }
+        }
         else if (options.LiveWar != null) { start.ArgumentList.Add("--live-war"); start.ArgumentList.Add(Path.GetFullPath(options.LiveWar)); result["liveWar"] = true; }
         if (options.Multiplayer)
         {

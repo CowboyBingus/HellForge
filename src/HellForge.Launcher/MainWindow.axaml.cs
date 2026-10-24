@@ -113,6 +113,15 @@ public partial class MainWindow : Window
         WarOpenRadio.IsChecked = war == ProfileStore.WarOpen;
         foreach (var (radio, mode) in new[] { (WarLiveRadio, ProfileStore.WarLive), (WarFrozenRadio, ProfileStore.WarFrozen), (WarOpenRadio, ProfileStore.WarOpen) })
             radio.IsCheckedChanged += (_, _) => { if (radio.IsChecked == true) ProfileStore.SaveWar(paths, mode); };
+        // the all-planets war's subfaction seed: typed (a whole number) or rolled, saved as it changes
+        SubfactionSeedBox.Text = ProfileStore.LoadSubfactionSeed(paths).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        SubfactionSeedBox.TextChanged += (_, _) =>
+        {
+            if (uint.TryParse(SubfactionSeedBox.Text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var seed))
+                ProfileStore.SaveSubfactionSeed(paths, seed);
+        };
+        SubfactionRandomiseButton.Click += (_, _) =>
+            SubfactionSeedBox.Text = ((uint)System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, int.MaxValue)).ToString(System.Globalization.CultureInfo.InvariantCulture);
         EngineLogBox.IsChecked = ProfileStore.LoadEngineLog(paths);
         EngineLogBox.IsCheckedChanged += (_, _) => ProfileStore.SaveEngineLog(paths, EngineLogBox.IsChecked == true);
         CrashDumpBox.IsChecked = ProfileStore.LoadCrashDump(paths);

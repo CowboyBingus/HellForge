@@ -21,7 +21,7 @@ Nothing here has a date, and stability comes first.
 | Co-op tools for mods | Next | Planned |
 | Cyberstan missions | Testing | Built for 0.3.0-dev.4 (All planets open) |
 | Super Earth missions | Later | Research done (research/cyberstan sketches it) |
-| Subfactions | Testing | Built for 0.3.0-dev.4; a per-session choice comes later |
+| Subfactions | Testing | Built for 0.3.0-dev.4, with a seed in the launcher |
 | Custom missions | Later | Planned in steps |
 | Progression system | Later | Design not decided |
 | Custom models | Later | Mesh importer works; physics, AI and textures left |
@@ -152,7 +152,9 @@ Spore Burst, Rupture, Dragonroach, Hive Lord; Jet Brigade, Incineration Corps, C
 spawn director only picks roster rows and squads whose tags are there (0x953150). The game builds its effect table from
 /WarSeason/GalacticWarEffects, which HellForge served empty, so no planet effect worked. The backend now serves the 13
 subfaction effects, so the frozen and live wars get their own subfactions, and "All planets open" gives each sector one
-of its enemy's (or none) by a stable hash, every Illuminate planet one (HD2Mods research/subfactions).
+of its enemy's (or none) by a stable hash, every Illuminate planet one (HD2Mods research/subfactions). The launcher's
+subfaction seed deals them anew: 0 keeps the frozen war's own, any other number another layout, and Randomise rolls one.
+In co-op the host's war decides; whether a joiner with another seed loads the host's subfaction enemies is to be tested.
 
 1. Find out what decides a mission's subfaction. Done.
 2. Have "All planets open" give each planet subfactions that fit its enemy. Done.

@@ -41,6 +41,7 @@ for (var i = 1; i < args.Length; i++)
         case "--template": options.Template = Value(); break;
         case "--live-war": options.LiveWar = Value(); break;
         case "--open-war": options.OpenWar = true; break;
+        case "--war-seed": options.WarSeed = uint.Parse(Value(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture); break;
         case "--local-playfab": options.LocalPlayFab = true; break;
         case "--multiplayer": options.Multiplayer = true; break;
         case "--engine-log": options.EngineLog = true; break;
@@ -73,6 +74,7 @@ sealed class PlayOptions
     public string? Template { get; set; }
     public string? LiveWar { get; set; }
     public bool OpenWar { get; set; } /* the all-planets war (backend --war open) */
+    public uint WarSeed { get; set; } /* its subfaction seed (backend --war-seed; 0 the default layout) */
     public bool LocalPlayFab { get; set; }
     public bool Multiplayer { get; set; }
     public bool EngineLog { get; set; }

@@ -47,6 +47,17 @@ static class OpenWarTests
         var illuminate = owner.Where(o => o.Value == 4).Select(o => o.Key).ToList();
         check(illuminate.All(i => onPlanet.Any(e => e.Index == i)), "Every Illuminate planet has an Illuminate subfaction.");
         check(owner[171] == 2 && onPlanet.Contains((171, 1243)), "A frozen-war subfaction of the planet's enemy stays (Predator Strain on 171).");
+        // a subfaction seed deals every sector anew, within its enemy's own; the same seed, the same war; 0 the default
+        List<(int Index, int Id)> Dealt(JsonElement war) => war.GetProperty("planetActiveEffects").EnumerateArray()
+            .Select(e => (e.GetProperty("index").GetInt32(), e.GetProperty("galacticEffectId").GetInt32()))
+            .Where(e => subfactions.TryGetValue(e.Item2, out var f) && f != 0).OrderBy(e => e).ToList();
+        var seeded = OpenWar.Status(info, frozen, seed: 12345);
+        var reseeded = OpenWar.Status(info, frozen, seed: 999);
+        check(OpenWar.Status(info, frozen, seed: 0).GetRawText() == open.GetRawText(), "Seed 0 is the default layout.");
+        check(OpenWar.Status(info, frozen, seed: 12345).GetRawText() == seeded.GetRawText() && !Dealt(seeded).SequenceEqual(Dealt(open)) &&
+              !Dealt(seeded).SequenceEqual(Dealt(reseeded)), "A seed deals another layout, the same each time.");
+        check(Dealt(seeded).All(e => owner[e.Index] == subfactions[e.Id]) && illuminate.All(i => Dealt(seeded).Any(e => e.Index == i)),
+            "A seeded layout keeps each planet to its enemy's subfactions, and every Illuminate planet has one.");
         // Cyberstan (the Automatons' home world): its 8 Megafactory regions are served available, at full health, with its
         // campaign; the frozen war's other region rows stay
         var regionInfos = info.GetProperty("planetRegions").EnumerateArray().Where(r => r.GetProperty("planetIndex").GetInt32() == 260)

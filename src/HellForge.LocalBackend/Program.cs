@@ -90,6 +90,11 @@ try
     var war = options.GetValueOrDefault("--war");
     if (war != null && war != OpenWar.Mode) throw new ArgumentException("--war takes \"" + OpenWar.Mode + "\".");
     var openWar = war == OpenWar.Mode;
+    // --war-seed <n>: the all-planets war's subfaction seed (0 the default layout)
+    var warSeed = options.GetValueOrDefault("--war-seed") is { } seedText
+        ? uint.TryParse(seedText, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed
+            : throw new ArgumentException("--war-seed takes a whole number from 0 to 4294967295.")
+        : 0u;
     await using var liveWar = !openWar && options.GetValueOrDefault("--live-war") is { } liveWarCache && startupFixtures
         ? await LiveWar.StartAsync(liveWarCache, warClock, message =>
         {
@@ -97,7 +102,7 @@ try
         }, cacheOnly: Environment.GetEnvironmentVariable("HELLFORGE_LINUX_NETNS") == "1") // Linux: fetched before the namespace
         : null;
     await using var app = LocalBackend.Create(port, evidence, mode, startupFixtures, profile, options.GetValueOrDefault("--item-catalog"),
-        options.GetValueOrDefault("--fixture-override"), options.GetValueOrDefault("--capture-mission-bodies") == "true", warClock, accountKeys, liveWar, presence, registeredItems, openWar);
+        options.GetValueOrDefault("--fixture-override"), options.GetValueOrDefault("--capture-mission-bodies") == "true", warClock, accountKeys, liveWar, presence, registeredItems, openWar, warSeed);
     await app.StartAsync(lifetime.Token);
     var pipeName = options.GetValueOrDefault("--pipe");
     // --mod-list <file>: the digest's mods one by one (ModlistDiff's form), so a refused join can say which differ

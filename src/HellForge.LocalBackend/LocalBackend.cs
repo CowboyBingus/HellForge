@@ -78,7 +78,7 @@ public static class LocalBackend
     public static WebApplication Create(int port, string evidenceDirectory, LoginMode mode, bool startupFixtures = false,
         ProfileStore? profile = null, string? itemCatalog = null, string? fixtureOverride = null, bool captureMissionBodies = false,
         WarClock? warClock = null, AccountKeys? accountKeys = null, LiveWar? liveWar = null, FriendPresence? presence = null,
-        RegisteredItems? registeredItems = null, bool openWar = false)
+        RegisteredItems? registeredItems = null, bool openWar = false, uint warSeed = 0)
     {
         if (port is < 0 or > 65535) throw new ArgumentOutOfRangeException(nameof(port));
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
@@ -106,7 +106,7 @@ public static class LocalBackend
         if (openWar)
         {
             if (!startupFixtures) throw new ArgumentException("The all-planets war requires startup fixtures.");
-            fixtures[$"/WarSeason/{LiveWar.WarId}/Status"] = OpenWar.Status(fixtures[$"/WarSeason/{LiveWar.WarId}/warinfo"], fixtures[$"/WarSeason/{LiveWar.WarId}/Status"]);
+            fixtures[$"/WarSeason/{LiveWar.WarId}/Status"] = OpenWar.Status(fixtures[$"/WarSeason/{LiveWar.WarId}/warinfo"], fixtures[$"/WarSeason/{LiveWar.WarId}/Status"], seed: warSeed);
             liveWar = null;
         }
         if (startupFixtures) profile ??= ProfileStore.Open(null);
