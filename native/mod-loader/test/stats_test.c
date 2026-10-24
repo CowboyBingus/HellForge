@@ -914,12 +914,16 @@ static void DifficultyFixture(void)
             memcpy(in, &seed, 4); memcpy(in + 8, &row, 4); memcpy(in + 0xC, &faction, 4); memcpy(in + 0x10, &level, 4);
             uint32_t ids[32] = {0xA1, 0xA9};
             int32_t classes[32] = {0, 3};
+            uint32_t logged = g_mixLoggedCount;
             uint32_t n = MixMission(in, 2, ids, classes, 1);
             assert(n == 4 && ids[2] == 0xB1 && classes[2] == 0 && ids[3] == 0xB2 && classes[3] == 1 && in[0x14] == 0);
+            assert(g_mixLoggedCount == logged + 1); /* the mix is logged */
             uint32_t again[32] = {0xA1, 0xA9};
             assert(MixMission(in, 2, again, NULL, 1) == 4 && again[2] == 0xB1 && again[3] == 0xB2);
+            assert(g_mixLoggedCount == logged + 1); /* the same mix again is not */
             uint32_t other[32] = {0xA1, 0xA9};
             assert(MixMission(in, 2, other, NULL, 2) == 2); /* the partner is not placed on layout 2 */
+            assert(g_mixLoggedCount == logged + 1); /* no mix, no line */
             in[0x14] = DIF_MIX_MARK; /* a nested call only reports its layout */
             assert(MixMission(in, 2, other, NULL, 5) == 2 && in[0x15] == 5 && in[0x16] == 1);
             /* The radar station: row 20 gets it as a weight-0 optional entry; the mission keeps it in place of its last

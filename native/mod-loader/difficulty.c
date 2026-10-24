@@ -1832,16 +1832,48 @@ static void CityIcbmInstall(uintptr_t game)
     Note("difficulty: city operations start with a Launch ICBM mission at level 11 (%u of 3 mission rows, %u of 7 operations)", rows, ops);
 }
 
+/* A mixed mission's rows and objectives (id/class), once per distinct mix and for the first DIF_MIX_LOGGED a session: the
+ * board selects the same missions again and again, and a stuck objective needs only what its mission was made of. */
+#define DIF_MIX_LOGGED 48u
+static SRWLOCK g_mixLogLock = SRWLOCK_INIT;
+static uint64_t g_mixLogged[DIF_MIX_LOGGED];
+static uint32_t g_mixLoggedCount;
+static void MixLog(uint32_t base, uint32_t partner, uint32_t layout, const uint32_t* ids, const int32_t* classes, uint32_t count)
+{
+    uintptr_t baseRow = g_difficultyGame + DIF_MISSIONS + base * DIF_MISSION_ROW;
+    uint64_t hash = MixHash(base, partner, layout);
+    for (uint32_t i = 0; i < count; i++) hash = MixHash(hash, ids[i], i);
+    int fresh = 1, full = 0;
+    AcquireSRWLockExclusive(&g_mixLogLock);
+    for (uint32_t i = 0; i < g_mixLoggedCount && i < DIF_MIX_LOGGED; i++) fresh &= g_mixLogged[i] != hash;
+    if (fresh && g_mixLoggedCount < DIF_MIX_LOGGED) g_mixLogged[g_mixLoggedCount] = hash;
+    if (fresh && g_mixLoggedCount <= DIF_MIX_LOGGED) full = g_mixLoggedCount++ == DIF_MIX_LOGGED;
+    else fresh = 0;
+    ReleaseSRWLockExclusive(&g_mixLogLock);
+    if (!fresh) return;
+    if (full) { Note("difficulty: %u mixed missions logged; later ones are not", DIF_MIX_LOGGED); return; }
+    char list[600];
+    int at = 0;
+    for (uint32_t i = 0; i < count && at < (int)sizeof list - 16; i++)
+        at += snprintf(list + at, sizeof list - (size_t)at, " %08x/%d", ids[i], classes != NULL ? classes[i] : RowClass(baseRow, ids[i]));
+    list[at] = 0;
+    Note("difficulty: mission row %u mixed with row %u on layout %u, objectives (id/class):%s", base, partner, layout, list);
+}
+
 /* Called at the end of objective selection at the added level. The nested call (marked) only reports its layout. */
-static uint32_t MixPartner(uint8_t* inputs, uint32_t count, uint32_t* ids, int32_t* classes, uint32_t layout);
+static uint32_t MixPartner(uint8_t* inputs, uint32_t count, uint32_t* ids, int32_t* classes, uint32_t layout, uint32_t* mixedWith);
 static uint32_t MixMission(uint8_t* inputs, uint32_t count, uint32_t* ids, int32_t* classes, uint32_t layout)
 {
     if (inputs[0x14] == DIF_MIX_MARK) { inputs[0x15] = (uint8_t)layout; inputs[0x16] = 1; return count; }
-    count = MixPartner(inputs, count, ids, classes, layout);
-    return RadarKeep(inputs, count, ids, classes, layout);
+    uint32_t partner = UINT32_MAX, base;
+    memcpy(&base, inputs + 8, 4);
+    count = MixPartner(inputs, count, ids, classes, layout, &partner);
+    count = RadarKeep(inputs, count, ids, classes, layout);
+    if (partner != UINT32_MAX) MixLog(base, partner, layout, ids, classes, count);
+    return count;
 }
 
-static uint32_t MixPartner(uint8_t* inputs, uint32_t count, uint32_t* ids, int32_t* classes, uint32_t layout)
+static uint32_t MixPartner(uint8_t* inputs, uint32_t count, uint32_t* ids, int32_t* classes, uint32_t layout, uint32_t* mixedWith)
 {
     uintptr_t game = g_difficultyGame;
     uint32_t in[4];
@@ -1905,6 +1937,7 @@ static uint32_t MixPartner(uint8_t* inputs, uint32_t count, uint32_t* ids, int32
             }
             InterlockedIncrement(&g_secondPrimaries);
             InterlockedExchangeAdd(&g_mixSteps, (LONG)(kept - mains));
+            *mixedWith = partner;
             return count;
         }
     }
