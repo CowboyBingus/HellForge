@@ -42,6 +42,14 @@ static class RecordGuardTests
         var numeric = RecordGuard.Lobby(new JsonObject { ["planetId"] = 7, ["seed"] = 5 });
         check(seeded?["seed"]?.GetValue<string>() == full && forged != null && !forged.ContainsKey("seed") && numeric != null && !numeric.ContainsKey("seed"),
             "A lobby record keeps a valid seed past the text limit and drops a forged or non-text one.");
+        // The lobby directory's schema (LobbyRecords): published with its seed; a stranger's listing with a forged seed is
+        // refused, and this machine's own record leaves a forged one out.
+        static JsonObject Listing(string seed) => JsonNode.Parse($"{{\"planetId\":7,\"seed\":\"{seed}\"}}")!.AsObject();
+        var listed = LobbyRecords.Clean(Listing(hostSeed), strict: true);
+        var forgedListing = LobbyRecords.Clean(Listing(Seed(0, 0, 0, 0, 0, 9)), strict: true);
+        var ownForged = LobbyRecords.Clean(Listing(hostSeed + "0"), strict: false);
+        check(listed?["seed"]?.GetValue<string>() == hostSeed && forgedListing == null && ownForged != null && !ownForged.ContainsKey("seed"),
+            "The directory keeps a valid seed, refuses a stranger's listing with a forged one and leaves a forged one out of its own.");
         var live = RecordGuard.Live(new JsonObject { ["missionTime"] = 30, ["playerPositions"] = new JsonArray(1, 2), ["other"] = 1 });
         check(live != null && live.Count == 2 && !live.ContainsKey("other"), "A live state keeps its known fields.");
         var objects = RecordGuard.Objects(new JsonObject { ["Title"] = new JsonObject { ["DataObject"] = "abc" }, ["bad\u0001key"] = 1 });
