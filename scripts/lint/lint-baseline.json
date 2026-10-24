@@ -1,0 +1,5 @@
+{
+  "format": 1,
+  "note": "Known structure violations per (unit, file, rule, normalised line text) with the measured value. `python scripts/lint/lint.py check` fails when one is new or worse; `update` rewrites this file.",
+  "entries": []
+}
