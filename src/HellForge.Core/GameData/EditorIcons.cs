@@ -15,8 +15,8 @@ namespace HellForge.Core.GameData;
 //                        and the white layer (green)
 //   boosters             the sprite in colour, with its alpha
 //   passives             their glyph: the sprite is a black glyph on opaque white, a mask the game draws in a colour
-//   factions             the emblem (Terminids, Automatons, Illuminate): the sprite's red mask (green is the same, blue a
-//                        soft glow), drawn in the faction's colour
+//   factions             the emblem, drawn in the faction's colour: an opaque one's red mask (Terminids, Automatons,
+//                        Illuminate: green is the same, blue a soft glow), else its alpha (Super Earth's white emblem)
 // Sprites larger than 128 pixels are scaled down (by area, alpha-weighted): the editor draws none larger.
 //
 // game-icons.bin: "HFIC", u32 version 2, u32 count, then per icon: u8 kind (0 weapon, 1 throwable, 2 stratagem category
@@ -96,7 +96,9 @@ public static class EditorIcons
                 switch (group)
                 {
                     case "factions":
-                        icons.Add(new(7, name, w, h, 1, Channel(rgba, 0, true)));
+                        var opaque = true;
+                        for (var i = 3; i < rgba.Length && opaque; i += 4) opaque = rgba[i] == 255;
+                        icons.Add(new(7, name, w, h, 1, opaque ? Channel(rgba, 0, true) : Channel(rgba, 3, false)));
                         break;
                     case "weapons" or "throwables":
                         icons.Add(new(group == "weapons" ? 0 : 1, name, w, h, 1, Channel(rgba, 0, false)));

@@ -60,13 +60,21 @@ Tone ToneOf(const std::string& tone)
     if (tone == "support") return {C(74, 172, 232, 255), C(74, 172, 232, 40)};
     return {0, 0};
 }
-/* An enemy faction's colour, the HD2R Editor's (its emblem, the game's HUD icon, is drawn in it); 0 for any other category. */
-ImU32 FactionColour(const std::string& category)
+/* A faction's colour, the HD2R Editor's (its emblem, the game's HUD icon, is drawn in it); 0 for anything else. */
+ImU32 FactionColour(const std::string& faction)
 {
-    if (category == "terminids") return C(255, 201, 45, 255);
-    if (category == "automatons") return C(255, 80, 80, 255);
-    if (category == "illuminate") return C(183, 116, 255, 255);
+    if (faction == "terminids") return C(255, 201, 45, 255);
+    if (faction == "automatons") return C(255, 80, 80, 255);
+    if (faction == "illuminate") return C(183, 116, 255, 255);
+    if (faction == "super_earth") return C(95, 195, 245, 255);
     return 0;
+}
+/* The faction whose emblem an object shows: an entity's own (structures and other entities too), else its page's. */
+const std::string& FactionOf(const Object* object) { return object->faction.empty() ? object->category : object->faction; }
+/* An object on a page of entities, where most rows have an emblem (Structures, Other Entities; the factions' pages). */
+bool EntityPage(const Object* object)
+{
+    return object->category == "structures" || object->category == "entities" || FactionColour(object->category) != 0;
 }
 const float SZ_TITLE = 22, SZ_TAB = 15, SZ_HEADING = 13, SZ_LABEL = 15, SZ_SMALL = 13, SZ_TINY = 12;
 const float PANEL_W = 1260, PANEL_H = 930, PANEL_MIN_H = 660;
@@ -1112,7 +1120,7 @@ float DrawMarks(const Marks& m, float x, float cy, float size)
 }
 
 /* An object's icon, fitted into a square: the game's HUD silhouette of a weapon or throwable; a stratagem's icon as the
- * game draws it (its category layer in the category's colour, its white layer white); a booster as it is; an enemy its
+ * game draws it (its category layer in the category's colour, its white layer white); a booster as it is; an entity its
  * faction's emblem in the faction's colour. A stratagem with no icon is a plain square in its colour (never made-up art).
  * False when there is nothing to draw. */
 bool DrawIcon(const Object* object, float x, float y, float size, int z = 4)
@@ -1155,9 +1163,9 @@ bool DrawIcon(const Object* object, float x, float y, float size, int z = 4)
         fit(icon, ICON, z);
         return true;
     }
-    if (ImU32 faction = FactionColour(object->category))
+    if (ImU32 faction = FactionColour(FactionOf(object)))
     {
-        const icons::Icon* icon = icons::Find(icons::FACTION, object->category);
+        const icons::Icon* icon = icons::Find(icons::FACTION, FactionOf(object));
         if (icon == nullptr) return false;
         fit(icon, faction, z);
         return true;
@@ -3384,7 +3392,8 @@ void DrawObjects(float y0, float h)
         }
         else if (hovered) g_cv.Rect(x + 8, y + 2, w - 16, rh - 4, HOVER, 2);
         float tx = x + 22;
-        if (DrawIcon(object, x + 18, y + 5, rh - 10)) tx = x + 18 + rh;
+        /* a page of entities keeps the emblem's room on every row, those of no known faction too, so the names line up */
+        if (DrawIcon(object, x + 18, y + 5, rh - 10) || EntityPage(object)) tx = x + 18 + rh;
         g_cv.Text(object->name, tx, y + 15, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, w - 56 - (tx - x)));
         g_cv.Text(object->subtitle, tx, y + 31, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, w - 56 - (tx - x)));
         auto found = marks.objects.find(object);

@@ -14,6 +14,8 @@ public sealed record StatsPart(string Category, string Target, string Title);
 public sealed record StatsItem(string Id, string Name, string Nav, string? Group, string? Subtitle, IReadOnlyList<StatsPart> Parts)
 {
     public string Search { get; init; } = "";
+    // An entity's faction (StatsTarget.Faction), for its emblem in the editor.
+    public string? Faction { get; init; }
 }
 public sealed record StatsRow(StatsPart Part, string Key, StatsField Field, string Label)
 {
@@ -115,7 +117,7 @@ public static class StatsCatalog
             var nav = target.Family is "terminids" or "automatons" or "illuminate" or "structures" ? target.Family : "entities";
             var unnamed = name.StartsWith("unnamed_entity", StringComparison.Ordinal);
             items.Add(new("enemies/" + name, target.Label ?? name, nav, unnamed ? "Unnamed" : null, unnamed ? name : null, [Part("enemies", name, "Entity")])
-                { Search = name });
+                { Search = name, Faction = target.Faction });
         }
         // The HD2R Editor's Spawning pages: a difficulty's budgets, an enemy's spawn weights, a squad composition (by faction),
         // a demolition template's force.

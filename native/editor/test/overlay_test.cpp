@@ -563,7 +563,8 @@ int main(int argc, char** argv)
             }
         };
         Key(window, VK_F6); pump(4);
-        Type(window, "overseer"); pump(6);
+        /* HELLFORGE_EDITOR_TEST_SEARCH: another entity to open (a structure, say) */
+        Type(window, getenv("HELLFORGE_EDITOR_TEST_SEARCH") ? getenv("HELLFORGE_EDITOR_TEST_SEARCH") : "overseer"); pump(6);
         /* the enemy opened with its hundreds of fields, then two seconds of frames: with a slow get_live
          * (HELLFORGE_EDITOR_TEST_LIVE_US), none may stall */
         if (const char* cost = getenv("HELLFORGE_EDITOR_TEST_LIVE_US")) g_liveCostUs = atoll(cost);

@@ -70,6 +70,7 @@ struct Category { std::string title, key, prefix; bool flat = false, plain = fal
 struct Object
 {
     std::string id, name, category, subtitle, icon, search, tone; /* tone: offensive, defensive, support or none */
+    std::string faction;                      /* an entity's: terminids, automatons, illuminate, super_earth or none */
     std::string notOffered;                   /* why HD2R Editor offers no projectile swap for it, or "" */
     std::string sprite, detail;               /* its icon by another name (an armor perk's passive); what it is */
     std::vector<Category> page;
