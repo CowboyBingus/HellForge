@@ -280,6 +280,15 @@ class Measures(unittest.TestCase):
         ''', 'c')
         self.assertEqual(function.stack_bytes, 260 + 4096 + 16 + 128)
 
+    def test_array_sizes(self):
+        """Sizes are C arithmetic, without an exponent and bounded: `9**9**9` is no size, and is refused at once."""
+        sizes = {'2 * 1024': 2048, '1 << 20': 1 << 20, '(2 + 3) * 4 << 1': 40, '16 / 3': 5, 'MAX_PATH * 2': 520,
+                 '0x10 + 1': 17, '9**9**9': None, '9 ** 9': None, '1 << 100': None, '-4': None, '4 / 0': None,
+                 '1 << 63 << 1': None}
+        for size, want in sizes.items():
+            function = one(f'void f(void) {{ char a[{size}]; }}', 'c')
+            self.assertEqual(function.stack_bytes or None, want, size)
+
     def test_module_lines(self):
         self.assertEqual(model('#include <a.h>\n\nint a;\n// note\nint b;\n', 'c').code_lines, 3)
 

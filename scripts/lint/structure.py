@@ -939,28 +939,100 @@ class _Source:
         function.stack_bytes += total
 
     def constant(self, start: int, stop: int) -> int | None:
-        parts = []
+        """An array size written with numbers, known constants and + - * / << >> ( ); None for anything else."""
+        parts: list[int | str] = []
         for k in range(start, stop):
             token = self.at(k)
             if token.kind == 'number':
                 text = re.sub(r"[uUlL']+$", '', token.value.replace("'", ''))
                 try:
-                    parts.append(str(int(text, 0)))
+                    parts.append(int(text, 0))
                 except ValueError:
                     return None
             elif token.kind == 'name' and token.value in KNOWN_CONSTANTS:
-                parts.append(str(KNOWN_CONSTANTS[token.value]))
-            elif token.kind == 'op' and token.value in ('+', '-', '*', '/', '(', ')', '<<', '>>'):
-                parts.append(token.value.replace('/', '//'))
+                parts.append(KNOWN_CONSTANTS[token.value])
+            elif token.kind == 'op' and token.value in _Arithmetic.OPERATORS:
+                parts.append(token.value)
             else:
                 return None
-        if not parts:
+        value = _Arithmetic(parts).value()
+        return value if value is not None and value > 0 else None
+
+
+class _Arithmetic:
+    """C's integer arithmetic over a size's tokens, by precedence (shifts below + -, below * /), with no exponent: two
+    operators in a row, as in `9**9`, are not a size. Values from 2**64 on are refused, so no size makes a huge
+    number."""
+    OPERATORS = ('+', '-', '*', '/', '(', ')', '<<', '>>')
+    LIMIT = 1 << 64
+
+    def __init__(self, parts: list):
+        self.parts, self.at = parts, 0
+
+    def value(self) -> int | None:
+        if not self.parts:
             return None
         try:
-            value = eval(''.join(parts), {'__builtins__': {}}, {})   # digits and arithmetic only
-        except (SyntaxError, ZeroDivisionError, TypeError):
+            result = self.shift()
+        except (ValueError, ZeroDivisionError, RecursionError):
             return None
-        return value if isinstance(value, int) and value > 0 else None
+        return result if self.at == len(self.parts) else None
+
+    def peek(self):
+        return self.parts[self.at] if self.at < len(self.parts) else None
+
+    def take(self):
+        part = self.peek()
+        self.at += 1
+        return part
+
+    def bounded(self, value: int) -> int:
+        if abs(value) >= self.LIMIT:
+            raise ValueError('too large')
+        return value
+
+    def shift(self) -> int:
+        value = self.additive()
+        while self.peek() in ('<<', '>>'):
+            operator, count = self.take(), self.additive()
+            if not 0 <= count < 64:
+                raise ValueError('shift count')
+            value = self.bounded(value << count if operator == '<<' else value >> count)
+        return value
+
+    def additive(self) -> int:
+        value = self.term()
+        while self.peek() in ('+', '-'):
+            operator, right = self.take(), self.term()
+            value = self.bounded(value + right if operator == '+' else value - right)
+        return value
+
+    def term(self) -> int:
+        value = self.unary()
+        while self.peek() in ('*', '/'):
+            operator, right = self.take(), self.unary()
+            value = self.bounded(value * right if operator == '*' else int(value / right))   # C truncates
+        return value
+
+    def unary(self) -> int:
+        if self.peek() in ('+', '-'):
+            operator = self.take()
+            if self.peek() in ('+', '-'):
+                raise ValueError('two signs')
+            value = self.unary()
+            return -value if operator == '-' else value
+        return self.primary()
+
+    def primary(self) -> int:
+        part = self.take()
+        if isinstance(part, int):
+            return self.bounded(part)
+        if part == '(':
+            value = self.shift()
+            if self.take() != ')':
+                raise ValueError('unclosed (')
+            return value
+        raise ValueError('not a number')
 
 
 @dataclass
