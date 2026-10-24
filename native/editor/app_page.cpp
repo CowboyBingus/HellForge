@@ -47,7 +47,6 @@ Object* Current()
     return g_obj >= 0 && g_obj < (int)list.size() ? list[g_obj] : nullptr;
 }
 
-
 static bool IsOpen(const std::string& key) { return g_open.count(key) != 0; }
 
 static std::vector<Item> ItemsNow(const Object* object);
@@ -65,6 +64,22 @@ const std::vector<Item>& Items(const Object* object)
     return cached;
 }
 
+/* A part's rows of a weapon's stats: on the weapons page, by the weapon's stats target. */
+static std::vector<const Row*> WeaponRows(const catalog::Part& p, const std::string& target)
+{
+    std::vector<const Row*> rows;
+    for (const Row* r : p.rows) if (r->category == "weapons" && r->target == target) rows.push_back(r);
+    return rows;
+}
+
+/* An object's parts holding a weapon's stats rows, each under its title (a flat category's own). */
+static void AddWeaponSections(const Object& o, const std::string& target, std::vector<std::pair<std::string, std::vector<const Row*>>>& sections)
+{
+    for (auto& c : o.page)
+        for (auto& p : c.parts)
+            if (std::vector<const Row*> rows = WeaponRows(p, target); !rows.empty()) sections.push_back({c.flat ? c.title : p.title, rows});
+}
+
 /* A weapon's stats as its own page shows them (a mount's: "Weapon · Left gun" on its vehicle): each part's title and rows,
  * by the weapon's stats target. Found once. */
 static const std::vector<std::pair<std::string, std::vector<const Row*>>>& WeaponSections(const std::string& target)
@@ -75,16 +90,128 @@ static const std::vector<std::pair<std::string, std::vector<const Row*>>>& Weapo
     auto& sections = found[target];
     for (auto& o : g_catalog.objects)
     {
-        for (auto& c : o->page)
-            for (auto& p : c.parts)
-            {
-                std::vector<const Row*> rows;
-                for (const Row* r : p.rows) if (r->category == "weapons" && r->target == target) rows.push_back(r);
-                if (!rows.empty()) sections.push_back({c.flat ? c.title : p.title, rows});
-            }
+        AddWeaponSections(*o, target, sections);
         if (!sections.empty()) break;
     }
     return sections;
+}
+
+static void AddNote(std::vector<Item>& items, const std::string& text, int depth) { Item it; it.note = text; it.depth = depth; items.push_back(it); }
+
+/* a row a reference locks is hidden, unless it holds a change of its own (then it shows, LOCKED) */
+static bool Hidden(const Row* r) { double held; return !LockOf(r).empty() && !PendingOf(r) && !Saved(r, &held); }
+
+/* The rows of other pages on a settings record's fields (component, ref, offsets), where the catalogue has them, at a
+ * depth under a prefix; how many. */
+static int AddViews(std::vector<Item>& items, int depth, const std::string& prefix, const char* component, uint64_t ref, std::initializer_list<uint16_t> offsets)
+{
+    int shown = 0;
+    for (uint16_t offset : offsets)
+        if (const Row* s = g_catalog.Setting(component, ref, offset)) { Item v; v.row = s; v.depth = depth; v.prefix = prefix; items.push_back(v); shown++; }
+    return shown;
+}
+
+/* the status in the slot: its duration, for every use of it */
+static void AddStatusViews(std::vector<Item>& items, const Row* r, int depth)
+{
+    RowView v = ViewOf(r);
+    if (v.has && v.value != 0) AddViews(items, depth, RefLabel(r, v.value) + " (all uses)", "StatusEffectSettings", (uint64_t)v.value, {40});
+}
+
+/* A donor round: why the weapon's own round's rows are hidden, and the donor's round, where the editor has it (edits land
+ * on the donor's own item, for everything that fires it). */
+static void AddDonorViews(std::vector<Item>& items, const Row* r, int depth, double value)
+{
+    AddNote(items, "Fires " + RefLabel(r, value) + " now: its own round's rows are hidden until \"" + r->label + "\" is reset", depth);
+    std::string donor = "Donor " + RefLabel(r, value);
+    int shown = AddViews(items, depth, donor, "ProjectileSettings", (uint64_t)value, {32, 36, 40, 44, 28, 52, 64, 144, 156});
+    double hurt;
+    if (ReadSetting("ProjectileSettings", (uint64_t)value, 60, HF_TYPE_U32, &hurt) && hurt != 0)
+        shown += AddViews(items, depth, donor, "DamageInfo", (uint64_t)hurt, {4, 8, 12, 16, 20, 24, 28, 32, 36, 44, 52, 60, 68});
+    if (shown == 0) AddNote(items, donor + ": no item of the editor shows its round", depth);
+}
+
+/* the explosion it sets off now: its rows where the catalogue shows them (edits land there) */
+static void AddExplosionViews(std::vector<Item>& items, const Row* r, int depth, double value)
+{
+    std::string name = RefLabel(r, value);
+    int shown = AddViews(items, depth, name, "ExplosionSettings", (uint64_t)value, {16, 20, 24});
+    if (uint32_t damage = ExplosionDamage((uint32_t)value)) shown += AddViews(items, depth, name, "DamageInfo", damage, {4, 8, 12, 16, 20, 24, 28, 32, 36});
+    if (shown == 0) AddNote(items, name + ": no item of the editor shows its fields", depth);
+}
+
+/* A row, unless a reference hides it, and what its pick shows after it: the status in its slot, the donor round it
+ * fires, the explosion it sets off. */
+static void AddRow(std::vector<Item>& items, const Row* r, int depth, const std::string& prefix)
+{
+    if (Hidden(r)) return;
+    Item it; it.row = r; it.depth = depth; it.prefix = prefix; items.push_back(it);
+    double value;
+    if (r->pick == "status" && r->Live()) AddStatusViews(items, r, depth);
+    if (r->pick == "projectile" && Swapped(r, &value)) AddDonorViews(items, r, depth, value);
+    if (r->pick != "explosion" || !Swapped(r, &value) || value == 0) return;
+    AddExplosionViews(items, r, depth, value);
+}
+
+/* The weapon a vehicle weapon's slot holds when it is not the vehicle's own (the category then shows that weapon's
+ * stats), else nullptr. */
+static const Row::Option* SwappedWeapon(const catalog::Category& c)
+{
+    for (auto& p : c.parts)
+        for (const Row* r : p.rows)
+        {
+            if (r->mountSlot.empty()) continue;
+            const Row* slot = g_catalog.Entry("mounts", MountVehicle(r), r->mountSlot);
+            if (slot == nullptr || slot->options.empty()) continue;
+            if (const Row::Option* o = slot->OptionOf(ViewOf(slot).value); o != nullptr && o != &slot->options[0]) return o;
+        }
+    return nullptr;
+}
+
+/* a vehicle weapon's category while its slot holds another weapon: that weapon's stats, editable there */
+static void AddSwappedCategory(std::vector<Item>& items, const catalog::Category& c, const Row::Option* swapped)
+{
+    static const std::vector<std::pair<std::string, std::vector<const Row*>>> none;
+    auto& sections = swapped->target.empty() ? none : WeaponSections(swapped->target);
+    Item h;
+    h.header = h.category = true; h.title = c.title + SEP + swapped->label; h.key = c.key; h.open = IsOpen(c.key);
+    for (auto& [title, rows] : sections) { h.count += (int)rows.size(); h.rows.insert(h.rows.end(), rows.begin(), rows.end()); }
+    h.parts = (int)sections.size();
+    items.push_back(h);
+    if (!h.open) return;
+    if (sections.empty()) { AddNote(items, swapped->label + ": no page of the editor shows its stats", 1); return; }
+    for (auto& [title, rows] : sections)
+    {
+        Item s;
+        s.header = true; s.title = title; s.key = c.key + "|" + swapped->target + "|" + title; s.open = IsOpen(s.key);
+        s.count = (int)rows.size(); s.depth = 1;
+        s.rows = rows;
+        items.push_back(s);
+        if (s.open) for (const Row* r : rows) AddRow(items, r, 2, "");
+    }
+}
+
+/* A part of an open category: a folded part is its one row; a part whose rows are all hidden is left out. */
+static void AddPart(std::vector<Item>& items, const catalog::Part& p)
+{
+    if (p.fold) { AddRow(items, p.rows[0], 1, p.prefix); return; }
+    if (std::all_of(p.rows.begin(), p.rows.end(), Hidden)) return;
+    Item s;
+    s.header = true; s.title = p.title; s.key = p.key; s.open = IsOpen(p.key); s.count = (int)p.rows.size(); s.depth = 1;
+    s.rows.assign(p.rows.begin(), p.rows.end());
+    items.push_back(s);
+    if (s.open) for (const Row* r : p.rows) AddRow(items, r, 2, "");
+}
+
+static void AddCategory(std::vector<Item>& items, const catalog::Category& c)
+{
+    Item h;
+    h.header = h.category = true; h.title = c.title; h.key = c.key; h.open = IsOpen(c.key); h.count = c.Count(); h.parts = (int)c.parts.size();
+    for (auto& p : c.parts) h.rows.insert(h.rows.end(), p.rows.begin(), p.rows.end());
+    items.push_back(h);
+    if (!h.open) return;
+    if (c.flat) { for (const Row* r : c.parts[0].rows) AddRow(items, r, 1, ""); return; }
+    for (auto& p : c.parts) AddPart(items, p);
 }
 
 static std::vector<Item> ItemsNow(const Object* object)
@@ -104,96 +231,11 @@ static std::vector<Item> ItemsNow(const Object* object)
         it.note = "No projectile swap: " + object->notOffered;
         items.push_back(it);
     }
-    auto note = [&](const std::string& text, int depth) { Item it; it.note = text; it.depth = depth; items.push_back(it); };
-    /* a row a reference locks is hidden, unless it holds a change of its own (then it shows, LOCKED) */
-    auto hidden = [&](const Row* r) { double held; return !LockOf(r).empty() && !PendingOf(r) && !Saved(r, &held); };
-    auto row = [&](const Row* r, int depth, const std::string& prefix) {
-        if (hidden(r)) return;
-        Item it; it.row = r; it.depth = depth; it.prefix = prefix; items.push_back(it);
-        double value;
-        auto views = [&](const std::string& prefix, const char* component, uint64_t ref, std::initializer_list<uint16_t> offsets) {
-            int shown = 0;
-            for (uint16_t offset : offsets)
-                if (const Row* s = g_catalog.Setting(component, ref, offset)) { Item v; v.row = s; v.depth = depth; v.prefix = prefix; items.push_back(v); shown++; }
-            return shown;
-        };
-        if (r->pick == "status" && r->Live())
-        {
-            /* the status in the slot: its duration, for every use of it */
-            RowView v = ViewOf(r);
-            if (v.has && v.value != 0) views(RefLabel(r, v.value) + " (all uses)", "StatusEffectSettings", (uint64_t)v.value, {40});
-        }
-        if (r->pick == "projectile" && Swapped(r, &value))
-        {
-            note("Fires " + RefLabel(r, value) + " now: its own round's rows are hidden until \"" + r->label + "\" is reset", depth);
-            /* the donor's round, where the editor has it (edits land on the donor's own item, for everything that fires it) */
-            std::string donor = "Donor " + RefLabel(r, value);
-            int shown = views(donor, "ProjectileSettings", (uint64_t)value, {32, 36, 40, 44, 28, 52, 64, 144, 156});
-            double hurt;
-            if (ReadSetting("ProjectileSettings", (uint64_t)value, 60, HF_TYPE_U32, &hurt) && hurt != 0)
-                shown += views(donor, "DamageInfo", (uint64_t)hurt, {4, 8, 12, 16, 20, 24, 28, 32, 36, 44, 52, 60, 68});
-            if (shown == 0) note(donor + ": no item of the editor shows its round", depth);
-        }
-        if (r->pick != "explosion" || !Swapped(r, &value) || value == 0) return;
-        /* the explosion it sets off now: its rows where the catalogue shows them (edits land there) */
-        static const uint16_t blast[] = {16, 20, 24}, hurt[] = {4, 8, 12, 16, 20, 24, 28, 32, 36};
-        std::string name = RefLabel(r, value);
-        int shown = 0;
-        for (uint16_t offset : blast)
-            if (const Row* s = g_catalog.Setting("ExplosionSettings", (uint64_t)value, offset)) { Item v; v.row = s; v.depth = depth; v.prefix = name; items.push_back(v); shown++; }
-        if (uint32_t damage = ExplosionDamage((uint32_t)value))
-            for (uint16_t offset : hurt)
-                if (const Row* s = g_catalog.Setting("DamageInfo", damage, offset)) { Item v; v.row = s; v.depth = depth; v.prefix = name; items.push_back(v); shown++; }
-        if (shown == 0) note(name + ": no item of the editor shows its fields", depth);
-    };
     for (auto& c : object->page)
     {
-        if (c.plain) { row(c.parts[0].rows[0], 0, c.prefix); continue; }
-        /* a vehicle weapon's category while its slot holds another weapon: that weapon's stats, editable there */
-        const Row::Option* swapped = nullptr;
-        for (auto& p : c.parts)
-            for (const Row* r : p.rows)
-                if (!r->mountSlot.empty() && swapped == nullptr)
-                    if (const Row* slot = g_catalog.Entry("mounts", MountVehicle(r), r->mountSlot); slot != nullptr && !slot->options.empty())
-                        if (const Row::Option* o = slot->OptionOf(ViewOf(slot).value); o != nullptr && o != &slot->options[0]) swapped = o;
-        if (swapped != nullptr)
-        {
-            static const std::vector<std::pair<std::string, std::vector<const Row*>>> none;
-            auto& sections = swapped->target.empty() ? none : WeaponSections(swapped->target);
-            Item h;
-            h.header = h.category = true; h.title = c.title + SEP + swapped->label; h.key = c.key; h.open = IsOpen(c.key);
-            for (auto& [title, rows] : sections) { h.count += (int)rows.size(); h.rows.insert(h.rows.end(), rows.begin(), rows.end()); }
-            h.parts = (int)sections.size();
-            items.push_back(h);
-            if (!h.open) continue;
-            if (sections.empty()) { note(swapped->label + ": no page of the editor shows its stats", 1); continue; }
-            for (auto& [title, rows] : sections)
-            {
-                Item s;
-                s.header = true; s.title = title; s.key = c.key + "|" + swapped->target + "|" + title; s.open = IsOpen(s.key);
-                s.count = (int)rows.size(); s.depth = 1;
-                s.rows = rows;
-                items.push_back(s);
-                if (s.open) for (const Row* r : rows) row(r, 2, "");
-            }
-            continue;
-        }
-        Item h;
-        h.header = h.category = true; h.title = c.title; h.key = c.key; h.open = IsOpen(c.key); h.count = c.Count(); h.parts = (int)c.parts.size();
-        for (auto& p : c.parts) h.rows.insert(h.rows.end(), p.rows.begin(), p.rows.end());
-        items.push_back(h);
-        if (!h.open) continue;
-        if (c.flat) { for (const Row* r : c.parts[0].rows) row(r, 1, ""); continue; }
-        for (auto& p : c.parts)
-        {
-            if (p.fold) { row(p.rows[0], 1, p.prefix); continue; }
-            if (std::all_of(p.rows.begin(), p.rows.end(), hidden)) continue;
-            Item s;
-            s.header = true; s.title = p.title; s.key = p.key; s.open = IsOpen(p.key); s.count = (int)p.rows.size(); s.depth = 1;
-            s.rows.assign(p.rows.begin(), p.rows.end());
-            items.push_back(s);
-            if (s.open) for (const Row* r : p.rows) row(r, 2, "");
-        }
+        if (c.plain) { AddRow(items, c.parts[0].rows[0], 0, c.prefix); continue; }
+        if (const Row::Option* swapped = SwappedWeapon(c)) AddSwappedCategory(items, c, swapped);
+        else AddCategory(items, c);
     }
     return items;
 }
@@ -207,6 +249,30 @@ void Toggle(const std::string& key, int open)
     SaveSettings();
 }
 
+static void SetOpen(const std::string& key, bool open) { if (open) g_open.insert(key); else g_open.erase(key); }
+
+/* A category's header and its parts' headers (a flat category has none for its parts, a folded part none). */
+static void SetCategoryOpen(const catalog::Category& c, bool open)
+{
+    SetOpen(c.key, open);
+    if (c.flat) return;
+    for (auto& p : c.parts) if (!p.fold) SetOpen(p.key, open);
+}
+
+/* Where the focused item is once the headers turned: the same row or header, else the category holding the row; 0 when
+ * it is gone. */
+static int FocusAfter(const std::vector<Item>& after, const Item& focused)
+{
+    int field = 0;
+    for (int i = 0; i < (int)after.size(); i++)
+    {
+        if ((focused.row && after[i].row == focused.row) || (!focused.key.empty() && after[i].key == focused.key)) return i;
+        if (focused.row && after[i].header && after[i].depth == 0 &&
+            std::find(after[i].rows.begin(), after[i].rows.end(), focused.row) != after[i].rows.end()) field = i;
+    }
+    return field;
+}
+
 /* Collapse or expand every header of the page; the focused row stays focused when it is still shown. */
 void SetPageOpen(const Object* object, bool open)
 {
@@ -214,21 +280,10 @@ void SetPageOpen(const Object* object, bool open)
     auto before = Items(object);
     g_layoutVersion++;
     Item focused = g_field < (int)before.size() ? before[g_field] : Item{};
-    for (auto& c : object->page)
-    {
-        if (c.plain) continue;
-        if (open) g_open.insert(c.key); else g_open.erase(c.key);
-        if (!c.flat) for (auto& p : c.parts) if (!p.fold) { if (open) g_open.insert(p.key); else g_open.erase(p.key); }
-    }
+    for (auto& c : object->page) if (!c.plain) SetCategoryOpen(c, open);
     SaveSettings();
     auto after = Items(object);
-    g_field = 0;
-    for (int i = 0; i < (int)after.size(); i++)
-    {
-        if ((focused.row && after[i].row == focused.row) || (!focused.key.empty() && after[i].key == focused.key)) { g_field = i; break; }
-        if (focused.row && after[i].header && after[i].depth == 0 &&
-            std::find(after[i].rows.begin(), after[i].rows.end(), focused.row) != after[i].rows.end()) g_field = i;
-    }
+    g_field = FocusAfter(after, focused);
 }
 
 bool PageOpen(const Object* object)
@@ -285,11 +340,9 @@ std::vector<const Row*> ItemChanges(const Object* object)
     return rows;
 }
 
-void ResetItem(const Object* object)
+/* The other objects on these rows' bytes, as RESET ITEM's toast names them: three, then how many more. */
+static std::string SharedNames(const Object* object, const std::vector<const Row*>& rows)
 {
-    if (RefuseLocked()) return;
-    auto rows = ItemChanges(object);
-    if (rows.empty()) return;
     std::set<std::string> shared;
     for (const Row* r : rows)
         for (const Row* s : g_catalog.Siblings(r)) if (s->object != object) shared.insert(s->object->name);
@@ -297,6 +350,15 @@ void ResetItem(const Object* object)
     int n = 0;
     for (auto& s : shared) { if (n < 3) names += (n ? ", " : "") + s; n++; }
     if (n > 3) names += " (+" + std::to_string(n - 3) + ")";
+    return names;
+}
+
+void ResetItem(const Object* object)
+{
+    if (RefuseLocked()) return;
+    auto rows = ItemChanges(object);
+    if (rows.empty()) return;
+    std::string names = SharedNames(object, rows);
     /* staged only (APPLY writes it, DISCARD takes it back): no confirmation needed */
     int marked = 0, dropped = 0;
     for (const Row* r : rows)
@@ -367,25 +429,31 @@ void Reveal(const Row* row)
 }
 
 /* ---- search (SEARCH: every object, by name and group; a word of four letters or more also names a category) ---- */
+static bool NamesCategory(const std::string& word, const std::string& label)
+{
+    if (word.size() < 4) return false;
+    for (auto& part : Words(label)) if (part.rfind(word, 0) == 0) return true;
+    return false;
+}
+
+/* Every word is in the object's names (hay), or names its category or group. */
+static bool AllWords(const std::vector<std::string>& words, const std::string& hay, const catalog::Nav& nav)
+{
+    for (auto& w : words)
+        if (hay.find(w) == std::string::npos && !NamesCategory(w, nav.label) && !NamesCategory(w, nav.group)) return false;
+    return true;
+}
 
 std::vector<Result> SearchResults(const std::string& text)
 {
     std::vector<Result> out;
     auto words = Words(text);
     if (words.empty()) return out;
-    auto namesCategory = [](const std::string& word, const std::string& label) {
-        if (word.size() < 4) return false;
-        for (auto& part : Words(label)) if (part.rfind(word, 0) == 0) return true;
-        return false;
-    };
     for (auto& nav : g_catalog.navs)
         for (Object* o : g_catalog.Of(nav.id))
         {
             std::string hay = Lower(o->name) + " " + Lower(o->subtitle) + " " + o->search;
-            bool ok = true;
-            for (auto& w : words)
-                if (hay.find(w) == std::string::npos && !namesCategory(w, nav.label) && !namesCategory(w, nav.group)) { ok = false; break; }
-            if (ok)
+            if (AllWords(words, hay, nav))
                 out.push_back({o, nav.label + (o->subtitle.empty() ? "" : std::string("  \xC2\xB7  ") + o->subtitle),
                     Lower(o->name).rfind(words[0], 0) == 0, (int)out.size()});
         }

@@ -257,7 +257,6 @@ const Pend* PendingOf(const Row* row)
     return nullptr;
 }
 
-
 static RowView ViewOfNow(const Row* row, bool withPending);
 /* A row's view, once a frame (and again after a change): pages, marks and lists ask for it many times. */
 RowView ViewOf(const Row* row, bool withPending)
