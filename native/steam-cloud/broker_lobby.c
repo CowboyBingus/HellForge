@@ -4,6 +4,7 @@
  * and every change takes <id>.lock first, reads the file, and writes it again whole (a new file moved over the old). All
  * of it runs on the broker's one serving thread. */
 #define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,7 +43,14 @@ struct BrokerLobbies {
     FILETIME seen[BROKER_LOBBY_MEMBERS];    /* each one's file time when last reported (LobbyDataUpdate_t) */
     int pendingCount;
     BrokerLocalResult pending[BROKER_LOBBY_PENDING];
+    /* Steam P2P between the instances: this broker's loopback socket, and the packets that arrived on it */
+    SOCKET udp;
+    int packetCount;
+    struct { uint64_t remote; int32_t channel; uint32_t size; uint8_t data[BROKER_LOCAL_PACKET]; } packets[BROKER_LOCAL_PACKETS];
 };
+
+/* A datagram between two instances' brokers: the sender's SteamID, the channel, the size, then the packet. */
+typedef struct LocalDatagram { uint64_t from; int32_t channel; uint32_t size; } LocalDatagram;
 
 static BrokerLobbies* g_current;
 static Lobby g_lobby;                       /* the lobby last read, or being changed */
@@ -331,6 +339,92 @@ static bool SetLobbyJoinable(void* self, uint64_t lobby, bool joinable)
     return ok;
 }
 
+/* ---- Steam P2P between the instances (loopback UDP; the bridge's own checks still decide who may be reached) ---- */
+
+static uint16_t PortOf(uint64_t id) { return (uint16_t)(BROKER_P2P_PORT_BASE + id % 1000); }
+
+/* Whatever arrived on this broker's socket since, into its packet list (a full list drops the rest). */
+static void Drain(BrokerLobbies* s)
+{
+    if (s->udp == INVALID_SOCKET) return;
+    static uint8_t datagram[sizeof(LocalDatagram) + BROKER_LOCAL_PACKET];
+    for (;;)
+    {
+        struct sockaddr_in from;
+        int fromLength = sizeof from;
+        int got = recvfrom(s->udp, (char*)datagram, sizeof datagram, 0, (struct sockaddr*)&from, &fromLength);
+        if (got == SOCKET_ERROR) return; /* WSAEWOULDBLOCK: nothing more */
+        LocalDatagram head;
+        if (got < (int)sizeof head || from.sin_addr.s_addr != htonl(INADDR_LOOPBACK)) continue;
+        memcpy(&head, datagram, sizeof head);
+        if (head.size > BROKER_LOCAL_PACKET || (int)(sizeof head + head.size) != got || s->packetCount >= BROKER_LOCAL_PACKETS) continue;
+        s->packets[s->packetCount].remote = head.from;
+        s->packets[s->packetCount].channel = head.channel;
+        s->packets[s->packetCount].size = head.size;
+        memcpy(s->packets[s->packetCount].data, datagram + sizeof head, head.size);
+        s->packetCount++;
+    }
+}
+
+static int FirstPacket(const BrokerLobbies* s, int32_t channel)
+{
+    for (int i = 0; i < s->packetCount; i++) if (s->packets[i].channel == channel) return i;
+    return -1;
+}
+
+static bool SendP2PPacket(void* self, uint64_t remote, const void* data, uint32_t size, int32_t type, int32_t channel)
+{
+    (void)self; (void)type;
+    BrokerLobbies* s = g_current;
+    if (s->udp == INVALID_SOCKET || size > BROKER_LOCAL_PACKET) return false;
+    static uint8_t datagram[sizeof(LocalDatagram) + BROKER_LOCAL_PACKET];
+    LocalDatagram head = { s->self, channel, size };
+    memcpy(datagram, &head, sizeof head);
+    if (size) memcpy(datagram + sizeof head, data, size);
+    struct sockaddr_in to = { 0 };
+    to.sin_family = AF_INET;
+    to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    to.sin_port = htons(PortOf(remote));
+    return sendto(s->udp, (const char*)datagram, (int)(sizeof head + size), 0, (struct sockaddr*)&to, sizeof to) == (int)(sizeof head + size);
+}
+
+static bool IsP2PPacketAvailable(void* self, uint32_t* size, int32_t channel)
+{
+    (void)self;
+    BrokerLobbies* s = g_current;
+    Drain(s);
+    int at = FirstPacket(s, channel);
+    if (size) *size = at >= 0 ? s->packets[at].size : 0;
+    return at >= 0;
+}
+
+static bool ReadP2PPacket(void* self, void* dest, uint32_t capacity, uint32_t* size, uint64_t* remote, int32_t channel)
+{
+    (void)self;
+    BrokerLobbies* s = g_current;
+    Drain(s);
+    int at = FirstPacket(s, channel);
+    if (at < 0) return false;
+    if (dest) memcpy(dest, s->packets[at].data, s->packets[at].size < capacity ? s->packets[at].size : capacity);
+    if (size) *size = s->packets[at].size;
+    if (remote) *remote = s->packets[at].remote;
+    memmove(&s->packets[at], &s->packets[at + 1], sizeof s->packets[0] * (size_t)(s->packetCount - at - 1));
+    s->packetCount--;
+    return true;
+}
+
+/* A session between two instances needs nothing set up: it is open whenever both brokers run. */
+static bool P2PSessionOk(void* self, uint64_t remote) { (void)self; (void)remote; return true; }
+static bool CloseP2PChannel(void* self, uint64_t remote, int32_t channel) { (void)self; (void)remote; (void)channel; return true; }
+static bool AllowP2PPacketRelay(void* self, bool allow) { (void)self; (void)allow; return true; }
+/* P2PSessionState_t: connection active, the rest zero */
+static bool GetP2PSessionState(void* self, uint64_t remote, void* state)
+{
+    (void)self; (void)remote;
+    if (state) { memset(state, 0, 20); ((uint8_t*)state)[0] = 1; }
+    return true;
+}
+
 /* ---- the module ---- */
 
 BrokerLobbies* BrokerLobbiesOpen(const wchar_t* folder, uint64_t self)
@@ -343,6 +437,20 @@ BrokerLobbies* BrokerLobbiesOpen(const wchar_t* folder, uint64_t self)
     CreateDirectoryW(folder, NULL);
     DWORD attributes = GetFileAttributesW(folder);
     if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) { free(s); return NULL; }
+    /* this instance's P2P socket; without it, P2P sends fail and nothing arrives (the lobby still works) */
+    WSADATA wsa;
+    s->udp = WSAStartup(MAKEWORD(2, 2), &wsa) == 0 ? socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP) : INVALID_SOCKET;
+    struct sockaddr_in at = { 0 };
+    at.sin_family = AF_INET;
+    at.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    at.sin_port = htons(PortOf(self));
+    u_long nonblocking = 1;
+    if (s->udp != INVALID_SOCKET && (bind(s->udp, (struct sockaddr*)&at, sizeof at) != 0 || ioctlsocket(s->udp, FIONBIO, &nonblocking) != 0))
+    {
+        closesocket(s->udp);
+        s->udp = INVALID_SOCKET;
+    }
+    if (s->udp == INVALID_SOCKET) fprintf(stderr, "broker: Steam P2P between the instances is off: 127.0.0.1:%u is not free\n", PortOf(self));
     return s;
 }
 
@@ -360,6 +468,14 @@ void* BrokerLobbiesResolve(const char* flat)
         { "SteamAPI_ISteamMatchmaking_GetLobbyData", (void*)GetLobbyData },
         { "SteamAPI_ISteamMatchmaking_SetLobbyData", (void*)SetLobbyData },
         { "SteamAPI_ISteamMatchmaking_SetLobbyJoinable", (void*)SetLobbyJoinable },
+        { "SteamAPI_ISteamNetworking_SendP2PPacket", (void*)SendP2PPacket },
+        { "SteamAPI_ISteamNetworking_IsP2PPacketAvailable", (void*)IsP2PPacketAvailable },
+        { "SteamAPI_ISteamNetworking_ReadP2PPacket", (void*)ReadP2PPacket },
+        { "SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser", (void*)P2PSessionOk },
+        { "SteamAPI_ISteamNetworking_CloseP2PSessionWithUser", (void*)P2PSessionOk },
+        { "SteamAPI_ISteamNetworking_CloseP2PChannelWithUser", (void*)CloseP2PChannel },
+        { "SteamAPI_ISteamNetworking_AllowP2PPacketRelay", (void*)AllowP2PPacketRelay },
+        { "SteamAPI_ISteamNetworking_GetP2PSessionState", (void*)GetP2PSessionState },
     };
     if (!flat) return NULL;
     for (size_t i = 0; i < sizeof table / sizeof table[0]; i++) if (strcmp(table[i].name, flat) == 0) return table[i].fn;
@@ -399,6 +515,7 @@ void BrokerLobbiesClose(BrokerLobbies* s)
     BrokerLobbies* before = g_current;
     g_current = s;
     while (s->inCount > 0) LeaveLobby(NULL, s->in[0]);
-    g_current = before;
+    g_current = before == s ? NULL : before;
+    if (s->udp != INVALID_SOCKET) closesocket(s->udp);
     free(s);
 }

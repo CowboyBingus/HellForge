@@ -94,6 +94,35 @@ int wmain(int argc, wchar_t** argv)
     EXPECT(members(NULL, lobby) == 2 && member(NULL, lobby, 1) == B, "the host sees the joiner among its lobby's members (what the game waits for)");
     EXPECT(Next(a, 505, &r) && memcmp(r.data, &lobby, 8) == 0 && r.data[16] == 1 && r.call == 0, "a change to the lobby's file comes as LobbyDataUpdate_t");
 
+    // Steam P2P between the instances, over their brokers' loopback sockets: the host sends, the joiner reads it with its
+    // sender, each channel apart
+    typedef bool (*SendFn)(void*, uint64_t, const void*, uint32_t, int32_t, int32_t);
+    typedef bool (*AvailableFn)(void*, uint32_t*, int32_t);
+    typedef bool (*ReadFn)(void*, void*, uint32_t, uint32_t*, uint64_t*, int32_t);
+    typedef bool (*StateFn)(void*, uint64_t, void*);
+    SendFn send = (SendFn)BrokerLobbiesResolve("SteamAPI_ISteamNetworking_SendP2PPacket");
+    AvailableFn available = (AvailableFn)BrokerLobbiesResolve("SteamAPI_ISteamNetworking_IsP2PPacketAvailable");
+    ReadFn readPacket = (ReadFn)BrokerLobbiesResolve("SteamAPI_ISteamNetworking_ReadP2PPacket");
+    StateFn state = (StateFn)BrokerLobbiesResolve("SteamAPI_ISteamNetworking_GetP2PSessionState");
+    static uint8_t bytes[7000];
+    for (int i = 0; i < (int)sizeof bytes; i++) bytes[i] = (uint8_t)(i * 13 + 5);
+    BrokerLobbiesUse(a);
+    uint8_t session[20] = { 0 };
+    EXPECT(send && available && readPacket && state && send(NULL, B, bytes, sizeof bytes, 2, 0) && send(NULL, B, "two", 3, 2, 3) &&
+        state(NULL, B, session) && session[0] == 1, "the host sends 7000 bytes on channel 0 and 3 on channel 3; the session is active");
+    BrokerLobbiesUse(b);
+    uint32_t size = 0;
+    uint64_t from = 0;
+    static uint8_t got[7000];
+    bool arrived = false;
+    for (int i = 0; i < 100 && !arrived; i++) { arrived = available(NULL, &size, 3); if (!arrived) Sleep(10); }
+    EXPECT(arrived && size == 3 && readPacket(NULL, got, sizeof got, &size, &from, 3) && size == 3 && memcmp(got, "two", 3) == 0 && from == A,
+        "the joiner reads channel 3's packet, from the host");
+    EXPECT(available(NULL, &size, 0) && size == sizeof bytes && readPacket(NULL, got, sizeof got, &size, &from, 0) && memcmp(got, bytes, sizeof bytes) == 0 &&
+        from == A && !available(NULL, &size, 0), "and channel 0's 7000 bytes, whole, then nothing more");
+    BrokerLobbiesUse(a);
+    EXPECT(!available(NULL, &size, 0), "the sender's own socket holds nothing of it");
+
     // closed, missing and full lobbies
     EXPECT(joinable(NULL, lobby, false), "the host closes it");
     BrokerLobbiesUse(c);
