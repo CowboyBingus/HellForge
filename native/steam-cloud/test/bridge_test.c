@@ -20,6 +20,7 @@ static int g_failures;
 #define LOBBY 0x0186000000000123ull
 #define HOST_LOBBY 0x0186000000000456ull
 #define CLOSED_LOBBY 0x0186000000000789ull
+#define HOST_PEER 76561197960287931ull
 
 typedef struct FakeValveState {
     int wrongSelf;
@@ -33,18 +34,30 @@ typedef struct FakeValveState {
     int createLobbyType;
     int setLobbyTypeCalls, setLobbyType;
     uint64_t setLobbyTypeLobby;
+    int p2pSends;
+    uint64_t p2pTo;
+    uint32_t p2pSize;
+    uint8_t p2pFirst;
+    int p2pAccepts;
 } FakeValveState;
 
 // Play with strangers in a mods folder of the test's own: the settings file's text (written anew, so its time stamp moves).
 static wchar_t g_mods[MAX_PATH];
 
+static wchar_t g_peers[MAX_PATH + 32];
+
+static void WriteText(const wchar_t* path, const char* text)
+{
+    HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    DWORD wrote = 0;
+    if (file != INVALID_HANDLE_VALUE) { WriteFile(file, text, (DWORD)strlen(text), &wrote, NULL); CloseHandle(file); }
+}
+
 static void Strangers(const char* json)
 {
     wchar_t path[MAX_PATH + 32];
     swprintf(path, sizeof path / sizeof path[0], L"%ls\\hellforge-mods.json", g_mods);
-    HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
-    DWORD wrote = 0;
-    if (file != INVALID_HANDLE_VALUE) { WriteFile(file, json, (DWORD)strlen(json), &wrote, NULL); CloseHandle(file); }
+    WriteText(path, json);
 }
 
 // ---- the broker, on a thread ----
@@ -124,6 +137,10 @@ int wmain(int argc, wchar_t** argv)
     CreateDirectoryW(g_mods, NULL);
     Strangers("{\"mods\":{\"x\":{\"playWithStrangers\":true}},\"playWithStrangers\":false}");
     BrokerBridgeWatchStrangers(&g_bridge, g_mods);
+    // the backend's co-op peers for Steam P2P: none yet
+    swprintf(g_peers, MAX_PATH + 32, L"%ls\\p2p-peers.txt", g_mods);
+    WriteText(g_peers, "");
+    BrokerBridgeWatchPeers(&g_bridge, g_peers);
     HANDLE broker = CreateThread(NULL, 0, Broker, NULL, 0, NULL);
 
     SetEnvironmentVariableW(L"HELLFORGE_BRIDGE_PIPE", suffix);
@@ -296,6 +313,47 @@ int wmain(int argc, wchar_t** argv)
     EXPECT(refusedEntry.runs == 1 && members(matchmaking, CLOSED_LOBBY) == 0 && !setLobbyData(matchmaking, CLOSED_LOBBY, "player", "2") &&
         fake->lobbyDataCalls == writes, "A lobby Steam did not let the game into (LobbyEnter_t response 2) stays refused");
 
+    // Steam P2P (2026-10-24: the host sends to a joiner when it joins): only with the game's co-op peers, a member of a
+    // lobby it made or entered, or one the backend lists; packets in come through the ring in pieces.
+    void* p2pNet = find(1, "SteamNetworking006");
+    typedef bool (*SendFn)(void*, uint64_t, const void*, uint32_t, int, int);
+    typedef bool (*PeerFn)(void*, uint64_t);
+    typedef bool (*StateFn)(void*, uint64_t, void*);
+    typedef bool (*AvailableFn)(void*, uint32_t*, int);
+    typedef bool (*ReadFn)(void*, void*, uint32_t, uint32_t*, uint64_t*, int);
+    SendFn send = (SendFn)SLOT(p2pNet, SteamNetworking006_SendP2PPacket);
+    PeerFn accept = (PeerFn)SLOT(p2pNet, SteamNetworking006_AcceptP2PSessionWithUser);
+    StateFn state = (StateFn)SLOT(p2pNet, SteamNetworking006_GetP2PSessionState);
+    AvailableFn p2pWaiting = (AvailableFn)SLOT(p2pNet, SteamNetworking006_IsP2PPacketAvailable);
+    ReadFn readPacket = (ReadFn)SLOT(p2pNet, SteamNetworking006_ReadP2PPacket);
+    const uint64_t stranger = 76561197960287999ull, listed = 76561197960288000ull;
+    static uint8_t bytes[7001];
+    for (int i = 0; i < (int)sizeof bytes; i++) bytes[i] = (uint8_t)(i * 7 + 1);
+    EXPECT(p2pNet && send(p2pNet, HOST_PEER, bytes, 5, 2, 0) && fake->p2pSends == 1 && fake->p2pTo == HOST_PEER && fake->p2pSize == 5 &&
+        fake->p2pFirst == 1, "SendP2PPacket to the host of the lobby the game entered reaches Steam, its bytes with it");
+    EXPECT(!send(p2pNet, stranger, bytes, 5, 2, 0) && fake->p2pSends == 1, "SendP2PPacket to anyone else is refused (no way out to any Steam user)");
+    WriteText(g_peers, "76561197960288000\n");
+    EXPECT(send(p2pNet, listed, bytes, 7000, 2, 0) && fake->p2pSends == 2 && fake->p2pSize == 7000,
+        "a peer the backend just listed (a join seconds old) is reached at once, 7000 bytes in one call");
+    EXPECT(!send(p2pNet, listed, bytes, 7001, 2, 0) && fake->p2pSends == 2, "more than 7000 bytes is refused in the game");
+    uint8_t session[20] = { 0 };
+    EXPECT(state(p2pNet, HOST_PEER, session) && session[0] == 1, "GetP2PSessionState: its P2PSessionState_t comes back as bytes");
+    EXPECT(accept(p2pNet, HOST_PEER) && !accept(p2pNet, stranger) && fake->p2pAccepts == 1, "AcceptP2PSessionWithUser: a peer, never anyone else");
+    void (*queuePacket)(uint64_t, int, const void*, uint32_t) = (void (*)(uint64_t, int, const void*, uint32_t))(void*)GetProcAddress(valve, "FakeValve_QueuePacket");
+    queuePacket(stranger, 0, bytes, 10);
+    queuePacket(HOST_PEER, 0, bytes, 3000);
+    queuePacket(HOST_PEER, 1, bytes + 100, 7);
+    uint32_t waiting = 0;
+    for (int i = 0; i < 200 && !p2pWaiting(p2pNet, &waiting, 1); i++) { g_runCallbacks(); Sleep(10); }
+    static uint8_t got[4096];
+    uint32_t gotSize = 0;
+    uint64_t from = 0;
+    bool firstPacket = p2pWaiting(p2pNet, &waiting, 0) && waiting == 3000 && readPacket(p2pNet, got, sizeof got, &gotSize, &from, 0);
+    EXPECT(firstPacket && gotSize == 3000 && from == HOST_PEER && memcmp(got, bytes, 3000) == 0,
+        "a 3000-byte packet from the peer arrives whole, through the ring in pieces, and ReadP2PPacket gives it with its sender");
+    EXPECT(!p2pWaiting(p2pNet, &waiting, 0) && readPacket(p2pNet, got, sizeof got, &gotSize, &from, 1) && gotSize == 7 && got[0] == bytes[100] &&
+        !p2pWaiting(p2pNet, &waiting, 1), "a stranger's packet never reaches the game; another channel's comes on its own");
+
     // the inline accessors' context, ISteamClient, and an interface the table does not know
     ContextInitFn contextInit = EXPORT(ContextInitFn, "SteamInternal_ContextInit");
     struct { void (*fn)(void*); uintptr_t counter; void* ptr; } context = { FillContext, 0, NULL };
@@ -317,8 +375,8 @@ int wmain(int argc, wchar_t** argv)
     EXPORT(VoidFn, "SteamAPI_Shutdown")();
     EXPECT(WaitForSingleObject(broker, 5000) == WAIT_OBJECT_0, "SteamAPI_Shutdown ends the broker's loop");
     // the control character, the 9-member lobby and the foreign lobby (the long key never left the game), the host's lobby
-    // twice before the join, and the lobby Steam refused twice
-    EXPECT(g_bridge.refusals == 7, "the broker counted its seven refusals");
+    // twice before the join, the lobby Steam refused twice, and the stranger's send and accept
+    EXPECT(g_bridge.refusals == 9, "the broker counted its nine refusals");
 
     printf("%s Steam bridge: %d failure(s)\n", g_failures ? "FAIL" : "PASS", g_failures);
     return g_failures ? 1 : 0;

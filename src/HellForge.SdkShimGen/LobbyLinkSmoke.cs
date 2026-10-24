@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
@@ -135,6 +136,22 @@ public static unsafe class LobbyLinkSmoke
                 Expect(friendProperty(friendLobby, k1, &text) == 0 && Marshal.PtrToStringUTF8(text) == "f8c9037f96047f7a", "The friend reads the host's lobby properties");
                 Expect(host.Player.WaitFor("2"), "The host sees the friend join");
                 Expect(hostMembers(hostLobby, &count, &list) == 0 && count == 2, "The host sees two members");
+                // each backend lists the other as a co-op peer for a sandboxed game's Steam P2P (MultiplayerHost.PeersFileName)
+                static bool Lists(string file, string hexId)
+                {
+                    for (var i = 0; i < 40; i++)
+                    {
+                        try
+                        {
+                            if (File.Exists(file) && File.ReadAllLines(file).Contains(ulong.Parse(hexId, NumberStyles.HexNumber).ToString(CultureInfo.InvariantCulture))) return true;
+                        }
+                        catch (IOException) { }
+                        Thread.Sleep(100);
+                    }
+                    return false;
+                }
+                Expect(Lists(Path.Combine(root, "host", "p2p-peers.txt"), FriendId) && Lists(Path.Combine(root, "friend", "p2p-peers.txt"), HostId),
+                    "Each backend lists the other among its co-op peers for Steam P2P");
 
                 var friendValues = stackalloc byte*[] { friendPlatform };
                 var memberUpdate = new JoinConfiguration { Count = 1, Keys = memberKeys, Values = friendValues };

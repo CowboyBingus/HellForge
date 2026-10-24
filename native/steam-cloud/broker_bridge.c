@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "bridge_gen.h"
 #include "broker_bridge.h"
@@ -206,6 +207,123 @@ static void RememberEntered(BrokerBridge* b, const uint8_t* data, uint32_t size)
     fprintf(stderr, "broker: the game entered lobby %llu\n", (unsigned long long)lobby);
 }
 
+/* ---- Steam P2P (docs/steam-bridge.md "Steam P2P"): only with the game's co-op peers ---- */
+
+/* The backend's peers file, read when its time stamp moved (looked at every 500 ms, or now). */
+static void LoadPeers(BrokerBridge* b, int now)
+{
+    if (!b->peersFile[0]) return;
+    DWORD tick = GetTickCount();
+    if (!now && tick - b->peersChecked < 500) return;
+    b->peersChecked = tick;
+    WIN32_FILE_ATTRIBUTE_DATA data;
+    FILETIME stamp = GetFileAttributesExW(b->peersFile, GetFileExInfoStandard, &data) ? data.ftLastWriteTime : (FILETIME){ 0, 0 };
+    if (CompareFileTime(&stamp, &b->peersStamp) == 0) return;
+    b->peersStamp = stamp;
+    b->peerCount = 0;
+    HANDLE file = CreateFileW(b->peersFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (file == INVALID_HANDLE_VALUE) return;
+    char text[BROKER_MAX_PEERS * 24 + 1];
+    DWORD read = 0;
+    BOOL ok = ReadFile(file, text, sizeof text - 1, &read, NULL);
+    CloseHandle(file);
+    if (!ok) return;
+    text[read] = 0;
+    for (char* at = text; *at && b->peerCount < BROKER_MAX_PEERS;)
+    {
+        char* end = NULL;
+        unsigned long long id = strtoull(at, &end, 10);
+        if (end == at) { at++; continue; }
+        if (id) b->peers[b->peerCount++] = id;
+        at = end;
+    }
+}
+
+static int Listed(const BrokerBridge* b, uint64_t id)
+{
+    for (int i = 0; i < b->peerCount; i++) if (b->peers[i] == id) return 1;
+    return 0;
+}
+
+/* A member of a lobby the game made or entered (Steam's answer, or the local lobby's). */
+static int LobbyMember(BrokerBridge* b, uint64_t id)
+{
+    typedef int32_t (*CountFn)(void*, uint64_t);
+    typedef uint64_t (*MemberFn)(void*, uint64_t, int32_t);
+    CountFn count = (CountFn)Resolve(&b->api, "SteamAPI_ISteamMatchmaking_GetNumLobbyMembers");
+    MemberFn member = (MemberFn)Resolve(&b->api, "SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex");
+    void* matchmaking = Self(&b->api, "SteamAPI_SteamMatchmaking_v009");
+    if (!count || !member || !matchmaking) return 0;
+    for (int i = 0; i < b->lobbyCount; i++)
+    {
+        int32_t n = count(matchmaking, b->lobbies[i]);
+        for (int32_t j = 0; j < n && j < 64; j++) if (member(matchmaking, b->lobbies[i], j) == id) return 1;
+    }
+    return 0;
+}
+
+/* One of the game's co-op peers. A join is often seconds old when the host first sends, so a miss reads the backend's
+ * file again at once. */
+static int P2PPeer(const BrokerApi* api, uint64_t id)
+{
+    BrokerBridge* b = Of(api);
+    if (!id) return 0;
+    LoadPeers(b, 0);
+    if (Listed(b, id) || LobbyMember(b, id)) return 1;
+    LoadPeers(b, 1);
+    return Listed(b, id);
+}
+
+void BrokerBridgeWatchPeers(BrokerBridge* b, const wchar_t* peersFile)
+{
+    if (!peersFile || wcslen(peersFile) >= sizeof b->peersFile / sizeof b->peersFile[0]) return;
+    wcscpy(b->peersFile, peersFile);
+    LoadPeers(b, 1);
+}
+
+/* Packets waiting for the game, from its co-op peers, into the ring in pieces (BridgeP2PPiece). Others are read and
+ * dropped, so they never pile up in Steam. */
+static void PollP2P(BrokerBridge* b, BrokerChannel* ch)
+{
+    typedef bool (*AvailableFn)(void*, uint32_t*, int32_t);
+    typedef bool (*ReadFn)(void*, void*, uint32_t, uint32_t*, uint64_t*, int32_t);
+    static AvailableFn available;
+    static ReadFn read;
+    if (!available) available = (AvailableFn)Resolve(&b->api, "SteamAPI_ISteamNetworking_IsP2PPacketAvailable");
+    if (!read) read = (ReadFn)Resolve(&b->api, "SteamAPI_ISteamNetworking_ReadP2PPacket");
+    void* networking = Self(&b->api, "SteamAPI_SteamNetworking_v006");
+    if (!available || !read || !networking) return;
+    static uint8_t packet[64 * 1024];
+    uint8_t piece[BRIDGE_RING_DATA_SIZE];
+    for (int32_t channel = 0; channel < BROKER_P2P_CHANNELS; channel++)
+        for (int n = 0; n < BROKER_P2P_PER_PUMP; n++)
+        {
+            uint32_t size = 0;
+            uint64_t remote = 0;
+            if (!available(networking, &size, channel) || !read(networking, packet, sizeof packet, &size, &remote, channel)) break;
+            if (size > sizeof packet || size > BRIDGE_P2P_MAX || !P2PPeer(&b->api, remote))
+            {
+                if (b->p2pDropped++ < 8)
+                    fprintf(stderr, "broker: P2P packet of %u bytes from %llu on channel %d dropped (%s)\n", size, (unsigned long long)remote, channel,
+                        size > BRIDGE_P2P_MAX ? "too large" : "not a co-op peer");
+                continue;
+            }
+            BridgeP2PPiece head = { remote, channel, size, 0, 0 };
+            do
+            {
+                uint32_t part = size - head.offset < BRIDGE_P2P_PIECE ? size - head.offset : BRIDGE_P2P_PIECE;
+                memcpy(piece, &head, sizeof head);
+                memcpy(piece + sizeof head, packet + head.offset, part);
+                if (!BrokerChannelPushCallback(ch, BRIDGE_P2P_PACKET, piece, (uint32_t)sizeof head + part))
+                {
+                    if (b->p2pDropped++ < 8) fprintf(stderr, "broker: the ring is full; a P2P packet of %u bytes is lost\n", size);
+                    break;
+                }
+                head.offset += part;
+            } while (head.offset < size);
+        }
+}
+
 static bool Allowed(int id)
 {
     for (int i = 0; i < BRIDGE_CALLBACK_COUNT; i++) if (g_bridgeCallbacks[i] == id) return true;
@@ -277,6 +395,7 @@ static void Pump(void* context, BrokerChannel* ch)
         b->freeLast(b->hPipe);
     }
     if (ch->dropped > 0 && reportedDrops == 0) { fprintf(stderr, "broker: the ring is full; callbacks are being dropped\n"); reportedDrops = 1; }
+    PollP2P(b, ch);
     CheckStrangers(b, 0);
     DWORD now = GetTickCount();
     if (!b->snapshotDone || now - b->lastSnapshot >= BROKER_SNAPSHOT_MS) BrokerBridgeSnapshot(b, ch);
@@ -358,7 +477,7 @@ int BrokerBridgeOpen(BrokerBridge* b, HMODULE valve, int hPipe)
     b->next = (void*)GetProcAddress(valve, "SteamAPI_ManualDispatch_GetNextCallback");
     b->freeLast = (FreeFn)(void*)GetProcAddress(valve, "SteamAPI_ManualDispatch_FreeLastCallback");
     if (!b->runFrame || !b->next || !b->freeLast) return 0;
-    b->api = (BrokerApi){ b, Resolve, Self, OwnLobby, Refuse, LogValue, Adjust, BrokerDispatchMethod };
+    b->api = (BrokerApi){ b, Resolve, Self, OwnLobby, Refuse, LogValue, P2PPeer, Adjust, BrokerDispatchMethod };
     b->steam = (BrokerSteam){ b, Pump, IsRunning, &b->api };
     return 1;
 }

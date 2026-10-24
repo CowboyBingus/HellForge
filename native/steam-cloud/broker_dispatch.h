@@ -16,6 +16,8 @@ typedef struct BrokerApi {
     uint32_t (*refuse)(const struct BrokerApi* api, const char* why);
     /* the table's "logged" strings */
     void (*log)(const struct BrokerApi* api, const char* what, const char* value);
+    /* the table's "p2pPeer" SteamIDs: one of the game's co-op peers */
+    int (*p2pPeer)(const struct BrokerApi* api, uint64_t steamId);
     /* the table's "adjust" integers: the value Valve's DLL gets for that method's argument */
     int64_t (*adjust)(const struct BrokerApi* api, uint32_t method, const char* argument, int64_t value);
     /* BrokerDispatchMethod: the serving loop reaches the generated code through this, so it builds without it */

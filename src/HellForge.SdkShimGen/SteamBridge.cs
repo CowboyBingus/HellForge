@@ -22,7 +22,9 @@ public static partial class SteamBridge
     const int DefaultString = 1024;
     const int ReturnedString = 1024;
 
-    enum Kind { Value, SteamId, InString, Buffer, Out, OutSteamId }
+    // InBuffer: bytes the game hands in (inBuffers: its size parameter and the most the broker accepts); OutBytes: a struct
+    // the method writes through a pointer (outBytes: its size), carried as bytes.
+    enum Kind { Value, SteamId, InString, Buffer, Out, OutSteamId, InBuffer, OutBytes }
 
     sealed record Param(string Name, string Type, Kind Kind, string CType, int Size, int Max, string? SizeParam);
 
@@ -199,6 +201,10 @@ public static partial class SteamBridge
         if (type == "CSteamID") return new(name, type, Kind.SteamId, "uint64_t", 8, 0, null);
         if (types.Scalar(type) is { } scalar) return new(name, type, Kind.Value, scalar.CType, scalar.Size, 0, null);
         if (type == "const char *") return new(name, type, Kind.InString, "const char *", 0, Get("strings", DefaultString), null);
+        if (rule is { } ri && ri.TryGetProperty("inBuffers", out var inBuffers) && inBuffers.TryGetProperty(name, out var ib))
+            return new(name, type, Kind.InBuffer, "const void *", 0, ib.GetProperty("max").GetInt32(), ib.GetProperty("size").GetString());
+        if (type.EndsWith('*') && rule is { } ro && ro.TryGetProperty("outBytes", out var outBytes) && outBytes.TryGetProperty(name, out var ob))
+            return new(name, type, Kind.OutBytes, "void *", ob.GetInt32(), 0, null);
         if (rule is { } rr && rr.TryGetProperty("buffers", out var buffers) && buffers.TryGetProperty(name, out var b))
             return new(name, type, Kind.Buffer, type.Replace("const ", "").Trim() is "char *" ? "char *" : "void *", 0, b.GetProperty("max").GetInt32(), b.GetProperty("size").GetString());
         if (type.EndsWith('*') && Listed("outs"))
@@ -240,14 +246,14 @@ public static partial class SteamBridge
         foreach (var p in m.Params)
         {
             if ((int)p.Kind < 0) throw new InvalidDataException($"{where}: parameter {p.Name} ({p.Type}) needs a buffers or outs entry, or the method stays refused.");
-            if (p.Kind == Kind.Buffer && m.Params.FirstOrDefault(q => q.Name == p.SizeParam) is not { Kind: Kind.Value } size)
+            if (p.Kind is Kind.Buffer or Kind.InBuffer && m.Params.FirstOrDefault(q => q.Name == p.SizeParam) is not { Kind: Kind.Value } size)
                 throw new InvalidDataException($"{where}: buffer {p.Name}'s size {p.SizeParam} is not an integer parameter.");
         }
-        var args = m.Params.Sum(p => p.Kind switch { Kind.InString => 2 + p.Max, Kind.Buffer or Kind.Out or Kind.OutSteamId => 1, _ => p.Size });
-        var result = (ret.Kind == "string" ? 2 + ReturnedString : ret.Size) + m.Params.Sum(p => p.Kind switch { Kind.Buffer => p.Max, Kind.Out or Kind.OutSteamId => p.Size, _ => 0 });
+        var args = m.Params.Sum(p => p.Kind switch { Kind.InString => 2 + p.Max, Kind.InBuffer => 4 + p.Max, Kind.Buffer or Kind.Out or Kind.OutSteamId or Kind.OutBytes => 1, _ => p.Size });
+        var result = (ret.Kind == "string" ? 2 + ReturnedString : ret.Size) + m.Params.Sum(p => p.Kind switch { Kind.Buffer => p.Max, Kind.Out or Kind.OutSteamId or Kind.OutBytes => p.Size, _ => 0 });
         if (args > MaxMessage || result > MaxMessage) throw new InvalidDataException($"{where}: {Math.Max(args, result)} bytes do not fit one message.");
         foreach (var rangeName in Names(m.Rule, "range").Concat(Names(m.Rule, "ownLobby")).Concat(Names(m.Rule, "printable")).Concat(Names(m.Rule, "logged"))
-            .Concat(Names(m.Rule, "adjust")))
+            .Concat(Names(m.Rule, "adjust")).Concat(Names(m.Rule, "p2pPeer")))
             if (m.Params.All(p => p.Name != rangeName)) throw new InvalidDataException($"{where}: the table names {rangeName}, which is not a parameter.");
         foreach (var adjusted in Names(m.Rule, "adjust"))
             if (m.Params.First(p => p.Name == adjusted).Kind != Kind.Value) throw new InvalidDataException($"{where}: only an integer parameter can be adjusted ({adjusted}).");
@@ -273,6 +279,8 @@ public static partial class SteamBridge
         foreach (var p in m.Params) ps.Add(p.Kind switch
         {
             Kind.InString => $"const char *{p.Name}",
+            Kind.InBuffer => $"const void *{p.Name}",
+            Kind.OutBytes => $"void *{p.Name}",
             Kind.Buffer => $"{p.CType}{p.Name}",
             Kind.Out or Kind.OutSteamId => $"{p.CType}{p.Name}",
             Kind.SteamId => $"uint64_t {p.Name}",
@@ -384,7 +392,12 @@ public static partial class SteamBridge
                     s.AppendLine($"    if (cap_{p.Name} > {p.Max}) {{ BridgeRefused(\"{m.Class}::{m.Name}: {p.Name} larger than {p.Max} bytes\"); {Refusal(m, types, enumRefusals)} }}");
                     s.AppendLine($"    BridgePutFlag(&w, {p.Name} != NULL);");
                     break;
-                case Kind.Out: case Kind.OutSteamId: s.AppendLine($"    BridgePutFlag(&w, {p.Name} != NULL);"); break;
+                case Kind.Out: case Kind.OutSteamId: case Kind.OutBytes: s.AppendLine($"    BridgePutFlag(&w, {p.Name} != NULL);"); break;
+                case Kind.InBuffer:
+                    s.AppendLine($"    int64_t len_{p.Name} = {p.Name} && {p.SizeParam} > 0 ? (int64_t){p.SizeParam} : 0;");
+                    s.AppendLine($"    if (len_{p.Name} > {p.Max}) {{ BridgeRefused(\"{m.Class}::{m.Name}: {p.Name} larger than {p.Max} bytes\"); {Refusal(m, types, enumRefusals)} }}");
+                    s.AppendLine($"    uint32_t n_{p.Name} = (uint32_t)len_{p.Name};\n    BridgePut(&w, &n_{p.Name}, 4);\n    if (n_{p.Name}) BridgePut(&w, {p.Name}, n_{p.Name});");
+                    break;
             }
         s.AppendLine("    BridgeReader r;");
         s.AppendLine($"    if (!BridgeInvoke(BRIDGE_M_{m.Id}, &w, &r)) {{ {Refusal(m, types, enumRefusals)} }}");
@@ -397,7 +410,7 @@ public static partial class SteamBridge
         foreach (var p in m.Params)
             switch (p.Kind)
             {
-                case Kind.Out: case Kind.OutSteamId: s.AppendLine($"    if ({p.Name}) BridgeGet(&r, {p.Name}, {p.Size});"); break;
+                case Kind.Out: case Kind.OutSteamId: case Kind.OutBytes: s.AppendLine($"    if ({p.Name}) BridgeGet(&r, {p.Name}, {p.Size});"); break;
                 case Kind.Buffer: s.AppendLine($"    if ({p.Name}) BridgeGet(&r, {p.Name}, (uint32_t)cap_{p.Name});"); break;
             }
         s.AppendLine(ret.Kind switch { "void" => "    return;", "steamid" => "    *ret_ = result_;\n    return ret_;", _ => "    return result_;" });
@@ -428,8 +441,12 @@ public static partial class SteamBridge
                         s.AppendLine($"        if (!BridgeGetBoundedString(r, {p.Name}_, {p.Max}, &{p.Name}_null)) return BRIDGE_STATUS_REFUSED;");
                         s.AppendLine($"        const char *{p.Name} = {p.Name}_null ? NULL : {p.Name}_;");
                         break;
-                    case Kind.Buffer: case Kind.Out: case Kind.OutSteamId:
+                    case Kind.Buffer: case Kind.Out: case Kind.OutSteamId: case Kind.OutBytes:
                         s.AppendLine($"        uint8_t has_{p.Name} = 0;\n        if (!BridgeGet(r, &has_{p.Name}, 1)) return BRIDGE_STATUS_MALFORMED;"); break;
+                    case Kind.InBuffer:
+                        s.AppendLine($"        uint32_t n_{p.Name} = 0;\n        if (!BridgeGet(r, &n_{p.Name}, 4) || n_{p.Name} > {p.Max}) return BRIDGE_STATUS_MALFORMED;");
+                        s.AppendLine($"        static uint8_t in_{p.Name}[{p.Max}];\n        if (n_{p.Name} && !BridgeGet(r, in_{p.Name}, n_{p.Name})) return BRIDGE_STATUS_MALFORMED;");
+                        break;
                 }
             s.AppendLine("        if (r->at != r->size) return BRIDGE_STATUS_MALFORMED;");
             // the table's checks
@@ -443,6 +460,13 @@ public static partial class SteamBridge
                     s.AppendLine($"        if ({p.Name} && !BridgePrintable({p.Name})) return api->refuse(api, \"{m.Class}::{m.Name}: {p.Name} is not printable\");");
                 if (Names(m.Rule, "logged").Contains(p.Name))
                     s.AppendLine($"        api->log(api, \"{m.Class}::{m.Name} {p.Name}\", {p.Name});");
+                if (Names(m.Rule, "p2pPeer").Contains(p.Name))
+                    s.AppendLine($"        if (!api->p2pPeer(api, {p.Name})) return api->refuse(api, \"{m.Class}::{m.Name}: not a co-op peer\");");
+                // the size the game gave is the size of the bytes it sent
+                if (p.Kind == Kind.InBuffer)
+                    s.AppendLine($"        if ((int64_t){p.SizeParam} != (int64_t)n_{p.Name}) return BRIDGE_STATUS_MALFORMED;");
+                if (p.Kind == Kind.OutBytes)
+                    s.AppendLine($"        uint8_t out_{p.Name}[{p.Size}];\n        memset(out_{p.Name}, 0, sizeof out_{p.Name});");
                 if (p.Kind == Kind.Buffer)
                 {
                     s.AppendLine($"        if (has_{p.Name} && ((int64_t){p.SizeParam} < 0 || (int64_t){p.SizeParam} > {p.Max})) return api->refuse(api, \"{m.Class}::{m.Name}: {p.Name} too large\");");
@@ -459,11 +483,17 @@ public static partial class SteamBridge
             var flatArgs = new List<string> { "self_" };
             foreach (var p in m.Params)
             {
-                flatParams.Add(p.Kind switch { Kind.InString => "const char *", Kind.Buffer => p.CType, Kind.SteamId => "uint64_t", Kind.OutSteamId => "uint64_t *", _ => p.CType });
+                flatParams.Add(p.Kind switch
+                {
+                    Kind.InString => "const char *", Kind.Buffer => p.CType, Kind.SteamId => "uint64_t", Kind.OutSteamId => "uint64_t *",
+                    Kind.InBuffer => "const void *", Kind.OutBytes => "void *", _ => p.CType
+                });
                 flatArgs.Add(p.Kind switch
                 {
                     Kind.Buffer => $"has_{p.Name} ? ({p.CType})buf_{p.Name} : NULL",
                     Kind.Out or Kind.OutSteamId => $"has_{p.Name} ? &out_{p.Name} : NULL",
+                    Kind.InBuffer => $"n_{p.Name} ? (const void *)in_{p.Name} : NULL",
+                    Kind.OutBytes => $"has_{p.Name} ? (void *)out_{p.Name} : NULL",
                     _ => p.Name,
                 });
             }
@@ -483,6 +513,7 @@ public static partial class SteamBridge
                 switch (p.Kind)
                 {
                     case Kind.Out: case Kind.OutSteamId: s.AppendLine($"        if (has_{p.Name}) BridgePut(w, &out_{p.Name}, {p.Size});"); break;
+                    case Kind.OutBytes: s.AppendLine($"        if (has_{p.Name}) BridgePut(w, out_{p.Name}, {p.Size});"); break;
                     case Kind.Buffer: s.AppendLine($"        if (has_{p.Name}) BridgePut(w, buf_{p.Name}, cap_{p.Name});"); break;
                 }
             s.AppendLine("        return w->failed ? BRIDGE_STATUS_MALFORMED : BRIDGE_STATUS_OK;\n    }");

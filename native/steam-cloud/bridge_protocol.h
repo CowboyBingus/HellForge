@@ -63,6 +63,20 @@ typedef struct BridgeRingHeader {
 #define BRIDGE_CALL_RESULT_FLAG 0x80000000u
 #define BRIDGE_CALL_RESULT_HEADER 16u
 
+/* A Steam P2P packet the broker read for the game, from one of its co-op peers: callbackId BRIDGE_P2P_PACKET (no Steam
+ * callback has it), data a BridgeP2PPiece then that piece of the packet. A packet larger than one slot comes in pieces,
+ * in order, each saying where it starts; a packet is at most BRIDGE_P2P_MAX bytes. */
+#define BRIDGE_P2P_PACKET 0x40000001u
+#define BRIDGE_P2P_MAX 8192u
+typedef struct BridgeP2PPiece {
+    uint64_t remote;    /* the sender's SteamID */
+    int32_t  channel;
+    uint32_t total;     /* the packet's size */
+    uint32_t offset;    /* where this piece starts in it */
+    uint32_t pad;
+} BridgeP2PPiece;
+#define BRIDGE_P2P_PIECE (BRIDGE_RING_DATA_SIZE - (uint32_t)sizeof(BridgeP2PPiece))
+
 /* --- The snapshot (after the ring in the same section) ---
  *
  * What the game asks of Steam every frame, answered without a round trip: the broker fills it at init and refreshes it

@@ -45,6 +45,13 @@ public sealed class MultiplayerHost : IAsyncDisposable
     readonly object presenceGate = new();
     readonly HashSet<ulong> presenceSentTo = [];
     static readonly TimeSpan PresenceInterval = TimeSpan.FromSeconds(10);
+    // This machine's co-op peers (lobby and Party), for a sandboxed game's Steam broker: the game's Steam P2P passes only to
+    // and from them (docs/steam-bridge.md "Steam P2P"). Decimal SteamIDs, one a line, rewritten when they change: at once
+    // when a lobby here changes or a join starts (a host sends to a joiner the moment it joins), and on each heartbeat.
+    public const string PeersFileName = "p2p-peers.txt";
+    readonly string peersFile;
+    readonly object peersGate = new();
+    string? peersWritten;
 
     MultiplayerHost(string pipeName, string link, string modDigest, string evidenceDirectory, WarClock? warClock, AccountKeys? accountKeys,
         FriendPresence? presence, string? modList)
@@ -52,9 +59,13 @@ public sealed class MultiplayerHost : IAsyncDisposable
         this.presence = presence;
         this.warClock = warClock;
         logFile = new StreamWriter(Path.Combine(evidenceDirectory, "multiplayer.log"), append: true) { AutoFlush = true };
+        peersFile = Path.Combine(evidenceDirectory, PeersFileName);
         transport = CreateTransport(link, Log);
         pipes = new PipeHost(pipeName, Log);
         Lobby = new LobbyService(transport, pipes.SendLobby, Log, modDigest, warClock, modList);
+        // off the lobby service's lock
+        Lobby.HostedChanged += () => Task.Run(WritePeers);
+        Lobby.LocalJoinStarted += (_, _) => Task.Run(WritePeers);
         // A refused join, in both games (the in-game editor shows it over the game): the joiner's says why, the host's who.
         Lobby.Refused += (peer, lines) => Stats?.Notice("error", "Couldn't join " + FriendName(peer), lines);
         Lobby.RefusedFriend += (peer, lines) => Stats?.Notice("info", FriendName(peer) + " couldn't join", lines);
@@ -222,9 +233,27 @@ public sealed class MultiplayerHost : IAsyncDisposable
         throw new ArgumentException("--link must be none, steam:<steam_api64.dll> or udp:<id>:<port>:<peer>=<port>,...");
     }
 
+    // The co-op peers file (PeersFileName), written whole when the set changed.
+    void WritePeers()
+    {
+        try
+        {
+            var text = string.Concat(Lobby.Peers().Concat(Party.Peers()).Distinct().Order().Select(p => p.ToString(CultureInfo.InvariantCulture) + "\n"));
+            lock (peersGate)
+            {
+                if (text == peersWritten) return;
+                File.WriteAllText(peersFile + ".partial", text);
+                File.Move(peersFile + ".partial", peersFile, overwrite: true);
+                peersWritten = text;
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Log("Could not write the co-op peers for Steam P2P: " + error.Message); }
+    }
+
     // Pings every friend this machine shares a lobby or network with; a friend unheard for PeerTimeout is gone.
     void Beat()
     {
+        WritePeers();
         try
         {
             var now = DateTime.UtcNow;

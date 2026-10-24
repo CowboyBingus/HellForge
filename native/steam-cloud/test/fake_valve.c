@@ -14,6 +14,7 @@
 #define CREATE_LOBBY_CALL 5005ull
 #define HOST_LOBBY 0x0186000000000456ull
 #define CLOSED_LOBBY 0x0186000000000789ull
+#define HOST_PEER 76561197960287931ull
 #define JOIN_LOBBY_CALL 5006ull
 #define JOIN_CLOSED_CALL 5007ull
 
@@ -29,10 +30,15 @@ typedef struct FakeValveState {
     int createLobbyType;        // the type Steam was asked for (the broker may change the game's)
     int setLobbyTypeCalls, setLobbyType;
     uint64_t setLobbyTypeLobby;
+    int p2pSends;               // SendP2PPacket calls that reached Steam
+    uint64_t p2pTo;
+    uint32_t p2pSize;
+    uint8_t p2pFirst;
+    int p2pAccepts;
 } FakeValveState;
 
 static FakeValveState g_state;
-static int g_user, g_friends, g_utils, g_apps, g_matchmaking, g_stats, g_input;
+static int g_user, g_friends, g_utils, g_apps, g_matchmaking, g_stats, g_input, g_networking;
 
 FAKE_API FakeValveState* FakeValve_State(void) { return &g_state; }
 
@@ -43,6 +49,7 @@ FAKE_API void* SteamAPI_SteamApps_v008(void) { return &g_apps; }
 FAKE_API void* SteamAPI_SteamMatchmaking_v009(void) { return &g_matchmaking; }
 FAKE_API void* SteamAPI_SteamUserStats_v012(void) { return &g_stats; }
 FAKE_API void* SteamAPI_SteamInput_v006(void) { return &g_input; }
+FAKE_API void* SteamAPI_SteamNetworking_v006(void) { return &g_networking; }
 
 static void Check(void* self, void* expected) { if (self != expected) g_state.wrongSelf++; }
 
@@ -162,6 +169,84 @@ FAKE_API int SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(void* self, uint64_t 
 {
     Check(self, &g_matchmaking);
     return lobby == LOBBY ? 1 : lobby == HOST_LOBBY ? 2 : lobby == CLOSED_LOBBY ? 3 : 0;
+}
+
+// The host's lobby: its host (a co-op peer for Steam P2P) and this player.
+FAKE_API uint64_t SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(void* self, uint64_t lobby, int index)
+{
+    Check(self, &g_matchmaking);
+    return lobby == HOST_LOBBY ? (index == 0 ? HOST_PEER : index == 1 ? STEAM_ID : 0) : lobby == LOBBY && index == 0 ? STEAM_ID : 0;
+}
+
+// ---- Steam P2P: sends recorded, packets in from FakeValve_QueuePacket ----
+
+#define PACKETS 8
+static struct { uint64_t remote; int channel; uint32_t size; uint8_t data[4096]; } g_packets[PACKETS];
+static int g_packetCount;
+
+FAKE_API void FakeValve_QueuePacket(uint64_t remote, int channel, const void* data, uint32_t size)
+{
+    EnterCriticalSection(&g_lock);
+    if (g_packetCount < PACKETS && size <= sizeof g_packets[0].data)
+    {
+        g_packets[g_packetCount].remote = remote;
+        g_packets[g_packetCount].channel = channel;
+        g_packets[g_packetCount].size = size;
+        memcpy(g_packets[g_packetCount].data, data, size);
+        g_packetCount++;
+    }
+    LeaveCriticalSection(&g_lock);
+}
+static int FirstPacket(int channel)
+{
+    for (int i = 0; i < g_packetCount; i++) if (g_packets[i].channel == channel) return i;
+    return -1;
+}
+FAKE_API bool SteamAPI_ISteamNetworking_IsP2PPacketAvailable(void* self, uint32_t* size, int channel)
+{
+    Check(self, &g_networking);
+    EnterCriticalSection(&g_lock);
+    int at = FirstPacket(channel);
+    if (size) *size = at >= 0 ? g_packets[at].size : 0;
+    LeaveCriticalSection(&g_lock);
+    return at >= 0;
+}
+FAKE_API bool SteamAPI_ISteamNetworking_ReadP2PPacket(void* self, void* dest, uint32_t capacity, uint32_t* size, uint64_t* remote, int channel)
+{
+    Check(self, &g_networking);
+    EnterCriticalSection(&g_lock);
+    int at = FirstPacket(channel);
+    if (at >= 0)
+    {
+        memcpy(dest, g_packets[at].data, g_packets[at].size < capacity ? g_packets[at].size : capacity);
+        *size = g_packets[at].size;
+        *remote = g_packets[at].remote;
+        memmove(&g_packets[at], &g_packets[at + 1], sizeof g_packets[0] * (size_t)(g_packetCount - at - 1));
+        g_packetCount--;
+    }
+    LeaveCriticalSection(&g_lock);
+    return at >= 0;
+}
+FAKE_API bool SteamAPI_ISteamNetworking_SendP2PPacket(void* self, uint64_t remote, const void* data, uint32_t size, int type, int channel)
+{
+    Check(self, &g_networking);
+    (void)type; (void)channel;
+    g_state.p2pSends++;
+    g_state.p2pTo = remote;
+    g_state.p2pSize = size;
+    g_state.p2pFirst = size && data ? *(const uint8_t*)data : 0;
+    return true;
+}
+FAKE_API bool SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser(void* self, uint64_t remote) { Check(self, &g_networking); (void)remote; g_state.p2pAccepts++; return true; }
+FAKE_API bool SteamAPI_ISteamNetworking_CloseP2PSessionWithUser(void* self, uint64_t remote) { Check(self, &g_networking); (void)remote; return true; }
+// P2PSessionState_t: connection active, then the rest zero
+FAKE_API bool SteamAPI_ISteamNetworking_GetP2PSessionState(void* self, uint64_t remote, uint8_t* state)
+{
+    Check(self, &g_networking);
+    (void)remote;
+    memset(state, 0, 20);
+    state[0] = 1;
+    return true;
 }
 
 // A co-op join: entering the host's lobby succeeds, the closed one is refused by Steam (LobbyEnter_t's response).

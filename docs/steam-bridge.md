@@ -93,8 +93,8 @@ Methods that carry data to other people or out of the PC, which are refused unle
 and then checked:
 - `ISteamFriends`: `SetRichPresence` (strings friends see), `ReplyToFriendMessage`, `InviteUserToGame`,
   `ActivateGameOverlayToWebPage` (it may open the player's browser), `SetPersonaName`;
-- `ISteamNetworking`: `SendP2PPacket` to any SteamID. HellForge's co-op does not use Steam P2P, since its party traffic
-  goes through the backend.
+- `ISteamNetworking`: `SendP2PPacket` to any SteamID. Co-op uses it (the host sends to a joiner when it joins), so it
+  passes only to the game's co-op peers ("Steam P2P" below).
 - `ISteamUserStats`: leaderboard uploads.
 
 The broker logs every refusal.
@@ -135,8 +135,8 @@ Generation fails on anything it cannot marshal exactly, on an enum whose 0 may m
 
 **Each method's mode, in the table:**
 - **hand:** answered in the game by `bridge_local.c`, without the broker:
-  - fixed: `ReadP2PPacket` and `IsP2PPacketAvailable` answer "no packet" (HellForge's co-op does not use Steam P2P),
-    `GetAppID` is 553850, the overlay calls answer "no overlay" (it lives in the broker);
+  - `ReadP2PPacket` and `IsP2PPacketAvailable` answer from the packets the broker put in the ring ("Steam P2P"
+    below); fixed: `GetAppID` is 553850, the overlay calls answer "no overlay" (it lives in the broker);
   - from the **snapshot**, which the broker fills before the game connects and refreshes about once a second:
     `BLoggedOn`, `GetSteamID`, `GetPersonaName`, the language, the IP country, the DLC list, `BIsSubscribedApp` for the
     game and its DLC, the beta name, Steam Deck. A seqlock: the game copies what it needs and retries if the broker was
@@ -177,7 +177,9 @@ rather than run on Valve's DLL.
 
 | Interface | Method | Mode | Checks, and why |
 | --- | --- | --- | --- |
-| `SteamNetworking006` | `ReadP2PPacket`, `IsP2PPacketAvailable` | local | no packets; `SendP2PPacket` refused |
+| `SteamNetworking006` | `ReadP2PPacket`, `IsP2PPacketAvailable` | local | the packets the broker read from the game's co-op peers, through the ring |
+| `SteamNetworking006` | `SendP2PPacket`, `AcceptP2PSessionWithUser`, `GetP2PSessionState` | call | **to review:** only a co-op peer; a packet at most 7000 bytes, channels 0-7 |
+| `SteamNetworking006` | `CloseP2PSessionWithUser`, `CloseP2PChannelWithUser`, `AllowP2PPacketRelay` | call | |
 | `STEAMAPPS_INTERFACE_VERSION008` | `GetDLCCount`, `BGetDLCDataByIndex`, `GetCurrentGameLanguage`, `GetCurrentBetaName` | snapshot | name buffers bounded |
 | `STEAMAPPS_INTERFACE_VERSION008` | `BIsSubscribedApp` | snapshot, else call | the DLC ids and the game from the snapshot |
 | `SteamUser021` | `BLoggedOn`, `GetSteamID` | snapshot | |
@@ -197,10 +199,10 @@ rather than run on Valve's DLL.
 | `SteamClient020` | `GetISteam*`; the pipe and user calls | interface; local | the bridge's own objects; one pipe, one user |
 
 In the table, local and snapshot are both mode `hand`. Callbacks: the 16 ids the census saw, and 504 (`LobbyEnter_t`)
-from the co-op census. 22 methods are calls, 47 are answered in the game, and the other 298 the nine interfaces declare
+from the co-op census. 28 methods are calls, 47 are answered in the game, and the other 292 the nine interfaces declare
 are refused.
 
-**Cost per frame, from the census's rates (unmeasured in game):** `ReadP2PPacket` (1.00 per frame) is a return; the DLC
+**Cost per frame, from the census's rates (unmeasured in game):** `ReadP2PPacket` (1.00 per frame) takes a slim lock and looks at the packet queue (no system call while uncontended); the DLC
 answers (0.85) and `BLoggedOn` (0.024) are memory reads. None makes a system call, so an idle frame stays at the ring
 read. The lobby queries (about 0.02 per frame each) and everything else are a round trip each, two system calls in the
 game; the census saw them on events only.
@@ -406,18 +408,41 @@ it yet; it is a test set-up). One game joined the other from the social tab. Wha
 Both games poll #17 `GetNumLobbyMembers` and #18 `GetLobbyMemberByIndex` 10 times a second each, in and out of a join:
 20 round trips a second in a sandboxed session, about 0.33 per frame at 60 frames a second (unmeasured in game).
 
-**No `SendP2PPacket`:** co-op's traffic is all Party, through the backend; the game only polls `ReadP2PPacket`.
+The census counted no `SendP2PPacket`. **That was its blind spot, not the game's:** it does not count calls on objects
+from `ISteamClient`, and the host sends P2P through one. A sandboxed run of the same join (the bridge build covers
+those objects) logged the host's `SendP2PPacket`, then `GetP2PSessionState`, the moment the joiner joined.
 
 The join stalled there: on one Steam account the host can never see the joiner in its Steam lobby. Between two PCs the
 same calls would have been refused by the bridge (`JoinLobby` and `GetLobbyData` unlisted, the others `ownLobby` on a
 lobby the game had not made, 504 not passed on). Now `JoinLobby` is a call, 504 is passed on, and a lobby the game
 entered counts as its own (`broker_bridge.c` `RememberEntered`).
 
+### Steam P2P
+
+Co-op uses the old `ISteamNetworking`: the host sends to a joiner when it joins (2026-10-24). Through the bridge it
+reaches only the game's **co-op peers**, so the game has no way to send to any other Steam user:
+- **A co-op peer** is a SteamID the backend lists, or a member of a lobby the game made or entered (`P2PPeer`):
+  - The backend writes its lobby and Party peers to `run/backend/p2p-peers.txt` (`MultiplayerHost.PeersFileName`), at
+    once when a lobby changes or a join starts, and on each heartbeat. The low-integrity game cannot write that folder.
+  - The broker reads the file when its time stamp moves, and again at once when a SteamID is not in it: a host sends
+    within a second of a join, seconds before the joiner enters its Steam lobby.
+- **Out:** `SendP2PPacket` (at most 7000 bytes, channels 0-7), `AcceptP2PSessionWithUser` and `GetP2PSessionState` to a
+  peer only; closing a session or channel and `AllowP2PPacketRelay` to anyone.
+- **In:** the broker reads channels 0-7 every pump, up to 32 packets a channel. A packet from a peer goes into the ring
+  under `BRIDGE_P2P_PACKET`, in pieces of up to 996 bytes. Packets from anyone else, or over 8192 bytes, are read and
+  dropped, so they never pile up in Steam. The stand-in puts each whole packet in a queue of 32 (a static array, no
+  allocation). `ReadP2PPacket` and `IsP2PPacketAvailable` answer from the queue with no system call. A full ring or
+  queue loses the packet, and it is logged.
+- Tests: `bridge_test.c` covers a send to the entered lobby's host, a refused one to anyone else, a peer the backend
+  lists mid-session, more than 7000 bytes, session state, accept, a 3000-byte packet in pieces, a stranger's packet
+  dropped, and a second channel. `smoke-lobby-link` checks each backend lists the other after a join.
+- Unmeasured: how much P2P co-op sends, and whether 8192 bytes and 60 ring slots are enough for it.
+
 ## Cost
 
 - **Idle frame** (`RunCallbacks`, about 400 a second in the census): one read of the ring's write position, compared
   with the stand-in's own. 0 system calls, 0 pipe messages, no allocation. Unmeasured in game.
-- **The calls the census saw every frame:** `ReadP2PPacket` (1.00 per frame) is a return; the DLC answers (0.85 per
+- **The calls the census saw every frame:** `ReadP2PPacket` (1.00 per frame) takes a slim lock and looks at the packet queue (no system call while uncontended); the DLC answers (0.85 per
   frame) and `BLoggedOn` are a seqlocked read of the snapshot, a few dozen bytes copied. No system call. Unmeasured in
   game.
 - **The inline accessors** (`SteamInternal_ContextInit`, about 340 a second in the census): a compare and a return.
@@ -453,7 +478,7 @@ Every number here is unmeasured in game until phase 4.
    snapshot, a refused method that never reaches Steam, a lobby the game did not make, callbacks (and an id the table
    does not list), a call result, `ContextInit`, `ISteamClient`, an unknown interface, the game's lobby type and Play
    with strangers, a co-op join (a lobby entered through `JoinLobby` becomes the game's, a refused entry does not), a
-   NULL game-server interface, and that Valve's DLL never loads (48 checks).
+   NULL game-server interface, Steam P2P with co-op peers only, and that Valve's DLL never loads (56 checks).
    Built 2026-10-23. Still to do: the next census, then the table's two review items (`SetRichPresence`, `CreateLobby`;
    `CreateLobby`'s type is now the broker's, above).
 4. **A low-integrity session:** the token and job, labelled folders, pipe labels, and the editor's saves through the

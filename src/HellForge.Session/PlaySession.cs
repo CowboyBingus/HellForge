@@ -617,6 +617,9 @@ sealed class PlaySession(PlayOptions options)
             brokerStart.ArgumentList.Add(Path.GetFullPath(Path.Combine(copy, "bin", CloudReal)));
             // Play with strangers, which the broker reads as the backend does: off, the game's Public Steam lobby is Friends only
             brokerStart.ArgumentList.Add(Path.GetFullPath(install.Mods));
+            // the backend's co-op peers (MultiplayerHost.PeersFile), the only Steam users the game's P2P reaches: in the
+            // backend's folder, which the low-integrity game cannot write
+            brokerStart.ArgumentList.Add(Path.GetFullPath(Path.Combine(run, "backend", "p2p-peers.txt")));
             broker = Process.Start(brokerStart) ?? throw new SessionFailure("The Steam broker did not start.");
             var brokerLog = new StreamWriter(Path.Combine(run, "steam-broker.log")) { AutoFlush = true };
             broker.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (brokerLog) brokerLog.WriteLine(e.Data); };

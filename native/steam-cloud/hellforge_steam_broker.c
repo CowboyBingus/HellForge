@@ -2,12 +2,13 @@
  * steam_api64.dll as app 553850, accepts the session's game over a named pipe with a low mandatory label, answers the
  * calls the allow-list permits, and pushes callbacks into a shared-memory ring.
  *
- * Usage: hellforge_steam_broker.exe <pipe-suffix> <game-pid> [valve-dll-path] [mods-folder]
+ * Usage: hellforge_steam_broker.exe <pipe-suffix> <game-pid> [valve-dll-path] [mods-folder] [p2p-peers-file]
  *
  * The session runner starts one broker per session; the game's stand-in finds the pipe by HELLFORGE_BRIDGE_PIPE. The
  * broker serves only the process with <game-pid>, and exits when that process exits, when it says BRIDGE_SHUTDOWN, or
  * when its pipe breaks. Its log is its standard error. The mods folder holds Play with strangers (hellforge-mods.json),
- * which decides whether the game's Public Steam lobby stays Public (broker_bridge.c).
+ * which decides whether the game's Public Steam lobby stays Public (broker_bridge.c). The peers file is the backend's
+ * list of the game's co-op peers, the only Steam users P2P passes to and from.
  *
  * The channel and the client check are phase 2; the interface methods, the allow-list's callbacks, call results and the
  * snapshot (broker_bridge.c, with the dispatch SdkShimGen steam-bridge generates) are phase 3. */
@@ -93,7 +94,7 @@ int wmain(int argc, wchar_t* argv[])
 {
     if (argc < 3 || wcslen(argv[1]) == 0 || wcslen(argv[1]) > 64)
     {
-        fprintf(stderr, "Usage: hellforge_steam_broker <pipe-suffix> <game-pid> [valve-dll-path] [mods-folder]\n");
+        fprintf(stderr, "Usage: hellforge_steam_broker <pipe-suffix> <game-pid> [valve-dll-path] [mods-folder] [p2p-peers-file]\n");
         return 2;
     }
     wchar_t* end = NULL;
@@ -126,6 +127,7 @@ int wmain(int argc, wchar_t* argv[])
         if (!BrokerBridgeOpen(&bridge, g_steam.module, g_steam.hPipe)) { fprintf(stderr, "broker: Valve's DLL lacks manual dispatch\n"); goto fail; }
         BrokerBridgeSnapshot(&bridge, ch); /* ready before the game's first frame */
         BrokerBridgeWatchStrangers(&bridge, argc >= 5 && argv[4][0] != L'\0' ? argv[4] : NULL);
+        BrokerBridgeWatchPeers(&bridge, argc >= 6 && argv[5][0] != L'\0' ? argv[5] : NULL);
         steam = bridge.steam;
     }
 

@@ -10,6 +10,10 @@
 /* how often the settings file's time stamp is looked at, as the backend does (StrangerSetting.Recheck) */
 #define BROKER_STRANGERS_MS 2000
 #define BROKER_PENDING_LOBBIES 4
+#define BROKER_MAX_PEERS 64
+/* Steam P2P: the channels the broker reads for the game, and how many packets a channel gives up in one pump */
+#define BROKER_P2P_CHANNELS 8
+#define BROKER_P2P_PER_PUMP 32
 
 typedef struct BrokerBridge {
     HMODULE valve;
@@ -25,6 +29,13 @@ typedef struct BrokerBridge {
     /* Play with strangers (mods/hellforge-mods.json "playWithStrangers", off without the file): the mods folder, the
      * settings file's time stamp when read, when it was last looked at */
     wchar_t modsFolder[520];
+    /* Steam P2P's co-op peers (BrokerBridgeWatchPeers): the backend's file, its time stamp when read, when last looked at */
+    wchar_t peersFile[520];
+    uint64_t peers[BROKER_MAX_PEERS];
+    int peerCount;
+    FILETIME peersStamp;
+    DWORD peersChecked;
+    uint32_t p2pDropped;            /* packets not passed on: from someone else, too large, or the ring full */
     int strangers;
     FILETIME strangersStamp;
     DWORD strangersChecked;
@@ -44,6 +55,11 @@ int BrokerBridgeOpen(BrokerBridge* b, HMODULE valve, int hPipe);
 /* Reads Play with strangers from that mods folder now, and again whenever its settings file changes (the pump looks
  * every BROKER_STRANGERS_MS). Without it, strangers are off. Call before serving. */
 void BrokerBridgeWatchStrangers(BrokerBridge* b, const wchar_t* modsFolder);
+
+/* Steam P2P passes only to and from the game's co-op peers: the SteamIDs in this file (the backend's lobby and Party
+ * peers, decimal, one a line; written as they change), and the members of a lobby the game made or entered. Without
+ * the file, only those members. Call before serving. */
+void BrokerBridgeWatchPeers(BrokerBridge* b, const wchar_t* peersFile);
 
 /* Play with strangers in a settings file's text: a top-level "playWithStrangers": true. */
 int BrokerStrangersIn(const char* json, size_t length);

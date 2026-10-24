@@ -208,21 +208,82 @@ bool Hand_STEAMAPPS_INTERFACE_VERSION008_GetCurrentBetaName(void* self, void* pc
     return true;
 }
 
-/* ---- answered in the game: HellForge's co-op does not use Steam P2P (its party traffic goes through the backend) ---- */
+/* ---- Steam P2P, answered in the game ----
+ * Co-op uses it: the host sends to a joiner when it joins (2026-10-24). The broker reads the packets from the game's
+ * co-op peers and puts them in the ring in pieces (BRIDGE_P2P_PACKET); RunCallbacks puts each whole packet in this
+ * queue, and the game reads it from here every frame with no system call and no allocation. Sending is a broker call. */
+
+#define P2P_QUEUE 32
+typedef struct P2PPacket { uint64_t remote; int32_t channel; uint32_t size; uint8_t data[BRIDGE_P2P_MAX]; } P2PPacket;
+static P2PPacket g_p2p[P2P_QUEUE];
+static int g_p2pHead, g_p2pCount;
+static P2PPacket g_p2pAssembly;      /* the packet whose pieces are arriving */
+static uint32_t g_p2pAssembled;      /* how much of it has (0: none under way) */
+static SRWLOCK g_p2pLock = SRWLOCK_INIT;
+
+/* A piece from the ring (RunCallbacks' thread). A piece out of order drops the packet under way; a full queue drops the
+ * new packet. */
+static void P2PPiece(const uint8_t* data, uint32_t size)
+{
+    BridgeP2PPiece head;
+    if (size < sizeof head) return;
+    memcpy(&head, data, sizeof head);
+    uint32_t part = size - (uint32_t)sizeof head;
+    if (head.total > BRIDGE_P2P_MAX || head.offset > head.total || part > head.total - head.offset) return;
+    if (head.offset == 0) { g_p2pAssembly.remote = head.remote; g_p2pAssembly.channel = head.channel; g_p2pAssembly.size = head.total; g_p2pAssembled = 0; }
+    else if (head.offset != g_p2pAssembled || head.remote != g_p2pAssembly.remote || head.total != g_p2pAssembly.size) { g_p2pAssembled = 0; return; }
+    memcpy(g_p2pAssembly.data + head.offset, data + sizeof head, part);
+    g_p2pAssembled = head.offset + part;
+    if (g_p2pAssembled < g_p2pAssembly.size) return;
+    AcquireSRWLockExclusive(&g_p2pLock);
+    if (g_p2pCount < P2P_QUEUE) g_p2p[(g_p2pHead + g_p2pCount++) % P2P_QUEUE] = g_p2pAssembly;
+    else BridgeRefused("a Steam P2P packet: the game's queue is full");
+    ReleaseSRWLockExclusive(&g_p2pLock);
+    g_p2pAssembled = 0;
+}
+
+/* The oldest packet waiting on that channel: its place in the queue, or -1. With the lock held. */
+static int P2PFind(int32_t channel)
+{
+    for (int i = 0; i < g_p2pCount; i++) if (g_p2p[(g_p2pHead + i) % P2P_QUEUE].channel == channel) return i;
+    return -1;
+}
 
 bool Hand_SteamNetworking006_IsP2PPacketAvailable(void* self, void* pcubMsgSize, int32_t nChannel)
 {
-    (void)self; (void)nChannel;
-    if (pcubMsgSize) memset(pcubMsgSize, 0, 4);
-    return false;
+    (void)self;
+    uint32_t size = 0;
+    AcquireSRWLockShared(&g_p2pLock);
+    int at = g_p2pCount ? P2PFind(nChannel) : -1;
+    if (at >= 0) size = g_p2p[(g_p2pHead + at) % P2P_QUEUE].size;
+    ReleaseSRWLockShared(&g_p2pLock);
+    if (pcubMsgSize) memcpy(pcubMsgSize, &size, 4);
+    return at >= 0;
 }
 
+/* As Steam: the packet leaves the queue, as much of it as fits is copied, and its whole size is said. */
 bool Hand_SteamNetworking006_ReadP2PPacket(void* self, void* pubDest, uint32_t cubDest, void* pcubMsgSize, void* psteamIDRemote, int32_t nChannel)
 {
-    (void)self; (void)pubDest; (void)cubDest; (void)nChannel;
-    if (pcubMsgSize) memset(pcubMsgSize, 0, 4);
-    if (psteamIDRemote) memset(psteamIDRemote, 0, 8);
-    return false;
+    (void)self;
+    uint32_t size = 0;
+    uint64_t remote = 0;
+    AcquireSRWLockExclusive(&g_p2pLock);
+    int at = g_p2pCount ? P2PFind(nChannel) : -1;
+    if (at >= 0)
+    {
+        P2PPacket* packet = &g_p2p[(g_p2pHead + at) % P2P_QUEUE];
+        size = packet->size;
+        remote = packet->remote;
+        if (pubDest) memcpy(pubDest, packet->data, size < cubDest ? size : cubDest);
+        /* the ones before it on other channels stay, in order */
+        for (int i = at; i > 0; i--) g_p2p[(g_p2pHead + i) % P2P_QUEUE] = g_p2p[(g_p2pHead + i - 1) % P2P_QUEUE];
+        g_p2pHead = (g_p2pHead + 1) % P2P_QUEUE;
+        g_p2pCount--;
+    }
+    ReleaseSRWLockExclusive(&g_p2pLock);
+    if (pcubMsgSize) memcpy(pcubMsgSize, &size, 4);
+    if (psteamIDRemote) memcpy(psteamIDRemote, &remote, 8);
+    return at >= 0;
 }
 
 /* ---- callbacks ----
@@ -307,6 +368,7 @@ static void Run(void* object, const uint8_t* payload, uint32_t size, bool ioFail
 
 void BridgeDispatch(uint32_t callbackId, const uint8_t* data, uint32_t size)
 {
+    if (callbackId == BRIDGE_P2P_PACKET) { P2PPiece(data, size); return; }
     if (callbackId & BRIDGE_CALL_RESULT_FLAG)
     {
         if (size < BRIDGE_CALL_RESULT_HEADER) return;
