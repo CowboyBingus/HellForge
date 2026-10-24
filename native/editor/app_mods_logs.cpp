@@ -36,6 +36,23 @@ void LogFilter()
     g_logs.index = std::clamp(g_logs.index, 0, std::max(0, (int)g_logs.shown.size() - 1));
 }
 
+/* The log's lines and their kinds (cut: the text starts within a line, which is left out; empty lines too). */
+static void LogLines(const std::string& text, bool cut)
+{
+    g_logs.lines.clear();
+    g_logs.kinds.clear();
+    size_t start = cut ? text.find('\n') + 1 : 0;
+    while (start < text.size())
+    {
+        size_t end = text.find('\n', start);
+        std::string line = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty()) { g_logs.kinds.push_back(LogKind(line)); g_logs.lines.push_back(line); }
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+}
+
 void LogRead(bool force)
 {
     ULONGLONG now = GetTickCount64();
@@ -59,18 +76,7 @@ void LogRead(bool force)
     text.resize(read);
     g_logs.path = path;
     g_logs.size = (uint64_t)size.QuadPart;
-    g_logs.lines.clear();
-    g_logs.kinds.clear();
-    size_t start = at.QuadPart > 0 ? text.find('\n') + 1 : 0; /* (a cut first line is left out) */
-    while (start < text.size())
-    {
-        size_t end = text.find('\n', start);
-        std::string line = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (!line.empty()) { g_logs.kinds.push_back(LogKind(line)); g_logs.lines.push_back(line); }
-        if (end == std::string::npos) break;
-        start = end + 1;
-    }
+    LogLines(text, at.QuadPart > 0);
     LogFilter();
 }
 
@@ -151,42 +157,48 @@ static std::pair<std::string, std::string> ManifestName(const std::string& folde
     return out;
 }
 
-/* The list again (every 2 s while MODS is open, or now): the mods from the loader, their names, and the values each holds
- * (the holder index HolderTick keeps). The selected mod stays selected. */
-void ScanMods(bool now)
+/* A mod as the loader lists it: a Lua mod by its runtime name, a code or stats mod by its manifest's name and version. */
+static ModInfo ModOf(const HfModInfo& info)
 {
-    ULONGLONG tick = GetTickCount64();
-    if (!now && g_modsAt != 0 && tick - g_modsAt < 2000) return;
-    g_modsAt = tick;
-    const ModInfo* was = SelectedMod();
-    std::string keep = was != nullptr ? was->id : "";
+    ModInfo m;
+    m.id = info.id;
+    m.kind = info.kind;
+    m.loaded = info.loaded != 0;
+    m.folder = info.folder != nullptr ? info.folder : "";
+    if (info.kind == HF_MOD_LUA)
+    {
+        std::string name = info.name != nullptr ? info.name : "";
+        m.name = LuaModTitle(name);
+        m.detail = name;
+    }
+    else
+    {
+        auto [name, version] = ManifestName(m.folder);
+        m.name = name.empty() ? m.id : name;
+        m.detail = m.id + (version.empty() ? "" : SEP + version);
+    }
+    return m;
+}
+
+/* The session's mods from the loader (the editor left out). */
+static std::vector<ModInfo> LoaderMods()
+{
     std::vector<ModInfo> list;
-    if (HasMods())
-        for (uint32_t i = 0; i < 1024; i++)
-        {
-            HfModInfo info{};
-            info.size = sizeof info;
-            if (!g_host.api->mods(g_host.mod, i, &info)) break;
-            if (info.kind == HF_MOD_EDITOR || info.id == nullptr) continue;
-            ModInfo m;
-            m.id = info.id;
-            m.kind = info.kind;
-            m.loaded = info.loaded != 0;
-            m.folder = info.folder != nullptr ? info.folder : "";
-            if (info.kind == HF_MOD_LUA)
-            {
-                std::string name = info.name != nullptr ? info.name : "";
-                m.name = LuaModTitle(name);
-                m.detail = name;
-            }
-            else
-            {
-                auto [name, version] = ManifestName(m.folder);
-                m.name = name.empty() ? m.id : name;
-                m.detail = m.id + (version.empty() ? "" : SEP + version);
-            }
-            list.push_back(m);
-        }
+    if (!HasMods()) return list;
+    for (uint32_t i = 0; i < 1024; i++)
+    {
+        HfModInfo info{};
+        info.size = sizeof info;
+        if (!g_host.api->mods(g_host.mod, i, &info)) break;
+        if (info.kind == HF_MOD_EDITOR || info.id == nullptr) continue;
+        list.push_back(ModOf(info));
+    }
+    return list;
+}
+
+/* The values each mod holds (the holder index HolderTick keeps), by object. */
+static void AddHeldRows(std::vector<ModInfo>& list)
+{
     std::map<std::string, size_t> byId;
     for (size_t i = 0; i < list.size(); i++) byId[list[i].id] = i;
     for (auto& [row, holder] : g_holders) /* read a few a frame (HolderTick) */
@@ -200,15 +212,46 @@ void ScanMods(bool now)
     }
     for (ModInfo& m : list)
         std::stable_sort(m.rows.begin(), m.rows.end(), [](const Row* a, const Row* b) { return a->object->name < b->object->name; });
-    g_modList = std::move(list);
-    auto entries = ModEntries();
-    g_modEntry = -1;
+}
+
+/* The entry of the mod selected before (it stays selected), else the first mod's; -1 none. */
+static int EntryOf(const std::vector<ModEntry>& entries, const std::string& keep)
+{
+    int entry = -1;
     for (int i = 0; i < (int)entries.size(); i++)
     {
         if (entries[i].mod < 0) continue;
-        if (g_modEntry < 0) g_modEntry = i;
-        if (g_modList[entries[i].mod].id == keep) { g_modEntry = i; break; }
+        if (entry < 0) entry = i;
+        if (g_modList[entries[i].mod].id == keep) return i;
     }
+    return entry;
+}
+
+/* The list again (every 2 s while MODS is open, or now): the mods from the loader, their names, and the values each holds
+ * (the holder index HolderTick keeps). The selected mod stays selected. */
+void ScanMods(bool now)
+{
+    ULONGLONG tick = GetTickCount64();
+    if (!now && g_modsAt != 0 && tick - g_modsAt < 2000) return;
+    g_modsAt = tick;
+    const ModInfo* was = SelectedMod();
+    std::string keep = was != nullptr ? was->id : "";
+    std::vector<ModInfo> list = LoaderMods();
+    AddHeldRows(list);
+    g_modList = std::move(list);
+    g_modEntry = EntryOf(ModEntries(), keep);
+}
+
+/* A group's heading in the left list, with how many mods it has. */
+static void DrawModHeading(const ModEntry& e, float x, float y, float lw, float rh)
+{
+    bool lua = e.heading == "LUA MODS";
+    int count = 0;
+    for (const ModInfo& m : g_modList) count += (m.kind == HF_MOD_LUA) == lua;
+    g_cv.Text(e.heading, x + 20, y + rh - 16, T(SZ_HEADING, GOLD, ui::TITLE));
+    g_cv.Text(count == 0 ? (lua ? "none (an HD2Runtime mod shows once it changes a value)" : "none") : std::to_string(count),
+        x + lw - 20, y + rh - 16, T(SZ_TINY, FAINT, ui::BODY, ui::RIGHT, lw - 170));
+    g_cv.Rect(x + 16, y + rh - 5, lw - 32, 1, LINE_STRONG, 2);
 }
 
 void DrawMods(float y0, float h)
@@ -229,17 +272,7 @@ void DrawMods(float y0, float h)
     o.click = [&](int i) { if (entries[i].mod >= 0) { g_modEntry = i; g_modRow = 0; g_scroll["modrows"] = 0; Sound(sounds::CLICK); } };
     o.draw = [&](int i, float x, float y, float lw, float rh, bool hovered) {
         const ModEntry& e = entries[i];
-        if (e.mod < 0)
-        {
-            bool lua = e.heading == "LUA MODS";
-            int count = 0;
-            for (const ModInfo& m : g_modList) count += (m.kind == HF_MOD_LUA) == lua;
-            g_cv.Text(e.heading, x + 20, y + rh - 16, T(SZ_HEADING, GOLD, ui::TITLE));
-            g_cv.Text(count == 0 ? (lua ? "none (an HD2Runtime mod shows once it changes a value)" : "none") : std::to_string(count),
-                x + lw - 20, y + rh - 16, T(SZ_TINY, FAINT, ui::BODY, ui::RIGHT, lw - 170));
-            g_cv.Rect(x + 16, y + rh - 5, lw - 32, 1, LINE_STRONG, 2);
-            return;
-        }
+        if (e.mod < 0) { DrawModHeading(e, x, y, lw, rh); return; }
         const ModInfo& m = g_modList[e.mod];
         bool selected = i == g_modEntry;
         if (selected) { g_cv.Rect(x + 8, y + 2, lw - 16, rh - 4, SELECT, 2); g_cv.Rect(x + 8, y + 2, 3, rh - 4, GOLD, 3); }
@@ -297,20 +330,19 @@ void DrawMods(float y0, float h)
     List(r);
 }
 
-void DrawLogs(float y0, float h)
+/* OPEN LOG FILE and SHOW IN FOLDER (a session's game may not start other programs: then the path is said instead) */
+static void DrawLogButtons(float W, float y0)
 {
-    float W = PANEL_W;
-    LogRead(false);
-    g_cv.Rect(0, y0, W, h, PANEL, 1);
-    g_cv.Text("LOGS", 20, y0 + 24, T(20, TEXT, ui::TITLE));
-    g_cv.Text(g_logs.path.empty() ? "This HellForge does not say where its logs are (update HellForge)." : Narrow(g_logs.path),
-        20, y0 + 47, T(SZ_SMALL, g_logs.path.empty() ? ERROR_ : FAINT, ui::BODY, ui::LEFT, W - 480));
     if (Button("OPEN LOG FILE", {W - 216, y0 + 16, 196, 34}, g_logs.path.empty() ? DISABLED : NORMAL, ui::Id("logfile")) && !g_logs.path.empty())
         if (!OpenWith(L"\"" + g_logs.path + L"\"")) Toast("Open it yourself: " + Narrow(g_logs.path), PENDING);
     if (Button("SHOW IN FOLDER", {W - 424, y0 + 16, 196, 34}, g_logs.path.empty() ? DISABLED : NORMAL, ui::Id("logfolder")) && !g_logs.path.empty())
         if (!OpenWith(L"/select,\"" + g_logs.path + L"\"")) Toast("Open it yourself: " + Narrow(g_logs.path), PENDING);
-    /* the source (HellForge's log or the editor's), the filters, following the end */
-    float fx = 20, fy = y0 + 68;
+}
+
+/* the source (HellForge's log or the editor's), the filters, following the end */
+static void DrawLogChips(float fy)
+{
+    float fx = 20;
     auto chip = [&](const std::string& label, bool on, ImU32 tone, uint64_t id) {
         float w = g_cv.Measure(label, SZ_TINY, ui::TITLE) + 22;
         g_cv.Rect(fx, fy, w, 22, on ? tone : (g_cv.Hovered() == id ? HOVER : BOX), 3);
@@ -331,6 +363,30 @@ void DrawLogs(float y0, float h)
     g_cv.Rect(g_logs.follow ? fx + 30 : fx + 14, fy + 4, 14, 14, g_logs.follow ? INVERSE : DIM, 4);
     g_cv.Text("Follow the end", fx + 56, fy + 11, T(SZ_SMALL, DIM));
     if (g_cv.Hit(fx + 12, fy, 160, 22, followId)) { g_logs.follow = !g_logs.follow; LogFilter(); }
+}
+
+/* the selected line in full, on two lines when it is long */
+static void DrawLogLine(const std::string& line, float W, float dy)
+{
+    std::string first = g_cv.Fit(line, W - 40, SZ_SMALL);
+    if (first.size() >= line.size() || first.size() < 4) { g_cv.Text(line, 20, dy + 12, T(SZ_SMALL, TEXT, ui::BODY, ui::LEFT, W - 40)); return; }
+    size_t cut = line.rfind(' ', first.size() - 3);
+    if (cut == std::string::npos || cut < 20) cut = first.size() - 3;
+    g_cv.Text(line.substr(0, cut), 20, dy + 12, T(SZ_SMALL, TEXT, ui::BODY, ui::LEFT, W - 40));
+    g_cv.Text(line.substr(cut + (line[cut] == ' ' ? 1 : 0)), 20, dy + 32, T(SZ_SMALL, TEXT, ui::BODY, ui::LEFT, W - 40));
+}
+
+void DrawLogs(float y0, float h)
+{
+    float W = PANEL_W;
+    LogRead(false);
+    g_cv.Rect(0, y0, W, h, PANEL, 1);
+    g_cv.Text("LOGS", 20, y0 + 24, T(20, TEXT, ui::TITLE));
+    g_cv.Text(g_logs.path.empty() ? "This HellForge does not say where its logs are (update HellForge)." : Narrow(g_logs.path),
+        20, y0 + 47, T(SZ_SMALL, g_logs.path.empty() ? ERROR_ : FAINT, ui::BODY, ui::LEFT, W - 480));
+    DrawLogButtons(W, y0);
+    float fy = y0 + 68;
+    DrawLogChips(fy);
     int n = (int)g_logs.shown.size();
     g_cv.Text(std::to_string(n) + " lines", W - 20, fy + 11, T(SZ_TINY, FAINT, ui::BODY, ui::RIGHT));
     float ly = fy + 32, detail = 54;
@@ -348,19 +404,6 @@ void DrawLogs(float y0, float h)
     List(o);
     float dy = y0 + h - detail + 6;
     g_cv.Rect(0, dy - 6, W, 1, LINE, 2);
-    if (g_logs.index < n)
-    {
-        /* the selected line in full, on two lines when it is long */
-        const std::string& line = g_logs.lines[g_logs.shown[g_logs.index]];
-        std::string first = g_cv.Fit(line, W - 40, SZ_SMALL);
-        if (first.size() >= line.size() || first.size() < 4) g_cv.Text(line, 20, dy + 12, T(SZ_SMALL, TEXT, ui::BODY, ui::LEFT, W - 40));
-        else
-        {
-            size_t cut = line.rfind(' ', first.size() - 3);
-            if (cut == std::string::npos || cut < 20) cut = first.size() - 3;
-            g_cv.Text(line.substr(0, cut), 20, dy + 12, T(SZ_SMALL, TEXT, ui::BODY, ui::LEFT, W - 40));
-            g_cv.Text(line.substr(cut + (line[cut] == ' ' ? 1 : 0)), 20, dy + 32, T(SZ_SMALL, TEXT, ui::BODY, ui::LEFT, W - 40));
-        }
-    }
+    if (g_logs.index < n) DrawLogLine(g_logs.lines[g_logs.shown[g_logs.index]], W, dy);
 }
 } // namespace editorapp
