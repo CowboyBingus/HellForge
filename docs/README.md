@@ -51,6 +51,8 @@ Reference and related pages:
   a game update.
 - [Co-op and public lobbies](multiplayer.md): how HellForge's co-op, mod sync and public lobbies work, and the research
   log from building them.
+- [Several installations on one PC](multi-instance.md): for testing co-op without a second PC; a test mode that runs
+  two games under one Steam account.
 - [Stratagem selection categories](stratagem-categories.md): the research behind SDK 8's selection headings.
 - [Roadmap](roadmap.md): what HellForge has, what is being built, and what comes next.
 - [Engine roadmap](engine-roadmap.md): planned engine work, starting with network isolation.

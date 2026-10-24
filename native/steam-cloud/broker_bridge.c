@@ -34,7 +34,12 @@ typedef int (*IsRunningFn)(void);
 
 static BrokerBridge* Of(const BrokerApi* api) { return (BrokerBridge*)api->context; }
 
-static void* Resolve(const BrokerApi* api, const char* flat) { return (void*)GetProcAddress(Of(api)->valve, flat); }
+/* Several installations on one PC (BrokerBridgeMultiInstance): the game's own Steam lobby is answered locally. */
+static void* Resolve(const BrokerApi* api, const char* flat)
+{
+    void* local = Of(api)->localLobbies ? BrokerLobbiesResolve(flat) : NULL;
+    return local ? local : (void*)GetProcAddress(Of(api)->valve, flat);
+}
 
 /* The accessors of the interfaces the table bridges, each looked up and called once. */
 static void* Self(const BrokerApi* api, const char* accessor)
@@ -134,6 +139,7 @@ static int AlwaysFriendsOnly(void)
 static void ApplyLobbyTypes(BrokerBridge* b)
 {
     typedef bool (*SetTypeFn)(void*, uint64_t, int);
+    if (b->localLobbies) return; /* local lobbies are in no Steam search whatever their type */
     SetTypeFn setType = (SetTypeFn)(void*)GetProcAddress(b->valve, "SteamAPI_ISteamMatchmaking_SetLobbyType");
     void* matchmaking = Self(&b->api, "SteamAPI_SteamMatchmaking_v009");
     int type = b->strangers && !AlwaysFriendsOnly() ? LOBBY_PUBLIC : LOBBY_FRIENDS_ONLY;
@@ -317,6 +323,8 @@ static bool Allowed(int id)
 
 /* SteamAPICallCompleted_t: the call, the result's callback id and size. Its result goes to the game behind the call-result
  * header; a LobbyCreated_t that succeeded names a lobby the game may then use. */
+static void PassCallResult(BrokerBridge* b, BrokerChannel* ch, uint64_t call, int32_t id, bool failed, uint8_t* slot, uint32_t resultSize);
+
 static void CallCompleted(BrokerBridge* b, BrokerChannel* ch, const uint8_t* data, int32_t size)
 {
     if (size < 16) return;
@@ -336,6 +344,13 @@ static void CallCompleted(BrokerBridge* b, BrokerChannel* ch, const uint8_t* dat
     bool failed = false;
     memset(slot, 0, BRIDGE_CALL_RESULT_HEADER + resultSize);
     if (!result || !result(b->hPipe, call, slot + BRIDGE_CALL_RESULT_HEADER, (int)resultSize, id, &failed)) failed = true;
+    PassCallResult(b, ch, call, id, failed, slot, resultSize);
+}
+
+/* A call result for the game (slot: the header's room, then the result): the lobbies it names are remembered for the
+ * table's ownLobby checks, then it goes into the ring behind the call-result header. */
+static void PassCallResult(BrokerBridge* b, BrokerChannel* ch, uint64_t call, int32_t id, bool failed, uint8_t* slot, uint32_t resultSize)
+{
     memcpy(slot, &call, 8);
     slot[8] = failed ? 1 : 0;
     if (id == LOBBY_CREATED)
@@ -378,6 +393,16 @@ static void Pump(void* context, BrokerChannel* ch)
                 fprintf(stderr, "broker: callback %d of %u bytes does not fit a ring slot; dropped\n", msg.callbackId, size);
         }
         b->freeLast(b->hPipe);
+    }
+    /* the local lobby's call results and data updates (BrokerBridgeMultiInstance) */
+    BrokerLocalResult local;
+    while (b->localLobbies && BrokerLobbiesNext(b->localLobbies, &local))
+    {
+        uint8_t slot[BRIDGE_CALL_RESULT_HEADER + sizeof local.data];
+        memset(slot, 0, sizeof slot);
+        memcpy(slot + BRIDGE_CALL_RESULT_HEADER, local.data, local.size);
+        if (local.call) PassCallResult(b, ch, local.call, local.id, false, slot, local.size);
+        else if (Allowed(local.id)) BrokerChannelPushCallback(ch, (uint32_t)local.id, local.data, local.size);
     }
     if (ch->dropped > 0 && reportedDrops == 0) { fprintf(stderr, "broker: the ring is full; callbacks are being dropped\n"); reportedDrops = 1; }
     PollP2P(b, ch);
@@ -441,6 +466,12 @@ void BrokerBridgeSnapshot(BrokerBridge* b, BrokerChannel* ch)
         }
     }
     next.betaName[sizeof next.betaName - 1] = 0;
+    /* several installations on one PC: the game is this instance's player, not the Steam account's */
+    if (b->identity)
+    {
+        next.steamId = b->identity;
+        Put(next.personaName, sizeof next.personaName, b->persona);
+    }
     /* the seqlock: odd while written */
     uint32_t version = s->version;
     __atomic_store_n(&s->version, version | 1, __ATOMIC_RELEASE);
@@ -464,5 +495,19 @@ int BrokerBridgeOpen(BrokerBridge* b, HMODULE valve, int hPipe)
     if (!b->runFrame || !b->next || !b->freeLast) return 0;
     b->api = (BrokerApi){ b, Resolve, Self, OwnLobby, Refuse, LogValue, P2PPeer, Adjust, BrokerDispatchMethod };
     b->steam = (BrokerSteam){ b, Pump, IsRunning, &b->api };
+    return 1;
+}
+
+int BrokerBridgeMultiInstance(BrokerBridge* b, const wchar_t* lobbyFolder, uint64_t identity, const char* persona)
+{
+    /* a SteamID64 of an individual account in the public universe, as HELLFORGE_IDENTITY must be (PlayFabService) */
+    if (identity >> 56 != 1 || (identity >> 52 & 0xF) != 1) return 0;
+    b->localLobbies = BrokerLobbiesOpen(lobbyFolder, identity);
+    if (!b->localLobbies) return 0;
+    BrokerLobbiesUse(b->localLobbies);
+    b->identity = identity;
+    Put(b->persona, sizeof b->persona, persona);
+    fprintf(stderr, "broker: several installations: this game is %llu (%s); its Steam lobby is kept with the others' locally\n",
+        (unsigned long long)identity, b->persona);
     return 1;
 }

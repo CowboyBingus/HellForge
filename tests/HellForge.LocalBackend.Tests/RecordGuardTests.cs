@@ -25,6 +25,31 @@ static class RecordGuardTests
         check(Depth(clean["operationProgress"]) < RecordGuard.LobbyLimits.Depth, "Nesting stops at the depth limit.");
         var huge = new JsonObject { ["players"] = new JsonArray(Enumerable.Range(0, 64).Select(_ => (JsonNode?)new JsonObject { ["playerName"] = new string('n', 256) }).ToArray()) };
         check(RecordGuard.Lobby(huge) == null, "A record over the size limit is refused.");
+        // The selected mission ("seed", MissionSeed): kept in its exact layout, whatever its length; a count past its
+        // slot in the game's 0xE8-byte struct, a wrong length, another version or uppercase is left out.
+        const string hostSeed = "f3fb5deebd23f97b279d04011f43e0c8d5003621037ec6ffee01890da150010205359da6d95501d50301020800000300010000";
+        var full = Seed(32, 8, 3, 2, 4, 8);
+        check(MissionSeed.Valid(hostSeed) && MissionSeed.Valid(full) && full.Length == MissionSeed.MaxLength && MissionSeed.Valid(Seed(0, 0, 0, 0, 0, 0)),
+            $"A host's seed and seeds with empty and full arrays are valid ({full.Length} digits).");
+        check(!MissionSeed.Valid(Seed(33, 0, 0, 0, 0, 0)) && !MissionSeed.Valid(Seed(0, 9, 0, 0, 0, 0)) && !MissionSeed.Valid(Seed(0, 0, 4, 0, 0, 0)) &&
+              !MissionSeed.Valid(Seed(0, 0, 0, 3, 0, 0)) && !MissionSeed.Valid(Seed(0, 0, 0, 0, 5, 0)) && !MissionSeed.Valid(Seed(0, 0, 0, 0, 0, 9)),
+            "A count past its slot is refused.");
+        check(!MissionSeed.Valid(hostSeed + "00") && !MissionSeed.Valid(hostSeed[..^2]) && !MissionSeed.Valid(hostSeed.ToUpperInvariant()) &&
+              !MissionSeed.Valid("f3fa" + hostSeed[4..]) && !MissionSeed.Valid("") && !MissionSeed.Valid(null),
+            "A wrong length, uppercase, another version or no seed is refused.");
+        var seeded = RecordGuard.Lobby(new JsonObject { ["planetId"] = 7, ["seed"] = full });
+        var forged = RecordGuard.Lobby(new JsonObject { ["planetId"] = 7, ["seed"] = Seed(40, 0, 0, 0, 0, 0) });
+        var numeric = RecordGuard.Lobby(new JsonObject { ["planetId"] = 7, ["seed"] = 5 });
+        check(seeded?["seed"]?.GetValue<string>() == full && forged != null && !forged.ContainsKey("seed") && numeric != null && !numeric.ContainsKey("seed"),
+            "A lobby record keeps a valid seed past the text limit and drops a forged or non-text one.");
+        // The lobby directory's schema (LobbyRecords): published with its seed; a stranger's listing with a forged seed is
+        // refused, and this machine's own record leaves a forged one out.
+        static JsonObject Listing(string seed) => JsonNode.Parse($"{{\"planetId\":7,\"seed\":\"{seed}\"}}")!.AsObject();
+        var listed = LobbyRecords.Clean(Listing(hostSeed), strict: true);
+        var forgedListing = LobbyRecords.Clean(Listing(Seed(0, 0, 0, 0, 0, 9)), strict: true);
+        var ownForged = LobbyRecords.Clean(Listing(hostSeed + "0"), strict: false);
+        check(listed?["seed"]?.GetValue<string>() == hostSeed && forgedListing == null && ownForged != null && !ownForged.ContainsKey("seed"),
+            "The directory keeps a valid seed, refuses a stranger's listing with a forged one and leaves a forged one out of its own.");
         var live = RecordGuard.Live(new JsonObject { ["missionTime"] = 30, ["playerPositions"] = new JsonArray(1, 2), ["other"] = 1 });
         check(live != null && live.Count == 2 && !live.ContainsKey("other"), "A live state keeps its known fields.");
         var objects = RecordGuard.Objects(new JsonObject { ["Title"] = new JsonObject { ["DataObject"] = "abc" }, ["bad\u0001key"] = 1 });
@@ -60,7 +85,15 @@ static class RecordGuardTests
         check(setting.Allowed && setting.Reads == read + 1, "After Recheck a changed file is read again.");
         clock += StrangerSetting.Recheck;
         check(setting.Allowed && setting.Reads == read + 1, "An unchanged file is not read again.");
-        Console.WriteLine("PASS record guard: known fields, limits, control characters, size; host file keys; the game's objects; the strangers setting");
+        Console.WriteLine("PASS record guard: known fields, limits, control characters, size; the selected mission's seed; host file keys; the game's objects; the strangers setting");
+    }
+
+    // A seed in the game's layout (MissionSeed) with the given array counts, every entry filled.
+    static string Seed(int words, int bytes, int few, int pair, int fourWords, int eightWords)
+    {
+        static string Count(int n, int digits) => n.ToString("x2") + string.Concat(Enumerable.Repeat(new string('1', digits), n));
+        return MissionSeed.Version + new string('0', 58) + Count(words, 8) + Count(bytes, 2) + Count(few, 2) + Count(pair, 2) + "03" +
+            Count(fourWords, 8) + "0100" + Count(eightWords, 8);
     }
 
     static JsonObject Deep(int levels)

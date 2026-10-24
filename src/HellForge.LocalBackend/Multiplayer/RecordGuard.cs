@@ -24,7 +24,7 @@ public static class RecordGuard
         "startTime", "lobbyId", "players", "connectionString", "operationProgress", "gameModeProgress", "memberAccountIds",
         "inLoadout", "buildGameHash", "warId", "state", "difficulty", "hostability", "privacyMode", "onboardingState",
         "numLobbyMembers", "sosBeacons", "planetId", "territoryId", "race", "crossplayMode", "preferenceGroup", "regionIndex",
-        "operationSeed", "operationType", "operationMissionStates"
+        "operationSeed", "operationType", "operationMissionStates", "seed"
     };
     static readonly HashSet<string> PlayerFields = new(StringComparer.Ordinal)
     {
@@ -56,7 +56,8 @@ public static class RecordGuard
         foreach (var (key, value) in record)
         {
             if (fields != null ? !fields.Contains(key) : !Key(key, limits, count)) continue;
-            var cleaned = players && key == "players" ? Players(value, limits, count) : Value(value, limits, 1, count);
+            var cleaned = players && key == "players" ? Players(value, limits, count)
+                : players && key == "seed" ? Seed(value, count) : Value(value, limits, 1, count);
             if (cleaned.Ok) copy[key] = cleaned.Node;
         }
         dropped = count.Dropped;
@@ -75,6 +76,15 @@ public static class RecordGuard
             players.Add((JsonNode)kept);
         }
         return (true, players);
+    }
+
+    // A lobby record's selected mission (MissionSeed), longer than other text and kept only in its exact layout.
+    static (bool Ok, JsonNode? Node) Seed(JsonNode? value, Count count)
+    {
+        if (value is JsonValue scalar && scalar.GetValueKind() == JsonValueKind.String && MissionSeed.Valid(scalar.GetValue<string>()))
+            return (true, scalar.DeepClone());
+        count.Dropped++;
+        return (false, null);
     }
 
     static (bool Ok, JsonNode? Node) Value(JsonNode? value, Limits limits, int depth, Count count)

@@ -21,6 +21,30 @@ static class SessionJobTests
             check(limited != 7, $"With the limit the child cannot start (exit code {limited}).");
         });
 
+        test("Several installations: another installation's game lets a session start only with HELLFORGE_MULTI_INSTANCE", () =>
+        {
+            HellForge.Core.InstallLayout Install(string name)
+            {
+                var folder = Directory.CreateDirectory(Path.Combine(root, "instances", name, "game", "bin")).Parent!.Parent!.FullName;
+                File.WriteAllText(Path.Combine(folder, HellForge.Core.InstallLayout.MarkerFile), "{}");
+                return new HellForge.Core.InstallLayout(folder);
+            }
+            var one = Install("one");
+            var two = Install("two");
+            var twoGame = Path.Combine(two.Game, "bin", "helldivers2.exe");
+            var oneGame = Path.Combine(one.Game, "bin", "helldivers2.exe");
+            var normal = Path.Combine(root, "instances", "steam", "Helldivers 2", "bin", "helldivers2.exe");
+            static (string, string?)[] Game(string? path) => [("helldivers2", path)];
+            check(HellForge.Session.GameProcesses.OtherInstallation(one, twoGame) == two.Root, "Another installation's game is recognised.");
+            check(HellForge.Session.GameProcesses.Blocking(one, [], multiInstance: false) == null, "Nothing running: the session starts.");
+            check(HellForge.Session.GameProcesses.Blocking(one, Game(twoGame), multiInstance: false) != null, "Without the switch any game stops it.");
+            check(HellForge.Session.GameProcesses.Blocking(one, Game(twoGame), multiInstance: true) == null, "With it, another installation's game does not.");
+            check(HellForge.Session.GameProcesses.Blocking(one, Game(oneGame), multiInstance: true) != null, "This installation's own game still stops it.");
+            check(HellForge.Session.GameProcesses.Blocking(one, Game(normal), multiInstance: true) != null, "The normal game still stops it.");
+            check(HellForge.Session.GameProcesses.Blocking(one, Game(null), multiInstance: true) != null, "A game whose path cannot be read still stops it.");
+            check(HellForge.Session.GameProcesses.Blocking(one, [("GameMon64", null)], multiInstance: true) != null, "GameGuard's monitor still stops it.");
+        });
+
         test("Sandboxed sessions: a low-integrity game writes to the pipes and folders labelled for it, and no others", () =>
         {
             if (!OperatingSystem.IsWindows()) return;

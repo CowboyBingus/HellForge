@@ -287,6 +287,12 @@ try
         BitConverter.GetBytes(steamId).CopyTo(ticket, 12);
         Check(PlayFabService.SteamIdFromTicket(Convert.ToHexString(ticket)) == steamId, "Steam ID not read from the ticket.");
         Check(PlayFabService.SteamIdFromTicket("00") == null && PlayFabService.SteamIdFromTicket(new string('0', 104)) == null, "Malformed ticket accepted.");
+        // several installations on one PC: HELLFORGE_IDENTITY only with HELLFORGE_MULTI_INSTANCE, and only a SteamID64
+        static Func<string, string?> Env(string? multi, string? identity) => name => name == "HELLFORGE_MULTI_INSTANCE" ? multi : name == "HELLFORGE_IDENTITY" ? identity : null;
+        Check(PlayFabService.IdentityOverride(Env("1", "76561199000000002")) == 76561199000000002UL &&
+            PlayFabService.IdentityOverride(Env(null, "76561199000000002")) == null && PlayFabService.IdentityOverride(Env("1", "12345")) == null &&
+            PlayFabService.IdentityOverride(Env("1", "-1")) == null && PlayFabService.IdentityOverride(Env("1", null)) == null,
+            "HELLFORGE_IDENTITY applies only beside HELLFORGE_MULTI_INSTANCE, and only as a SteamID64.");
         var playFab = new PlayFabService();
         using var login = JsonDocument.Parse($"{{\"TitleId\":\"974A9\",\"SteamTicket\":\"{Convert.ToHexString(ticket)}\"}}");
         var (loginStatus, loginReply, _) = playFab.Handle("/playfab/Client/LoginWithSteam", login.RootElement);

@@ -69,10 +69,21 @@ public sealed class PlayFabService
         };
     }
 
+    // Several installations on one PC share a Steam account: HELLFORGE_IDENTITY (a SteamID64, set with HELLFORGE_MULTI_INSTANCE)
+    // logs this installation's game in as another player, the id its backend has on the loopback link (docs/multi-instance.md).
+    public static ulong? IdentityOverride(Func<string, string?> environment)
+    {
+        if (environment("HELLFORGE_MULTI_INSTANCE") != "1" || !ulong.TryParse(environment("HELLFORGE_IDENTITY"), NumberStyles.None, CultureInfo.InvariantCulture, out var id)) return null;
+        return id >> 56 == 1 && (id >> 52 & 0xF) == 1 ? id : null;
+    }
+
+    static readonly ulong? identity = IdentityOverride(Environment.GetEnvironmentVariable);
+
     (int, JsonObject, string) Login(JsonElement body)
     {
         var steamId = SteamIdFromTicket(body.ValueKind == JsonValueKind.Object && body.TryGetProperty("SteamTicket", out var t) ? t.GetString() : null);
-        if (steamId is not { } id) return Error(400, "InvalidSteamTicket", 1010, "Steam ticket not recognised.", "pf_login_ticket_unrecognised");
+        if (steamId is not { } ticketId) return Error(400, "InvalidSteamTicket", 1010, "Steam ticket not recognised.", "pf_login_ticket_unrecognised");
+        var id = identity ?? ticketId;
         localSteamId = id;
         var now = DateTime.UtcNow;
         return Ok(new JsonObject
