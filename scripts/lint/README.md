@@ -125,3 +125,11 @@ python -m unittest discover -s scripts/lint/tests -v
   alone, macro blocks, code lines, stack bytes and duplicated code.
 - `test_lint.py`: every rule exactly at its limit (silent) beside one just over it (reported), `lint-ok`, R14 within a
   language family and across units, R15, the baseline ratchet, `--only`, and the command line's errors.
+
+## In CI
+
+`.github/workflows/lint.yml` runs these tests and then `check` on every pull request and on pushes to `dev` and `main`,
+on Linux (the repository's `.gitattributes` keeps every source LF, so the lint reads the same bytes on any platform). A
+pull request that adds a violation or makes a known one worse fails the "Structure lint" check. For that to block
+merging, the check must be marked required in the repository's branch rules (Settings, Rules or Branches: "Require
+status checks to pass", then "Structure lint").
