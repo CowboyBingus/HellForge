@@ -118,6 +118,12 @@ public partial class MainWindow : Window
             try { ModSettings.SetPlayWithStrangers(paths.ModsFolder, StrangersBox.IsChecked == true); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Append("Could not save Play with strangers: " + error.Message, Red); }
         };
+        // The sandbox (docs/steam-bridge.md): off unless chosen, and only with an engine built with the Steam bridge.
+        var steamBridge = SessionRunner.HasSteamBridge(paths);
+        SandboxBox.IsEnabled = steamBridge;
+        SandboxBox.IsChecked = steamBridge && ProfileStore.LoadSandbox(paths);
+        SandboxUnavailable.IsVisible = !steamBridge;
+        SandboxBox.IsCheckedChanged += (_, _) => ProfileStore.SaveSandbox(paths, SandboxBox.IsChecked == true);
         var war = ProfileStore.LoadWar(paths);
         WarLiveRadio.IsChecked = war == ProfileStore.WarLive;
         WarFrozenRadio.IsChecked = war == ProfileStore.WarFrozen;
@@ -249,10 +255,11 @@ public partial class MainWindow : Window
             return;
         }
         if (gameOptions.Count > 0) Append("Launch options: " + HellForge.Core.GameLaunchOptions.CommandLine(gameOptions), LauncherLine);
+        if (SandboxBox.IsChecked == true) Append("Sandboxed (Settings > Sandbox): the game runs at low integrity, with Steam through the Steam broker.", LauncherLine);
         try
         {
             runner.Start(paths, profile, new(LocalPlayFabBox.IsChecked == true, SdkShimsBox.IsChecked == true, ProfileStore.LoadWar(paths),
-                EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true, gameOptions, modSync));
+                EngineLogBox.IsChecked == true, CrashDumpBox.IsChecked == true, gameOptions, modSync, SandboxBox.IsChecked == true));
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {

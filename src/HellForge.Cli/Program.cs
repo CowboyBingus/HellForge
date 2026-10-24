@@ -31,8 +31,8 @@ try
 
             For launchers of their own (docs/external-launchers.md); --install defaults to the installation this is in:
             play [--install <folder>] [--profile <name>] [--war live | frozen | open] [--local-playfab yes | no]
-                 [--multiplayer yes | no] [--engine-log yes | no] [--crash-dump yes | no] [--game-options <options>]
-                 [--wait yes] [--dry-run yes]
+                 [--multiplayer yes | no] [--engine-log yes | no] [--crash-dump yes | no] [--sandbox yes | no]
+                 [--game-options <options>] [--wait yes] [--dry-run yes]
             stop [--install <folder>] [--run <session folder>] [--wait yes]
             status [--install <folder>]
             profiles [--install <folder>] [--create <name> --template <template>]
@@ -44,7 +44,8 @@ try
             mod-order [--install <folder>] --ids <id,id,... top first>
             mod-pack [--install <folder>] --id <pack id> (--option <name> [--on yes | no] [--variant <name>] | --all yes | no)
             settings [--install <folder>] [--profile <name>] [--war live | frozen | open] [--local-playfab yes | no]
-                     [--multiplayer yes | no] [--engine-log yes | no] [--crash-dump yes | no] [--game-options <options>]
+                     [--multiplayer yes | no] [--engine-log yes | no] [--crash-dump yes | no] [--sandbox yes | no]
+                     [--strangers yes | no] [--game-options <options>]
             logs [--install <folder>] [--run <session id>] [--export <file.zip>]
 
             inspect prints JSON; prepare makes a full, hash-verified, unpatched copy; supported-build lists a
@@ -95,7 +96,7 @@ try
         "package-mod" => ["--mod", "--out"],
         "mod-hash" => ["--mod"],
         "mod-tools" => ["--install", "--ide"],
-        "play" => ["--install", "--profile", "--war", "--local-playfab", "--multiplayer", "--engine-log", "--crash-dump", "--game-options", "--wait", "--dry-run"],
+        "play" => ["--install", "--profile", "--war", "--local-playfab", "--multiplayer", "--engine-log", "--crash-dump", "--sandbox", "--game-options", "--wait", "--dry-run"],
         "stop" => ["--install", "--run", "--wait"],
         "status" or "fetch-war" or "mods" => ["--install"],
         "profiles" => ["--install", "--create", "--template"],
@@ -104,7 +105,7 @@ try
         "mod-switch" => ["--install", "--id", "--on"],
         "mod-order" => ["--install", "--ids"],
         "mod-pack" => ["--install", "--id", "--option", "--on", "--variant", "--all"],
-        "settings" => ["--install", "--profile", "--war", "--local-playfab", "--multiplayer", "--engine-log", "--crash-dump", "--game-options"],
+        "settings" => ["--install", "--profile", "--war", "--local-playfab", "--multiplayer", "--engine-log", "--crash-dump", "--sandbox", "--strangers", "--game-options"],
         "logs" => ["--install", "--run", "--export"],
         _ => throw new ArgumentException($"Unknown command: {args[0]}")
     };

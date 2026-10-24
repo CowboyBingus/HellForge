@@ -5,9 +5,10 @@ namespace HellForge.Core;
 
 // A session's choices, as the launcher's Settings page keeps them (launcher-settings.json, ProfileStore) or as another
 // launcher passes them (HellForge.Cli play). The game options are already checked (GameLaunchOptions.Parse). ModSync:
-// the next session's mods after a mod sync (a ModSyncSession file), for that one session.
+// the next session's mods after a mod sync (a ModSyncSession file), for that one session. Sandbox: the game at low
+// integrity (ProfileStore.LoadSandbox).
 public sealed record SessionOptions(bool LocalPlayFab, bool SdkShims, string War, bool EngineLog, bool CrashDump, IReadOnlyList<string> GameOptions,
-    string? ModSync = null);
+    string? ModSync = null, bool Sandbox = false);
 
 // Starts and stops the engine's session runner (HellForge.Session.exe play). It owns every safety step (verified copy,
 // Steam ownership, network block, cleanup); this class only starts it and asks it to stop. It runs without a window and
@@ -47,8 +48,16 @@ public sealed class SessionRunner
         // the player's launch options, for the session runner to add to the game's command line (GameLaunchOptions)
         if (options.GameOptions.Count > 0) arguments.AddRange(["--game-options", GameLaunchOptions.CommandLine(options.GameOptions)]);
         if (options.ModSync != null) arguments.AddRange(["--mod-sync", options.ModSync]);
+        if (options.Sandbox) arguments.Add("--sandbox");
         return arguments;
     }
+
+    // Whether the engine was built with the Steam bridge (the Steamworks SDK): its stand-ins' build.json pins the bridge
+    // build, which a sandboxed session needs (<app>/sdk-shims, beside the session runner's folder).
+    public static bool HasSteamBridge(ISessionPaths paths) =>
+        Path.GetDirectoryName(Path.GetDirectoryName(paths.Session)) is { } app &&
+        SessionFiles.ReadJson(Path.Combine(app, "sdk-shims", "build.json")) is { } build &&
+        SessionFiles.Text(build, "steamBridge") is { Length: > 0 };
 
     public void Start(ISessionPaths paths, LocalProfile profile, SessionOptions options)
     {
