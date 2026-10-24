@@ -413,9 +413,9 @@ HELLFORGE_API int __cdecl SteamAPI_IsSteamRunning(void)
     if (g_bridgeRequested)
     {
         uint8_t running = 0;
-        uint32_t size = 0, status = BRIDGE_STATUS_UNKNOWN;
-        if (!g_bridged || !GameChannelCall(&g_bridge, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &running, 1, &size, &status) ||
-            status != BRIDGE_STATUS_OK || size != 1)
+        GameChannelReply reply = { &running, 1, 0, BRIDGE_STATUS_UNKNOWN };
+        if (!g_bridged || !GameChannelCall(&g_bridge, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &reply) ||
+            reply.status != BRIDGE_STATUS_OK || reply.size != 1)
             return 0;
         return running;
     }
