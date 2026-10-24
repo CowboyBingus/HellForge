@@ -123,6 +123,75 @@ void DrawSettings(float y0, float h)
         std::to_string(g_catalog.rows.size()) + " fields", x, y, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, PANEL_W - 60));
 }
 
+/* the search box: what is typed filters the list */
+static void DrawPickerSearch(float x, float sy, float sw, float sh)
+{
+    int matches = (int)std::count_if(g_picker.entries.begin(), g_picker.entries.end(), [](auto& e) { return !e.header; });
+    g_cv.Rect(x + 24, sy, sw, sh, BOX, 11);
+    g_cv.Frame(x + 24, sy, sw, sh, g_picker.filter.empty() ? BOX_EDGE : BOX_FOCUS, 12);
+    bool empty = g_picker.filter.empty();
+    float tw = g_cv.Text(empty ? "Search..." : g_picker.filter, x + 36, sy + sh / 2, T(SZ_LABEL, empty ? FAINT : TEXT, ui::BODY, ui::LEFT, sw - 140, 13));
+    if ((int)(g_time * 2.2f) % 2 == 0) g_cv.Rect(empty ? x + 32 : x + 38 + tw, sy + 7, 2, sh - 14, GOLD, 13);
+    g_cv.Text(std::to_string(matches) + (matches == 1 ? " match" : " matches"), x + 24 + sw - 12, sy + sh / 2, T(SZ_TINY, FAINT, ui::BODY, ui::RIGHT, 120, 13));
+}
+
+/* A group's heading among the options. */
+static void DrawPickHeading(const PickEntry& option, const Area& at)
+{
+    std::string upper = option.label;
+    for (char& c : upper) c = (char)toupper((unsigned char)c);
+    g_cv.Text(upper, at.x + 22, at.y + at.h / 2 + 4, T(SZ_TINY, GOLD, ui::TITLE, ui::LEFT, at.w - 44, 12));
+    g_cv.Rect(at.x + 22, at.y + at.h - 3, at.w - 44, 1, LINE, 11);
+}
+
+/* An option's warnings as chips, right to left from right; returns the x left of them. */
+static float WarningChips(const PickEntry& option, float right, float cy)
+{
+    for (auto w = option.warnings.rbegin(); w != option.warnings.rend(); ++w)
+        right -= Chip(WarningChip(*w), right, cy, *w == "very_large" || *w == "objective_packages" ? ERROR_ : PENDING,
+            *w == "very_large" || *w == "objective_packages" ? ERROR_SOFT : PENDING_SOFT, true, 12) + 6;
+    return right;
+}
+
+/* An option's note, after an explosion's summary (its damage, radius and statuses, read from the game). */
+static std::string PickNote(const PickEntry& option, const Row* row)
+{
+    std::string note = option.note;
+    if (row->pick == "explosion" && option.value != 0)
+        if (std::string sum = ExplosionSummary((uint32_t)option.value); !sum.empty()) note = sum + "   " + note;
+    return note;
+}
+
+/* An option: its icon (a passive's), its label, the CURRENT and warning chips, and its note. */
+static void DrawPickOption(const PickEntry& option, const Row* row, const RowView& v, const Area& at, bool selected, bool hovered)
+{
+    float rx = at.x, ry = at.y, rw = at.w, rh = at.h;
+    if (selected) { g_cv.Rect(rx + 8, ry + 2, rw - 16, rh - 4, SELECT, 10); g_cv.Rect(rx + 8, ry + 2, 3, rh - 4, GOLD, 11); }
+    else if (hovered) g_cv.Rect(rx + 8, ry + 2, rw - 16, rh - 4, HOVER, 10);
+    float tx = rx + 22;
+    const icons::Icon* icon = option.icon.empty() ? nullptr : icons::Find(icons::PASSIVE, option.icon);
+    if (icon != nullptr && icons::Texture()) { g_cv.Image(icons::Texture(), ImVec2(rx + 18, ry + 6), ImVec2(rh - 12, rh - 12), icon->uv0, icon->uv1, PERK, 11); tx = rx + 18 + rh; }
+    float top = row->pick.empty() ? 16 : 13, below = row->pick.empty() ? 34 : 29;
+    float right = rx + rw - 20;
+    if (option.value == v.value) right -= Chip("CURRENT", right, ry + top, GOLD, GOLD_WASH, true, 12) + 6;
+    right = WarningChips(option, right, ry + top);
+    g_cv.Text(option.label, tx, ry + top, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, right - tx - 8, 12));
+    std::string note = PickNote(option, row);
+    if (!note.empty()) g_cv.Text(note, tx, ry + below, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, rw - (tx - rx) - 24, 12));
+}
+
+/* the highlighted option's warnings, spelled out (HD2R Editor's), else the keys */
+static void DrawPickerHint(const Row* row, float x, float y, float w, float h)
+{
+    std::string warning;
+    if (PickerHas(g_picker.index))
+        for (auto& w : g_picker.entries[g_picker.index].warnings)
+            if (auto text = g_catalog.warnings.find(w); text != g_catalog.warnings.end()) warning += (warning.empty() ? "" : "   ") + WarningChip(w) + ": " + text->second;
+    if (!warning.empty()) g_cv.Text(warning, x + 24, y + h - 25, T(SZ_TINY, PENDING, ui::BODY, ui::LEFT, w - 24 - 190, 11));
+    else g_cv.Text(row->pick.empty() ? "\xE2\x86\x91\xE2\x86\x93 select   Enter choose   Esc cancel" :
+        "\xE2\x86\x91\xE2\x86\x93 select   type to filter   Backspace erase   Enter choose   Esc cancel", x + 24, y + h - 25, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, 0, 11));
+}
+
 /* The picker of a choice row (the HD2R Editor's pickers): its options with their icons and notes, a dialog over the panel. */
 void DrawPicker()
 {
@@ -137,15 +206,8 @@ void DrawPicker()
     std::string title = row->label + (row->pick.empty() ? std::string() : SEP + row->object->name);
     g_cv.Text(title, x + 24, y + 30, T(19, TEXT, ui::TITLE, ui::LEFT, w - 48, 11));
     if (!row->note.empty()) g_cv.Text(row->note, x + 24, y + 52, T(SZ_SMALL, FAINT, ui::BODY, ui::LEFT, w - 48, 11));
-    /* the search box: what is typed filters the list */
     float sy = y + (row->note.empty() ? 46 : 66), sh = 30, sw = w - 48;
-    int matches = (int)std::count_if(g_picker.entries.begin(), g_picker.entries.end(), [](auto& e) { return !e.header; });
-    g_cv.Rect(x + 24, sy, sw, sh, BOX, 11);
-    g_cv.Frame(x + 24, sy, sw, sh, g_picker.filter.empty() ? BOX_EDGE : BOX_FOCUS, 12);
-    bool empty = g_picker.filter.empty();
-    float tw = g_cv.Text(empty ? "Search..." : g_picker.filter, x + 36, sy + sh / 2, T(SZ_LABEL, empty ? FAINT : TEXT, ui::BODY, ui::LEFT, sw - 140, 13));
-    if ((int)(g_time * 2.2f) % 2 == 0) g_cv.Rect(empty ? x + 32 : x + 38 + tw, sy + 7, 2, sh - 14, GOLD, 13);
-    g_cv.Text(std::to_string(matches) + (matches == 1 ? " match" : " matches"), x + 24 + sw - 12, sy + sh / 2, T(SZ_TINY, FAINT, ui::BODY, ui::RIGHT, 120, 13));
+    DrawPickerSearch(x, sy, sw, sh);
     RowView v = ViewOf(row);
     ListOpts o;
     float ly = sy + sh + 8;
@@ -155,42 +217,12 @@ void DrawPicker()
     o.click = [&](int i) { PickerChoose(i); };
     o.draw = [&](int i, float rx, float ry, float rw, float rh, bool hovered) {
         const PickEntry& option = g_picker.entries[i];
-        if (option.header)
-        {
-            std::string upper = option.label;
-            for (char& c : upper) c = (char)toupper((unsigned char)c);
-            g_cv.Text(upper, rx + 22, ry + rh / 2 + 4, T(SZ_TINY, GOLD, ui::TITLE, ui::LEFT, rw - 44, 12));
-            g_cv.Rect(rx + 22, ry + rh - 3, rw - 44, 1, LINE, 11);
-            return;
-        }
-        bool selected = i == g_picker.index;
-        if (selected) { g_cv.Rect(rx + 8, ry + 2, rw - 16, rh - 4, SELECT, 10); g_cv.Rect(rx + 8, ry + 2, 3, rh - 4, GOLD, 11); }
-        else if (hovered) g_cv.Rect(rx + 8, ry + 2, rw - 16, rh - 4, HOVER, 10);
-        float tx = rx + 22;
-        const icons::Icon* icon = option.icon.empty() ? nullptr : icons::Find(icons::PASSIVE, option.icon);
-        if (icon != nullptr && icons::Texture()) { g_cv.Image(icons::Texture(), ImVec2(rx + 18, ry + 6), ImVec2(rh - 12, rh - 12), icon->uv0, icon->uv1, PERK, 11); tx = rx + 18 + rh; }
-        float top = row->pick.empty() ? 16 : 13, below = row->pick.empty() ? 34 : 29;
-        float right = rx + rw - 20;
-        if (option.value == v.value) right -= Chip("CURRENT", right, ry + top, GOLD, GOLD_WASH, true, 12) + 6;
-        for (auto w = option.warnings.rbegin(); w != option.warnings.rend(); ++w)
-            right -= Chip(WarningChip(*w), right, ry + top, *w == "very_large" || *w == "objective_packages" ? ERROR_ : PENDING,
-                *w == "very_large" || *w == "objective_packages" ? ERROR_SOFT : PENDING_SOFT, true, 12) + 6;
-        g_cv.Text(option.label, tx, ry + top, T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, right - tx - 8, 12));
-        std::string note = option.note;
-        if (row->pick == "explosion" && option.value != 0)
-            if (std::string sum = ExplosionSummary((uint32_t)option.value); !sum.empty()) note = sum + "   " + note;
-        if (!note.empty()) g_cv.Text(note, tx, ry + below, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, rw - (tx - rx) - 24, 12));
+        if (option.header) DrawPickHeading(option, {rx, ry, rw, rh});
+        else DrawPickOption(option, row, v, {rx, ry, rw, rh}, i == g_picker.index, hovered);
     };
     List(o);
     if (Button("CANCEL", {x + w - 24 - 150, y + h - 40, 150, 30}, NORMAL, ui::Id("pickercancel"), 11)) g_picker.on = false;
-    /* the highlighted option's warnings, spelled out (HD2R Editor's) */
-    std::string warning;
-    if (PickerHas(g_picker.index))
-        for (auto& w : g_picker.entries[g_picker.index].warnings)
-            if (auto text = g_catalog.warnings.find(w); text != g_catalog.warnings.end()) warning += (warning.empty() ? "" : "   ") + WarningChip(w) + ": " + text->second;
-    if (!warning.empty()) g_cv.Text(warning, x + 24, y + h - 25, T(SZ_TINY, PENDING, ui::BODY, ui::LEFT, w - 24 - 190, 11));
-    else g_cv.Text(row->pick.empty() ? "\xE2\x86\x91\xE2\x86\x93 select   Enter choose   Esc cancel" :
-        "\xE2\x86\x91\xE2\x86\x93 select   type to filter   Backspace erase   Enter choose   Esc cancel", x + 24, y + h - 25, T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, 0, 11));
+    DrawPickerHint(row, x, y, w, h);
 }
 
 /* The errors popup (HD2R Editor's): every refused field with HellForge's reason; a click or Enter opens it in BROWSE,
