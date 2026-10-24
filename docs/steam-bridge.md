@@ -4,8 +4,10 @@
 channel (phase 2), the generated bridge with its first allow-list (phase 3), and the session side of phase 4. In game,
 one sandboxed solo session reached the title screen (2026-10-23, phase 4 below); a mission, a controller and co-op are
 untested. The allow-list covers the calls one census run saw, and the next census (a controller, a whole mission, the
-social tab) will show what it misses. A session is sandboxed only when asked (`HellForge.Session play --sandbox`, or
-`HELLFORGE_SANDBOX=1`), and only with an engine built with the Steamworks SDK; nothing here ships yet.
+social tab) will show what it misses. A session is sandboxed only when asked: the launcher's Settings > Sandbox, "Run
+the game sandboxed (experimental)", off by default and offered only by an engine built with the Steam bridge;
+`HellForge.Cli play --sandbox yes` or `settings --sandbox yes`; `HellForge.Session play --sandbox`; or
+`HELLFORGE_SANDBOX=1`. Only an engine built with the Steamworks SDK has the bridge; nothing here ships yet.
 
 ## Why
 
@@ -178,7 +180,7 @@ rather than run on Valve's DLL.
 | Interface | Method | Mode | Checks, and why |
 | --- | --- | --- | --- |
 | `SteamNetworking006` | `ReadP2PPacket`, `IsP2PPacketAvailable` | local | the packets the broker read from the game's co-op peers, through the ring |
-| `SteamNetworking006` | `SendP2PPacket`, `AcceptP2PSessionWithUser`, `GetP2PSessionState` | call | **to review:** only a co-op peer; a packet at most 7000 bytes, channels 0-7 |
+| `SteamNetworking006` | `SendP2PPacket`, `AcceptP2PSessionWithUser`, `GetP2PSessionState` | call | reviewed 2026-10-24: only a co-op peer the backend lists ("Steam P2P"); a packet at most 7000 bytes, channels 0-7 |
 | `SteamNetworking006` | `CloseP2PSessionWithUser`, `CloseP2PChannelWithUser`, `AllowP2PPacketRelay` | call | |
 | `STEAMAPPS_INTERFACE_VERSION008` | `GetDLCCount`, `BGetDLCDataByIndex`, `GetCurrentGameLanguage`, `GetCurrentBetaName` | snapshot | name buffers bounded |
 | `STEAMAPPS_INTERFACE_VERSION008` | `BIsSubscribedApp` | snapshot, else call | the DLC ids and the game from the snapshot |
@@ -186,13 +188,13 @@ rather than run on Valve's DLL.
 | `SteamUser021` | `GetAuthSessionTicket`, `CancelAuthTicket` | call | ticket buffer at most 1024 bytes |
 | `SteamFriends017` | `GetPersonaName` | snapshot | |
 | `SteamFriends017` | `GetFriendCount`, `GetFriendByIndex`, `GetFriendRelationship`, `GetUserRestrictions` | call | read only |
-| `SteamFriends017` | `SetRichPresence`, `ClearRichPresence` | call | **to review:** strings friends see; key at most 64, value at most 256 printable characters, every key logged |
+| `SteamFriends017` | `SetRichPresence`, `ClearRichPresence` | call | reviewed 2026-10-24: strings friends see; key at most 64, value at most 256 printable characters, every key logged; the key `hellforge` (HellForge's own, how friends' backends find this one) refused in any case |
 | `SteamUtils010` | `GetAppID` | local | 553850 |
 | `SteamUtils010` | `GetIPCountry`, `IsSteamRunningOnSteamDeck` | snapshot | |
 | `SteamUtils010` | `SetOverlayNotificationPosition`, `IsOverlayEnabled` | local | the overlay is in the broker: nothing to place, none shown |
 | `SteamUtils010` | `InitFilterText`, `FilterText` | call | input at most 4096 bytes, output buffer bounded |
-| `SteamMatchMaking009` | `CreateLobby` | call | **to review:** strangers can read a public lobby's data; at most 4 members; the type is logged, and Public becomes Friends only while Play with strangers is off (below) |
-| `SteamMatchMaking009` | `JoinLobby` | call | **to review:** any lobby by id, as the game joins the host's own Steam lobby in a co-op join; that lobby learns this player's SteamID |
+| `SteamMatchMaking009` | `CreateLobby` | call | reviewed 2026-10-24: strangers can read a public lobby's data; at most 4 members; the type is logged, and Public becomes Friends only while Play with strangers is off (below); whether it can be Friends only always is the two-PC stranger test's question |
+| `SteamMatchMaking009` | `JoinLobby` | call | reviewed 2026-10-24: any lobby by id, as the game joins the host's own Steam lobby in a co-op join; that lobby learns this player's SteamID, as without HellForge, and its members are no co-op peers for P2P unless the backend lists them |
 | `SteamMatchMaking009` | `SetLobbyData`, `GetLobbyData`, `SetLobbyJoinable`, `LeaveLobby`, `GetNumLobbyMembers`, `GetLobbyMemberByIndex`, `GetLobbyOwner` | call | only a lobby the game made or entered this session (`LobbyCreated_t`, or a `LobbyEnter_t` that says it entered); key at most 255, value at most 8192 bytes |
 | `STEAMUSERSTATS_INTERFACE_VERSION012` | `RequestCurrentStats`, `GetAchievement` | call | name at most 128 |
 | `SteamInput006` | `GetControllerForGamepadIndex` | call | index 0-15; per-frame use unknown until a controller census |
@@ -421,7 +423,9 @@ entered counts as its own (`broker_bridge.c` `RememberEntered`).
 
 Co-op uses the old `ISteamNetworking`: the host sends to a joiner when it joins (2026-10-24). Through the bridge it
 reaches only the game's **co-op peers**, so the game has no way to send to any other Steam user:
-- **A co-op peer** is a SteamID the backend lists, or a member of a lobby the game made or entered (`P2PPeer`):
+- **A co-op peer** is a SteamID the backend lists (`P2PPeer`). A member of a lobby the game made or entered is not
+  enough (reviewed 2026-10-24): `JoinLobby` takes any lobby id, so a compromised game could enter any lobby it knows of
+  and reach its members.
   - The backend writes its lobby and Party peers to `run/backend/p2p-peers.txt` (`MultiplayerHost.PeersFileName`), at
     once when a lobby changes or a join starts, and on each heartbeat. The low-integrity game cannot write that folder.
   - The broker reads the file when its time stamp moves, and again at once when a SteamID is not in it: a host sends
@@ -441,7 +445,8 @@ reaches only the game's **co-op peers**, so the game has no way to send to any o
 ## Cost
 
 - **Idle frame** (`RunCallbacks`, about 400 a second in the census): one read of the ring's write position, compared
-  with the stand-in's own. 0 system calls, 0 pipe messages, no allocation. Unmeasured in game.
+  with the stand-in's own, and one of the tick count (for the cost log below). 0 system calls, 0 pipe messages, no
+  allocation. Unmeasured in game.
 - **The calls the census saw every frame:** `ReadP2PPacket` (1.00 per frame) takes a slim lock and looks at the packet queue (no system call while uncontended); the DLC answers (0.85 per
   frame) and `BLoggedOn` are a seqlocked read of the snapshot, a few dozen bytes copied. No system call. Unmeasured in
   game.
@@ -455,7 +460,14 @@ reaches only the game's **co-op peers**, so the game has no way to send to any o
 - **Steam Input with a controller:** read from the snapshot, with no system call per call. The snapshot's per-frame
   cost is to be measured.
 
-Every number here is unmeasured in game until phase 4.
+Every number here is unmeasured in game until phase 4. The bridge build measures itself: each minute, and at
+`SteamAPI_Shutdown`, the stand-in's log (`HELLFORGE_CLOUD_LOG`) gets two lines:
+- `bridge cost, the last minute: <frames> frames; <n> round trips, <ms> in all, longest <ms>; <n> callbacks in <n>
+  frames, <ms> in all, longest frame <ms>`. A round trip's time runs from the call to its reply, the lock's wait
+  included, on whichever game thread made it.
+- `bridge cost, the last minute, by function (id, round trips, time): ...`: the five functions whose round trips took
+  longest. Id 0 is `SteamAPI_IsSteamRunning`, and 100 on are `BRIDGE_M_*` in the generated `bridge_gen.h`. The first
+  16 functions called in a minute are counted apart.
 
 ## Phases, each tested before the next
 
@@ -478,9 +490,11 @@ Every number here is unmeasured in game until phase 4.
    snapshot, a refused method that never reaches Steam, a lobby the game did not make, callbacks (and an id the table
    does not list), a call result, `ContextInit`, `ISteamClient`, an unknown interface, the game's lobby type and Play
    with strangers, a co-op join (a lobby entered through `JoinLobby` becomes the game's, a refused entry does not), a
-   NULL game-server interface, Steam P2P with co-op peers only, and that Valve's DLL never loads (56 checks).
-   Built 2026-10-23. Still to do: the next census, then the table's two review items (`SetRichPresence`, `CreateLobby`;
-   `CreateLobby`'s type is now the broker's, above).
+   NULL game-server interface, Steam P2P with the backend's co-op peers only, HellForge's own rich presence key
+   refused, and that Valve's DLL never loads.
+   Built 2026-10-23. The table's review items (`SetRichPresence`, `CreateLobby`, `JoinLobby`, `SendP2PPacket`) were
+   reviewed 2026-10-24: the `hellforge` rich presence key is refused, and a member of a lobby the game entered is no
+   longer a P2P peer by itself. Still to do: the next census.
 4. **A low-integrity session:** the token and job, labelled folders, pipe labels, and the editor's saves through the
    backend. In game, solo then co-op on two PCs: no STEAM NOT DETECTED, login, a mission, a controller, an invite, and
    per-frame cost measured.

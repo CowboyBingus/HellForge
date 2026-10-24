@@ -57,8 +57,7 @@ int BrokerBridgeOpen(BrokerBridge* b, HMODULE valve, int hPipe);
 void BrokerBridgeWatchStrangers(BrokerBridge* b, const wchar_t* modsFolder);
 
 /* Steam P2P passes only to and from the game's co-op peers: the SteamIDs in this file (the backend's lobby and Party
- * peers, decimal, one a line; written as they change), and the members of a lobby the game made or entered. Without
- * the file, only those members. Call before serving. */
+ * peers, decimal, one a line; written as they change). Without the file, to no one. Call before serving. */
 void BrokerBridgeWatchPeers(BrokerBridge* b, const wchar_t* peersFile);
 
 /* Play with strangers in a settings file's text: a top-level "playWithStrangers": true. */

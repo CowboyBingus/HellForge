@@ -388,20 +388,71 @@ HELLFORGE_API bool __cdecl SteamAPI_InitSafe(void)
     return ok;
 }
 
+// What the bridge costs the game (docs/steam-bridge.md, Cost), logged each minute and at shutdown: the frames
+// (RunCallbacks), the round trips with the functions that took longest, and the callbacks read from the ring.
+static struct { uint64_t frames, callbackFrames, callbacks, ticks, maxTicks; ULONGLONG since; } g_bridgeCost;
+
+static double Milliseconds(uint64_t ticks)
+{
+    static LARGE_INTEGER frequency;
+    if (frequency.QuadPart == 0) QueryPerformanceFrequency(&frequency);
+    return frequency.QuadPart ? ticks * 1000.0 / (double)frequency.QuadPart : 0.0;
+}
+
+static void BridgeCostReport(const char *span)
+{
+    GameChannelCost calls;
+    GameChannelTakeCost(&g_bridge, &calls);
+    Log("bridge cost, %s: %llu frames; %llu round trips, %.1f ms in all, longest %.2f ms; %llu callbacks in %llu frames, "
+        "%.1f ms in all, longest frame %.2f ms", span, (unsigned long long)g_bridgeCost.frames, (unsigned long long)calls.calls,
+        Milliseconds(calls.ticks), Milliseconds(calls.maxTicks), (unsigned long long)g_bridgeCost.callbacks,
+        (unsigned long long)g_bridgeCost.callbackFrames, Milliseconds(g_bridgeCost.ticks), Milliseconds(g_bridgeCost.maxTicks));
+    // the five functions whose round trips took longest (ids: bridge_protocol.h, and BRIDGE_M_* in bridge_gen.h)
+    char line[300];
+    int at = 0;
+    for (int n = 0; n < 5; n++)
+    {
+        int best = -1;
+        for (int i = 0; i < BRIDGE_COST_FUNCTIONS; i++)
+            if (calls.byFunction[i].calls > 0 && (best < 0 || calls.byFunction[i].ticks > calls.byFunction[best].ticks)) best = i;
+        if (best < 0) break;
+        at += snprintf(line + at, sizeof line - at, " %u x%u %.1f ms", calls.byFunction[best].function, calls.byFunction[best].calls,
+                       Milliseconds(calls.byFunction[best].ticks));
+        calls.byFunction[best].calls = 0;
+    }
+    if (at > 0) Log("bridge cost, %s, by function (id, round trips, time):%s", span, line);
+    memset(&g_bridgeCost, 0, sizeof g_bridgeCost);
+    g_bridgeCost.since = GetTickCount64();
+}
+
 HELLFORGE_API void __cdecl SteamAPI_RunCallbacks(void)
 {
     if (g_bridgeRequested)
     {
-        // the idle frame: one read of the ring's sequence, no system call
+        // the idle frame: one read of the ring's sequence and of the tick count, no system call
+        g_bridgeCost.frames++;
+        if (g_bridged && GetTickCount64() - g_bridgeCost.since >= 60000)
+        {
+            if (g_bridgeCost.since != 0) BridgeCostReport("the last minute");
+            else g_bridgeCost.since = GetTickCount64();
+        }
         if (!g_bridged || !GameChannelPending(&g_bridge)) return;
         uint32_t id, size;
         uint8_t data[BRIDGE_RING_DATA_SIZE];
+        LARGE_INTEGER start, end;
+        QueryPerformanceCounter(&start);
         while (GameChannelReadCallback(&g_bridge, &id, data, sizeof data, &size))
         {
+            g_bridgeCost.callbacks++;
 #ifdef HELLFORGE_BRIDGE_BUILD
             BridgeDispatch(id, data, size);
 #endif
         }
+        QueryPerformanceCounter(&end);
+        uint64_t ticks = (uint64_t)(end.QuadPart - start.QuadPart);
+        g_bridgeCost.callbackFrames++;
+        g_bridgeCost.ticks += ticks;
+        if (ticks > g_bridgeCost.maxTicks) g_bridgeCost.maxTicks = ticks;
         return;
     }
     VoidFn forward = REAL(VoidFn, "SteamAPI_RunCallbacks");
@@ -428,6 +479,7 @@ HELLFORGE_API void __cdecl SteamAPI_Shutdown(void)
     EnsureInitialized();
     if (g_bridgeRequested)
     {
+        if (g_bridged) BridgeCostReport("since the last report");
         if (g_bridged) GameChannelClose(&g_bridge); // says BRIDGE_SHUTDOWN first
         g_bridged = false;
 #ifdef HELLFORGE_BRIDGE_BUILD

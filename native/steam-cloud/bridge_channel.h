@@ -45,6 +45,14 @@ int BrokerChannelPushCallback(BrokerChannel* ch, uint32_t callbackId, const void
 
 /* --- Game (client) side: synchronous, calls serialized by a lock --- */
 
+/* What the round trips cost the game's threads (docs/steam-bridge.md, Cost), in QueryPerformanceCounter ticks from the
+ * call to its reply, the lock's wait included. The first BRIDGE_COST_FUNCTIONS functions called are counted apart. */
+#define BRIDGE_COST_FUNCTIONS 16
+typedef struct GameChannelCost {
+    uint64_t calls, ticks, maxTicks;
+    struct { uint32_t function, calls; uint64_t ticks; } byFunction[BRIDGE_COST_FUNCTIONS];
+} GameChannelCost;
+
 typedef struct GameChannel {
     HANDLE pipe;
     BridgeRingHeader* ring;
@@ -53,6 +61,7 @@ typedef struct GameChannel {
     int dead;               /* the broker went away: every call fails from then on */
     CRITICAL_SECTION lock;
     int lockReady;
+    GameChannelCost cost;   /* under the lock */
 } GameChannel;
 
 /* Opens the pipe, waiting up to timeoutMs for the broker to make it, then says HELLO and maps the ring it is given. */
@@ -63,6 +72,9 @@ void GameChannelClose(GameChannel* ch);
  * dead). result receives min(resultSize, capacity) bytes; *resultSize is the reply's full size. */
 int GameChannelCall(GameChannel* ch, uint32_t function, const void* args, uint32_t argsSize,
                     void* result, uint32_t capacity, uint32_t* resultSize, uint32_t* status);
+
+/* The round trips' cost since the last take, and a fresh count from now. */
+void GameChannelTakeCost(GameChannel* ch, GameChannelCost* out);
 
 /* The idle check: nonzero when the broker has written a callback the game has not read (one shared-memory read). */
 static inline int GameChannelPending(const GameChannel* ch) { return ch->ring && ch->ring->writeSeq != ch->readSeq; }

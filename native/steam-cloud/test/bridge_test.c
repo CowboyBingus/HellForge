@@ -184,6 +184,10 @@ int wmain(int argc, wchar_t** argv)
     longKey[sizeof longKey - 1] = 0;
     EXPECT(!((RichFn)SLOT(friends, SteamFriends017_SetRichPresence))(friends, longKey, "x") && fake->richPresenceCalls == 1,
         "a key over the table's 64 bytes is refused");
+    EXPECT(!((RichFn)SLOT(friends, SteamFriends017_SetRichPresence))(friends, "HellForge", "hellforge-mp-9") && fake->richPresenceCalls == 1,
+        "HellForge's own key (how friends' backends find this one) is refused, in any case");
+    EXPECT(((RichFn)SLOT(friends, SteamFriends017_SetRichPresence))(friends, "hellforge2", "x") && fake->richPresenceCalls == 2,
+        "a key that only starts with it passes");
     ((uint64_t (*)(void*, const char*))SLOT(friends, SteamFriends017_SetPersonaName))(friends, "Someone else");
     EXPECT(fake->personaNameSets == 0, "SetPersonaName (not in the table) never reaches Steam");
 
@@ -313,8 +317,8 @@ int wmain(int argc, wchar_t** argv)
     EXPECT(refusedEntry.runs == 1 && members(matchmaking, CLOSED_LOBBY) == 0 && !setLobbyData(matchmaking, CLOSED_LOBBY, "player", "2") &&
         fake->lobbyDataCalls == writes, "A lobby Steam did not let the game into (LobbyEnter_t response 2) stays refused");
 
-    // Steam P2P (2026-10-24: the host sends to a joiner when it joins): only with the game's co-op peers, a member of a
-    // lobby it made or entered, or one the backend lists; packets in come through the ring in pieces.
+    // Steam P2P (2026-10-24: the host sends to a joiner when it joins): only with the game's co-op peers, the ones the
+    // backend lists (a member of a lobby the game entered is not enough); packets in come through the ring in pieces.
     void* p2pNet = find(1, "SteamNetworking006");
     typedef bool (*SendFn)(void*, uint64_t, const void*, uint32_t, int, int);
     typedef bool (*PeerFn)(void*, uint64_t);
@@ -329,10 +333,13 @@ int wmain(int argc, wchar_t** argv)
     const uint64_t stranger = 76561197960287999ull, listed = 76561197960288000ull;
     static uint8_t bytes[7001];
     for (int i = 0; i < (int)sizeof bytes; i++) bytes[i] = (uint8_t)(i * 7 + 1);
-    EXPECT(p2pNet && send(p2pNet, HOST_PEER, bytes, 5, 2, 0) && fake->p2pSends == 1 && fake->p2pTo == HOST_PEER && fake->p2pSize == 5 &&
-        fake->p2pFirst == 1, "SendP2PPacket to the host of the lobby the game entered reaches Steam, its bytes with it");
+    EXPECT(p2pNet && !send(p2pNet, HOST_PEER, bytes, 5, 2, 0) && fake->p2pSends == 0,
+        "SendP2PPacket to a member of the lobby the game entered is refused while the backend does not list it (JoinLobby takes any lobby)");
+    WriteText(g_peers, "76561197960287931\n");
+    EXPECT(send(p2pNet, HOST_PEER, bytes, 5, 2, 0) && fake->p2pSends == 1 && fake->p2pTo == HOST_PEER && fake->p2pSize == 5 &&
+        fake->p2pFirst == 1, "SendP2PPacket to the host the backend lists reaches Steam, its bytes with it");
     EXPECT(!send(p2pNet, stranger, bytes, 5, 2, 0) && fake->p2pSends == 1, "SendP2PPacket to anyone else is refused (no way out to any Steam user)");
-    WriteText(g_peers, "76561197960288000\n");
+    WriteText(g_peers, "76561197960287931\n76561197960288000\n");
     EXPECT(send(p2pNet, listed, bytes, 7000, 2, 0) && fake->p2pSends == 2 && fake->p2pSize == 7000,
         "a peer the backend just listed (a join seconds old) is reached at once, 7000 bytes in one call");
     EXPECT(!send(p2pNet, listed, bytes, 7001, 2, 0) && fake->p2pSends == 2, "more than 7000 bytes is refused in the game");
@@ -374,9 +381,10 @@ int wmain(int argc, wchar_t** argv)
     EXPECT(GetModuleHandleW(L"steam_api64_hellforge.dll") == NULL, "the stand-in never loaded Valve's DLL");
     EXPORT(VoidFn, "SteamAPI_Shutdown")();
     EXPECT(WaitForSingleObject(broker, 5000) == WAIT_OBJECT_0, "SteamAPI_Shutdown ends the broker's loop");
-    // the control character, the 9-member lobby and the foreign lobby (the long key never left the game), the host's lobby
-    // twice before the join, the lobby Steam refused twice, and the stranger's send and accept
-    EXPECT(g_bridge.refusals == 9, "the broker counted its nine refusals");
+    // the control character, HellForge's key, the 9-member lobby and the foreign lobby (the long key never left the game),
+    // the host's lobby twice before the join, the lobby Steam refused twice, the send before the backend listed the host,
+    // and the stranger's send and accept
+    EXPECT(g_bridge.refusals == 11, "the broker counted its eleven refusals");
 
     printf("%s Steam bridge: %d failure(s)\n", g_failures ? "FAIL" : "PASS", g_failures);
     return g_failures ? 1 : 0;

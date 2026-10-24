@@ -91,3 +91,14 @@ static inline bool BridgePrintable(const char* s)
     for (; *s; s++) if ((unsigned char)*s < 0x20 || (unsigned char)*s > 0x7E) return false;
     return true;
 }
+
+/* The table's "refusedStrings": the same text, ASCII letters in either case. */
+static inline bool BridgeSameText(const char* s, const char* refused)
+{
+    for (; *s && *refused; s++, refused++)
+    {
+        char a = *s >= 'A' && *s <= 'Z' ? (char)(*s + 32) : *s, b = *refused >= 'A' && *refused <= 'Z' ? (char)(*refused + 32) : *refused;
+        if (a != b) return false;
+    }
+    return *s == 0 && *refused == 0;
+}

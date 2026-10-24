@@ -181,6 +181,16 @@ static void TestServe(void)
     CHECK(GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &running, 1, &size, &status) && running == 1,
         "serve: calls still work after both");
 
+    /* the round trips' cost: the three calls made through GameChannelCall, by function, then a fresh count */
+    GameChannelCost cost;
+    GameChannelTakeCost(&game, &cost);
+    CHECK(cost.calls == 3 && cost.ticks > 0 && cost.maxTicks > 0 && cost.maxTicks <= cost.ticks &&
+        cost.byFunction[0].function == BRIDGE_FN_IS_STEAM_RUNNING && cost.byFunction[0].calls == 2 &&
+        cost.byFunction[1].function == 777 && cost.byFunction[1].calls == 1 && cost.byFunction[2].calls == 0,
+        "serve: the round trips are counted with their time, by function");
+    GameChannelTakeCost(&game, &cost);
+    CHECK(cost.calls == 0 && cost.ticks == 0 && cost.byFunction[0].calls == 0, "serve: a take starts a fresh count");
+
     /* the pump runs between calls: its callback reaches the ring */
     DWORD start = GetTickCount();
     while (!GameChannelPending(&game) && GetTickCount() - start < 2000) Sleep(5);
