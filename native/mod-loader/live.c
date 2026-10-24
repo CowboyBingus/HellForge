@@ -859,8 +859,9 @@ static size_t LiveLines(HANDLE pipe, OVERLAPPED* writeOp, char* buffer, size_t u
     return used;
 }
 
-/* A connection's requests answered and its queued lines written, until it breaks: 1 when a read is still pending. */
-static int LiveServe(HANDLE pipe, OVERLAPPED* readOp, OVERLAPPED* writeOp)
+/* A connection's requests answered and its queued lines written, until it breaks. A read still pending then is
+ * cancelled and waited for here, while its buffer is in scope: a late completion would write into reused stack. */
+static void LiveServe(HANDLE pipe, OVERLAPPED* readOp, OVERLAPPED* writeOp)
 {
     char buffer[8192];
     size_t used = 0;
@@ -882,7 +883,12 @@ static int LiveServe(HANDLE pipe, OVERLAPPED* readOp, OVERLAPPED* writeOp)
         if (!GetOverlappedResult(pipe, readOp, &read, FALSE) || read == 0) break;
         used = LiveLines(pipe, writeOp, buffer, used + read, sizeof buffer, &open);
     }
-    return reading;
+    if (reading)
+    {
+        DWORD read;
+        CancelIoEx(pipe, readOp);
+        GetOverlappedResult(pipe, readOp, &read, TRUE);
+    }
 }
 
 /* One connection to the launcher's pipe, from its hello to its end. */
@@ -893,14 +899,7 @@ static void LiveConnected(HANDLE pipe, OVERLAPPED* readOp, OVERLAPPED* writeOp)
     char hello[160];
     snprintf(hello, sizeof hello, "hello\t%d\t%s\t%s", LIVE_PROTOCOL, g_build, g_statsSchema[0] ? g_statsSchema : "-");
     InterlockedExchange(&g_packagesDirty, 1); /* the backend gets this machine's own packages as it connects */
-    int reading = 0;
-    if (LiveSend(pipe, writeOp, hello) && LiveFlush(pipe, writeOp)) reading = LiveServe(pipe, readOp, writeOp);
-    if (reading)
-    {
-        DWORD read;
-        CancelIoEx(pipe, readOp);
-        GetOverlappedResult(pipe, readOp, &read, TRUE);
-    }
+    if (LiveSend(pipe, writeOp, hello) && LiveFlush(pipe, writeOp)) LiveServe(pipe, readOp, writeOp);
     LiveOutConnected(0);
     CloseHandle(pipe);
     Note("live editor disconnected");
