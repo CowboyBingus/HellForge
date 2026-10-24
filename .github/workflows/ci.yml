@@ -33,3 +33,6 @@ jobs:
           # the tests' temporary files inside the workspace, as on a developer's PC (artifacts/ is ignored)
           $env:TEMP = $env:TMP = (New-Item -ItemType Directory -Force (Join-Path $env:GITHUB_WORKSPACE 'artifacts/tmp')).FullName
           ./scripts/Test.ps1
+          # Test.ps1 throws on any failure; its last checks expect the CLI to refuse (exit code 1), which the step's own
+          # "exit $LASTEXITCODE" would otherwise report
+          exit 0
