@@ -553,18 +553,30 @@ static int InstallReaper(int pinsReady);
 /* SDK 7 events (events.c, after abilities.c: the silo countdowns listen for a mission's end). */
 static int ApiSubscribe(HfMod* mod, uint32_t kind, HfListener listener, void* user, int32_t priority);
 #include "registry.c"
+#include "registry_load.c" /* right after registry.c: the registry at work when the entity data loads */
 #include "damage.c"
 #include "projectiles.c"
 #include "stratagems.c"
 #include "difficulty.c"
+#include "difficulty_ui.c" /* the level on the war table and in the HUD */
+#include "difficulty_missions.c" /* its missions and objectives */
+#include "difficulty_countdown.c" /* its mission countdown */
+#include "difficulty_cities.c" /* its larger structured maps and cities */
+#include "difficulty_maps.c" /* after difficulty_cities.c: its larger maps (the radii stub ends through the city copies) */
+#include "difficulty_block.c" /* the generation block's moved arrays */
+#include "difficulty_diag.c" /* its diagnostics and their watch */
+#include "difficulty_install.c" /* after every difficulty file: the checks and the install, in their order */
 #include "director.c" /* after difficulty.c: its rosters and the difficulty copies */
 #include "behaviours.c"
+#include "behaviour_turret.c" /* right after behaviours.c: the turret behaviour (TurretUpdate) */
+#include "crash_notes.c" /* after behaviours.c: the crash and freeze notes (BHV_CLOCK) */
 #include "packages.c"
 #include "loadout_preview.c"
 #include "abilities.c"
 #include "events.c"
 #include "stats.c"
 #include "fields.c" /* after stats.c: it reports conflicts with stats edits */
+#include "fields_live.c" /* right after fields.c: its live edits */
 #include "refs.c"
 #include "passives.c"
 #include "perks.c"
