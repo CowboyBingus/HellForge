@@ -187,7 +187,7 @@ rather than run on Valve's DLL.
 | `SteamUser021` | `BLoggedOn`, `GetSteamID` | snapshot | |
 | `SteamUser021` | `GetAuthSessionTicket`, `CancelAuthTicket` | call | ticket buffer at most 1024 bytes |
 | `SteamFriends017` | `GetPersonaName` | snapshot | |
-| `SteamFriends017` | `GetFriendCount`, `GetFriendByIndex`, `GetFriendRelationship`, `GetUserRestrictions` | call | read only |
+| `SteamFriends017` | `GetFriendCount`, `GetFriendByIndex`, `GetFriendRelationship`, `GetUserRestrictions`, `GetFriendPersonaState`, `GetFriendPersonaName`, `GetFriendGamePlayed` (its `FriendGameInfo_t`, 24 bytes out) | call | read only; the last three since 0.3.0-dev.10: the social menu showed every friend offline without them |
 | `SteamFriends017` | `SetRichPresence`, `ClearRichPresence` | call | reviewed 2026-10-24: strings friends see; key at most 64, value at most 256 printable characters, every key logged; the key `hellforge` (HellForge's own, how friends' backends find this one) refused in any case |
 | `SteamUtils010` | `GetAppID` | local | 553850 |
 | `SteamUtils010` | `GetIPCountry`, `IsSteamRunningOnSteamDeck` | snapshot | |
