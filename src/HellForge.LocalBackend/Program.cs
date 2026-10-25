@@ -95,6 +95,16 @@ try
         ? uint.TryParse(seedText, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed
             : throw new ArgumentException("--war-seed takes a whole number from 0 to 4294967295.")
         : 0u;
+    // --war-subfactions / --war-seaf yes|no: whether it deals its subfactions and SEAF allies from the seed (yes, the
+    // default) or keeps the frozen war's
+    bool Deal(string name) => options.GetValueOrDefault(name) switch
+    {
+        null or "yes" => true,
+        "no" => false,
+        _ => throw new ArgumentException(name + " takes yes or no."),
+    };
+    var dealSubfactions = Deal("--war-subfactions");
+    var dealSeaf = Deal("--war-seaf");
     await using var liveWar = !openWar && options.GetValueOrDefault("--live-war") is { } liveWarCache && startupFixtures
         ? await LiveWar.StartAsync(liveWarCache, warClock, message =>
         {
@@ -102,7 +112,7 @@ try
         }, cacheOnly: Environment.GetEnvironmentVariable("HELLFORGE_LINUX_NETNS") == "1") // Linux: fetched before the namespace
         : null;
     await using var app = LocalBackend.Create(port, evidence, mode, startupFixtures, profile, options.GetValueOrDefault("--item-catalog"),
-        options.GetValueOrDefault("--fixture-override"), options.GetValueOrDefault("--capture-mission-bodies") == "true", warClock, accountKeys, liveWar, presence, registeredItems, openWar, warSeed);
+        options.GetValueOrDefault("--fixture-override"), options.GetValueOrDefault("--capture-mission-bodies") == "true", warClock, accountKeys, liveWar, presence, registeredItems, openWar, warSeed, dealSubfactions, dealSeaf);
     await app.StartAsync(lifetime.Token);
     var pipeName = options.GetValueOrDefault("--pipe");
     // --sandbox: the session's game runs at low integrity, so the pipes it opens carry a low label (PipeServer)
