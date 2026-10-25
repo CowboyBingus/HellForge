@@ -1109,6 +1109,21 @@ static const uint8_t kSpreadReferenceStub[24] = {
     0x45, 0x31, 0xE4,                                                 /*  6 xor r12d, r12d (none: location 0) */
     0x41, 0x8B, 0xC4, 0x4C, 0x69, 0xE0, 0xE0, 0x00, 0x00, 0x00,       /*  9 mov eax, r12d; imul r12, rax, 0xe0 */
     0xE9, 0, 0, 0, 0};                                                /* 19 jmp 0xF7CED2 (rel32 at 20) */
+/* The game's hash insert (0x172F790, 704 callers) probes every slot for the key or an empty one and, finding neither in
+ * a full table, writes the entry through a null slot (0x172F7F2, writing 0x4). A level-11 city map (twice the radius)
+ * registered more destructibles than the world's destruction-record map holds ([game + 0x346D528] + 0xC5F48, 0x8000
+ * slots set at 0x13DF877; its records at +0xC5F78) and ended the game as the mission launched. A full table now skips
+ * the entry and counts it (DifficultyWatch logs the count): that destructible has no record lookup instead of the game
+ * ending. A table with room is unchanged. The map cannot simply grow: its storage is inline, followed by another table. */
+#define DIF_HASH_INSERT_END 0x172F7F2u
+static const uint8_t kHashInsertEndPin[12] = {0x89, 0x71, 0x04, 0x48, 0x8B, 0x74, 0x24, 0x10, 0x44, 0x89, 0x09, 0xC3};
+static const uint8_t kHashInsertEndStub[26] = {
+    0x48, 0x85, 0xC9, 0x75, 0x09,                                     /*  0 test rcx, rcx; jne 14 */
+    0xF0, 0xFF, 0x05, 0xF4, 0x0F, 0x00, 0x00,                         /*  5 lock inc dword [rip+0xff4] (the count, next page) */
+    0xEB, 0x06,                                                       /* 12 jmp 20 */
+    0x89, 0x71, 0x04, 0x44, 0x89, 0x09,                               /* 14 mov [rcx+4], esi; mov [rcx], r9d */
+    0x48, 0x8B, 0x74, 0x24, 0x10, 0xC3};                              /* 20 mov rsi, [rsp+0x10]; ret */
+static volatile LONG* g_hashFullCount;
 /* The war table's mission board: 110 slots of 0x5C per planet: 0..29 the
  * planet's missions (3 per level 1..10), 30..109 regions 0..7 (10 levels each). City and factory maps only come from
  * regions (Super Earth's mega cities), whose generator (0x11E44D0) stopped at 10 (0x11E46F1, mov ebp, 10), and the
@@ -2295,6 +2310,9 @@ static const char* DifficultySitesFailed(uintptr_t game, int* waiting)
             return "the war table's mission board is not the reviewed one";
         if (SafeRead(game + DIF_SPREAD_REFERENCE, board, 7) || memcmp(board, kSpreadReferencePin, 7) != 0)
             return "the map generator's location spreading is not the reviewed one";
+        uint8_t insertEnd[sizeof kHashInsertEndPin];
+        if (SafeRead(game + DIF_HASH_INSERT_END, insertEnd, sizeof insertEnd) || memcmp(insertEnd, kHashInsertEndPin, sizeof insertEnd) != 0)
+            return "the game's hash insert is not the reviewed one";
     }
     uint8_t iconCall[5];
     int32_t iconRel;
@@ -3031,6 +3049,15 @@ static int InstallDifficulty(uintptr_t game, int pinsReady)
         uint8_t spreadJump[10] = {0xE9, 0, 0, 0, 0, 0x90, 0x90, 0x90, 0x90, 0x90};
         rel = (int32_t)((uintptr_t)spread - (game + DIF_SPREAD_REFERENCE + 5)); memcpy(spreadJump + 1, &rel, 4);
         if (ApiWrite(game + DIF_SPREAD_REFERENCE, spreadJump, 10)) return RefuseDifficulty("the location spreading could not be guarded");
+        uint8_t* insertEnd = AllocateNearGame(game, 0x2000); /* the stub's page (+0), its count's page (+0x1000, stays writable) */
+        if (insertEnd == NULL) return RefuseDifficulty("no memory within 2 GB of game.dll for the hash insert's guard");
+        memcpy(insertEnd, kHashInsertEndStub, sizeof kHashInsertEndStub);
+        g_hashFullCount = (volatile LONG*)(insertEnd + 0x1000);
+        DWORD insertProtect;
+        VirtualProtect(insertEnd, 0x1000, PAGE_EXECUTE_READ, &insertProtect);
+        uint8_t insertJump[12] = {0xE9, 0, 0, 0, 0, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC};
+        rel = (int32_t)((uintptr_t)insertEnd - (game + DIF_HASH_INSERT_END + 5)); memcpy(insertJump + 1, &rel, 4);
+        if (ApiWrite(game + DIF_HASH_INSERT_END, insertJump, 12)) return RefuseDifficulty("the game's hash insert could not be guarded");
     }
     if (g_difficulty.flags & HF_DIFFICULTY_SECOND_PRIMARY) MixInstall(game);
     if (g_difficulty.grant != 0)
@@ -3613,6 +3640,19 @@ static void DifficultyWatch(void)
         {
             if (changed == 0 || g_zoneDiag[4] != cursor) { cursor = g_zoneDiag[4]; changed = GetTickCount64(); }
             else if (GetTickCount64() - changed >= 300) { dumpedTable = g_zoneDiag[0]; changed = 0; ZoneDump(); }
+        }
+    }
+    {
+        /* entries the hash insert's guard skipped in full tables (destructibles past the destruction-record map), at most
+         * one line in 5 s */
+        static LONG reported;
+        static ULONGLONG fullLogged;
+        LONG full = g_hashFullCount != NULL ? *g_hashFullCount : 0;
+        if (full != reported && GetTickCount64() - fullLogged >= 5000)
+        {
+            reported = full;
+            fullLogged = GetTickCount64();
+            Note("difficulty: a full hash table skipped %ld entries so far (a map's destructibles past the 32768 the world's destruction-record map holds; the game used to end there)", full);
         }
     }
     static uint32_t seen[4], pockets;
