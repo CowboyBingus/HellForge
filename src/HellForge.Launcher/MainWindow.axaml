@@ -214,7 +214,7 @@
             <StackPanel Spacing="10">
               <TextBlock Text="ACCOUNT SYNC" Classes="h2" Margin="0" />
               <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
-                         Text="Brings your own HELLDIVERS 2 account into this profile. Warbonds and Superstore items you bought always follow your latest sync; everything else is imported only as you choose, and the profile is backed up first. Super Credits are never imported or usable. Sync opens the normal game through Steam; log in and pass the title screen. Each sync asks for administrator access: until the capture finishes (10 minutes at most), the game's server name points at this PC and a temporary certificate is trusted. Both are removed when it ends." />
+                         Text="Brings your own HELLDIVERS 2 account into this profile. Warbonds, Superstore items and DLC gear you bought always follow your latest sync; everything else is imported only as you choose, and the profile is backed up first. Super Credits are never imported or usable. Sync opens the normal game through Steam; log in and pass the title screen. Each sync asks for administrator access: until the capture finishes (10 minutes at most), the game's server name points at this PC and a temporary certificate is trusted. Both are removed when it ends." />
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button x:Name="SyncButton" Classes="primary" Content="Sync Inventory" />
                 <TextBlock x:Name="SyncStatusText" VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" />

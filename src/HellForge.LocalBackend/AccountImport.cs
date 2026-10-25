@@ -129,10 +129,11 @@ static class AccountImport
         };
         var owned = vanillaItems.Select(MixId).OfType<uint>().Where(paid.IsPaid).ToList();
         var tokens = owned.Count(paid.WarbondTokens.Contains);
+        var dlc = owned.Count(paid.DlcItems.Contains);
         return new JsonObject
         {
             ["categories"] = categories,
-            ["premium"] = Counted(tokens, "warbond token", "warbond tokens") + " and " + Counted(owned.Count - tokens, "Superstore item", "Superstore items"),
+            ["premium"] = Premium(tokens, owned.Count - tokens - dlc, dlc),
             ["capturedUtc"] = snapshot.Seal.CapturedUtc.ToString("O", CultureInfo.InvariantCulture)
         };
     }
@@ -167,6 +168,21 @@ static class AccountImport
     static string Format(long number) => number.ToString("N0", CultureInfo.InvariantCulture);
 
     static string Counted(long number, string one, string many) => Format(number) + " " + (number == 1 ? one : many);
+
+    // "2 warbond tokens, 3 Superstore items and 6 DLC items", leaving out kinds the account has none of.
+    static string Premium(int tokens, int store, int dlc)
+    {
+        List<string> parts = [];
+        if (tokens > 0) parts.Add(Counted(tokens, "warbond token", "warbond tokens"));
+        if (store > 0) parts.Add(Counted(store, "Superstore item", "Superstore items"));
+        if (dlc > 0) parts.Add(Counted(dlc, "DLC item", "DLC items"));
+        return parts.Count switch
+        {
+            0 => "no premium items",
+            1 => parts[0],
+            _ => string.Join(", ", parts[..^1]) + " and " + parts[^1]
+        };
+    }
 
     static Kind KindOf(JsonObject item, PaidContentSet paid) => MixId(item) is not { } id ? Kind.Armory
         : PaidContentSet.IsSuperCredits(id) ? Kind.SuperCredits

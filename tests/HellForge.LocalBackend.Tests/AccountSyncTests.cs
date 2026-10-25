@@ -11,6 +11,12 @@ static class AccountSyncTests
     const ulong Player = 76561198000000001, Sibling = 76561198000000002;
     const uint MobilizeToken = 2032304616, Medals = 1276729503, Requisition = 0xD7150EEC, CommonSamples = 0xEDF6EAF5;
     const uint SuperCreditPrice = 0xCF875032, SuperCreditWallet = 0xCBFFC645, LocalArmoryItem = 9999, VanillaArmoryItem = 4242;
+    // Steam DLC gear: the Super Citizen Edition's MP-98 Knight, DP-53 helmet and armour and cape; TR-117 Alpha Commander;
+    // TR-40 Gold Eagle; and their packages. Not DLC: the TR-7, TR-9 and TR-62 sets of item package 3722765189.
+    const uint Knight = 2161995568;
+    static readonly uint[] DlcGear = [Knight, 1296068557, 556862721, 2007907056, 1945105139, 3066485739, 276679263, 3813318023, 1849408484,
+        1542124658, 651643972, 1999963265, 4146558611];
+    static readonly uint[] PromotionalArmour = [495842462, 1122513689, 2899116161];
 
     sealed record Ids(uint OwnedToken, uint OwnedWarbondItem, uint OtherWarbondItem, uint StoreItem, uint MobilizeItem);
 
@@ -50,7 +56,7 @@ static class AccountSyncTests
         var token = details.GetProperty("610512218").GetProperty("premiumTokenMixIds")[0].GetUInt32();
         var owned = Items("610512218").First(i => paid.TryGetWarbondTokens(i, out var tokens) && tokens.Contains(token));
         var other = Items("19991972").First(i => paid.TryGetWarbondTokens(i, out var tokens) && !tokens.Contains(token));
-        var store = paid.MixIds.Except(paid.WarbondTokens).First();
+        var store = paid.MixIds.Except(paid.WarbondTokens).Except(paid.DlcItems).First();
         var mobilize = Items("1929468580").First(i => !paid.TryGetWarbondTokens(i, out _));
         return new Ids(token, owned, other, store, mobilize);
     }
@@ -66,11 +72,13 @@ static class AccountSyncTests
             {
                 var items = front.GetProperty("sections").EnumerateArray().SelectMany(s => s.GetProperty("items").EnumerateArray()).Select(i => i.GetProperty("mixId").GetUInt32()).ToList();
                 var id = front.GetProperty("id32").GetUInt32();
-                // two of its items are also progression package rewards: earned in play, so not paid
-                if (id == 2776696735) check(items.Count(i => !paid.IsPaid(i)) == 2, "Superstore items are not paid: " + items.Count(i => !paid.IsPaid(i)));
+                // every item, the weapons whose mastery packages require them included (a requirement is not a reward)
+                if (id == 2776696735) check(items.All(paid.IsPaid), "Superstore items are not paid: " + items.Count(i => !paid.IsPaid(i)));
                 if (id == 124284010) check(!items.Any(paid.IsPaid), "A requisition terminal item counts as paid.");
             }
         check(!paid.IsPaid(1497469599) && !paid.IsPaid(3787370254), "The starting stratagems count as paid.");
+        check(DlcGear.All(paid.IsPaid) && DlcGear.All(paid.DlcItems.Contains), "Steam DLC gear is not paid.");
+        check(!PromotionalArmour.Any(paid.IsPaid), "Promotional armour that is no Steam DLC counts as paid.");
         check(!paid.TryGetWarbondTokens(ids.MobilizeItem, out _), "A free warbond item needs a token.");
         check(new[] { SuperCreditPrice, 0x6C3C83C1u, SuperCreditWallet, 0x865AF2FDu }.All(PaidContentSet.IsSuperCredits), "A Super Credits item is not recognised.");
         check(paid.Currencies.Contains(Medals) && paid.Currencies.Contains(Requisition) && !paid.Currencies.Contains(SuperCreditWallet), "Currencies are wrong.");
@@ -82,6 +90,7 @@ static class AccountSyncTests
         check(!served.Any(paid.IsPaid), "A paid item was served without a snapshot.");
         check(!served.Contains(ids.OwnedWarbondItem) && !served.Contains(ids.OtherWarbondItem), "A premium warbond's item was served without its token.");
         check(served.Contains(MobilizeToken) && served.Contains(ids.MobilizeItem) && served.Count > 1000, "The free warbond or ordinary items were withheld.");
+        check(!served.Overlaps(DlcGear), "Steam DLC gear was served without a snapshot.");
     }
 
     static void SuperCredits(string root, Action<bool, string> check)
@@ -113,12 +122,13 @@ static class AccountSyncTests
     {
         var (_, snapshot) = Install(root, "seals", ids);
         var owned = OwnershipFilter.ForSnapshot(paid, snapshot, Player, out var problem);
-        check(problem == null && owned.OwnedPaidCount == 2, "A sealed snapshot did not unlock its premium items: " + problem);
+        check(problem == null && owned.OwnedPaidCount == 3, "A sealed snapshot did not unlock its premium items: " + problem);
         using (var starter = ProfileStore.Open(null, "starter"))
         {
             starter.Ownership = owned;
             var served = Served(starter);
-            check(served.Contains(ids.OwnedToken) && served.Contains(ids.StoreItem), "Owned premium items were not served to a profile lacking them.");
+            check(served.Contains(ids.OwnedToken) && served.Contains(ids.StoreItem) && served.Contains(Knight), "Owned premium items were not served to a profile lacking them.");
+            check(!served.Overlaps(DlcGear.Where(id => id != Knight)), "DLC gear the snapshot lacks was served.");
             check(!served.Any(PaidContentSet.IsSuperCredits), "The snapshot's Super Credits were served.");
         }
         Refused(paid, snapshot, Sibling, "another Steam account", check);
@@ -129,7 +139,7 @@ static class AccountSyncTests
         File.WriteAllText(inventory, File.ReadAllText(inventory).Replace("\"items\":[", "\"items\":[{\"mixId\":" + ids.OtherWarbondItem + ",\"amount\":1,\"isDiscovered\":true},", StringComparison.Ordinal));
         Refused(paid, snapshot, Player, "changed", check);
         File.WriteAllBytes(inventory, original);
-        check(OwnershipFilter.ForSnapshot(paid, snapshot, Player, out _).OwnedPaidCount == 2, "The restored snapshot no longer verifies.");
+        check(OwnershipFilter.ForSnapshot(paid, snapshot, Player, out _).OwnedPaidCount == 3, "The restored snapshot no longer verifies.");
 
         var seal = Path.Combine(snapshot, SnapshotSeal.FileName);
         var sealText = File.ReadAllText(seal);
@@ -173,7 +183,7 @@ static class AccountSyncTests
                 "Warbond unlocks or packages were not merged.");
             check(progression["shipName"]?.ToJsonString() == shipBefore && !progression.ContainsKey("location") && Whole(progression["onboardingFlags"]) != 16350331,
                 "Ship or tutorial imported though left out by default.");
-            check(!items.Keys.Any(PaidContentSet.IsSuperCredits) && !items.ContainsKey(ids.OwnedToken) && !items.ContainsKey(ids.StoreItem),
+            check(!items.Keys.Any(PaidContentSet.IsSuperCredits) && !items.ContainsKey(ids.OwnedToken) && !items.ContainsKey(ids.StoreItem) && !items.ContainsKey(Knight),
                 "Super Credits or premium items were written into the profile.");
         }
         check(ProfileBackups.List(profileDir) is [{ Reason: "import" }], "The first import did not back the profile up.");
@@ -196,7 +206,7 @@ static class AccountSyncTests
         check(Command(AccountCommands.Preview, profileDir, Player, out var preview) == 0, "The preview failed.");
         using (var review = JsonDocument.Parse(preview))
             check(review.RootElement.GetProperty("categories").GetProperty("level").GetProperty("vanilla").GetString() == "485,592 XP" &&
-                review.RootElement.GetProperty("premium").GetString() == "1 warbond token and 1 Superstore item", "The preview is wrong: " + preview);
+                review.RootElement.GetProperty("premium").GetString() == "1 warbond token, 1 Superstore item and 1 DLC item", "The preview is wrong: " + preview);
 
         check(Command(AccountCommands.Import, profileDir, Player, out error) == 0, "The import command failed: " + error);
         var imported = ProfileStore.Load(file);
@@ -223,7 +233,7 @@ static class AccountSyncTests
         return code;
     }
 
-    // An installation folder with a profile folder and a sealed snapshot for Player: two paid items, a premium warbond
+    // An installation folder with a profile folder and a sealed snapshot for Player: a token, a Superstore item, DLC gear, a premium warbond
     // item, an armory item, currencies, Super Credits, and the progression of the 2026-10-24 capture's shape.
     static (string ProfileDir, string SnapshotDir) Install(string root, string name, Ids ids)
     {
@@ -232,7 +242,7 @@ static class AccountSyncTests
         Directory.CreateDirectory(profileDir);
         Directory.CreateDirectory(snapshot);
         string Item(uint id, long amount) => "{\"mixId\":" + id + ",\"amount\":" + amount + ",\"isDiscovered\":true}";
-        File.WriteAllText(Path.Combine(snapshot, InventorySync.InventoryFile), "{\"items\":[" + string.Join(",", Item(ids.OwnedToken, 1), Item(ids.StoreItem, 1),
+        File.WriteAllText(Path.Combine(snapshot, InventorySync.InventoryFile), "{\"items\":[" + string.Join(",", Item(ids.OwnedToken, 1), Item(ids.StoreItem, 1), Item(Knight, 1),
             Item(ids.OwnedWarbondItem, 1), Item(VanillaArmoryItem, 2), Item(Medals, 119), Item(Requisition, 50000), Item(SuperCreditWallet, 180), Item(SuperCreditPrice, 180)) +
             "],\"loadouts\":[]}");
         File.WriteAllText(Path.Combine(snapshot, InventorySync.ProgressionFile), """
