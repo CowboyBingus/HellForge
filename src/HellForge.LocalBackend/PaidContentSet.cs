@@ -15,21 +15,13 @@ namespace HellForge.LocalBackend;
 // - currencies: medals, requisition and samples, which the import treats as numbers.
 public sealed class PaidContentSet
 {
-    static readonly HashSet<uint> FreeWarbonds = [1929468580];
     const uint SuperCreditPrice = 0xCF875032;
     static readonly HashSet<uint> SuperCreditIds = [SuperCreditPrice, 0x6C3C83C1, 0xCBFFC645, 0x865AF2FD];
     // Requisition, common, rare and super samples, and the generic medal reward
     static readonly uint[] FixedCurrencies = [0xD7150EEC, 0xEDF6EAF5, 0xB1ED1C41, 0xDAC0E9DB, 0x3584C850];
-    // The item packages (progression-data itemPackages) the Steam DLCs with gear grant, known by their contents' names in
-    // the armour data (KB hellforge-account-sync-import-design-2026-10-25). Only what is gear is listed: ownership comes
-    // from the player's sealed inventory, never from Steam's DLC list. The premium warbond DLCs are tokens, paid already.
-    static readonly uint[] SteamDlcPackages =
-    [
-        1542124658, // Super Citizen Edition: MP-98 Knight, DP-53 Savior of the Free helmet and armour, "Will of the People" cape, two cosmetics
-        651643972,  // TR-117 Alpha Commander helmet and armour
-        1999963265, // TR-40 Gold Eagle helmet, armour and one cosmetic
-        4146558611  // TR-40 Gold Eagle helmet and armour
-    ];
+    // The item packages the Steam DLCs with gear grant (HellForge.Core PremiumContent.SteamDlc, which mods name too). Ownership
+    // comes from the player's sealed inventory, never from Steam's DLC list. The premium warbond DLCs are tokens, paid already.
+    static readonly uint[] SteamDlcPackages = [.. HellForge.Core.PremiumContent.SteamDlc.Values.SelectMany(packages => packages)];
 
     readonly Dictionary<uint, uint[]> warbondItemTokens;
 
@@ -66,7 +58,7 @@ public sealed class PaidContentSet
         {
             foreach (var medal in new[] { "medalsTotalMixId", "medalsConsumableMixId", "medalsSpentMixId" })
                 currencies.Add(pass.GetProperty(medal).GetUInt32());
-            var free = FreeWarbonds.Contains(pass.GetProperty("id32").GetUInt32());
+            var free = pass.GetProperty("id32").GetUInt32() == HellForge.Core.PremiumContent.FreeWarbond;
             var tokens = pass.GetProperty("premiumTokenMixIds").EnumerateArray().Select(t => t.GetUInt32()).ToArray();
             if (!free) paid.UnionWith(tokens);
             foreach (var item in WarbondPageItems(pass))

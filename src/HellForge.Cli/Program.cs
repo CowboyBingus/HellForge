@@ -86,7 +86,7 @@ try
         "create-install" => ["--root"],
         "prepare-session" => ["--install", "--profile", "--user-data"],
         "migrate" => ["--install", "--from", "--appdata"],
-        "mods-stage" => ["--install", "--plan", "--logs", "--progress", "--modset", "--sync"],
+        "mods-stage" => ["--install", "--plan", "--logs", "--progress", "--modset", "--sync", "--premium-snapshot", "--premium-locked"],
         "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--out"],
         "check-stats" => ["--mod"],
         "sdk-headers" => ["--repo", "--mode"],
@@ -235,6 +235,13 @@ try
             // The synced store keeps the mods used most recently (SyncedStore.Keep), this session's among them.
             foreach (var pruned in SyncedStore.Prune(modInstall.Mods, loadOrder.Select(m => m.Folder)))
                 Console.Error.WriteLine("Mod sync: removed the downloaded mod " + pruned + ", used least recently.");
+            // Premium content mods declare (PremiumContent), against the profile's account snapshot (--premium-snapshot): a
+            // cosmetic mod the player does not own is not loaded; a gameplay one loads, its items locked by the backend
+            // (--premium-locked, which the session passes on).
+            var premium = PremiumMods.ForSession(modInstall, options.GetValueOrDefault("--premium-snapshot"), SteamAccount.Current(), loadOrder);
+            loadOrder = premium.Loaded;
+            modProblems.AddRange(premium.Problems);
+            if (options.TryGetValue("--premium-locked", out var lockedFile)) PremiumMods.WriteLocked(lockedFile, premium.Locked);
             // Mods with a data spec get their data built from the copy's game data first (once per game data and spec);
             // a mod whose data cannot be built is not loaded.
             var (active, dataProblems) = ModDataCache.Prepare(modInstall, loadOrder, Console.Error.WriteLine);
@@ -273,7 +280,7 @@ try
                 loaderRequired = true, // read-only stats snapshots are also collected without mods
                 disabled = mods.Where(m => !m.Enabled).Select(m => m.Id),
                 problems = modProblems, staged, stagedCopied = ModStaging.LastCounts.Copied, stagedKept = ModStaging.LastCounts.Kept,
-                native = active.Any(m => m.HasNative), digest, modlist = ModlistDiff.Encode(compared), syncedWith,
+                native = active.Any(m => m.HasNative), digest, modlist = ModlistDiff.Encode(compared), syncedWith, premiumLocked = premium.Locked,
                 // the session's mods with network type edits (after a mod sync, the host's), for the session's native applier
                 nativeFolders = active.Where(m => m.NetworkFieldTypes.Count > 0).Select(m => Path.GetFullPath(m.Folder))
             };

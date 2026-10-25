@@ -29,6 +29,39 @@ static class AccountSyncTests
         Seals(root, paid, ids, check);
         Imports(root, ids, check);
         DuplicateItems(root, ids, check);
+        ModItems(root, paid, check);
+    }
+
+    // Mods' weapons and stratagems (RegisteredItems): a copy of premium content is the player's only when they own the
+    // original, and a mod mods-stage locked (its premium list not owned) adds nothing; free copies are untouched.
+    static void ModItems(string root, PaidContentSet paid, Action<bool, string> check)
+    {
+        const uint Liberator = 0xAA035309, KnightCopy = 0x5EED0001, LiberatorCopy = 0x5EED0002, LockedCopy = 0x5EED0003, StrikeCopy = 0x5EED0004;
+        const uint Strike = 1560416221, StrikeStable = 0x0BADF00D;
+        var fixtures = LocalBackend.LoadStartupFixtures();
+        var file = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "premium-mod-items")).FullName, "registered-items.json");
+        File.WriteAllText(file, $$"""
+            {"format":1,"items":[{"mixId":{{KnightCopy}},"copyOf":{{Knight}},"mod":"a.knight-variant"},{"mixId":{{LiberatorCopy}},"copyOf":{{Liberator}},"mod":"b.free"},
+              {"mixId":{{LockedCopy}},"copyOf":{{Liberator}},"mod":"c.warbond-port"},
+              {"kind":"stratagem","mixId":{{StrikeCopy}},"stable":{{StrikeStable}},"copyOf":{{Strike}},"mod":"b.free"}]}
+            """);
+        var items = new RegisteredItems(file)
+        {
+            Source = path => fixtures.TryGetValue(path, out var body) ? body : null,
+            OwnsBase = new OwnershipFilter(paid, null).IsAllowed,
+            LockedMods = new HashSet<string> { "c.warbond-port" }
+        };
+        HashSet<uint> Served()
+        {
+            var held = JsonSerializer.SerializeToElement(new { items = Array.Empty<object>() });
+            return [.. JsonNode.Parse(items.Apply("/Progression/inventory", held).GetRawText())!["items"]!.AsArray().Select(i => (uint)Whole(i!["mixId"]))];
+        }
+        var served = Served();
+        check(!served.Contains(KnightCopy), "A copy of DLC gear was served to a player who does not own it.");
+        check(served.Contains(LiberatorCopy) && served.Contains(StrikeCopy), "A copy of free content was withheld.");
+        check(!served.Contains(LockedCopy), "A locked premium mod's item was served.");
+        items.OwnsBase = new OwnershipFilter(paid, [new JsonObject { ["mixId"] = Knight, ["amount"] = 1, ["isDiscovered"] = true }]).IsAllowed;
+        check(Served().Contains(KnightCopy), "A copy of DLC gear was withheld from its owner.");
     }
 
     // A hand-edited profile may list an item twice; an import must still work and keep one entry per item it touches.

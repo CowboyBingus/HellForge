@@ -102,6 +102,10 @@ try
     var presence = new FriendPresence();
     // The mod loader writes the session's registered weapons beside the backend's evidence folder.
     var registeredItems = new RegisteredItems(Path.Combine(Path.GetDirectoryName(evidence)!, "registered-items.json"));
+    // Premium content mods build on: a copy of a premium base follows the player's ownership, and the mods mods-stage
+    // locked (--premium-locked: their declared premium list is not owned) add nothing to the inventory.
+    if (profile?.Ownership is { } ownership) registeredItems.OwnsBase = ownership.IsAllowed;
+    registeredItems.LockedMods = HellForge.Core.PremiumMods.ReadLocked(options.GetValueOrDefault("--premium-locked"));
     // --live-war <cache file>: follow the live galactic war read-only through the community mirror (LiveWar).
     Directory.CreateDirectory(evidence);
     var liveWarLog = Path.Combine(evidence, "live-war.log");
