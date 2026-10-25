@@ -655,6 +655,7 @@ static int ApiSubscribe(HfMod* mod, uint32_t kind, HfListener listener, void* us
 #include "perks.c"
 #include "actions.c" /* after refs.c (packages) and events.c (the readers) */
 #include "shots.c" /* after actions.c: the players (event_polls.c), RefCheck (refs.c), the field records (fields.c) */
+#include "rounds.c" /* after shots.c: its players and wielders; the projectile and damage lists (projectiles.c, damage.c) */
 
 static void Deliver(HfEvent event)
 {
@@ -812,7 +813,7 @@ static DWORD WINAPI Watch(void* parameter)
         if ((g_statCount || g_statsProbeCount) && !(g_statsTablesDone[0] && g_statsTablesDone[1] && g_statsTablesDone[2]) && g_fired[HF_EVENT_GAME_LOADED])
             StatsTablesReady(ApiModuleBase("game.dll", NULL));
         if (g_fired[HF_EVENT_PROJECTILES_READY]) StatsExtraReady();
-        if (g_fired[HF_EVENT_GAME_LOADED]) { StatsBoostersReady(); StatsMeleeReady(); StatsDirectorReady(); ShotsTick(); }
+        if (g_fired[HF_EVENT_GAME_LOADED]) { StatsBoostersReady(); StatsMeleeReady(); StatsDirectorReady(); ShotsTick(); RoundsTick(); }
         if (g_fired[HF_EVENT_GAME_LOADED] && g_tickState == 0) TickInstall();
         if (g_fired[HF_EVENT_GAME_LOADED]) InstallLoadoutPreview();
         if (g_fired[HF_EVENT_GAME_LOADED]) EventsInstall();

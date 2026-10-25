@@ -658,6 +658,31 @@ screens, and on the swapping player's screen the others' guns fired the swap too
 - Not covered: beams (they choose no row). A swap that follows the gun itself (dropped and picked up by another player)
   needs the weapon's network identity through drops, which the research leaves to in-game tests.
 
+#### A player's edited rounds
+
+The same holds for a round's stats: a shot copies them when it spawns, from the spawning machine's own rows
+(SpawnProjectile, game.dll 0x13A9830, reads the ProjectileSettings row through its descriptor and copies the DamageInfo
+row's four armour-penetration lanes into the shot; damage is read from the DamageInfo row per hit, times the shot's
+damage multiplier). So a friend's AP 4 round deflected on a host with AP 2, and this machine's own edits showed on the
+others' guns. Research: `HD2Mods\research\coop-weapon-stats` (part B).
+
+- Each player's changes of ProjectileSettings and DamageInfo rows (four-byte fields: flight, the damage and explosion
+  ids, armour penetration, damage) travel with the lobby's assets: `assets.mine` adds `P<type>+<offset>=<bits>` and
+  `D<id>+<offset>=<bits>` entries (hex offsets and bits, `;` between them, at most 96), `assets.lobby` adds
+  `<peer hex>=<entries>` for every player, and each backend sends its game `rounds <list>` (`AssetShare.Rounds`). Not
+  while the host shares its stats (`rounds -`).
+- The mod loader (`native/mod-loader/rounds.c`) rebuilds every row anyone in the lobby changed, for every other player
+  present: this machine's row with this machine's own changes undone (the Local Stats mod's boot edits and the editors'
+  live ones, by their originals), then that player's values. It changes one call, the pellet spawn of the ProjectileWeapon
+  fire path (0x616612), which makes this machine's copies of every player's hand-held shots. For a shot another player
+  fires (the shooter found as in shots.c), SpawnProjectile is handed that player's projectile row (a copy that keeps
+  the stock type), and the spawned shot takes their armour-penetration lanes and a damage scale (their standard damage
+  over this machine's, else their durable over this machine's). This machine's player's shots, and shots by no player,
+  are left alone.
+- Not covered: a shotgun's pellet count (read by type in the fire function), explosion values, damage statuses and
+  demolition (read by damage id per hit; the damage list is not moved for this), and shots spawned anywhere else
+  (sentries, vehicles, stratagems). Which machine decides damage is unchanged: the shooter's.
+
 ### When the host leaves
 
 When the lobby's owner leaves, the lobby closes for everyone (`lobby.disconnected`, reason LobbyDeleted). When the
