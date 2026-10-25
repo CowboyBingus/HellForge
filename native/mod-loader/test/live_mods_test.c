@@ -197,7 +197,7 @@ static void LiveModsFixture(void)
         "modorder\t55\tr6\t3\te", "modadd\t56\tr6\te\tstats\t3333333333333333\tC:\\mods\\e\t-",
         "modstat\t57\tr6\te\tcomponent\tFixture\t0000000000000001\t0\t0\tu32\t00000001\t-\t1\t0\t0\te own", "modcommit\t58\tr6"};
     TxnRun(own, 8, reply, sizeof reply);
-    assert(TxnResult("r6", "capability"));
+    assert(TxnResult("r6", "capability")); /* its record holds a's and c's values: a copy would leave them behind */
     g_statsTablesDone[1] = 0;
     const char* later[] = {"modbegin\t59\tr7\tsolo\tx", "modorder\t60\tr7\t0\ta", "modorder\t61\tr7\t1\tc", "modorder\t62\tr7\t2\tb",
         "modorder\t63\tr7\t3\tf", "modadd\t64\tr7\tf\tstats\t4444444444444444\tC:\\mods\\f\t-",
@@ -245,6 +245,93 @@ static void LiveModsFixture(void)
     g_componentCount = savedComponents;
     g_statCount = savedStats;
     g_editCount = savedEdits;
+    InterlockedExchange(&g_statsComponentsReady, 0);
+}
+
+/* "own" lines live (live_own.c, M6): an entity whose record nothing holds gets a record of its own, the table copied at
+ * the first (a line of the change at that record follows into the copy); a second entity's copy goes into HellForge's
+ * copy; the vanilla records stay as they were; removing the mod leaves the copy with the field's bottom. */
+static void OwnLiveFixture(void)
+{
+    HfMod saved[4];
+    memcpy(saved, g_mods, sizeof saved);
+    int savedMods = g_modCount, savedComponents = g_componentCount, savedStats = g_statCount, savedEdits = g_editCount, savedOwned = g_ownedCount;
+    Component savedComponent = g_components[0];
+    memset(g_mods, 0, sizeof saved);
+    strcpy(g_mods[0].id, "a"); g_mods[0].loaded = 1; g_mods[0].log = INVALID_HANDLE_VALUE; wcscpy(g_mods[0].dll, L"-");
+    g_modCount = 1;
+    g_statCount = g_editCount = 0;
+    Component* c = &g_components[0];
+    g_componentCount = 1;
+    memset(c, 0, sizeof *c);
+    strcpy(c->name, "Fixture"); c->index = 998; c->indices = 4; c->records = 2; c->recordOffset = 64; c->stride = 16;
+    uint32_t extent = 96;
+    memcpy(c->header + 16, &extent, 4);
+    g_txnState = calloc(1, REG_TABLES + 8 * 1000);
+    uint8_t* block = calloc(1, 32 + 96);
+    uint8_t* table = block + 32;
+    memcpy(block, &c->index, 4);
+    memcpy(block + 4, c->header, 28);
+    *(uint64_t*)(table + 16) = 1;                                            /* entity 1: record 0 */
+    *(uint64_t*)(table + 32) = 2; *(uint32_t*)(table + 40) = 1;              /* entity 2: record 1 */
+    uint32_t* records = (uint32_t*)(table + 64);
+    records[0] = 10; records[4] = 20; records[5] = 21;
+    assert(!SetStatePointer(g_txnState, REG_TABLES + 8 * c->index, table));
+    FixtureLoad(g_txnState);
+    g_liveEntityState = TxnFixtureState;
+    g_livePlayers = TxnFixturePlayers;
+    g_liveGameState = TxnFixtureGameState;
+    g_txnInline = 1;
+    AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 1; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
+    char reply[512], sent[2048];
+
+    /* entity 2's own +0 and a plain +4 of it: the table copied, entity 2 pointed at its copy, both values there */
+    const char* first[] = {"modbegin\t1\to1\tsolo\tx", "modorder\t2\to1\t0\ta", "modorder\t3\to1\t1\te",
+        "modadd\t4\to1\te\tstats\t3333333333333333\tC:\\mods\\e\t-",
+        "modstat\t5\to1\te\tcomponent\tFixture\t0000000000000002\t1\t0\tu32\t00000063\t-\t1\t0\t0\te own",
+        "modstat\t6\to1\te\tcomponent\tFixture\t0000000000000002\t1\t4\tu32\t00000064\t-\t0\t0\t0\te plain", "modcommit\t7\to1"};
+    TxnRun(first, 7, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    uint8_t* copy = StatePointer(g_txnState, REG_TABLES + 8 * c->index);
+    uint32_t mine;
+    memcpy(&mine, FindRow(copy, 4, 16, 2) + 8, 4);
+    const uint32_t* own = (const uint32_t*)(copy + 64 + (size_t)mine * 16);
+    if (strstr(sent, "modresult\to1\tok\n") == NULL) fprintf(stderr, "  own live: sent %s\n", sent);
+    assert(strstr(sent, "modresult\to1\tok\n") && copy != table && g_ownedCount == savedOwned + 1 && mine >= 2);
+    assert(own[0] == 0x63 && own[1] == 0x64 && records[4] == 20 && records[5] == 21);
+    /* entity 1's own +0: into HellForge's copy, no move */
+    const char* second[] = {"modbegin\t8\to2\tsolo\tx", "modorder\t9\to2\t0\ta", "modorder\t10\to2\t1\te", "modorder\t11\to2\t2\tf",
+        "modadd\t12\to2\tf\tstats\t4444444444444444\tC:\\mods\\f\t-",
+        "modstat\t13\to2\tf\tcomponent\tFixture\t0000000000000001\t0\t0\tu32\t00000077\t-\t1\t0\t0\tf own", "modcommit\t14\to2"};
+    TxnRun(second, 7, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    uint32_t one;
+    memcpy(&one, FindRow(copy, 4, 16, 1) + 8, 4);
+    assert(strstr(sent, "modresult\to2\tok\n") && StatePointer(g_txnState, REG_TABLES + 8 * c->index) == copy && one > mine &&
+        *(const uint32_t*)(copy + 64 + (size_t)one * 16) == 0x77 && *(const uint32_t*)(copy + 64) == 10);
+    /* e out: entity 2 keeps its copy, its fields back to their bottoms */
+    const char* removeE[] = {"modbegin\t15\to3\tsolo\tx", "modorder\t16\to3\t0\ta", "modorder\t17\to3\t1\tf", "modremove\t18\to3\te",
+        "modcommit\t19\to3"};
+    TxnRun(removeE, 5, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    memcpy(&mine, FindRow(copy, 4, 16, 2) + 8, 4);
+    own = (const uint32_t*)(copy + 64 + (size_t)mine * 16);
+    assert(strstr(sent, "modresult\to3\tok\n") && mine >= 2 && own[0] == 20 && own[1] == 21);
+    printf("  live own records: the table copied at the first, a second copy in it, a removed mod's copy keeps the bottoms\n");
+
+    AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 0; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
+    g_liveEntityState = EntityState;
+    g_livePlayers = LivePlayers;
+    g_liveGameState = LiveGameState;
+    g_txnInline = 0;
+    free(g_txnState);
+    memcpy(g_mods, saved, sizeof saved);
+    g_modCount = savedMods;
+    g_components[0] = savedComponent;
+    g_componentCount = savedComponents;
+    g_statCount = savedStats;
+    g_editCount = savedEdits;
+    g_ownedCount = savedOwned;
     InterlockedExchange(&g_statsComponentsReady, 0);
 }
 

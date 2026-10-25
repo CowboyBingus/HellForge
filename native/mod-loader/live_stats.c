@@ -11,15 +11,6 @@
  * line naming another row (a payload swap, refs.c) waits for that row's packages before the change is made, as the
  * boot pass's does. */
 
-/* Why a mod of the session cannot change live for its stats ("own" lines: their record clones are made only as the
- * entity data loads), or NULL. */
-static const char* TxnStatsOwn(const HfMod* mod)
-{
-    for (int i = 0; i < g_statCount; i++)
-        if (g_stats[i].mod == mod && g_stats[i].own) return "it gives an entity a record of its own (\"own\"), which needs a new session";
-    return NULL;
-}
-
 /* A table or settings kind's field: 0 with *later when its boot pass has not run yet, else the field or 0 with *why. */
 static uintptr_t TxnTableAddress(StatEdit* e, int* later, const char** why)
 {
@@ -56,10 +47,12 @@ static uintptr_t TxnStatAddress(StatEdit* e, int* later, const char** why)
     *why = NULL;
     if (strcmp(e->kind, "component")) return TxnTableAddress(e, later, why);
     if (!g_statsComponentsReady) { *later = 1; return 0; }
-    int expect = e->hasExpect;
+    int expect = e->hasExpect, own = e->own;
     e->hasExpect = 0; /* checked against the bottom of the field's layers instead (TxnBottom) */
+    e->own = 0;       /* the record it has now: an own line's copy is made once the change is checked (live_own.c) */
     uintptr_t at = strcmp(g_build, "25480438") ? 0 : StatsComponent(e, g_liveEntityState());
     e->hasExpect = expect;
+    e->own = own;
     if (!at) *why = "component layout or ownership differs from the reviewed record";
     return at;
 }
@@ -244,15 +237,9 @@ static const char* TxnStatsPrepare(char* why, size_t size)
     return NULL;
 }
 
-/* Under both locks, before anything changes: no "own" lines, room for every line, and every line placeable now. */
+/* Under both locks, before anything changes: room for every line, every line placeable now, every own line's copy. */
 static const char* TxnStatsCheck(char* why, size_t size)
 {
-    for (int i = 0; i < g_txn.statCount; i++)
-        if (g_txn.stats[i].edit.own)
-        {
-            snprintf(why, size, "capability\t%s: it gives an entity a record of its own (\"own\"), which needs a new session", g_txn.mods[g_txn.stats[i].mod].id);
-            return why;
-        }
     if (g_txn.statCount > TxnFreeSlots()) { snprintf(why, size, "capacity\tthe session holds %d stats edits at most", MAX_STATS); return why; }
     for (int i = 0; i < g_txn.statCount; i++)
     {
@@ -266,7 +253,7 @@ static const char* TxnStatsCheck(char* why, size_t size)
             return why;
         }
     }
-    return NULL;
+    return TxnOwnCheck(why, size);
 }
 
 /* Every field the change touches, with its bottom, before anything at it changes. */
@@ -330,6 +317,7 @@ static void TxnPlaceStats(void)
  * TxnApplyMods. */
 static void TxnStatsApply(void)
 {
+    TxnOwnApply();
     TxnTouchFields();
     for (int i = 0; i < g_txn.modCount; i++)
     {

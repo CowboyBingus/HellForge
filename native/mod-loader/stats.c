@@ -123,8 +123,10 @@ static uintptr_t StatsComponent(StatEdit* e, uint8_t* state)
     }
     if (owners != 1) return 0;
     uintptr_t record = (uintptr_t)table + c->recordOffset + (uintptr_t)selected * c->stride;
+    /* The edits before this one (all of them for a live change's line, which is not in g_stats). */
+    StatEdit* before = e >= g_stats && e < g_stats + MAX_STATS ? e : g_stats + g_statCount;
     /* A preceding own edit for this entity has already checked its vanilla record identity. Reuse that clone. */
-    for (StatEdit* earlier = g_stats; earlier < e; earlier++)
+    for (StatEdit* earlier = g_stats; earlier < before; earlier++)
         if (earlier->applied && earlier->own && earlier->resource == e->resource && !strcmp(earlier->component, e->component) &&
             earlier->address - earlier->offset == record) return record + e->offset;
     if (selected >= c->records || (e->record >= 0 && selected != (uint64_t)e->record)) return 0;
@@ -134,7 +136,7 @@ static uintptr_t StatsComponent(StatEdit* e, uint8_t* state)
         if (SafeRead(record + e->offset, &current, size)) return 0;
         /* Check before cloning too; a refused own edit must not redirect the entity. */
         uint32_t original = e->hasBaseline ? e->original : current;
-        for (StatEdit* earlier = g_stats; earlier < e; earlier++)
+        for (StatEdit* earlier = g_stats; earlier < before; earlier++)
             if (earlier->applied && earlier->address == record + e->offset) original = earlier->original;
         if (original != e->expect) return 0;
     }
@@ -143,7 +145,7 @@ static uintptr_t StatsComponent(StatEdit* e, uint8_t* state)
         uint8_t* copy = OwnRecord(state, c->index, c->stride, e->resource, e->resource);
         uint8_t* moved = StatePointer(state, REG_TABLES + 8 * c->index);
         if (copy && moved != table)
-            for (StatEdit* earlier = g_stats; earlier < e; earlier++)
+            for (StatEdit* earlier = g_stats; earlier < before; earlier++)
                 if (earlier->applied && !strcmp(earlier->component, e->component) &&
                     earlier->address >= (uintptr_t)table + c->recordOffset && earlier->address < (uintptr_t)table + extent)
                     earlier->address = (uintptr_t)moved + (earlier->address - (uintptr_t)table);

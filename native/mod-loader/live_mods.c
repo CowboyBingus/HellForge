@@ -183,6 +183,7 @@ static unsigned TxnKinds(const char* text)
     return kinds;
 }
 
+#include "live_own.c"   /* "own" lines: an entity's record of its own */
 #include "live_stats.c" /* the stats layer: stat lines added, removed and replaced in load order */
 #include "live_content.c" /* numbered content: registered, numbered, installed and made owned; tombstones */
 #include "live_registry.c" /* weapons and entities */
@@ -197,8 +198,6 @@ static const char* TxnModCheck(TxnMod* t, char* why, size_t size)
     if (t->action != TXN_ADD && ModRunsCode(t->old) && CodeRemovable(t->old, why, size) != NULL) return why;
     if ((t->kinds & TXN_CODE) && !(t->kinds & TXN_LIVE))
     { snprintf(why, size, "capability\t%s runs code that does not declare \"live\": true, which changes at the next session", t->id); return why; }
-    const char* own = present ? TxnStatsOwn(t->old) : NULL;
-    if (own != NULL) { snprintf(why, size, "capability\t%s: %s", t->id, own); return why; }
     return NULL;
 }
 

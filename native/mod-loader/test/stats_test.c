@@ -3170,6 +3170,7 @@ int main(int argc, char** argv)
     LiveFixture();
     LiveSyncFixture();
     LiveModsFixture();
+    OwnLiveFixture();
     LiveCodeFixture();
     EditsForgetFixture();
     NetTypesFixture();
