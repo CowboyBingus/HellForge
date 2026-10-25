@@ -90,9 +90,10 @@ public sealed class LobbyService
     readonly IPeerTransport? transport;
     readonly Action<Frame> toLocal;
     readonly Action<string> log;
-    readonly string modDigest;
-    // The digest's mods one by one (ModlistDiff's form), or null when the session did not give them.
-    readonly string? modList;
+    // The session's modlist digest and its mods one by one (ModlistDiff's form, null when the session did not give them),
+    // swapped whole when a live change of the session's mods changes them (SetMods).
+    sealed record ModsNow(string Digest, string? List);
+    volatile ModsNow mods;
     readonly WarClock? warClock;
     readonly Dictionary<string, HostedLobby> hosted = new(StringComparer.Ordinal);
     // Lobbies on a friend's machine that this machine's DLL joined or is joining: lobby id -> owner node.
@@ -139,9 +140,11 @@ public sealed class LobbyService
         this.transport = transport;
         this.toLocal = toLocal;
         this.log = log;
-        this.modDigest = modDigest;
-        this.modList = modList;
+        mods = new ModsNow(modDigest, modList);
     }
+
+    // The session's mods changed while it runs (LiveMods): joins are checked against the new digest from now on.
+    public void SetMods(string digest, string? list) => mods = new ModsNow(digest, list);
 
     // A friend's lobby refused this machine's join (the host's machine, and lines saying why for this player), and this
     // host refused a friend's (their machine, and lines for this host); the game is told (MultiplayerHost). Raised under
@@ -419,9 +422,10 @@ public sealed class LobbyService
                 joins[lobbyId] = (owner, DateTime.UtcNow);
                 var (joinOwner, joinLobby) = (owner, lobbyId);
                 afterLock.Add(() => LocalJoinStarted?.Invoke(joinOwner, joinLobby));
-                frame.Add(modDigest);
+                var own = mods;
+                frame.Add(own.Digest);
                 frame.Add(Protocol);
-                if (modList != null) frame.Add(modList);
+                if (own.List != null) frame.Add(own.List);
                 break;
             }
             default:
@@ -527,7 +531,8 @@ public sealed class LobbyService
                 var connection = frame.Text(3).Split(';');
                 var index = 4;
                 var memberProperties = frame.Properties(ref index);
-                var digest = node == LocalNode ? modDigest : frame.Count > index ? frame.Text(index) : "";
+                var hosting = mods;
+                var digest = node == LocalNode ? hosting.Digest : frame.Count > index ? frame.Text(index) : "";
                 var protocol = node == LocalNode ? Protocol : frame.Count > index + 1 ? frame.Text(index + 1) : "an older HellForge";
                 if (connection.Length != 3 || !hosted.TryGetValue(connection[1], out var lobby)) { Answer(node, op, "join", LobbyNotFound, connection.ElementAtOrDefault(1)); return; }
                 // A friend joins as themselves: the member id must be the requesting machine's own SteamID.
@@ -546,11 +551,11 @@ public sealed class LobbyService
                         ["Their HellForge version is not yours: both players need the same HellForge installer."]);
                     return;
                 }
-                if (digest != modDigest)
+                if (digest != hosting.Digest)
                 {
                     // the joiner's mods one by one (after its digest and protocol; a joiner from before sends none)
                     var theirs = node != LocalNode && frame.Count > index + 2 ? ModlistDiff.Decode(frame.Text(index + 2)) : null;
-                    var mine = modList != null ? ModlistDiff.Decode(modList) : null;
+                    var mine = hosting.List != null ? ModlistDiff.Decode(hosting.List) : null;
                     // mod sync: the joiner's backend gets this host's mod set first; when it may download it, its game is told so
                     var offered = node != LocalNode && ModsRefused?.Invoke(node, lobby.Id) == true;
                     // it passed the privacy check, so it may come back with this host's mods (AutoRejoin), invited or not
@@ -706,7 +711,7 @@ public sealed class LobbyService
         if (lobby == null) { Tell("gone", ["The host's lobby has closed."]); return; }
         if (Admission(lobby, node) is { } refusal) { Tell("refused", refusal.JoinerLines); return; }
         if (protocol != Protocol) { Tell("version", ["Your HellForge version is not the host's.", "Both players need the same HellForge installer."]); return; }
-        if (digest != modDigest) { Tell("mods", ["The host's gameplay mods changed after your restart.", "Join them again to see which differ."]); return; }
+        if (digest != mods.Digest) { Tell("mods", ["The host's gameplay mods changed since you were refused.", "Join them again to see which differ."]); return; }
         if (lobby.Lock == 1) { Tell("locked", ["The host's lobby is locked."]); return; }
         if (lobby.Members.Count(m => m.Node != node) >= lobby.MaxMembers) { Tell("full", ["The host's lobby is full."]); return; }
         Expect(lobby, node, RejoinGrace);

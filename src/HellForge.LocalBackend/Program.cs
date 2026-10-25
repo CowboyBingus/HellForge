@@ -15,6 +15,8 @@ if (args.Contains("--help"))
     Console.WriteLine("HellForge.LocalBackend fetch-live-war <cache file>   fetches the live war once into the cache file, for a session with no network (HELLFORGE_LINUX_NETNS=1 serves it without refreshing).");
     Console.WriteLine("--war open serves the all-planets war instead: the frozen war with every planet but Super Earth an enemy's, each with a liberation campaign (no --live-war).");
     Console.WriteLine("--pipe <name> serves the game's lobby stand-in on that named pipe; --link none|steam:<steam_api64.dll>|udp:<id>:<port>:<peer>=<port>,... reaches friends' backends; --mod-digest <text> must match theirs; --mod-list <file> names its mods, so a refused join says which differ; --modset <file> is the session's mod set, which joiners lacking its mods may download; --directory <folder> lists public lobbies in a folder (the loopback harness; Steam's directory otherwise); --rejoin <file> (after a mod sync, a ModSyncSession) invites the game back into that host's lobby once it is on the ship.");
+    Console.WriteLine("--pipe <name> serves the game's lobby stand-in on that named pipe; --link none|steam:<steam_api64.dll>|udp:<id>:<port>:<peer>=<port>,... reaches friends' backends; --mod-digest <text> must match theirs; --mod-list <file> names its mods, so a refused join says which differ; --modset <file> is the session's mod set, which joiners lacking its mods may download; --directory <folder> lists public lobbies in a folder (the loopback harness; Steam's directory otherwise).");
+    Console.WriteLine("--live-run <run id> serves the game's live pipe in a solo session (a multiplayer session's comes with stats sharing); with --mods, --modset and --session-mods <file> (the mods the session runs), the launcher can change the session's mods without a restart (POST /hellforge/live-mods).");
     return 0;
 }
 if (args is ["profile", "show", var showDirectory])
@@ -113,8 +115,10 @@ try
             lock (liveWarLog) File.AppendAllText(liveWarLog, DateTime.UtcNow.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) + " " + HellForge.Core.Privacy.Scrub(message) + Environment.NewLine);
         }, cacheOnly: Environment.GetEnvironmentVariable("HELLFORGE_LINUX_NETNS") == "1") // Linux: fetched before the namespace
         : null;
+    var liveMods = new LiveModsHub();
     await using var app = LocalBackend.Create(port, evidence, mode, startupFixtures, profile, options.GetValueOrDefault("--item-catalog"),
-        options.GetValueOrDefault("--fixture-override"), options.GetValueOrDefault("--capture-mission-bodies") == "true", warClock, accountKeys, liveWar, presence, registeredItems, openWar, warSeed, dealSubfactions, dealSeaf);
+        options.GetValueOrDefault("--fixture-override"), options.GetValueOrDefault("--capture-mission-bodies") == "true", warClock, accountKeys, liveWar, presence, registeredItems, openWar, warSeed, dealSubfactions, dealSeaf,
+        liveMods);
     await app.StartAsync(lifetime.Token);
     var pipeName = options.GetValueOrDefault("--pipe");
     HellForge.Core.PipeServer.LowIntegrityClients = sandboxed;
@@ -125,6 +129,34 @@ try
             options.GetValueOrDefault("--mods"), modList, options.GetValueOrDefault("--modset"), directoryFolder: options.GetValueOrDefault("--directory"),
             rejoinFile: options.GetValueOrDefault("--rejoin"))
         : null;
+    // The game's live pipe: a multiplayer session's comes with stats sharing (StatsShare); a solo session's is served here
+    // (--live-run). With it the session's mods can change without a restart (LiveMods).
+    await using var soloLive = multiplayer?.Stats == null && options.GetValueOrDefault("--live-run") is { } liveRun ? new HellForge.Core.LiveEditServer(liveRun) : null;
+    soloLive?.Start();
+    if ((multiplayer?.Stats?.Live ?? soloLive) is { } livePipe && options.GetValueOrDefault("--session-mods") is { } sessionModsFile &&
+        options.GetValueOrDefault("--mods") is { } liveModsFolder && options.GetValueOrDefault("--modset") is { } liveModSetFile)
+    {
+        var liveLog = Path.Combine(evidence, "live-mods.log");
+        var liveLogLock = new object();
+        liveMods.Service = new LiveMods(livePipe, liveModsFolder, sessionModsFile, liveModSetFile, message =>
+        {
+            lock (liveLogLock) File.AppendAllText(liveLog, DateTime.UtcNow.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) + " " + message + Environment.NewLine);
+        });
+        if (multiplayer != null) liveMods.Service.Changed += multiplayer.ModsChanged;
+        // mod sync: the running game takes the host's mods when it can, instead of restarting, and is invited back into
+        // the host's lobby at once (AutoRejoin from the ship)
+        if (multiplayer?.Sync is { } sync)
+        {
+            var service = liveMods.Service;
+            sync.CanApplyLive = service.CanApplySync;
+            sync.ApplyLive = async session =>
+            {
+                var why = await service.ApplySyncAsync(session, CancellationToken.None);
+                if (why == null) multiplayer.RejoinAfterLiveSync(session, session.Digest);
+                return why;
+            };
+        }
+    }
     var ready = new System.Text.Json.Nodes.JsonObject
     {
         ["scope"] = "synthetic-local-backend", ["urls"] = new System.Text.Json.Nodes.JsonArray(app.Urls.Select(u => (System.Text.Json.Nodes.JsonNode?)u).ToArray()),

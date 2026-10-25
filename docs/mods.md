@@ -48,8 +48,8 @@ packs, Lua mods and mods that say they are cosmetic; friends need not have the s
 - Mod notices, at the top in red, say why a mod could not be loaded.
 - The modlist code friends must match is at the bottom of the page.
 
-Changes apply to the next session. While a session runs, the page is locked and the session keeps the mods it started
-with.
+Changes apply to the next session. While a session runs, a switch the running game can take changes it at once, and
+everything else waits for the next session ([Changing mods while you play](#changing-mods-while-you-play)).
 
 While a session runs, its mod files are held read-only, so nothing the game runs can change a mod that loads as yours
 next time. HellForge's own files stay writable: the page's settings file, Local Stats, the in-game editor's settings,
@@ -59,6 +59,30 @@ Console, and a new mod, or a mod whose folder gained files, is switched off unti
 on again if you put those files there.
 
 The page saves its switches, order and pack options in `mods/hellforge-mods.json`.
+
+## Changing mods while you play
+
+While a session runs, the Mods page's switches still work:
+- **Stats mods change the running game at once.** These are mods whose only changes are stats (`hellforge-stats.json`)
+  and `componentWrites`. Switching one on or off, or saving an edit to its stats file, goes straight to the game. The
+  console says what changed.
+  - Each value applies as a live edit does: now, on respawn, or at the next mission. The stats editor shows which.
+  - A changed mod keeps its place in the load order. The mods above it still win where they change the same value,
+    Local Stats included. A code mod's edit of a field stays on top of the stats under it.
+- **Everything else is saved for the next session,** and the page says why. That covers code mods (a DLL or sources),
+  Lua, data patches and cosmetic packs, network field types, stats with `"own": true`, and a new order. The order and
+  packs' options stay locked while a session runs.
+- **Only while no friend is in your game.** Friends need the same mods, so the game refuses a change while one is
+  connected. After a change, friends who join need your new mods, which mod sync offers them.
+- **A session that plays a host's mods** (after a mod sync) keeps them. Your Mods page applies to your next session.
+
+How it works:
+- **The session's files.** The session's backend compares the mods the session runs (`session-mods.json` in its log
+  folder) with the Mods page's (HellForge.Core `LiveModPlan`).
+- **One change.** It sends the in-game loader the whole change over the live pipe, and the loader takes all of it or
+  none.
+- **Afterwards.** The session's modlist code, `modset.json`, its lobby and its public listing follow the new mods.
+- **Logs.** Each change is logged in the session's `backend/live-mods.log`, and the loader's side in `modloader.log`.
 
 ## Load order
 
@@ -111,12 +135,19 @@ shows the same prompt instead, with the same buttons (BLOCK is the in-game promp
 Its buttons, **Enter** and **B** wait a second after it appears, so a key or click meant for the game does not
 answer it. **DOWNLOAD AND RESTART** downloads what it can, when the drive has room for it and 256 MB to spare;
 **Esc** hides the prompt while the download goes on, and it comes back when the mods are ready. **CANCEL** or **Esc**
-before that answers no. **RESTART TO JOIN** then ends the session and the launcher starts a new one with the host's
-mods, in the host's load order, plus your own cosmetic mods and Local Stats. Once the game is on the ship, the
-host's invitation to their lobby waits in game ("Rejoining <host>"): accept it to join. If the lobby has closed, is
-full or locked, or the host does not answer, the game says so ("Couldn't rejoin <host>"); join from the social tab or
-the map then. Only that one session plays the host's mods: your Mods page and its switches never change, and the next
-session you start yourself runs your own mods again.
+before that answers no.
+
+Then one of two buttons plays the host's mods, in the host's load order, plus your own cosmetic mods and Local Stats:
+- **APPLY AND JOIN** when the running game can take every difference with the host's mods (see
+  [Changing mods while you play](#changing-mods-while-you-play)). The game changes its mods without a restart, and the
+  host's invitation to their lobby comes at once.
+- **RESTART TO JOIN** otherwise: it ends the session and the launcher starts a new one with the host's mods. Once the
+  game is on the ship, the host's invitation waits in game. A change the running game refuses restarts the same way.
+
+Accept the invitation ("Rejoining <host>") to join. If the lobby has closed, is full or locked, or the host does not
+answer, the game says so ("Couldn't rejoin <host>"); join from the social tab or the map then. Only that one session
+plays the host's mods: your Mods page and its switches never change, and the next session you start yourself runs your
+own mods again.
 
 **What may download (the trust rule).** Only what HellForge checks itself downloads by itself. Your backend decides
 each mod's class from the bytes it received, never from what the host says, and the rule is the same for every host,

@@ -147,6 +147,15 @@ public sealed class MultiplayerHost : IAsyncDisposable
         return host;
     }
 
+    // The session's mods changed while it runs (LiveMods): joins are checked against the new digest, and mod sync's offers
+    // and the directory's listing carry the new set.
+    public void ModsChanged(ModSet set)
+    {
+        Lobby.SetMods(set.Digest, ModlistDiff.Encode(set.Fingerprints()));
+        Sync?.SetOwn(set);
+        Log($"The session's mods changed live; their digest is now {set.Digest}.");
+    }
+
     // The session folder is the evidence folder's parent; the next session's mods go to the installation's temp folder.
     void StartSync(string modsFolder, string? modSetFile, string evidenceDirectory)
     {
@@ -172,13 +181,31 @@ public sealed class MultiplayerHost : IAsyncDisposable
     {
         var (target, reason) = AutoRejoin.Read(file, transport!.LocalId, modDigest, DateTime.UtcNow);
         if (target == null) { Log("Rejoin: not rejoining, because " + reason); return; }
-        var rejoin = Rejoin = new AutoRejoin(target, modDigest, (peer, frame) => transport.Send(peer, frame.Encode(), reliable: true), Lobby.InviteLocal,
+        StartRejoin(target, modDigest, onShip: false);
+    }
+
+    // After the running game took a host's mods without a restart (LiveMods, mod sync's APPLY AND JOIN): the game is on
+    // the ship already, so the host is asked at once. digest: this session's modlist digest now, the host's.
+    public void RejoinAfterLiveSync(ModSyncSession session, string digest)
+    {
+        if (transport == null) return;
+        var (target, reason) = AutoRejoin.From(session, transport.LocalId, digest);
+        if (target == null) { Log("Rejoin: not rejoining, because " + reason); return; }
+        StartRejoin(target, digest, onShip: true);
+    }
+
+    void StartRejoin(AutoRejoin.Target target, string modDigest, bool onShip)
+    {
+        var rejoin = new AutoRejoin(target, modDigest, (peer, frame) => transport!.Send(peer, frame.Encode(), reliable: true), Lobby.InviteLocal,
             (kind, title, lines) =>
             {
                 if (Stats != null) Stats.Notice(kind, title, lines);
                 else Log($"Notice not shown, no live-edit pipe: {title}");
             }, Log);
+        Rejoin?.Dispose(); /* a rejoin from an earlier sync of this session ends: this one is the player's latest */
+        Rejoin = rejoin;
         rejoin.Attach(Lobby);
+        if (onShip) rejoin.GameReady();
         rejoin.Start();
     }
 

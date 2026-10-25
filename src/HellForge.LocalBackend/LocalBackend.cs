@@ -86,7 +86,7 @@ public static class LocalBackend
     public static WebApplication Create(int port, string evidenceDirectory, LoginMode mode, bool startupFixtures = false,
         ProfileStore? profile = null, string? itemCatalog = null, string? fixtureOverride = null, bool captureMissionBodies = false,
         WarClock? warClock = null, AccountKeys? accountKeys = null, LiveWar? liveWar = null, FriendPresence? presence = null,
-        RegisteredItems? registeredItems = null, bool openWar = false, uint warSeed = 0, bool dealSubfactions = true, bool dealSeaf = true)
+        RegisteredItems? registeredItems = null, bool openWar = false, uint warSeed = 0, bool dealSubfactions = true, bool dealSeaf = true, LiveModsHub? liveMods = null)
     {
         if (port is < 0 or > 65535) throw new ArgumentOutOfRangeException(nameof(port));
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
@@ -256,6 +256,36 @@ public static class LocalBackend
                             sessions.TryAdd(sessionId, 0);
                             response = new JsonObject { ["sessionId"] = sessionId };
                         }
+                    }
+                }
+                else if (request.Path == "/hellforge/live-mods")
+                {
+                    // The launcher's Mods page while the session runs: what a change would do (GET), or make it (POST)
+                    // (LiveMods; HellForge-Open docs/mods.md "Changing mods while you play").
+                    if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsPost(request.Method))
+                    {
+                        status = StatusCodes.Status405MethodNotAllowed;
+                        context.Response.Headers.Allow = "GET, POST";
+                        outcome = "method_rejected";
+                        response = Error("HELLFORGE_METHOD_NOT_ALLOWED");
+                    }
+                    else if (liveMods?.Service is not { } service)
+                    {
+                        status = StatusCodes.Status409Conflict;
+                        outcome = "live_mods_unavailable";
+                        response = Error("HELLFORGE_LIVE_MODS_UNAVAILABLE");
+                    }
+                    else
+                    {
+                        var result = HttpMethods.IsGet(request.Method) ? service.Preview() : await service.ApplyAsync(null, false, "", context.RequestAborted);
+                        static JsonArray Texts(IEnumerable<string> texts) => [.. texts.Select(t => (JsonNode?)t)];
+                        status = StatusCodes.Status200OK;
+                        outcome = result.Applied ? "live_mods_applied" : HttpMethods.IsGet(request.Method) ? "live_mods_previewed" : "live_mods_not_applied";
+                        response = new JsonObject
+                        {
+                            ["live"] = result.Live, ["applied"] = result.Applied, ["changes"] = Texts(result.Changes), ["blocking"] = Texts(result.Blocking),
+                            ["detail"] = result.Detail, ["digest"] = result.Digest
+                        };
                     }
                 }
                 else if (request.Path.StartsWithSegments("/lobby", out var lobbyPath))

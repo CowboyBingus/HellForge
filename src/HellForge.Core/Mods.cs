@@ -671,11 +671,21 @@ public static class ModLoaderPlan
         {
             if (mod.HasCode && mod.DllPath == null) throw new InvalidDataException($"{mod.Id} is a source mod that was not built for this session.");
             lines.Add($"mod\t{mod.Id}\t{Field(mod.Folder)}\t{(mod.HasCode ? Field(mod.DllPath!) : "-")}");
-            foreach (var e in StatsData.Edits(mod))
-                lines.Add(FormattableString.Invariant($"stat\t{mod.Id}\t{e.Kind}\t{(e.Component.Length == 0 ? "-" : e.Component)}\t{e.Resource:X16}\t{e.Record}\t{e.Offset}\t{e.Storage}\t{e.Value:X8}\t{(e.Expect.HasValue ? e.Expect.Value.ToString("X8", CultureInfo.InvariantCulture) : "-")}\t{(e.Own ? 1 : 0)}\t{(e.Shared ? 1 : 0)}\t{(e.Unverified ? 1 : 0)}\t{Field(e.Label)}"));
+            foreach (var e in StatsData.Edits(mod)) lines.Add("stat\t" + string.Join('\t', StatFields(mod, e)));
         }
         if (Encoding.UTF8.GetByteCount(string.Join("\n", lines)) >= (4 << 20) - 1) throw new InvalidDataException("Mod loader plan exceeds 4 MiB.");
         return string.Join("\n", lines) + "\n";
+    }
+
+    // A stats edit's fields after "stat" in the plan (and after a live change's "modstat"), the mod id first.
+    public static string[] StatFields(ModManifest mod, StatsEdit e)
+    {
+        static string Field(string value) => value.Contains('\t') || value.Contains('\n') || value.Contains('\r')
+            ? throw new InvalidDataException("A stats label contains a tab or line break.") : value;
+        var invariant = CultureInfo.InvariantCulture;
+        return [mod.Id, e.Kind, e.Component.Length == 0 ? "-" : e.Component, e.Resource.ToString("X16", invariant), e.Record.ToString(invariant),
+            e.Offset.ToString(invariant), e.Storage, e.Value.ToString("X8", invariant), e.Expect.HasValue ? e.Expect.Value.ToString("X8", invariant) : "-",
+            e.Own ? "1" : "0", e.Shared ? "1" : "0", e.Unverified ? "1" : "0", Field(e.Label)];
     }
 }
 

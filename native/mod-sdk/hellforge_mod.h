@@ -798,6 +798,7 @@ typedef struct HfModInfo
 #define HF_SYNC_DOWNLOADING 3u /* downloading from the host: done of bytes */
 #define HF_SYNC_READY 4u       /* everything is here: HF_SYNC_RESTART restarts the session with the host's mods */
 #define HF_SYNC_FAILED 5u      /* the download or its checks failed (message says why) */
+#define HF_SYNC_LIVE 1u        /* flags: HF_SYNC_RESTART changes the running game's mods instead of restarting it */
 typedef struct HfSyncState
 {
     uint32_t size;      /* sizeof(HfSyncState): set by the caller */
@@ -808,6 +809,7 @@ typedef struct HfSyncState
     uint64_t done;      /* downloaded so far */
     char host[64];      /* the host's name (UTF-8) */
     char message[192];  /* what the backend says about it (UTF-8), or "" */
+    uint32_t flags;     /* HF_SYNC_LIVE */
 } HfSyncState;
 
 /* One mod of an offer (sync_mod): what happens to it. */
@@ -840,7 +842,8 @@ typedef struct HfSyncMod
 /* The player's answer to an offer (sync_answer). */
 #define HF_SYNC_ACCEPT 1u  /* download (HF_SYNC_OFFER) */
 #define HF_SYNC_DECLINE 2u /* no: the offer goes (a download stops) */
-#define HF_SYNC_RESTART 3u /* restart the session with the host's mods (HF_SYNC_READY, or an offer with nothing to download) */
+#define HF_SYNC_RESTART 3u /* play with the host's mods (HF_SYNC_READY, or an offer with nothing to download): the session
+                            * restarts with them, or with HF_SYNC_LIVE the running game takes them */
 #define HF_SYNC_BLOCK 4u   /* put mod_id on the blocklist; the offer goes */
 #define HF_SYNC_TRUST 5u   /* trust mod_id (an HF_SYNC_MOD_TRUST row: that exact content) and download it once nothing else
                             * waits; a new offer follows. Ask the player first: the mod runs its own code on their PC */
