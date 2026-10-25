@@ -113,37 +113,9 @@ public sealed class StatsShare : IAsyncDisposable
         try
         {
             ReadMine();
-            var shares = hostShares();
-            lock (gate)
-                if (shares != sharing)
-                {
-                    (sharing, version, sessionSent) = (shares, version + 1, false); /* the game's editor shows which */
-                    sentTo.Clear();
-                    log(shares ? "Stats: friends in lobbies hosted here play with this machine's stats." : "Stats: every player keeps their own stats.");
-                }
+            ReadSharing();
             var friends = lobby.HostedFriends();
-            List<ulong> send;
-            byte[] packed, packedMods, packedMounts;
-            long sending;
-            bool shared;
-            lock (gate)
-            {
-                sentTo.IntersectWith(friends);
-                send = friends.Where(f => !sentTo.Contains(f)).ToList();
-                sentTo.UnionWith(send);
-                packed = StatsSync.Pack(sharing ? mine ?? "" : "");
-                packedMods = StatsSync.Pack(sharing ? mineMods ?? "" : "");
-                packedMounts = StatsSync.Pack(sharing ? mineMounts ?? "" : "");
-                sending = version;
-                shared = sharing;
-            }
-            foreach (var friend in send)
-            {
-                transport.Send(friend, new Frame("stats.set").Add(sending).Add(packed).Add(packedMods).Add(packedMounts).Add(shared ? "host" : "own").Encode(),
-                    reliable: true);
-                log(shared ? $"Stats: sent this host's Local Stats, mod content values and arm swaps (version {sending}, {packed.Length} + {packedMods.Length} + {packedMounts.Length} bytes) to {LobbyService.EntityId(friend)}."
-                    : $"Stats: told {LobbyService.EntityId(friend)} to keep its own stats (version {sending}).");
-            }
+            SendToFriends(friends);
             bool hostGone;
             lock (gate)
             {
@@ -160,6 +132,46 @@ public sealed class StatsShare : IAsyncDisposable
             if (hostGone || !sessionSent) _ = ApplyAsync();
         }
         catch (Exception error) { log("Stats sharing failed: " + error.Message); }
+    }
+
+    // Whether friends play with this machine's stats (the Mods page), read again each second.
+    void ReadSharing()
+    {
+        var shares = hostShares();
+        lock (gate)
+            if (shares != sharing)
+            {
+                (sharing, version, sessionSent) = (shares, version + 1, false); /* the game's editor shows which */
+                sentTo.Clear();
+                log(shares ? "Stats: friends in lobbies hosted here play with this machine's stats." : "Stats: every player keeps their own stats.");
+            }
+    }
+
+    // This host's file, or that friends keep their own, to every friend who joined since it last changed.
+    void SendToFriends(IReadOnlyCollection<ulong> friends)
+    {
+        List<ulong> send;
+        byte[] packed, packedMods, packedMounts;
+        long sending;
+        bool shared;
+        lock (gate)
+        {
+            sentTo.IntersectWith(friends);
+            send = friends.Where(f => !sentTo.Contains(f)).ToList();
+            sentTo.UnionWith(send);
+            packed = StatsSync.Pack(sharing ? mine ?? "" : "");
+            packedMods = StatsSync.Pack(sharing ? mineMods ?? "" : "");
+            packedMounts = StatsSync.Pack(sharing ? mineMounts ?? "" : "");
+            sending = version;
+            shared = sharing;
+        }
+        foreach (var friend in send)
+        {
+            transport.Send(friend, new Frame("stats.set").Add(sending).Add(packed).Add(packedMods).Add(packedMounts).Add(shared ? "host" : "own").Encode(),
+                reliable: true);
+            log(shared ? $"Stats: sent this host's Local Stats, mod content values and arm swaps (version {sending}, {packed.Length} + {packedMods.Length} + {packedMounts.Length} bytes) to {LobbyService.EntityId(friend)}."
+                : $"Stats: told {LobbyService.EntityId(friend)} to keep its own stats (version {sending}).");
+        }
     }
 
     // The Local Stats file, the editor's mod content values and its arm swaps, re-read when they changed (a new version
@@ -309,32 +321,44 @@ public sealed class StatsShare : IAsyncDisposable
             bool sessionShared;
             lock (gate)
                 (host, own, sessionRole, sessionHost, sessionShared) = (hostPeer != 0 && hostShared ? hostStats ?? "" : null, mine, role, roleHost, LobbyShared());
-            bool sendSession;
-            lock (gate) sendSession = !sessionSent;
-            if (sendSession)
-            {
-                var session = await live.SessionAsync(sessionRole, sessionHost, sessionShared ? "host" : "own");
-                lock (gate) if (session.Ok && sessionRole == role && sessionHost == roleHost && sessionShared == LobbyShared()) sessionSent = true;
-            }
+            await SendSessionAsync(sessionRole, sessionHost, sessionShared);
             var requests = sync.Plan(host, own);
-            int done = 0, refused = 0;
-            foreach (var request in requests)
-            {
-                var result = request.Verb switch
-                {
-                    "set" => await live.SetAsync(request.Field, request.Bits, request.Field.Shared),
-                    "base" => await live.BaseAsync(request.Field),
-                    _ => await live.ResetAsync(request.Field),
-                };
-                if (result.Ok) { sync.Done(request, host != null); done++; }
-                else if (refused++ < 5) log($"Stats: {request.Verb} {request.Field.Name} refused: {result.Detail}");
-            }
+            var (done, refused) = await RequestAllAsync(requests, host != null);
             if (requests.Count > 0)
                 log($"Stats: {(host != null ? "the host's values" : "this game's own values")}: {done} applied, {refused} refused" +
                     (host != null && sync.BootOnly > 0 ? $", {sync.BootOnly} apply only from a session start (attachments, status multipliers)" : "") + ".");
         }
         catch (Exception error) { log("Stats: applying failed: " + error.Message); }
         finally { applying.Release(); }
+    }
+
+    // The game's role, when it has not been told it since it changed (or the game connected).
+    async Task SendSessionAsync(string sessionRole, string sessionHost, bool sessionShared)
+    {
+        bool sendSession;
+        lock (gate) sendSession = !sessionSent;
+        if (!sendSession) return;
+        var session = await live.SessionAsync(sessionRole, sessionHost, sessionShared ? "host" : "own");
+        lock (gate) if (session.Ok && sessionRole == role && sessionHost == roleHost && sessionShared == LobbyShared()) sessionSent = true;
+    }
+
+    // The plan's requests, one at a time (joined: to the host's values); how many the game took and refused, the first
+    // five refusals logged.
+    async Task<(int Done, int Refused)> RequestAllAsync(List<StatsSyncRequest> requests, bool joined)
+    {
+        int done = 0, refused = 0;
+        foreach (var request in requests)
+        {
+            var result = request.Verb switch
+            {
+                "set" => await live.SetAsync(request.Field, request.Bits, request.Field.Shared),
+                "base" => await live.BaseAsync(request.Field),
+                _ => await live.ResetAsync(request.Field),
+            };
+            if (result.Ok) { sync.Done(request, joined); done++; }
+            else if (refused++ < 5) log($"Stats: {request.Verb} {request.Field.Name} refused: {result.Detail}");
+        }
+        return (done, refused);
     }
 
     public async ValueTask DisposeAsync()
