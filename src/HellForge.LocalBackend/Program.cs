@@ -78,6 +78,41 @@ try
     var profileTemplate = options.GetValueOrDefault("--profile-template");
     if (profileTemplate != null && !startupFixtures) throw new ArgumentException("--profile-template requires --startup-fixtures true.");
     using var profile = startupFixtures ? ProfileStore.Open(profileDirectory, profileTemplate) : null;
+    // Account snapshot (the launcher's Sync Inventory): the player's own inventory and progression replace the
+    // profile's on every start. A snapshot that cannot be read or validated is skipped, never fatal.
+    var snapshotDir = profileDirectory != null ? HellForge.Core.InventorySync.SnapshotDirectoryFromProfileDir(profileDirectory) : null;
+    if (profile != null && snapshotDir != null && HellForge.Core.InventorySync.HasSnapshot(snapshotDir))
+    {
+        try
+        {
+            var withProgression = profile.ApplyAccountSnapshot(snapshotDir);
+            Console.Error.WriteLine("[snapshot] applied " + snapshotDir + (withProgression ? "" : " (inventory only)"));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
+        {
+            Console.Error.WriteLine("[snapshot] skipped: " + error.Message);
+        }
+    }
+    // Ownership filter: paid items are removed from served profiles. With a real inventory (--real-inventory, the
+    // profile's real-inventory.json or the snapshot's), only paid items the player doesn't own are removed.
+    if (profile != null)
+    {
+        var paid = PaidContentSet.Load();
+        var realInventoryPath = options.GetValueOrDefault("--real-inventory");
+        // Use a cached real inventory from the profile directory, or the snapshot directory.
+        if (realInventoryPath == null && profile.FilePath != null)
+        {
+            var cached = Path.Combine(Path.GetDirectoryName(profile.FilePath)!, "real-inventory.json");
+            if (File.Exists(cached)) realInventoryPath = cached;
+        }
+        if (realInventoryPath == null && snapshotDir != null)
+        {
+            var fromSnapshot = Path.Combine(snapshotDir, HellForge.Core.InventorySync.InventoryFile);
+            if (File.Exists(fromSnapshot)) realInventoryPath = fromSnapshot;
+        }
+        var realInventory = realInventoryPath != null ? OwnershipFilter.LoadRealInventory(realInventoryPath) : null;
+        profile.Ownership = new OwnershipFilter(paid, realInventory);
+    }
     var warClock = new WarClock();
     var accountKeys = new AccountKeys();
     var presence = new FriendPresence();

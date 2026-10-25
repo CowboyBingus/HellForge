@@ -36,7 +36,8 @@ A few things the engine uses live elsewhere in the repository:
 
 Some parts are not in the engine package. The in-game editor (`native/editor`) is a bundled code mod built by
 `scripts/Build-Editor.ps1`. `native/launcher-stub` is the top-level `HellForge.exe`, which starts
-`app\launcher\HellForge.Launcher.exe`. `src/HellForge.SteamProbe` is the Steam ownership probe. All three are built by
+`app\launcher\HellForge.Launcher.exe`. `src/HellForge.SteamProbe` is the Steam ownership probe, and
+`src/HellForge.CaptureProxy` (`app\capture`) is the launcher's Sync Inventory capture. All four are built by
 `scripts/Publish-HellForge.ps1`.
 
 The session runner's `src/HellForge.Session/EarlyConstructor.cs` is generated from `scripts/EarlyConstructorExperiment.cs`

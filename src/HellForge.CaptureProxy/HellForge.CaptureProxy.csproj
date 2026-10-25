@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The launcher's Sync Inventory capture (HellForge.Core InventorySync): reads the player's own inventory and
+       progression from the live API during the normal game's login. Runs elevated (hosts file, LocalMachine root store,
+       port 443); published to app/capture by scripts/Publish-HellForge.ps1. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>HellForge.CaptureProxy</AssemblyName>
+  </PropertyGroup>
+</Project>

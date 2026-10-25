@@ -32,6 +32,9 @@ public sealed class ProfileStore : IDisposable
     public string? FilePath { get; }
     public bool Created { get; }
 
+    // When set, paid items are filtered from inventory responses and template applications.
+    public OwnershipFilter? Ownership { get; set; }
+
     ProfileStore(JsonObject profile, string? filePath, FileStream? lease, bool created)
     {
         this.profile = profile;
@@ -109,7 +112,12 @@ public sealed class ProfileStore : IDisposable
         foreach (var (section, sectionPath) in Sections)
         {
             if (sectionPath != path) continue;
-            lock (gate) body = JsonSerializer.SerializeToElement(profile[section], BackendJson.Default.JsonNode);
+            lock (gate)
+            {
+                body = JsonSerializer.SerializeToElement(profile[section], BackendJson.Default.JsonNode);
+                if (section == "inventory" && Ownership != null)
+                    body = Ownership.FilterInventoryResponse(body);
+            }
             return true;
         }
         body = default;
@@ -249,6 +257,44 @@ public sealed class ProfileStore : IDisposable
             profile["progression"] = updated["progression"]!.DeepClone();
         }
         return true;
+    }
+
+    // Replaces the inventory with the live account's items and copies the progression fields the
+    // profile serves, from the launcher's account snapshot (Sync Inventory) at backend start. The live
+    // inventory is the player's own items; no paid-ID filtering is applied here.
+    public void ApplyAccountSnapshot(JsonElement inventory, JsonElement? progression)
+    {
+        if (inventory.ValueKind != JsonValueKind.Object || !inventory.TryGetProperty("items", out var items) ||
+            items.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("The account snapshot's inventory has no items array.");
+        lock (gate)
+        {
+            var updated = profile.DeepClone().AsObject();
+            updated["inventory"] = new JsonObject { ["items"] = JsonNode.Parse(items.GetRawText()) };
+            if (progression is { ValueKind: JsonValueKind.Object } live)
+            {
+                var target = (JsonObject)updated["progression"]!;
+                foreach (var field in new[] { "experience", "onboardingState", "onboardingFlags", "packageProgress",
+                    "activeSeasonPass", "purchasedSeasonPassItems", "shipName", "location" })
+                    if (live.TryGetProperty(field, out var value))
+                        target[field] = JsonNode.Parse(value.GetRawText());
+            }
+            Validate(updated);
+            if (FilePath != null) Save(FilePath, updated);
+            profile["inventory"] = updated["inventory"]!.DeepClone();
+            profile["progression"] = updated["progression"]!.DeepClone();
+        }
+    }
+
+    // A snapshot folder as the launcher writes it: the inventory, and the progression when it was captured.
+    // Returns whether progression was applied too.
+    public bool ApplyAccountSnapshot(string snapshotDirectory)
+    {
+        using var inventory = JsonDocument.Parse(File.ReadAllText(Path.Combine(snapshotDirectory, HellForge.Core.InventorySync.InventoryFile)));
+        var progressionPath = Path.Combine(snapshotDirectory, HellForge.Core.InventorySync.ProgressionFile);
+        using var progression = File.Exists(progressionPath) ? JsonDocument.Parse(File.ReadAllText(progressionPath)) : null;
+        ApplyAccountSnapshot(inventory.RootElement, progression?.RootElement);
+        return progression != null;
     }
 
     // Mission end: adds experience and item amounts (samples, requisition). Amounts are clamped to the catalogue

@@ -210,6 +210,18 @@
               </StackPanel>
             </Border>
           </UniformGrid>
+          <Border x:Name="SyncCard" Classes="card" Margin="0,0,0,16">
+            <StackPanel Spacing="10">
+              <TextBlock Text="ACCOUNT SYNC" Classes="h2" Margin="0" />
+              <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                         Text="Copies your own HELLDIVERS 2 inventory and progression into this profile, which then takes them on every Play. Sync opens the normal game through Steam; log in and pass the title screen. Each sync asks for administrator access: until the capture finishes (10 minutes at most), the game's server name points at this PC and a temporary certificate is trusted. Both are removed when it ends." />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button x:Name="SyncButton" Classes="primary" Content="Sync Inventory" />
+                <TextBlock x:Name="SyncStatusText" VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" />
+              </StackPanel>
+              <TextBlock x:Name="SyncDetailText" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
           <Border Classes="card" Margin="0,0,0,16">
             <StackPanel Spacing="10">
               <TextBlock Text="GAME SETTINGS" Classes="h2" Margin="0" />

@@ -78,6 +78,7 @@ public partial class MainWindow : Window
         InitializeMods();
         InitializeWeaponLevels();
         InitializeSettingsImport();
+        InitializeSync();
         Nav.SelectionChanged += (_, _) => ShowPage(Nav.SelectedIndex);
         DiscordButton.Click += (_, _) => OpenLink(DiscordInvite);
         ToolTip.SetTip(DiscordButton, "Support, news and mods: the HellForge Discord (" + DiscordInvite + ")");
@@ -216,6 +217,11 @@ public partial class MainWindow : Window
     void Start(string? modSync = null)
     {
         if (runner.IsRunning) return;
+        if (SyncBusy)
+        {
+            SetStatus("Inventory sync is running. Play once it finishes.", Phase.Idle);
+            return;
+        }
         runDirectory = null;  // Forget the previous run so its final state does not overwrite this one.
         launchedUtc = default;
         NoteSessionEditor();
@@ -317,6 +323,7 @@ public partial class MainWindow : Window
     void RefreshState()
     {
         ShowProfile();
+        RefreshSync();
         if (runDirectory == null && launchedUtc != default) FindRun();
         if (runDirectory != null)
         {
@@ -459,6 +466,7 @@ public partial class MainWindow : Window
         ImportSettingsStatus.Text = "";
         ShowProfile();
         UpdateSettingsImport();
+        UpdateSyncStatus();
     }
 
     void ShowTemplateDescription()
