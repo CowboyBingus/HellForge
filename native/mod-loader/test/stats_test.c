@@ -3178,6 +3178,7 @@ int main(int argc, char** argv)
     ContentNumbersFixture();
     ContentInstallFixture();
     ContentWeaponsFixture();
+    ContentDifficultyFixture();
     LuaBridgeFixture();
     ActionsFixture();
     PassivesFixture();

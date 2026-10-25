@@ -496,3 +496,76 @@ static void ContentWeaponsFixture(void)
     g_modCount = mods;
     ContentEventsRestore();
 }
+
+/* A live level 11 (difficulty.c, live_content.c): one needing the boot's buffers (a larger map) refused, a plain one
+ * taken (and unstaged); the install's writes queued for the freeze instead of made; the cap's override found as
+ * 0x12E7990 finds it and raised to 11; its unlock item copied from level 10's and owned only when level 10's is. */
+static void ContentDifficultyFixture(void)
+{
+    ContentEventsSave();
+    int mods = g_modCount, state = g_difficultyState;
+    g_difficultyState = 1; g_difficultyAdded = 0;
+    InterlockedExchange(&g_fired[HF_EVENT_GAME_LOADED], 1);
+    HfMod* m = ContentMod("m");
+    ContentChange(NULL, m);
+    HfDifficulty big = {sizeof big, .name = "big", .title = "Big", .map_scale = 2.0f};
+    g_liveSetup = m;
+    assert(ApiAddDifficulty(m, &big) == 0 && g_lcRefused[0] && !g_difficultyAdded);
+    g_lcRefused[0] = 0;
+    HfDifficulty plain = {sizeof plain, .name = "plain", .title = "Plain", .encounter_points = 900.0f};
+    assert(ApiAddDifficulty(m, &plain) == DIF_VANILLA + 1 && g_difficultyAdded && g_difficultyLive);
+    g_liveSetup = NULL;
+    LiveContentUnstage();
+    TxnReset();
+    assert(!g_difficultyAdded && !g_difficultyLive);
+    /* writes of the install's thread queued, the bytes kept apart; another thread's made at once */
+    static uint8_t target[64];
+    memset(target, 0, sizeof target);
+    g_lcWriteCount = 0; g_lcPoolUsed = 0;
+    g_writeQueue = LivePut;
+    g_writeQueueThread = GetCurrentThreadId();
+    uint8_t jump[20] = {0xE9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
+    assert(ApiWrite((uintptr_t)target, jump, sizeof jump) == 0 && target[0] == 0 && g_lcWriteCount == 1 && g_lcWrites[0].size == 20);
+    g_writeQueueThread = 0;
+    LiveWritesMake();
+    assert(!memcmp(target, jump, sizeof jump));
+    g_lcWriteCount = 0; g_lcPoolUsed = 0;
+    /* the override: the second table holds it; raised from 10 to 11, left alone otherwise */
+    size_t size = DIF_CONFIG + 8;
+    uint8_t* game = (uint8_t*)calloc(1, size);
+    uint8_t* config = (uint8_t*)calloc(1, 0x12078 + 0x18);
+    uint8_t* entries = (uint8_t*)calloc(8, 48);
+    memcpy(game + DIF_CONFIG, &config, 8);
+    uint32_t m1 = 0x5BD1E995u, k = 0xFAABBEA9u * m1, key = (k ^ (k >> 24)) * m1 ^ 0xAF218CACu * m1;
+    uint32_t multiplier = 3, capacity = 8, empty = 0xFFFFFFFFu;
+    for (int i = 0; i < 8; i++) memcpy(entries + 48 * i, &empty, 4);
+    uint8_t* entry = entries + 48 * ((capacity - 1) & (key * multiplier));
+    memcpy(entry, &key, 4); *(uint32_t*)(entry + 0x14) = 6; *(uint32_t*)(entry + 0x18) = 10;
+    uintptr_t at = (uintptr_t)entries;
+    memcpy(config + 0xC050, &at, 8); memcpy(config + 0xC058, &capacity, 4); memcpy(config + 0xC05C, &empty, 4); memcpy(config + 0xC060, &multiplier, 4);
+    assert(DifficultyCapValue((uintptr_t)game) == (uint32_t*)(entry + 0x18));
+    DifficultyCapStep(game);
+    assert(*(uint32_t*)(entry + 0x18) == 11);
+    *(uint32_t*)(entry + 0x18) = 7;
+    DifficultyCapStep(game);
+    assert(*(uint32_t*)(entry + 0x18) == 7);
+    free(entries); free(config); free(game);
+    /* the unlock item: level 10's copied; owned when level 10's is */
+    FakeCatalogue();
+    FakeOwnAdd(0, kDifficultyItems[DIF_VANILLA - 1], kDifficultyItems[DIF_VANILLA - 1], 0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, 16, 1);
+    OwnBatch batch = {.items = {{OWN_DIFFICULTY, 0xD1FF, 0, 0, kDifficultyItems[DIF_VANILLA - 1], 0}}, .count = 1};
+    g_fakeOwnedCount = 0;
+    OwnBatchStep(&batch);
+    assert(batch.added == 1 && batch.owned == 0 && OwnEntry((uintptr_t)g_fakeCatalogue, 0xD1FF, 0, 16) >= 0);
+    int level10 = OwnEntry((uintptr_t)g_fakeCatalogue, kDifficultyItems[DIF_VANILLA - 1], 0, 16);
+    *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, level10) + 0x14) = 2;
+    OwnBatch again = {.items = {{OWN_DIFFICULTY, 0xD1FF, 0, 0, kDifficultyItems[DIF_VANILLA - 1], 0}}, .count = 1};
+    OwnBatchStep(&again);
+    assert(again.added == 0 && again.owned == 1 && g_fakeOwned[0] == 0xD1FF);
+    g_ownAdd = NULL; g_ownSort = NULL; g_ownRemove = NULL; g_ownManager = NULL; g_ownApply = NULL;
+    free(g_fakeCatalogue);
+    printf("  live content: a level 11 with larger maps refused, a plain one taken; its writes queued; the online highest level raised; its unlock item owned with level 10's\n");
+    g_difficultyState = state;
+    g_modCount = mods;
+    ContentEventsRestore();
+}

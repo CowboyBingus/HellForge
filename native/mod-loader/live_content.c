@@ -192,15 +192,18 @@ static void LiveContentUnstage(void)
     }
     g_weaponCount = g_lcWeaponsBefore;
     g_stratagemCategoryCount = g_lcCategoriesBefore;
+    if (g_difficultyLive) { g_difficultyLive = g_difficultyAdded = 0; memset(&g_difficulty, 0, sizeof g_difficulty); }
     while (g_textCount > g_lcTextsBefore) { g_textCount--; free(g_texts[g_textCount].text); }
     g_lcOpen = 0;
 }
 
 /* ---- the queued writes and the freeze ------------------------------------------------------------------------------ */
 
-typedef struct ContentWrite { uintptr_t at; uint32_t size; int code; uint8_t bytes[16]; } ContentWrite;
+typedef struct ContentWrite { uintptr_t at; uint32_t size, bytes; int code; } ContentWrite; /* bytes: where in the pool */
 static ContentWrite* g_lcWrites;
 static int g_lcWriteCount, g_lcWriteCapacity, g_lcWriteFailed;
+static uint8_t* g_lcPool;
+static size_t g_lcPoolUsed, g_lcPoolCapacity;
 static uintptr_t g_lcImageFrom, g_lcImageTo; /* game.dll's image: a write there makes its page writable first */
 #define LC_PAGES 4096
 static uintptr_t g_lcPages[LC_PAGES];
@@ -209,7 +212,15 @@ static int g_lcPageCount;
 
 static int LiveWriteQueue(uintptr_t at, const void* bytes, size_t size, int code)
 {
-    if (size > sizeof g_lcWrites[0].bytes) { g_lcWriteFailed = 1; return 1; }
+    if (g_lcPoolUsed + size > g_lcPoolCapacity)
+    {
+        size_t capacity = g_lcPoolCapacity ? g_lcPoolCapacity * 2 : 65536;
+        while (capacity < g_lcPoolUsed + size) capacity *= 2;
+        uint8_t* grown = (uint8_t*)realloc(g_lcPool, capacity);
+        if (grown == NULL) { g_lcWriteFailed = 1; return 1; }
+        g_lcPool = grown;
+        g_lcPoolCapacity = capacity;
+    }
     if (g_lcWriteCount == g_lcWriteCapacity)
     {
         int capacity = g_lcWriteCapacity ? g_lcWriteCapacity * 2 : 2048;
@@ -219,8 +230,9 @@ static int LiveWriteQueue(uintptr_t at, const void* bytes, size_t size, int code
         g_lcWriteCapacity = capacity;
     }
     ContentWrite* w = &g_lcWrites[g_lcWriteCount++];
-    *w = (ContentWrite){at, (uint32_t)size, code || (at >= g_lcImageFrom && at < g_lcImageTo), {0}};
-    memcpy(w->bytes, bytes, size);
+    *w = (ContentWrite){at, (uint32_t)size, (uint32_t)g_lcPoolUsed, code || (at >= g_lcImageFrom && at < g_lcImageTo)};
+    memcpy(g_lcPool + g_lcPoolUsed, bytes, size);
+    g_lcPoolUsed += size;
     return 0;
 }
 /* PutFn for the installs: game memory (its image's pages made writable), or HellForge's own. */
@@ -252,7 +264,7 @@ static void LiveWritesMake(void)
 {
     for (int k = 0; k < g_lcPageCount; k++)
         if (!VirtualProtect((void*)g_lcPages[k], 0x1000, PAGE_EXECUTE_READWRITE, &g_lcPageProtect[k])) g_lcPageProtect[k] = 0;
-    for (int i = 0; i < g_lcWriteCount; i++) memcpy((void*)g_lcWrites[i].at, g_lcWrites[i].bytes, g_lcWrites[i].size);
+    for (int i = 0; i < g_lcWriteCount; i++) memcpy((void*)g_lcWrites[i].at, g_lcPool + g_lcWrites[i].bytes, g_lcWrites[i].size);
     for (int k = 0; k < g_lcPageCount; k++)
     {
         DWORD old;
@@ -331,7 +343,7 @@ typedef struct LivePlan
 {
     uintptr_t game;
     uint8_t *stratagems, *projectiles, *damage; /* a list moved by this change: its block */
-    int behaviourStubs, abilityStubs, categories, launch;
+    int behaviourStubs, abilityStubs, categories, launch, difficulty;
     OwnBatch items;
     Scrub scrub;          /* what the change takes out that the loadout may hold */
     int scrubbing, scrubFailed;
@@ -375,7 +387,7 @@ static const char* LiveStratagem(LivePlan* plan, uint8_t* table, uint32_t index,
     uint64_t base = 0;
     uint32_t baseStable = 0;
     memcpy(&base, table + s->base * 8, 8);
-    if (added && base != 0 && !SafeRead(base + 4, &baseStable, 4)) LiveOwn(plan, (OwnItem){1, s->item, s->stable, baseStable, 0, 0});
+    if (added && base != 0 && !SafeRead(base + 4, &baseStable, 4)) LiveOwn(plan, (OwnItem){OWN_STRATAGEM, s->item, s->stable, baseStable, 0, 0});
     return NULL;
 }
 
@@ -504,6 +516,32 @@ static const char* LiveAbilities(LivePlan* plan, char* why, size_t size)
     return NULL;
 }
 
+/* A live level 11 (difficulty.c): its install as a boot runs it (InstallDifficulty), every write it makes to game.dll
+ * queued for the freeze, then its unlock item; the highest level is raised later, once no menu is open
+ * (DifficultyCapTick). Only a level without larger maps or extra objectives gets here (add_difficulty refuses them). */
+static const char* LiveDifficulty(LivePlan* plan, char* why, size_t size)
+{
+    if (!g_difficultyLive) return NULL;
+    if (g_difficultyState < 0) { ApiLog(g_difficulty.mod, "difficulty %s not installed: level 11 was refused when the game started", g_difficulty.name); return NULL; }
+    if (g_difficultyState == 0) { snprintf(why, size, "state\tthe game has not checked its difficulties yet; try again in a moment"); return why; }
+    if (!DifficultyCapPins(plan->game)) { snprintf(why, size, "capability\tdifficulty: the game's highest-level lookup is not the reviewed one"); return why; }
+    g_difficultyState = 0;
+    g_writeQueue = LivePut;
+    g_writeQueueThread = GetCurrentThreadId();
+    int done = InstallDifficulty(plan->game, 1);
+    g_writeQueueThread = 0;
+    if (!done || g_difficultyState != 1)
+    {
+        int waited = !done;
+        g_difficultyState = waited ? 1 : g_difficultyState;
+        snprintf(why, size, waited ? "state\tdifficulty: the game's code is not decoded yet; try again in a moment" : "capability\tdifficulty: its install was refused (modloader.log)");
+        return why;
+    }
+    plan->difficulty = 1;
+    LiveOwn(plan, (OwnItem){OWN_DIFFICULTY, g_difficulty.item, 0, 0, kDifficultyItems[DIF_VANILLA - 1], 0});
+    return NULL;
+}
+
 /* A silo countdown in a session whose boot had none: the launch functions proven, the loose guard in a page of its own,
  * the per-frame pass and the mission's end. */
 static void LiveLaunch(uintptr_t game)
@@ -539,14 +577,14 @@ static void LiveRetire(LivePlan* plan)
         {
             if (g_lcShadowed[kind][i] || LiveTomb(kind, i) || !LiveLeaves(LiveModAt(kind, i))) continue;
             g_lcTomb[kind][i] = 1;
-            if (kind == LC_STRATAGEM) LiveOwn(plan, (OwnItem){1, g_stratagems[i].item, 0, 0, 0, 1});
+            if (kind == LC_STRATAGEM) LiveOwn(plan, (OwnItem){OWN_STRATAGEM, g_stratagems[i].item, 0, 0, 0, 1});
         }
     for (int i = 0; i < g_lcWeaponsBefore; i++)
     {
         Weapon* w = &g_weapons[i];
         if (LiveTomb(LC_WEAPON, (uint32_t)i) || !LiveLeaves(w->mod) || LiveCarried(i)) continue;
         g_lcTomb[LC_WEAPON][i] = 1;
-        if (!w->plain && w->state == 1) LiveOwn(plan, (OwnItem){0, w->id, 0, 0, 0, 1});
+        if (!w->plain && w->state == 1) LiveOwn(plan, (OwnItem){OWN_WEAPON, w->id, 0, 0, 0, 1});
     }
 }
 
@@ -628,7 +666,7 @@ static int LiveFreezeNeeded(void)
 static const char* LivePrepare(LivePlan* plan, char* why, size_t size)
 {
     static const char* (*const kinds[])(LivePlan*, char*, size_t) = {LiveDamage, LiveProjectiles, LiveStratagems, LiveBehaviours, LiveAbilities,
-        LiveRegistryPrepare, LiveScrubCheck};
+        LiveRegistryPrepare, LiveScrubCheck, LiveDifficulty}; /* the difficulty last: its install changes loader state */
     for (size_t k = 0; k < sizeof kinds / sizeof kinds[0]; k++)
     {
         const char* refused = kinds[k](plan, why, size);
@@ -649,6 +687,12 @@ static void LiveInstalled(const LivePlan* plan)
     if (plan->behaviourStubs) { g_behaviourState = 0; InstallBehaviours(plan->game); }
     if (plan->abilityStubs) { g_abilityState = 0; g_abilityFirstTry = GetTickCount64() - 60000; InstallAbilities(plan->game); }
     if (plan->launch) LiveLaunch(plan->game);
+    if (plan->difficulty)
+    {
+        g_difficultyLive = 0;
+        g_difficultyOnGameThread = g_liveOnGameThread;
+        InterlockedExchange(&g_difficultyCapPending, 1);
+    }
 }
 
 /* The game thread's step, the loadout's push checked a few frames on; 0 when something did not happen. */
@@ -679,6 +723,7 @@ static const char* LiveContentMake(char* why, size_t size, int* failed)
     g_lcImageTo = plan.game + image;
     if (g_game == 0) g_game = plan.game;
     g_lcWriteCount = g_lcWriteFailed = 0;
+    g_lcPoolUsed = 0;
     const char* refused = LivePrepare(&plan, why, size);
     if (refused != NULL) return refused;
     if (plan.items.count > 0 && !OwnProve()) Note("items: the game's catalogue functions are not the reviewed ones; new items are not owned until the next session");

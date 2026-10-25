@@ -196,6 +196,8 @@ static const char* TxnModCheck(TxnMod* t, char* why, size_t size)
     if (t->action == TXN_ADD && present) { snprintf(why, size, "malformed\t%s is already loaded", t->id); return why; }
     if (t->action != TXN_ADD && !present) { snprintf(why, size, "malformed\t%s is not loaded", t->id); return why; }
     if (t->action != TXN_ADD && ModRunsCode(t->old) && CodeRemovable(t->old, why, size) != NULL) return why;
+    if (t->action != TXN_ADD && g_difficultyAdded && g_difficulty.mod == t->old)
+    { snprintf(why, size, "capability\t%s added level 11, which the running game keeps; it goes at the next session", t->id); return why; }
     if ((t->kinds & TXN_CODE) && !(t->kinds & TXN_LIVE))
     { snprintf(why, size, "capability\t%s runs code that does not declare \"live\": true, which changes at the next session", t->id); return why; }
     return NULL;

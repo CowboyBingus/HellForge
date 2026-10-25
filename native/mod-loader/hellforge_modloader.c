@@ -125,6 +125,7 @@ enum { LC_STRATAGEM, LC_PROJECTILE, LC_DAMAGE, LC_BEHAVIOUR, LC_ABILITY, LC_KIND
 static void* LiveEntry(int kind, HfMod* mod, const char* name, uint32_t* index);
 static int LiveTomb(int kind, uint32_t index);
 static int LiveGone(int kind, uint32_t index);
+static void LiveRefuse(HfMod* mod, const char* kind, const char* name, const char* why);
 /* Where content installs write game memory: ApiWrite at boot, a live change's batch (live_content.c LivePut). */
 typedef int (*PutFn)(uintptr_t address, const void* bytes, size_t size);
 static uintptr_t g_region;
@@ -226,8 +227,14 @@ static void NoteRewrite(uintptr_t address, size_t size)
     ReleaseSRWLockExclusive(&g_rewriteLock);
 }
 
+/* A live change's install of a boot-time patch (live_content.c, the difficulty's): that thread's writes are queued for the
+ * change's freeze instead. */
+static volatile DWORD g_writeQueueThread;
+static int (*g_writeQueue)(uintptr_t address, const void* data, size_t size);
+
 static int ApiWrite(uintptr_t address, const void* data, size_t size)
 {
+    if (g_writeQueueThread != 0 && g_writeQueueThread == GetCurrentThreadId()) return g_writeQueue(address, data, size);
     DWORD previous;
     if (!VirtualProtect((void*)address, size, PAGE_EXECUTE_READWRITE, &previous)) return 1;
     memcpy((void*)address, data, size);
@@ -926,6 +933,7 @@ static DWORD WINAPI Watch(void* parameter)
         if (g_fired[HF_EVENT_GAME_LOADED] && g_physicsPools == 0) PhysicsPools(ApiModuleBase("game.dll", NULL));
         if (g_difficultyState == 1) DifficultyWatch();
         if (g_difficultyState == 1 && g_game != 0) DifficultyDelta(g_game);
+        if (g_difficultyCapPending) DifficultyCapTick(g_game); /* a live level 11 (live_content.c) */
         if (g_fired[HF_EVENT_NETWORK_READY] && g_difficultyState == 1) DifficultyNetwork();
         if (g_fired[HF_EVENT_ENTITIES_READY]) StatsSnapshotReady(ApiModuleBase("game.dll", NULL));
         Sleep(elapsed < 180000 ? 5 : 250);

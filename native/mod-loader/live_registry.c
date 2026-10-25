@@ -258,7 +258,7 @@ static void LiveRegistryStep(LivePlan* plan)
     {
         Weapon* w = &g_weapons[order[k]];
         if (w->state != 2) continue;
-        if (RegisterOne(&ctx, w) && !w->plain) LiveOwn(plan, (OwnItem){0, w->id, 0, 0, w->base, 0});
+        if (RegisterOne(&ctx, w) && !w->plain) LiveOwn(plan, (OwnItem){OWN_WEAPON, w->id, 0, 0, w->base, 0});
     }
     if (ctx.appended == 0 && first) { VirtualFree(ctx.index - 32, 0, MEM_RELEASE); VirtualFree(ctx.list, 0, MEM_RELEASE); return; }
     RegistryPublish(&ctx, first);

@@ -105,9 +105,10 @@ static void OwnAppend(const uint8_t* source, uint32_t mixId, uint32_t itemId, ui
         *(const uint32_t*)(source + 0xC), *(const uint32_t*)(source + 0x18));
 }
 
-/* One item to make owned: a stratagem (copies of its base's category 11 item and category 10 child) or a weapon (its
- * base's root item and children). */
-typedef struct OwnItem { int stratagem; uint32_t mixId, stable, baseStable, baseMixId; int take; } OwnItem;
+/* One item to make owned: a stratagem (copies of its base's category 11 item and category 10 child), a weapon (its base's
+ * root item and children) or a difficulty's unlock item (level 10's copied, owned when level 10's is: RegisteredItems.cs). */
+enum { OWN_WEAPON, OWN_STRATAGEM, OWN_DIFFICULTY };
+typedef struct OwnItem { int kind; uint32_t mixId, stable, baseStable, baseMixId; int take; } OwnItem;
 typedef struct OwnBatch { OwnItem items[OWN_ITEMS]; int count, added, owned, taken; const char* why; } OwnBatch;
 
 /* A stratagem's records: the base's child (category 10, itemId its stable id) and its item (the child's parent). */
@@ -141,6 +142,23 @@ static int OwnWeapon(uintptr_t manager, const OwnItem* item)
     return added;
 }
 
+/* A difficulty's unlock item: a copy of level 10's (category 16) under its own id. */
+static int OwnDifficulty(uintptr_t manager, const OwnItem* item)
+{
+    int base = OwnEntry(manager, item->baseMixId, 0, 16);
+    if (base < 0) return 0;
+    OwnAppend(OwnRecordAt(manager, base), item->mixId, item->mixId, 0);
+    return 1;
+}
+
+/* Whether an item is owned (its record's state 2 or 4). */
+static int OwnOwned(uintptr_t manager, uint32_t mixId)
+{
+    int entry = OwnEntry(manager, mixId, 0, 0);
+    uint32_t state = entry >= 0 ? *(const uint32_t*)(OwnRecordAt(manager, entry) + 0x14) : 0;
+    return state == 2 || state == 4;
+}
+
 /* On the game thread: the batch's records appended, the catalogue sorted, and each item owned (or, take, given back). */
 static void OwnBatchStep(void* arg)
 {
@@ -155,7 +173,7 @@ static void OwnBatchStep(void* arg)
         if (item->take) continue;
         if (OwnEntry(manager, item->mixId, 0, 0) >= 0) continue; /* in the catalogue already (taken out and back) */
         if (*(const uint32_t*)(manager + OWN_COUNT) + 16 > OWN_MAX) { b->why = "the game's catalogue is full"; break; }
-        int added = item->stratagem ? OwnStratagem(manager, item) : OwnWeapon(manager, item);
+        int added = item->kind == OWN_STRATAGEM ? OwnStratagem(manager, item) : item->kind == OWN_WEAPON ? OwnWeapon(manager, item) : OwnDifficulty(manager, item);
         if (added == 0) continue;
         b->added += added;
         appended = 1;
@@ -169,6 +187,7 @@ static void OwnBatchStep(void* arg)
     {
         const OwnItem* item = &b->items[i];
         if (item->take) { g_ownRemove(manager, item->mixId, 1); b->taken++; }
-        else if (OwnEntry(manager, item->mixId, 0, 0) >= 0) { g_ownApply(manager, item->mixId, 1, 0, NULL, 0); b->owned++; }
+        else if (OwnEntry(manager, item->mixId, 0, 0) >= 0 && (item->kind != OWN_DIFFICULTY || OwnOwned(manager, item->baseMixId)))
+        { g_ownApply(manager, item->mixId, 1, 0, NULL, 0); b->owned++; }
     }
 }
