@@ -137,8 +137,8 @@ this is in [modding/content.md](modding/content.md).
 
 HellForge adds the weapon to the game's entity data when that loads (the file is never changed), to the engine's
 network types (so it can be equipped and synced), to the armory, and to the backend's item catalogue and the player's
-inventory (`<session>/registered-items.json`). The loader's `modloader.log` and the mod's log record each step, and
-`native/mod-loader/registry.c` explains how.
+inventory (`registered-items.json` in the session folder, or its `game` folder when sandboxed). The loader's
+`modloader.log` and the mod's log record each step, and `native/mod-loader/registry.c` explains how.
 
 In multiplayer, the weapon is part of the mod's code, which the modlist gate already requires friends to share.
 

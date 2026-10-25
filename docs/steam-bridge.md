@@ -250,7 +250,8 @@ lobby stays listed.
   Labelling at creation, at or below one's own integrity, needs no admin. Relabelling an existing folder needs
   WRITE_OWNER, which a standard account seldom has on its own folders: the first in-game try stopped there
   (2026-10-23). The folder holds:
-  - the mod loader's, the stand-ins' and the census's logs, the stats snapshot, and the editor's saves;
+  - the mod loader's, the stand-ins' and the census's logs, the stats snapshot, the editor's saves, and the items mods
+    registered (`registered-items.json`, which the backend reads from here when it runs with `--sandbox`);
   - `environment/`, a copy of `userdata/environment` (the game's AppData and temp);
   - `userdata/`, the user-data root `data/settings.ini` points at for the session (`prepare-session --user-data`): a
     copy of the profile's folder (settings, saves, the cloud folder), the shader cache (110 MB on the test PC) and the
