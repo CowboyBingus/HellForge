@@ -28,11 +28,13 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <d3d12.h>
-#include <dxgi1_4.h>
+#include <dxgi1_6.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <vector>
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_dx12.h"
@@ -95,6 +97,130 @@ static UINT64 g_fenceValue, g_frameFence[MAX_BUFFERS];
 /* Direct3D 11 (the game started with --use-d3d11): its device, found through the swap chain; no queue of its own */
 static ID3D11Device* g_device11;
 static ID3D11DeviceContext* g_context11;
+
+/* ---- HDR ---------------------------------------------------------------------------------------------------------- */
+
+/* With HDR on, the game draws into a 10-bit back buffer in HDR10 (PQ, Rec.2020) where it is 8-bit without (format 28;
+ * 24 with HDR, game settings hdr_enabled / prefer_hdr), and ImGui's colours, written as they are, came out washed out.
+ * Then ImGui's pixel shader is the editor's (Build-Editor.ps1 patches the DX11 and DX12 renderers to take
+ * g_hellforgePixelShader): the editor's sRGB colours made linear and put at the brightness the display gives SDR content
+ * (Windows' "SDR content brightness" for the game window's display, 200 nits when unknown), for HDR10 moved to Rec.2020
+ * primaries and PQ-encoded, for scRGB (a 16-bit float back buffer) scaled so 80 nits is 1. HDR10 needs the display in HDR
+ * too (its DXGI colour space ST.2084): a 10-bit back buffer on an SDR display is SDR, as the overlay test's is.
+ * HELLFORGE_EDITOR_HDR=off|pq|scrgb[:nits] decides instead (the tests; a display detected wrongly). */
+const char* g_hellforgePixelShader = nullptr;
+enum { HDR_OFF, HDR_PQ, HDR_SCRGB };
+static int g_hdrMode = -1; /* -1: not decided yet */
+static float g_hdrNits;
+static std::string g_hdrShader;
+
+/* The SDR white level (nits) Windows uses for the display the window is on, or 0 when it cannot say. */
+static float WindowsSdrWhite(HWND window)
+{
+    MONITORINFOEXW monitor = {};
+    monitor.cbSize = sizeof monitor;
+    if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor)) return 0;
+    UINT32 pathCount = 0, modeCount = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS) return 0;
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), NULL) != ERROR_SUCCESS) return 0;
+    for (UINT32 i = 0; i < pathCount; i++)
+    {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source = {};
+        source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        source.header.size = sizeof source;
+        source.header.adapterId = paths[i].sourceInfo.adapterId;
+        source.header.id = paths[i].sourceInfo.id;
+        if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS || wcscmp(source.viewGdiDeviceName, monitor.szDevice) != 0) continue;
+        DISPLAYCONFIG_SDR_WHITE_LEVEL white = {};
+        white.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL;
+        white.header.size = sizeof white;
+        white.header.adapterId = paths[i].targetInfo.adapterId;
+        white.header.id = paths[i].targetInfo.id;
+        if (DisplayConfigGetDeviceInfo(&white.header) == ERROR_SUCCESS && white.SDRWhiteLevel > 0) return white.SDRWhiteLevel * 80.0f / 1000.0f;
+    }
+    return 0;
+}
+
+/* Is the display the swap chain shows on in HDR (its colour space ST.2084)? */
+static bool DisplayInHdr(IDXGISwapChain3* swapChain)
+{
+    IDXGIOutput* output = NULL;
+    if (FAILED(swapChain->GetContainingOutput(&output)) || output == NULL) return false;
+    IDXGIOutput6* output6 = NULL;
+    DXGI_OUTPUT_DESC1 desc = {};
+    bool hdr = SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(&output6))) && SUCCEEDED(output6->GetDesc1(&desc)) &&
+        desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+    if (output6 != NULL) output6->Release();
+    output->Release();
+    return hdr;
+}
+
+/* The pixel shader for an HDR mode: ImGui's (colour times texture), then the editor's colour turned into the back
+ * buffer's. */
+static std::string HdrShader(int mode, float nits)
+{
+    char scale[64];
+    std::string text =
+        "struct PS_INPUT { float4 pos : SV_POSITION; float4 col : COLOR0; float2 uv : TEXCOORD0; };\n"
+        "SamplerState sampler0 : register(s0);\n"
+        "Texture2D texture0 : register(t0);\n"
+        "float3 Linear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }\n"
+        "float4 main(PS_INPUT input) : SV_Target\n"
+        "{\n"
+        "  float4 c = input.col * texture0.Sample(sampler0, input.uv);\n"
+        "  float3 l = Linear(saturate(c.rgb));\n";
+    if (mode == HDR_PQ)
+    {
+        snprintf(scale, sizeof scale, "%.8f", nits / 10000.0f); /* PQ's 1 is 10000 nits */
+        text += "  l = mul(float3x3(0.6274, 0.3293, 0.0433, 0.0691, 0.9195, 0.0114, 0.0164, 0.0880, 0.8956), l) * ";
+        text += scale;
+        text += ";\n"
+                "  float3 p = pow(max(l, 0.0), 0.1593017578125);\n"
+                "  c.rgb = pow((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p), 78.84375);\n";
+    }
+    else
+    {
+        snprintf(scale, sizeof scale, "%.8f", nits / 80.0f); /* scRGB's 1 is 80 nits */
+        text += "  c.rgb = l * ";
+        text += scale;
+        text += ";\n";
+    }
+    return text + "  return c;\n}\n";
+}
+
+/* HELLFORGE_EDITOR_HDR=off|pq|scrgb[:nits], when set: the mode, and the nits when given. */
+static void HdrOverride(int* mode, float* nits, const char** source)
+{
+    const char* forced = getenv("HELLFORGE_EDITOR_HDR");
+    if (forced == NULL) return;
+    *mode = strncmp(forced, "pq", 2) == 0 ? HDR_PQ : strncmp(forced, "scrgb", 5) == 0 ? HDR_SCRGB : HDR_OFF;
+    const char* colon = strchr(forced, ':');
+    if (colon != NULL) { *nits = (float)atof(colon + 1); *source = "HELLFORGE_EDITOR_HDR"; }
+}
+
+/* Decides the HDR mode for a back buffer format (and the swap chain's display) and sets the pixel shader ImGui's
+ * renderer takes when it makes its device objects next; true when it changed. */
+static bool UpdateHdr(IDXGISwapChain3* swapChain, DXGI_FORMAT format)
+{
+    int mode = format == DXGI_FORMAT_R16G16B16A16_FLOAT ? HDR_SCRGB
+             : format == DXGI_FORMAT_R10G10B10A2_UNORM && DisplayInHdr(swapChain) ? HDR_PQ : HDR_OFF;
+    float nits = WindowsSdrWhite(g_window);
+    const char* source = nits > 0 ? "Windows' SDR content brightness" : "the default";
+    HdrOverride(&mode, &nits, &source);
+    if (nits <= 0) nits = 200;
+    nits = nits < 80 ? 80 : nits > 1000 ? 1000 : nits;
+    if (mode == g_hdrMode && (mode == HDR_OFF || nits == g_hdrNits)) return false;
+    g_hdrMode = mode;
+    g_hdrNits = nits;
+    g_hdrShader = mode == HDR_OFF ? std::string() : HdrShader(mode, nits);
+    g_hellforgePixelShader = mode == HDR_OFF ? nullptr : g_hdrShader.c_str();
+    if (mode == HDR_OFF) g_api->log(g_mod, "editor: SDR (back buffer format %d)", (int)format);
+    else g_api->log(g_mod, "editor: HDR, %s (back buffer format %d): SDR white %.0f nits (%s)", mode == HDR_PQ ? "HDR10 (PQ)" : "scRGB",
+        (int)format, nits, source);
+    return true;
+}
 
 /* ---- the editor's window ---------------------------------------------------------------------------------------- */
 
@@ -385,8 +511,10 @@ static bool Initialize11(IDXGISwapChain3* swapChain)
     DXGI_SWAP_CHAIN_DESC desc;
     if (FAILED(swapChain->GetDesc(&desc))) return false;
     g_window = desc.OutputWindow;
+    g_format = desc.BufferDesc.Format;
     g_device11->GetImmediateContext(&g_context11);
     CreateImGui();
+    UpdateHdr(swapChain, g_format);
     if (!ImGui_ImplWin32_Init(g_window) || !ImGui_ImplDX11_Init(g_device11, g_context11)) return false;
     if (!icons::Upload11(g_device11)) g_api->log(g_mod, "editor: the images could not be made; the editor shows none");
     g_gameProc = (WNDPROC)SetWindowLongPtrW(g_window, GWLP_WNDPROC, (LONG_PTR)EditorProc);
@@ -447,6 +575,7 @@ static bool Initialize(IDXGISwapChain3* swapChain)
     CreateImGui();
     RECT client;
     GetClientRect(g_window, &client);
+    UpdateHdr(swapChain, g_format);
     if (!ImGui_ImplWin32_Init(g_window) || !InitDx12Backend()) return false;
     D3D12_CPU_DESCRIPTOR_HANDLE cpu;
     D3D12_GPU_DESCRIPTOR_HANDLE gpu;
@@ -498,7 +627,14 @@ static void Render(IDXGISwapChain3* swapChain)
             WaitFence(g_fenceValue);
             ImGui_ImplDX12_Shutdown();
             g_format = desc.BufferDesc.Format;
+            UpdateHdr(swapChain, g_format);
             if (!InitDx12Backend()) { g_failed = 1; LeaveCriticalSection(&g_lock); return; }
+        }
+        else if (g_device11 != NULL && desc.BufferDesc.Format != g_format)
+        {
+            /* Direct3D 11 makes its device objects again on the next frame, with the shader for the new format */
+            g_format = desc.BufferDesc.Format;
+            if (UpdateHdr(swapChain, g_format)) ImGui_ImplDX11_InvalidateDeviceObjects();
         }
         /* the fonts at the window's scale: made again (after our last frame) when the screen or the interface size changes */
         float width = (float)desc.BufferDesc.Width, height = (float)desc.BufferDesc.Height;
