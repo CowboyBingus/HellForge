@@ -7,4 +7,6 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>HellForge.CaptureProxy</AssemblyName>
   </PropertyGroup>
+  <!-- The seal only: HellForge.Core itself carries tens of megabytes of game mappings the capture never uses. -->
+  <ItemGroup><Compile Include="../HellForge.Core/SnapshotSeal.cs" Link="SnapshotSeal.cs" /></ItemGroup>
 </Project>

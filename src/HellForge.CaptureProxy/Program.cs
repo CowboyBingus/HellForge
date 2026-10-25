@@ -6,7 +6,8 @@
 // API by IP. With the session the login returns it reads GET /api/Progression and GET /api/Progression/inventory, writes
 // them to --progression and --output, removes the hosts line and the CA, and exits 0 (1 when nothing was captured before
 // the timeout). Nothing else is kept: the log holds methods, the first two path segments, status codes and sizes, never
-// bodies, query strings, header values or the session.
+// bodies, query strings, header values or the session. With --seal-key and --steam-account it seals the two files for
+// that Steam account (HellForge.Core SnapshotSeal) before it exits; the backend unlocks premium items only from a seal.
 //
 //   --cleanup      only remove a hosts line and CA left by a run that was killed
 //   --no-hosts --no-ca --loopback --listen-port 8443 --real-ip <ip>   local plumbing test, no system changes
@@ -22,6 +23,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using HellForge.Core;
 
 const string HostsMarker = "# HellForge-CaptureProxy";
 const string CaName = "HellForge Capture CA";
@@ -36,6 +38,8 @@ string? progressionPath = null;
 var evidenceDir = Path.Combine(AppContext.BaseDirectory, "capture");
 bool manageHosts = true, manageCa = true, loopbackOnly = false, cleanupOnly = false;
 var timeoutMin = 10;
+string? sealKey = null;
+ulong? steamAccount = null;
 
 try
 {
@@ -55,13 +59,21 @@ try
             case "--no-ca": manageCa = false; break;
             case "--loopback": loopbackOnly = true; break;
             case "--cleanup": cleanupOnly = true; break;
+            case "--seal-key": sealKey = Next(); break;
+            case "--steam-account": steamAccount = ulong.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
             case "--help":
                 Console.WriteLine("HellForge.CaptureProxy [--output <file>] [--progression <file>] [--evidence <dir>] [--timeout-min <n>]");
-                Console.WriteLine("  [--host <name>] [--listen-port <n>] [--real-ip <ip>] [--no-hosts] [--no-ca] [--loopback] | --cleanup");
+                Console.WriteLine("  [--seal-key <file> --steam-account <SteamID64>] [--host <name>] [--listen-port <n>] [--real-ip <ip>]");
+                Console.WriteLine("  [--no-hosts] [--no-ca] [--loopback] | --cleanup");
                 return 0;
             default: throw new ArgumentException("Unknown argument: " + args[i]);
         }
     }
+    if ((sealKey == null) != (steamAccount == null)) throw new ArgumentException("--seal-key and --steam-account go together.");
+    // The seal covers the snapshot's own file names, side by side.
+    if (sealKey != null && (Path.GetFileName(outputPath) != SnapshotSeal.InventoryFile ||
+        progressionPath != null && Path.GetFullPath(progressionPath) != Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, SnapshotSeal.ProgressionFile)))
+        throw new ArgumentException("A sealed capture writes " + SnapshotSeal.InventoryFile + " and " + SnapshotSeal.ProgressionFile + " in one folder.");
 }
 catch (Exception error) when (error is ArgumentException or FormatException or OverflowException)
 {
@@ -194,7 +206,11 @@ finally
     Cleanup();
 }
 Log(captured == 1 ? "capture complete" : "nothing captured");
-return captured == 1 ? 0 : 1;
+if (captured != 1) return 1;
+if (sealKey == null) return 0;
+var sealWritten = Step("seal", () => SnapshotSeal.Write(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, sealKey, steamAccount!.Value, DateTime.UtcNow));
+if (sealWritten) Log("capture sealed");
+return sealWritten ? 0 : 1;
 
 async Task Handle(TcpClient client)
 {

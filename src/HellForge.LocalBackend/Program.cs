@@ -7,6 +7,9 @@ if (args.Contains("--help"))
     Console.WriteLine("HellForge.LocalBackend profile show <directory>");
     Console.WriteLine("HellForge.LocalBackend profile apply-template <directory> <template>   (replaces the inventory; server must be stopped)");
     Console.WriteLine("HellForge.LocalBackend profile add-template-items <directory> <template>   (adds only missing items; server must be stopped)");
+    Console.WriteLine("HellForge.LocalBackend profile import-preview <directory> [template]   (the account snapshot against the profile, as JSON)");
+    Console.WriteLine("HellForge.LocalBackend profile import <directory> [template]   (applies the account snapshot with the profile's account-import.json; backs up first; server must be stopped)");
+    Console.WriteLine("HellForge.LocalBackend profile restore <directory> <backup file>   (backs up first; server must be stopped)");
     Console.WriteLine("--item-catalog <file> (development) serves that file's \"items\" array as /Progression/items.");
     Console.WriteLine("--profile-template <name> sets the inventory of a newly created profile: " + string.Join(", ", ProfileStore.TemplateNames));
     Console.WriteLine("Synthetic loopback-only login service. Default port 0 selects a free port. No game launch or routing changes.");
@@ -51,6 +54,12 @@ if (args is ["profile", var templateCommand and ("apply-template" or "add-templa
         return 1;
     }
 }
+if (args is ["profile", var accountCommand and ("import-preview" or "import"), var accountDirectory, .. var accountTemplate] && accountTemplate.Length <= 1)
+    return accountCommand == "import"
+        ? AccountCommands.Import(accountDirectory, accountTemplate.FirstOrDefault(), HellForge.Core.SteamAccount.Current(), Console.Out, Console.Error)
+        : AccountCommands.Preview(accountDirectory, accountTemplate.FirstOrDefault(), HellForge.Core.SteamAccount.Current(), Console.Out, Console.Error);
+if (args is ["profile", "restore", var restoreDirectory, var backupFile])
+    return AccountCommands.Restore(restoreDirectory, backupFile, Console.Out, Console.Error);
 if (args is ["fetch-live-war", var fetchCache])
     return await LiveWar.FetchOnceAsync(fetchCache, Console.WriteLine) ? 0 : 1;
 try
@@ -78,40 +87,15 @@ try
     var profileTemplate = options.GetValueOrDefault("--profile-template");
     if (profileTemplate != null && !startupFixtures) throw new ArgumentException("--profile-template requires --startup-fixtures true.");
     using var profile = startupFixtures ? ProfileStore.Open(profileDirectory, profileTemplate) : null;
-    // Account snapshot (the launcher's Sync Inventory): the player's own inventory and progression replace the
-    // profile's on every start. A snapshot that cannot be read or validated is skipped, never fatal.
-    var snapshotDir = profileDirectory != null ? HellForge.Core.InventorySync.SnapshotDirectoryFromProfileDir(profileDirectory) : null;
-    if (profile != null && snapshotDir != null && HellForge.Core.InventorySync.HasSnapshot(snapshotDir))
-    {
-        try
-        {
-            var withProgression = profile.ApplyAccountSnapshot(snapshotDir);
-            Console.Error.WriteLine("[snapshot] applied " + snapshotDir + (withProgression ? "" : " (inventory only)"));
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
-        {
-            Console.Error.WriteLine("[snapshot] skipped: " + error.Message);
-        }
-    }
-    // Ownership filter: paid items are removed from served profiles. With a real inventory (--real-inventory, the
-    // profile's real-inventory.json or the snapshot's), only paid items the player doesn't own are removed.
+    // Premium items (OwnershipFilter): served only from the profile's account snapshot, when it is sealed on this PC for
+    // the Steam account signed in now. The rest of a snapshot reaches the profile only through an import the player
+    // chose (AccountCommands), never at start.
     if (profile != null)
     {
-        var paid = PaidContentSet.Load();
-        var realInventoryPath = options.GetValueOrDefault("--real-inventory");
-        // Use a cached real inventory from the profile directory, or the snapshot directory.
-        if (realInventoryPath == null && profile.FilePath != null)
-        {
-            var cached = Path.Combine(Path.GetDirectoryName(profile.FilePath)!, "real-inventory.json");
-            if (File.Exists(cached)) realInventoryPath = cached;
-        }
-        if (realInventoryPath == null && snapshotDir != null)
-        {
-            var fromSnapshot = Path.Combine(snapshotDir, HellForge.Core.InventorySync.InventoryFile);
-            if (File.Exists(fromSnapshot)) realInventoryPath = fromSnapshot;
-        }
-        var realInventory = realInventoryPath != null ? OwnershipFilter.LoadRealInventory(realInventoryPath) : null;
-        profile.Ownership = new OwnershipFilter(paid, realInventory);
+        var snapshotDir = profileDirectory != null ? HellForge.Core.InventorySync.SnapshotDirectoryFromProfileDir(profileDirectory) : null;
+        profile.Ownership = OwnershipFilter.ForSnapshot(PaidContentSet.Load(), snapshotDir, HellForge.Core.SteamAccount.Current(), out var refusal);
+        Console.Error.WriteLine(refusal != null ? "[premium] none unlocked: " + refusal
+            : "[premium] " + profile.Ownership.OwnedPaidCount + " premium items from the account snapshot");
     }
     var warClock = new WarClock();
     var accountKeys = new AccountKeys();

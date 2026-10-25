@@ -6,18 +6,20 @@ using System.Text.Json.Nodes;
 
 namespace HellForge.Core;
 
-// The launcher's Sync Inventory: copies the player's own HELLDIVERS 2 inventory and progression into a profile's
-// account snapshot, which the local backend applies on every start (HellForge.LocalBackend Program.cs).
+// The launcher's Sync Inventory: captures the player's own HELLDIVERS 2 inventory and progression into a profile's account
+// snapshot. The local backend takes premium ownership from it on every start; the rest reaches the profile only through
+// an import the player reviews (AccountImportSettings, HellForge.LocalBackend AccountImport).
 //
 // The capture proxy (app/capture/HellForge.CaptureProxy.exe) runs elevated: it maps the live API host to loopback in the
 // hosts file, trusts a per-run CA, terminates TLS for the normal game's login and, with that login's session, reads
-// /api/Progression and /api/Progression/inventory. It removes the hosts line and the CA when it exits. Both files land in
-// a private sync folder under logs/, and FinalizeCapture moves them into account-snapshot/<profile>/.
+// /api/Progression and /api/Progression/inventory. It seals both for the signed-in Steam account (SnapshotSeal) and removes
+// the hosts line and the CA when it exits. The files land in a private sync folder under logs/, and FinalizeCapture moves
+// them into account-snapshot/<profile>/.
 public static class InventorySync
 {
     public const string SnapshotFolder = "account-snapshot";
-    public const string InventoryFile = "real-inventory.json";
-    public const string ProgressionFile = "progression.json";
+    public const string InventoryFile = SnapshotSeal.InventoryFile;
+    public const string ProgressionFile = SnapshotSeal.ProgressionFile;
     public const string MetadataFile = "snapshot.json";
     // Written by the proxy once it listens; the launcher opens the game only then.
     public const string ListeningFile = "capture-state.json";
@@ -46,6 +48,11 @@ public static class InventorySync
         if (installRoot == null || string.IsNullOrEmpty(profileName)) return null;
         return Path.Combine(installRoot, SnapshotFolder, profileName);
     }
+
+    // One key per installation, beside every profile's snapshot.
+    public static string SealKeyFor(string snapshotDir) =>
+        Path.Combine(Path.GetDirectoryName(Path.GetFullPath(snapshotDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)))!,
+            SnapshotSeal.KeyFileName);
 
     // The inventory makes a snapshot; progression is applied when it was captured too.
     public static bool HasSnapshot(string snapshotDir) => File.Exists(Path.Combine(snapshotDir, InventoryFile));
@@ -92,16 +99,18 @@ public static class InventorySync
         }
     }
 
-    // Starts the proxy elevated (one UAC prompt). Blocks until the prompt is answered, so call it off the UI thread.
-    // Returns null when elevation was declined.
-    public static Process? StartCaptureProxy(string proxyPath, string syncDir)
+    // Starts the proxy elevated (one UAC prompt), sealing what it captures for steamAccount. Blocks until the prompt is
+    // answered, so call it off the UI thread. Returns null when elevation was declined.
+    public static Process? StartCaptureProxy(string proxyPath, string syncDir, string snapshotDir, ulong steamAccount)
     {
         Directory.CreateDirectory(syncDir);
         return StartElevated(proxyPath, [
             "--timeout-min", TimeoutMinutes.ToString(CultureInfo.InvariantCulture),
             "--output", Path.Combine(syncDir, InventoryFile),
             "--progression", Path.Combine(syncDir, ProgressionFile),
-            "--evidence", syncDir]);
+            "--evidence", syncDir,
+            "--seal-key", SealKeyFor(snapshotDir),
+            "--steam-account", steamAccount.ToString(CultureInfo.InvariantCulture)]);
     }
 
     // Removes a leftover hosts line and CA (one UAC prompt). Null when elevation was declined.
@@ -126,47 +135,24 @@ public static class InventorySync
     public static void OpenVanillaGame() =>
         Process.Start(new ProcessStartInfo("steam://rungameid/553850") { UseShellExecute = true })?.Dispose();
 
-    // After the proxy exits with success: moves its files into the snapshot folder and writes the metadata.
-    // Returns null on success, or what went wrong. A previous snapshot is replaced only by a complete new inventory.
+    // After the proxy exits with success: moves its sealed files into the snapshot folder and writes the metadata.
+    // Returns null on success, or what went wrong. A previous snapshot is replaced only by a complete, sealed new one.
     public static string? FinalizeCapture(string syncDir, string snapshotDir)
     {
-        var inventory = Path.Combine(syncDir, InventoryFile);
-        if (!File.Exists(inventory)) return "The capture finished without an inventory.";
-        int items;
-        try
-        {
-            using var doc = JsonDocument.Parse(File.ReadAllText(inventory));
-            if (!doc.RootElement.TryGetProperty("items", out var list) || list.ValueKind != JsonValueKind.Array)
-                return "The captured inventory has no items list.";
-            items = list.GetArrayLength();
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return "Could not read the captured inventory: " + error.Message;
-        }
-        var progression = Path.Combine(syncDir, ProgressionFile);
-        long? experience = null;
-        if (File.Exists(progression))
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(File.ReadAllText(progression));
-                if (doc.RootElement.ValueKind != JsonValueKind.Object) return "The captured progression is not an object.";
-                if (doc.RootElement.TryGetProperty("experience", out var xp) && xp.ValueKind == JsonValueKind.Number && xp.TryGetInt64(out var value)) experience = value;
-            }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
-            {
-                return "Could not read the captured progression: " + error.Message;
-            }
-        }
+        if (ReadInventory(Path.Combine(syncDir, InventoryFile), out var items) is { } inventoryProblem) return inventoryProblem;
+        if (ReadProgression(Path.Combine(syncDir, ProgressionFile), out var experience) is { } progressionProblem) return progressionProblem;
+        if (SnapshotSeal.Verify(syncDir, SealKeyFor(snapshotDir)) == null) return "The capture is not sealed for this PC. Sync again.";
         try
         {
             Directory.CreateDirectory(snapshotDir);
-            File.Move(inventory, Path.Combine(snapshotDir, InventoryFile), overwrite: true);
-            // Progression from an earlier capture must not stay beside a newer inventory.
-            var snapshotProgression = Path.Combine(snapshotDir, ProgressionFile);
-            if (File.Exists(progression)) File.Move(progression, snapshotProgression, overwrite: true);
-            else File.Delete(snapshotProgression);
+            // A file from an earlier capture must not stay beside newer ones: progression may be missing from this one.
+            foreach (var file in new[] { InventoryFile, ProgressionFile, SnapshotSeal.FileName })
+            {
+                var from = Path.Combine(syncDir, file);
+                var to = Path.Combine(snapshotDir, file);
+                if (File.Exists(from)) File.Move(from, to, overwrite: true);
+                else File.Delete(to);
+            }
             var metadata = new JsonObject
             {
                 ["capturedUtc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
@@ -179,6 +165,42 @@ public static class InventorySync
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             return "Could not save the snapshot: " + error.Message;
+        }
+    }
+
+    static string? ReadInventory(string path, out int items)
+    {
+        items = 0;
+        if (!File.Exists(path)) return "The capture finished without an inventory.";
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (!doc.RootElement.TryGetProperty("items", out var list) || list.ValueKind != JsonValueKind.Array)
+                return "The captured inventory has no items list.";
+            items = list.GetArrayLength();
+            return null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return "Could not read the captured inventory: " + error.Message;
+        }
+    }
+
+    // Progression is optional: a capture may end with the inventory alone.
+    static string? ReadProgression(string path, out long? experience)
+    {
+        experience = null;
+        if (!File.Exists(path)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return "The captured progression is not an object.";
+            if (doc.RootElement.TryGetProperty("experience", out var xp) && xp.ValueKind == JsonValueKind.Number && xp.TryGetInt64(out var value)) experience = value;
+            return null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return "Could not read the captured progression: " + error.Message;
         }
     }
 }

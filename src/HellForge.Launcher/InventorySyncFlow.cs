@@ -6,11 +6,13 @@ using HellForge.Core;
 namespace HellForge.Launcher;
 
 // Profile > Account sync (HellForge.Core InventorySync): runs the elevated capture proxy, opens the normal game through Steam
-// once the proxy listens, and saves the player's inventory and progression as the profile's snapshot, which the backend
-// applies on every Play. Polled with the rest of the window, once a second, only while a sync runs.
+// once the proxy listens, and saves the player's sealed inventory and progression as the profile's snapshot. The backend
+// takes premium ownership from it on every Play; the rest is imported as the player chooses (AccountImportFlow). Polled
+// with the rest of the window, once a second, only while a sync runs.
 public partial class MainWindow
 {
     Process? syncProxy;
+    LocalProfile? syncProfile;
     string? syncDir, syncSnapshotDir;
     bool syncGameOpened, syncStarting;
 
@@ -20,6 +22,7 @@ public partial class MainWindow
     {
         SyncCard.IsVisible = InventorySync.FindCaptureProxy(paths.InstallRoot) != null;
         SyncButton.Click += async (_, _) => await StartSync();
+        InitializeAccountImport();
         UpdateSyncStatus();
     }
 
@@ -30,6 +33,7 @@ public partial class MainWindow
         SyncDetailText.Text = info == null ? "No snapshot yet. Sync to copy your real inventory into this profile."
             : "Last synced " + (info.CapturedUtc?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "at an unknown time") +
               $": {info.Items:N0} items, " + (info.Experience is { } xp ? $"{xp:N0} XP." : "no progression captured.");
+        UpdateImportControls();
         if (SyncBusy) return;
         var leftover = InventorySync.HasLeftoverRedirect();
         SyncButton.Content = leftover ? "Clean up" : "Sync Inventory";
@@ -50,25 +54,21 @@ public partial class MainWindow
             await CleanUpSync(proxy);
             return;
         }
-        if (runner.IsRunning)
+        if (SyncRefusal(out var account) is { } refusal)
         {
-            SetSyncStatus("Stop the HellForge session first.", Orange);
-            return;
-        }
-        if (InventorySync.IsGameRunning())
-        {
-            SetSyncStatus("Close HELLDIVERS 2 first: the sync reads its next login.", Orange);
+            SetSyncStatus(refusal, Orange);
             return;
         }
         var install = new InstallLayout(paths.InstallRoot);
-        var snapshot = InventorySync.SnapshotDirectory(install.Root, Selected.Name);
+        var profile = Selected;
+        var snapshot = InventorySync.SnapshotDirectory(install.Root, profile.Name);
         var folder = Path.Combine(install.Logs, "sync-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
         syncStarting = true;
         SyncButton.IsEnabled = false;
         SetSyncStatus("Waiting for the administrator prompt...", Gold);
         Process? started = null;
         string? failure = null;
-        try { started = await Task.Run(() => InventorySync.StartCaptureProxy(proxy, folder)); }
+        try { started = await Task.Run(() => InventorySync.StartCaptureProxy(proxy, folder, snapshot, account)); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { failure = error.Message; }
         syncStarting = false;
         if (started == null)
@@ -77,14 +77,25 @@ public partial class MainWindow
             SetSyncStatus(failure ?? "Sync cancelled: it needs the administrator prompt.", failure != null ? Red : Orange);
             return;
         }
-        (syncProxy, syncDir, syncSnapshotDir, syncGameOpened) = (started, folder, snapshot, false);
+        (syncProxy, syncProfile, syncDir, syncSnapshotDir, syncGameOpened) = (started, profile, folder, snapshot, false);
         SetSyncStatus("Starting the capture...", Gold);
-        Append("Inventory sync: capture started for profile " + Selected.Name + ". HELLDIVERS 2 opens through Steam; take it past the title screen.", LauncherLine);
+        Append("Inventory sync: capture started for profile " + profile.Name + ". HELLDIVERS 2 opens through Steam; take it past the title screen.", LauncherLine);
+    }
+
+    // Why a sync cannot start now; null with the signed-in Steam account it will be sealed for.
+    string? SyncRefusal(out ulong account)
+    {
+        account = 0;
+        if (runner.IsRunning) return "Stop the HellForge session first.";
+        if (InventorySync.IsGameRunning()) return "Close HELLDIVERS 2 first: the sync reads its next login.";
+        if (SteamAccount.Current() is not { } signedIn) return "Sign in to Steam first: the sync is sealed for your Steam account.";
+        account = signedIn;
+        return null;
     }
 
     void RefreshSync()
     {
-        if (syncProxy == null || syncDir == null || syncSnapshotDir == null) return;
+        if (syncProxy == null || syncProfile == null || syncDir == null || syncSnapshotDir == null) return;
         if (!syncProxy.HasExited)
         {
             if (!syncGameOpened && InventorySync.IsListening(syncDir)) OpenGameForSync();
@@ -97,18 +108,19 @@ public partial class MainWindow
         var error = exitCode == 0 ? InventorySync.FinalizeCapture(syncDir, syncSnapshotDir)
             : syncGameOpened ? $"Nothing was captured within {InventorySync.TimeoutMinutes} minutes. Close the game and sync again."
             : "The capture could not start: see " + Path.Combine(syncDir, "proxy.log") + ".";
+        var synced = syncProfile;
+        (syncProfile, syncDir, syncSnapshotDir) = (null, null, null);
+        UpdateSyncStatus();
         if (error == null)
         {
-            SetSyncStatus("Synced. The inventory and progression apply on the next Play.", Green);
-            Append("Inventory sync complete: " + syncSnapshotDir, LauncherLine);
+            Append("Inventory sync complete for profile " + synced.Name + ".", LauncherLine);
+            _ = AfterCaptureAsync(synced);
         }
         else
         {
             SetSyncStatus(error, Red);
             Append("Inventory sync failed: " + error, Red);
         }
-        (syncDir, syncSnapshotDir) = (null, null);
-        UpdateSyncStatus();
     }
 
     void OpenGameForSync()

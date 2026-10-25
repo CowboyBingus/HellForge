@@ -3,83 +3,83 @@ using System.Text.Json.Nodes;
 
 namespace HellForge.LocalBackend;
 
-// Filters paid content from profile inventory responses.
-//
-// Without a real inventory (offline mode): all paid items are removed from served profiles.
-// With a real inventory (the player's own, from the launcher's Sync Inventory snapshot): only paid items
-// the player actually owns are kept; paid items not in the real inventory are removed.
-//
-// Items that are not in the paid set pass through unfiltered in both modes.
+// Which items a profile's /Progression/inventory may serve (PaidContentSet says what is paid):
+// - Super Credits never.
+// - paid items (premium warbond tokens, Superstore items) only when the verified account snapshot holds them. Those it
+//   holds are served even when the profile lacks them, so premium ownership always follows the latest sync, whatever
+//   the player chose to import.
+// - a premium warbond's items only when one of its tokens is owned.
+// Everything else passes through. Without a verified snapshot no paid item is served.
 public sealed class OwnershipFilter
 {
-    readonly HashSet<uint>? realInventory;
+    readonly Dictionary<uint, JsonObject> owned = [];
 
-    public OwnershipFilter(PaidContentSet paid, HashSet<uint>? realInventory)
+    public OwnershipFilter(PaidContentSet paid, IEnumerable<JsonObject>? snapshotItems)
     {
         Paid = paid;
-        this.realInventory = realInventory;
+        HasRealInventory = snapshotItems != null;
+        foreach (var item in snapshotItems ?? [])
+            if (MixId(item) is { } id && paid.IsPaid(id)) owned[id] = (JsonObject)item.DeepClone();
     }
 
     public PaidContentSet Paid { get; }
-    public int PaidCount => Paid.MixIds.Count;
 
-    // True when the filter was built with a captured real inventory.
-    public bool HasRealInventory => realInventory != null;
+    // True when the filter was built from a verified account snapshot.
+    public bool HasRealInventory { get; }
 
-    // Whether a given item should be included in a served profile.
+    // The paid items the snapshot holds.
+    public int OwnedPaidCount => owned.Count;
+
     public bool IsAllowed(uint mixId)
     {
-        if (!Paid.IsPaid(mixId))
-            return true;
-        if (realInventory == null)
-            return false;
-        return realInventory.Contains(mixId);
+        if (PaidContentSet.IsSuperCredits(mixId)) return false;
+        if (Paid.IsPaid(mixId)) return owned.ContainsKey(mixId);
+        return !Paid.TryGetWarbondTokens(mixId, out var tokens) || tokens.Any(owned.ContainsKey);
     }
 
-    // Filter a template's items array: returns a new array with disallowed items removed.
-    public JsonArray FilterItems(JsonArray items)
-    {
-        var filtered = new JsonArray();
-        foreach (var item in items)
-        {
-            if (item is not JsonObject obj) continue;
-            if (obj["mixId"] is not JsonNode mixNode) { filtered.Add(item.DeepClone()); continue; }
-            var mixId = (uint)long.Parse(mixNode.ToJsonString(), System.Globalization.CultureInfo.InvariantCulture);
-            if (IsAllowed(mixId))
-                filtered.Add(item.DeepClone());
-        }
-        return filtered;
-    }
-
-    // Filter an inventory section (the "items" array inside the inventory object).
+    // The inventory section as served: disallowed items removed, owned paid items the profile lacks added.
     public JsonElement FilterInventoryResponse(JsonElement inventorySection)
     {
         var node = JsonNode.Parse(inventorySection.GetRawText())!.AsObject();
-        if (node["items"] is JsonArray items)
-            node["items"] = FilterItems(items);
+        var served = new JsonArray();
+        var present = new HashSet<uint>();
+        foreach (var item in node["items"] as JsonArray ?? [])
+        {
+            if (item is not JsonObject entry) continue;
+            if (MixId(entry) is { } id)
+            {
+                if (!IsAllowed(id)) continue;
+                present.Add(id);
+            }
+            served.Add(entry.DeepClone());
+        }
+        foreach (var (id, item) in owned)
+            if (!present.Contains(id)) served.Add(item.DeepClone());
+        node["items"] = served;
         return JsonSerializer.SerializeToElement(node, BackendJson.Default.JsonNode);
     }
 
-    // Load a real inventory from a JSON file: an array of objects with "mixId" fields,
-    // as the real backend's /Progression/inventory response serves them.
-    public static HashSet<uint> LoadRealInventory(string path)
+    // Without a filter (a profile served with no ownership rules, as in tests), Super Credits still never leave.
+    public static JsonElement WithoutSuperCredits(JsonElement inventorySection)
     {
-        var text = File.ReadAllText(path);
-        using var document = JsonDocument.Parse(text);
-        return ParseRealInventory(document.RootElement);
+        var node = JsonNode.Parse(inventorySection.GetRawText())!.AsObject();
+        if (node["items"] is not JsonArray items) return inventorySection;
+        foreach (var item in items.OfType<JsonObject>().Where(i => MixId(i) is { } id && PaidContentSet.IsSuperCredits(id)).ToList())
+            items.Remove(item);
+        return JsonSerializer.SerializeToElement(node, BackendJson.Default.JsonNode);
     }
 
-    // Parse a real inventory from a JSON element: accepts either the full inventory response
-    // ({"items": [...]}) or a bare items array ([...]).
-    public static HashSet<uint> ParseRealInventory(JsonElement element)
+    // The filter for a profile's snapshot folder: ownership only from a snapshot that is sealed on this PC for steamAccount.
+    // problem says why there is none.
+    public static OwnershipFilter ForSnapshot(PaidContentSet paid, string? snapshotDir, ulong? steamAccount, out string? problem)
     {
-        var owned = new HashSet<uint>();
-        var items = element.ValueKind == JsonValueKind.Object && element.TryGetProperty("items", out var arr)
-            ? arr : element;
-        if (items.ValueKind != JsonValueKind.Array) return owned;
-        foreach (var item in items.EnumerateArray())
-            if (item.TryGetProperty("mixId", out var mix) && mix.TryGetUInt32(out var id))
-                owned.Add(id);
-        return owned;
+        problem = null;
+        if (snapshotDir == null || !HellForge.Core.InventorySync.HasSnapshot(snapshotDir)) return new OwnershipFilter(paid, null);
+        using var snapshot = AccountSnapshot.Open(snapshotDir, steamAccount, out problem);
+        return new OwnershipFilter(paid, snapshot?.Items());
     }
+
+    static uint? MixId(JsonObject item) =>
+        item["mixId"] is JsonValue value && value.GetValueKind() == JsonValueKind.Number && uint.TryParse(value.ToJsonString(),
+            System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : null;
 }
