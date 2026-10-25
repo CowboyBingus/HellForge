@@ -1,6 +1,6 @@
 # HellForge roadmap
 
-What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-24 for HellForge 0.3.0-dev.10.
+What HellForge can do today, what is being tested, and what comes after. Updated 2026-10-25 for HellForge 0.3.0-dev.11.
 Nothing here has a date, and stability comes first.
 
 ## At a glance
@@ -41,7 +41,7 @@ subfactions, custom missions, and mod content in progression. The [SDK roadmap](
 The rest of this page goes through each item. Contributors will find more detail in [engine-roadmap.md](engine-roadmap.md)
 (session runner, local backend, mod loader, stand-ins) and [sdk-roadmap.md](sdk-roadmap.md) (the mod SDK).
 
-Versions: HellForge 0.3.0-dev.10, engine 0.1.38, mod SDK 15.
+Versions: HellForge 0.3.0-dev.11, engine 0.1.39, mod SDK 15.
 
 ## Done in 0.2.0-beta
 
