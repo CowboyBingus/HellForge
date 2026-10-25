@@ -217,32 +217,14 @@ async Task Handle(TcpClient client)
     }
     try
     {
-        if (await ReadRequest(ssl) is not var (method, target, headers, body)) return;
-        var path = target.Split('?')[0];
-        using var upstream = new HttpRequestMessage(new HttpMethod(method), $"https://{host}{target}");
-        foreach (var (name, value) in headers)
-            if (name is not ("Host" or "Connection" or "Content-Length" or "Content-Type" or "Transfer-Encoding" or "Accept-Encoding" or "Expect" or "Proxy-Connection" or "Upgrade" or "TE"))
-                upstream.Headers.TryAddWithoutValidation(name, value);
-        if (body.Length > 0 || method is "POST" or "PUT")
-        {
-            upstream.Content = new ByteArrayContent(body);
-            if (headers.TryGetValue("Content-Type", out var contentType)) upstream.Content.Headers.TryAddWithoutValidation("Content-Type", contentType);
-        }
+        if (await ReadRequest(ssl) is not { } request) return;
+        var path = request.Target.Split('?')[0];
+        using var upstream = Forward(request);
         using var response = await http.SendAsync(upstream);
         var responseBody = await response.Content.ReadAsByteArrayAsync();
-        Log($"{method} {Shorten(path)} {(int)response.StatusCode} {responseBody.Length} bytes");
+        Log($"{request.Method} {Shorten(path)} {(int)response.StatusCode} {responseBody.Length} bytes");
         if (response.IsSuccessStatusCode) await Capture(path, responseBody);
-
-        var head = new StringBuilder($"HTTP/1.1 {(int)response.StatusCode} {response.ReasonPhrase}\r\n");
-        foreach (var header in response.Headers.Concat(response.Content.Headers))
-        {
-            if (header.Key is "Transfer-Encoding" or "Connection" or "Keep-Alive" or "Content-Length" or "Content-Encoding") continue;
-            foreach (var value in header.Value) head.Append(header.Key).Append(": ").Append(value).Append("\r\n");
-        }
-        head.Append("Content-Length: ").Append(responseBody.Length).Append("\r\nConnection: close\r\n\r\n");
-        await ssl.WriteAsync(Encoding.ASCII.GetBytes(head.ToString()));
-        await ssl.WriteAsync(responseBody);
-        await ssl.FlushAsync();
+        await Respond(ssl, response, responseBody);
     }
     catch (Exception error) when (error is IOException or HttpRequestException or TaskCanceledException or InvalidOperationException or FormatException)
     {
@@ -253,6 +235,31 @@ async Task Handle(TcpClient client)
         // Only once this response is on its way, so the game's login completes before the redirect goes.
         if (Volatile.Read(ref captured) == 1) stop.Cancel();
     }
+}
+
+// The game's request as it was, to the real API (hop-by-hop headers left out).
+HttpRequestMessage Forward((string Method, string Target, Dictionary<string, string> Headers, byte[] Body) request)
+{
+    var upstream = new HttpRequestMessage(new HttpMethod(request.Method), $"https://{host}{request.Target}");
+    foreach (var (name, value) in request.Headers)
+        if (name is not ("Host" or "Connection" or "Content-Length" or "Content-Type" or "Transfer-Encoding" or "Accept-Encoding" or "Expect" or "Proxy-Connection" or "Upgrade" or "TE"))
+            upstream.Headers.TryAddWithoutValidation(name, value);
+    if (request.Body.Length == 0 && request.Method is not ("POST" or "PUT")) return upstream;
+    upstream.Content = new ByteArrayContent(request.Body);
+    if (request.Headers.TryGetValue("Content-Type", out var contentType)) upstream.Content.Headers.TryAddWithoutValidation("Content-Type", contentType);
+    return upstream;
+}
+
+static async Task Respond(SslStream ssl, HttpResponseMessage response, byte[] body)
+{
+    var head = new StringBuilder($"HTTP/1.1 {(int)response.StatusCode} {response.ReasonPhrase}\r\n");
+    foreach (var (name, values) in response.Headers.Concat(response.Content.Headers))
+        if (name is not ("Transfer-Encoding" or "Connection" or "Keep-Alive" or "Content-Length" or "Content-Encoding"))
+            foreach (var value in values) head.Append(name).Append(": ").Append(value).Append("\r\n");
+    head.Append("Content-Length: ").Append(body.Length).Append("\r\nConnection: close\r\n\r\n");
+    await ssl.WriteAsync(Encoding.ASCII.GetBytes(head.ToString()));
+    await ssl.WriteAsync(body);
+    await ssl.FlushAsync();
 }
 
 // A failure here is logged and never keeps the response from the game.
@@ -343,42 +350,61 @@ static string Shorten(string path)
         : "/" + string.Join('/', segments.Take(2)) + (segments.Length > 2 ? "/..." : "");
 }
 
+// One HTTP/1.1 request (no chunked bodies, which the game does not send; bodies up to 1 MiB).
 static async Task<(string Method, string Target, Dictionary<string, string> Headers, byte[] Body)?> ReadRequest(SslStream ssl)
 {
     var buffer = new MemoryStream();
-    var chunk = new byte[8192];
-    var headerEnd = -1;
-    while (headerEnd < 0 && buffer.Length < 65536)
-    {
-        var n = await ssl.ReadAsync(chunk);
-        if (n == 0) return null;
-        buffer.Write(chunk, 0, n);
-        headerEnd = buffer.GetBuffer().AsSpan(0, (int)buffer.Length).IndexOf("\r\n\r\n"u8);
-    }
+    var headerEnd = await ReadHead(ssl, buffer);
     if (headerEnd < 0) return null;
     var lines = Encoding.ASCII.GetString(buffer.GetBuffer(), 0, headerEnd).Split("\r\n");
     var first = lines[0].Split(' ');
-    if (first.Length < 3) return null;
+    var headers = ParseHeaders(lines.Skip(1));
+    if (first.Length < 3 || headers.ContainsKey("Transfer-Encoding")) return null;
+    if (headers.TryGetValue("Expect", out var expect) && expect.Contains("100-continue", StringComparison.OrdinalIgnoreCase))
+        await ssl.WriteAsync("HTTP/1.1 100 Continue\r\n\r\n"u8.ToArray());
+    var length = headers.TryGetValue("Content-Length", out var text) && int.TryParse(text, out var parsed) && parsed is >= 0 and <= 1 << 20 ? parsed : 0;
+    return (first[0], first[1], headers, await ReadBody(ssl, buffer, headerEnd + 4, length));
+}
+
+// Reads until the blank line after the headers; its offset, or -1 when the client stopped or sent 64 KiB without one.
+static async Task<int> ReadHead(SslStream ssl, MemoryStream buffer)
+{
+    var chunk = new byte[8192];
+    while (buffer.Length < 65536)
+    {
+        var n = await ssl.ReadAsync(chunk);
+        if (n == 0) return -1;
+        buffer.Write(chunk, 0, n);
+        var end = buffer.GetBuffer().AsSpan(0, (int)buffer.Length).IndexOf("\r\n\r\n"u8);
+        if (end >= 0) return end;
+    }
+    return -1;
+}
+
+static Dictionary<string, string> ParseHeaders(IEnumerable<string> lines)
+{
     var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    foreach (var line in lines.Skip(1))
+    foreach (var line in lines)
     {
         var colon = line.IndexOf(':');
         if (colon > 0) headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
     }
-    if (headers.ContainsKey("Transfer-Encoding")) return null;
-    if (headers.TryGetValue("Expect", out var expect) && expect.Contains("100-continue", StringComparison.OrdinalIgnoreCase))
-        await ssl.WriteAsync("HTTP/1.1 100 Continue\r\n\r\n"u8.ToArray());
-    var length = headers.TryGetValue("Content-Length", out var text) && int.TryParse(text, out var parsed) && parsed is >= 0 and <= 1 << 20 ? parsed : 0;
+    return headers;
+}
+
+// The body: what arrived with the headers, then the rest from the stream.
+static async Task<byte[]> ReadBody(SslStream ssl, MemoryStream buffer, int start, int length)
+{
     var body = new byte[length];
-    var read = Math.Min((int)buffer.Length - (headerEnd + 4), length);
-    Array.Copy(buffer.GetBuffer(), headerEnd + 4, body, 0, read);
+    var read = Math.Min((int)buffer.Length - start, length);
+    Array.Copy(buffer.GetBuffer(), start, body, 0, read);
     while (read < length)
     {
         var n = await ssl.ReadAsync(body.AsMemory(read, length - read));
         if (n == 0) break;
         read += n;
     }
-    return (first[0], first[1], headers, body);
+    return body;
 }
 
 void Log(string message)
