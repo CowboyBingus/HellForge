@@ -907,6 +907,52 @@ void ApplyRow(const Row* row, double value)
 
 int PendingCount() { return (int)g_pending.size(); }
 
+/* A field's value once the changes are applied: the saved one, else what the game holds. */
+double Effective(const Row* row)
+{
+    double v;
+    if (localstats::Get(row->category, row->target, row->key, &v)) return v;
+    const LiveState& s = Live(row, true);
+    return s.read ? s.now : 0;
+}
+
+/* Added rates (rate slots X and Z, ProjectileWeapon +4 / +12) are selectable only while an input is bound to rate of
+ * fire (WeaponData +184 / +188 = 2: the press dispatcher reaches the rate cycle only for it, game.dll 0x75541F; the
+ * cycle skips empty slots, 0x617A0B; HD2Mods research\coop-weapon-stats). Filling X or Z binds a free input with them;
+ * emptying both takes that binding off again, unless the weapon has it itself. Returns what it says to the player. */
+std::string BindRateInput(const Row* rate)
+{
+    auto entry = [&](const char* key) { return g_catalog.Entry(rate->category, rate->target, key); };
+    const Row *x = entry("fire_rate.modes.x"), *y = entry("weapon.fire_rate"), *z = entry("fire_rate.modes.z");
+    const Row* inputs[2] = {entry("weapon_function.left"), entry("weapon_function.right")};
+    double xv = x ? Effective(x) : 0, zv = z ? Effective(z) : 0;
+    bool added = xv != 0 || zv != 0;
+    const Row *bound = nullptr, *free = nullptr;
+    for (const Row* input : inputs)
+    {
+        if (input == nullptr) continue;
+        double v = Effective(input);
+        if (v == 2) bound = input;
+        else if (v == 0 && free == nullptr && input->OptionOf(2)) free = input;
+    }
+    if (!added)
+    {
+        if (bound != nullptr && Live(bound, true).base != 2) { ResetRow(bound); return bound->label + " is back to its own: no added rates"; }
+        return "";
+    }
+    std::string said;
+    if (bound == nullptr)
+    {
+        if (free == nullptr) return "Both inputs are in use: the added rates of fire can't be selected";
+        ApplyRow(free, 2);
+        said = free->label + " set to Rate of fire, so the added rates can be selected (from the next respawn)";
+    }
+    double yv = y ? Effective(y) : 0;
+    if ((xv != 0 && (xv == yv || xv == zv)) || (zv != 0 && zv == yv))
+        said += std::string(said.empty() ? "" : "; ") + "two rates of fire are the same, so a press may seem to do nothing";
+    return said;
+}
+
 void Apply()
 {
     if (RefuseLocked()) return;
@@ -923,10 +969,16 @@ void Apply()
     };
     std::stable_sort(pending.begin(), pending.end(), [&](auto& a, auto& b) { return rank(a) < rank(b); });
     for (auto& p : pending) { if (p.second.reset) ResetRow(p.first); else ApplyRow(p.first, p.second.value); }
+    std::string rates;
+    std::set<std::string> weapons;
+    for (auto& p : pending)
+        if ((p.first->key == "fire_rate.modes.x" || p.first->key == "fire_rate.modes.z") && weapons.insert(p.first->category + "/" + p.first->target).second)
+            if (std::string said = BindRateInput(p.first); !said.empty()) rates = said;
     g_markVersion++;
     g_host.saveSoon(800);
     Sound(sounds::APPLY);
-    Toast(g_errors.empty() ? (std::to_string(n) + (n == 1 ? " change applied" : " changes applied") + " and saved to Local Stats") :
+    if (!rates.empty() && g_errors.empty()) Toast(rates, PENDING);
+    else Toast(g_errors.empty() ? (std::to_string(n) + (n == 1 ? " change applied" : " changes applied") + " and saved to Local Stats") :
         std::to_string(g_errors.size()) + " refused: see the ERRORS badge", g_errors.empty() ? OK : ERROR_);
 }
 
