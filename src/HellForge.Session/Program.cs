@@ -35,6 +35,7 @@ string? gameOptions = null;
 for (var i = 1; i < args.Length; i++)
 {
     string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
+    static bool YesNo(string value, string name) => value switch { "yes" => true, "no" => false, _ => throw new ArgumentException(name + " takes yes or no.") };
     switch (args[i])
     {
         case "--install": options.Install = Value(); break;
@@ -43,6 +44,8 @@ for (var i = 1; i < args.Length; i++)
         case "--live-war": options.LiveWar = Value(); break;
         case "--open-war": options.OpenWar = true; break;
         case "--war-seed": options.WarSeed = uint.Parse(Value(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture); break;
+        case "--war-subfactions": options.DealSubfactions = YesNo(Value(), "--war-subfactions"); break;
+        case "--war-seaf": options.DealSeaf = YesNo(Value(), "--war-seaf"); break;
         case "--local-playfab": options.LocalPlayFab = true; break;
         case "--multiplayer": options.Multiplayer = true; break;
         case "--engine-log": options.EngineLog = true; break;
@@ -78,7 +81,9 @@ sealed class PlayOptions
     public string? Template { get; set; }
     public string? LiveWar { get; set; }
     public bool OpenWar { get; set; } /* the all-planets war (backend --war open) */
-    public uint WarSeed { get; set; } /* its subfaction seed (backend --war-seed; 0 the default layout) */
+    public uint WarSeed { get; set; } /* its seed for subfactions and SEAF allies (backend --war-seed) */
+    public bool DealSubfactions { get; set; } = true; /* deal its subfactions from the seed (backend --war-subfactions) */
+    public bool DealSeaf { get; set; } = true; /* deal its SEAF allies from the seed (backend --war-seaf) */
     public bool LocalPlayFab { get; set; }
     public bool Multiplayer { get; set; }
     public bool EngineLog { get; set; }
