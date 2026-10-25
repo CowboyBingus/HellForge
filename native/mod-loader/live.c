@@ -576,6 +576,13 @@ static void LiveRequest(char* line, char* reply, size_t size)
         else snprintf(reply, size, "%s	refused	%s", seq, why);
         return;
     }
+    if (!strcmp(f[0], "rounds") && n == 3)
+    {
+        const char* why = NULL;
+        if (RoundsSetLobby(f[2], &why)) snprintf(reply, size, "%s	ok	now", seq);
+        else snprintf(reply, size, "%s	refused	%s", seq, why);
+        return;
+    }
     if (!strcmp(f[0], "notice") && n >= 4)
     {
         SetNotice(f + 2, n - 2);
@@ -754,6 +761,7 @@ static DWORD WINAPI LiveWatch(void* parameter)
         SetSession(HF_SESSION_SOLO, HF_STATS_OWN, ""); /* the backend is gone: nothing tells this game it is joined */
         const char* none;
         ShotsSetRules("-", &none); /* nor whose swaps friends' shots fire */
+        RoundsSetLobby("-", &none); /* nor their edited rounds */
         SyncClear();
     }
 }

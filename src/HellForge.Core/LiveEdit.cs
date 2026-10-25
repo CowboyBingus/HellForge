@@ -135,6 +135,10 @@ public sealed class LiveEditServer : IAsyncDisposable
     // "<peer hex>:<weapon resource hex>=<type>" comma separated, "-" none.
     public Task<LiveResult> ShotsAsync(string rules) => SendAsync("shots", rules);
 
+    // Each player's changes of projectile and damage rows, which the game's copies of their shots fly and hit with
+    // (native/mod-loader/rounds.c): "<peer hex>=<entry>;<entry>..." comma separated, "-" none (AssetShare.Rounds).
+    public Task<LiveResult> RoundsAsync(string list) => SendAsync("rounds", list);
+
     // A "packages" or "preload" list: package ids, 16 hex digits each, comma separated, "-" none. Null when malformed.
     public static SortedSet<ulong>? Packages(string list, int max)
     {

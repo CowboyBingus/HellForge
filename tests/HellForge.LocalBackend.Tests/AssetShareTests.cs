@@ -7,7 +7,8 @@ using HellForge.LocalBackend.Multiplayer;
 // Assets in co-op, end to end: a host and two joiners over the in-memory network, each game a fake mod loader on its
 // live-edit pipe that says which packages it holds ("packages") and records what it is asked to load ("preload"). Every
 // game loads the lobby's packages less its own, again when a player's change; malformed lists are dropped. Each player's
-// projectile swaps (from their Local Stats) reach every game, by their peer ("shots").
+// projectile swaps (from their Local Stats) reach every game, by their peer ("shots"), and so do their changes of
+// projectile and damage rows ("rounds").
 static class AssetShareTests
 {
     const ulong HostId = 0x110000100000021, FirstId = 0x110000100000022, SecondId = 0x110000100000023;
@@ -15,7 +16,7 @@ static class AssetShareTests
 
     sealed class Game : IAsyncDisposable
     {
-        public readonly BlockingCollection<string> Preloads = new(), Shots = new();
+        public readonly BlockingCollection<string> Preloads = new(), Shots = new(), Rounds = new();
         readonly BlockingCollection<string> outgoing = new();
         readonly CancellationTokenSource stop = new();
         readonly Task running;
@@ -61,6 +62,7 @@ static class AssetShareTests
                         var parts = line.Split('\t');
                         if (parts[0] == "preload") Preloads.Add(parts[2]);
                         if (parts[0] == "shots") Shots.Add(parts[2]);
+                        if (parts[0] == "rounds") Rounds.Add(parts[2]);
                         await Write(parts[1] + "\tok\tnow");
                     }
                 }
@@ -73,6 +75,7 @@ static class AssetShareTests
         // The last list it was asked to load within the time, waiting until it equals `want` (or the time runs out).
         public string WaitFor(string want) => Wait(Preloads, want);
         public string WaitForShots(string want) => Wait(Shots, want);
+        public string WaitForRounds(string want) => Wait(Rounds, want);
         static string Wait(BlockingCollection<string> lines, string want)
         {
             var last = "";
@@ -154,7 +157,12 @@ static class AssetShareTests
         var functions = AssetShare.Swaps(function);
         check(functions.Split(',') is [var normal, var programmable] && normal.EndsWith("=142", StringComparison.Ordinal) &&
             programmable == normal[..normal.IndexOf('=')] + "=150/f", "A programmable round's projectile swap: " + functions);
-        await using var first = new Machine(network, FirstId, root, "first", P2, log, swap);
+        // round changes: the Liberator's armour penetration (its damage row 108, +0x0C) and velocity (its projectile row 276,
+        // +0x20: 900 m/s), damage rows first; a swap is not one, nor is a whole-entity record
+        const string changed = """{"format":1,"weapons":{"AR/GL-21 One-Two":{"attack.primary.projectile":142},"AR-23 Liberator":{"ammunition.projectile":142,"damage.ap_direct":4,"projectile.velocity":900}}}""";
+        check(AssetShare.Rounds(changed) == "D108+c=4;P276+20=44610000" && AssetShare.Rounds(swap) == "-" && AssetShare.Rounds(null) == "-",
+            "A player's changes of projectile and damage rows from their Local Stats: " + AssetShare.Rounds(changed));
+        await using var first = new Machine(network, FirstId, root, "first", P2, log, changed);
         await using var second = new Machine(network, SecondId, root, "second", "-", log);
 
         // Alone, nothing is asked of any game.
@@ -179,6 +187,11 @@ static class AssetShareTests
         var hostShots = host.Game.WaitForShots(rule);
         var secondShots = second.Game.WaitForShots(rule);
         check(hostShots == rule && secondShots == rule, "Joined: the first joiner's projectile swap reaches the others' games: " + hostShots + " | " + secondShots);
+        // ... and their round changes, by their peer: the others' copies of their shots fly and hit with them
+        var changes = first16 + "=D108+c=4;P276+20=44610000";
+        var hostRounds = host.Game.WaitForRounds(changes);
+        var secondRounds = second.Game.WaitForRounds(changes);
+        check(hostRounds == changes && secondRounds == changes, "Joined: the first joiner's round changes reach the others' games: " + hostRounds + " | " + secondRounds);
 
         // The first joiner applies a change that needs another package: it reaches every other game.
         first.Game.Hold(P2 + "," + P3);
