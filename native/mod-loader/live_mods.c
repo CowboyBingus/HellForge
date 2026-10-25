@@ -10,6 +10,8 @@
  *   modreplace <seq> <txn> <mod id> <kinds> <hash16> <folder> <dll or ->
  *   modstat    <seq> <txn> <mod id> <kind> <component> <resource> <record> <offset> <storage> <value> <expect> <own>
  *              <shared> <unverified> <label>          a plan's stat line after "stat", for a mod added or replaced
+ *   modnet     <seq> <txn> <mod id> <name> <kind> <expect bits> <expect min> <bits>   a networkFieldTypes entry of a mod added
+ *              or replaced (nettypes.c)
  *   modremove  <seq> <txn> <mod id>
  *   modcommit  <seq> <txn>
  *   modabort   <seq> <txn>
@@ -48,6 +50,8 @@ typedef struct TxnMod
     int applied, refused, failed;
 } TxnMod;
 typedef struct TxnStat { StatEdit edit; int mod; uintptr_t at; } TxnStat;
+#define TXN_NETS 128
+typedef struct TxnNet { int mod; char name[64]; uint8_t kind, expectBits; int32_t min, bits; } TxnNet;
 /* A field the change touched: where, its size, what it held before any stats mod (known 0: a deferred edit holds it,
  * and keeps no original), and the difficulty row it is in (every copy of that row follows it: DifficultyMirror). */
 typedef struct TxnField { uintptr_t at; uint32_t size, bottom; int known; uintptr_t difficultyRow; } TxnField;
@@ -67,6 +71,8 @@ static struct
     int statCount, statCapacity;
     TxnField* fields;
     int fieldCount, fieldCapacity;
+    TxnNet nets[TXN_NETS];
+    int netCount;
     int ordersBefore[MAX_MODS]; /* the mods' order before the change, put back when it is refused */
 } g_txn;
 /* A retired stat entry's mod: never loaded, so every pass skips the entry. */
@@ -115,7 +121,7 @@ static void TxnReset(void)
 {
     g_txn.open = 0;
     g_txn.id[0] = 0;
-    g_txn.orderCount = g_txn.modCount = g_txn.statCount = g_txn.fieldCount = 0;
+    g_txn.orderCount = g_txn.modCount = g_txn.statCount = g_txn.fieldCount = g_txn.netCount = 0;
 }
 
 static void LiveModsAbort(const char* why)
@@ -179,7 +185,6 @@ static const char* TxnModCheck(TxnMod* t, char* why, size_t size)
     if (t->action != TXN_ADD && ModRunsCode(t->old) && CodeRemovable(t->old, why, size) != NULL) return why;
     if ((t->kinds & TXN_CODE) && !(t->kinds & TXN_LIVE))
     { snprintf(why, size, "capability\t%s runs code that does not declare \"live\": true, which changes at the next session", t->id); return why; }
-    if (t->kinds & TXN_NET) { snprintf(why, size, "capability\t%s changes network field types, which change at the next session", t->id); return why; }
     if (t->kinds & TXN_DATA) { snprintf(why, size, "capability\t%s changes game data, which changes at the next session", t->id); return why; }
     const char* own = present ? TxnStatsOwn(t->old) : NULL;
     if (own != NULL) { snprintf(why, size, "capability\t%s: %s", t->id, own); return why; }
@@ -380,6 +385,21 @@ static void TxnApplyMods(void)
     }
 }
 
+/* Network field types: the asks of the mods taken out or replaced go, the change's modnet asks come (their mods' new
+ * entries), and every type either names takes its new width (nettypes.c). */
+static void TxnNetApply(void)
+{
+    for (int i = 0; i < g_txn.modCount; i++) if (g_txn.mods[i].action != TXN_ADD && g_txn.mods[i].old != NULL) NetForget(g_txn.mods[i].old);
+    AcquireSRWLockExclusive(&g_netLock);
+    for (int i = 0; i < g_txn.netCount; i++)
+    {
+        const TxnNet* n = &g_txn.nets[i];
+        if (g_txn.mods[n->mod].mod != NULL) NetKeep(g_txn.mods[n->mod].mod, n->name, n->kind, n->expectBits, n->min, n->bits);
+    }
+    for (int i = 0; i < g_txn.netCount; i++) NetApply(g_txn.nets[i].name);
+    ReleaseSRWLockExclusive(&g_netLock);
+}
+
 /* The change's results for the backend, and the change done. refused: "<reason>\t<why>", or NULL when it was made. */
 static void TxnFinish(const char* refused)
 {
@@ -428,6 +448,7 @@ static const char* TxnMake(char* why, size_t size)
     TxnStatsApply();
     ReleaseSRWLockExclusive(&g_statsLock);
     ReleaseSRWLockExclusive(&g_fieldsLock);
+    TxnNetApply();
     int order[TXN_MODS], count = 0;
     TxnCodeOrder(order, &count);
     for (int k = 0; k < count; k++) CodeReplay(g_txn.mods[order[k]].mod);
@@ -537,6 +558,23 @@ static void TxnStatLine(char** f, int n, char* reply, size_t size)
     snprintf(reply, size, "%s\tok\tnow", f[1]);
 }
 
+/* modnet: f[3] the mod, then the type's name, kind, expected width and minimum, and the width it asks. */
+static void TxnNetLine(char** f, int n, char* reply, size_t size)
+{
+    TxnMod* t = n == 9 ? TxnFind(f[3]) : NULL;
+    char* end = "";
+    long kind = t ? strtol(f[5], &end, 10) : -1, expect = *end ? -1 : strtol(f[6], &end, 10), min = *end ? 0 : strtol(f[7], &end, 10),
+        bits = *end ? -1 : strtol(f[8], &end, 10);
+    if (t == NULL || t->action == TXN_REMOVE || !(t->kinds & TXN_NET) || *end || kind < 0 || kind > 255 || expect < 0 || expect > 32 ||
+        strlen(f[4]) >= sizeof g_txn.nets[0].name || NetAskRefused((uint8_t)kind, (uint8_t)expect, (int32_t)bits) != NULL)
+    { TxnRefuse(reply, size, f[1], "malformed", "modnet"); return; }
+    if (g_txn.netCount == TXN_NETS) { TxnRefuse(reply, size, f[1], "capacity", "a change holds 128 network field types at most"); return; }
+    TxnNet* net = &g_txn.nets[g_txn.netCount++];
+    *net = (TxnNet){(int)(t - g_txn.mods), "", (uint8_t)kind, (uint8_t)expect, (int32_t)min, (int32_t)bits};
+    snprintf(net->name, sizeof net->name, "%s", f[4]);
+    snprintf(reply, size, "%s\tok\tnow", f[1]);
+}
+
 /* One of the change's lines (its verb starts with "mod"): 1 when it was one, with the reply written. */
 static int LiveModsRequest(char* line, char* reply, size_t size)
 {
@@ -547,8 +585,9 @@ static int LiveModsRequest(char* line, char* reply, size_t size)
     if (n < 3) return 0;
     const char *verb = f[0], *seq = f[1], *txn = f[2];
     int begin = !strcmp(verb, "modbegin"), order = !strcmp(verb, "modorder"), stat = !strcmp(verb, "modstat"), commit = !strcmp(verb, "modcommit"),
-        abort = !strcmp(verb, "modabort"), mod = !strcmp(verb, "modadd") || !strcmp(verb, "modreplace") || !strcmp(verb, "modremove");
-    if (!(begin || order || stat || commit || abort || mod)) return 0;
+        abort = !strcmp(verb, "modabort"), mod = !strcmp(verb, "modadd") || !strcmp(verb, "modreplace") || !strcmp(verb, "modremove"),
+        net = !strcmp(verb, "modnet");
+    if (!(begin || order || stat || commit || abort || mod || net)) return 0;
     if (g_txn.committing) { snprintf(reply, size, "%s\trefused\tbusy\tchange %s is being made", seq, g_txn.id); return 1; }
     if (begin) { TxnBeginLine(f, n, reply, size); return 1; }
     if (!g_txn.open || strcmp(txn, g_txn.id)) { snprintf(reply, size, "%s\trefused\tmalformed\tno change %s is under way", seq, txn); return 1; }
@@ -556,6 +595,7 @@ static int LiveModsRequest(char* line, char* reply, size_t size)
     if (commit) TxnCommit(seq, reply, size);
     else if (order) TxnOrderLine(f, n, reply, size);
     else if (mod) TxnModLine(verb, f, n, reply, size);
+    else if (net) TxnNetLine(f, n, reply, size);
     else TxnStatLine(f, n, reply, size);
     return 1;
 }

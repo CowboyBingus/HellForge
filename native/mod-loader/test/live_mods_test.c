@@ -425,3 +425,72 @@ static void EditsForgetFixture(void)
     g_modCount = mods;
     InterlockedExchange(&g_fired[HF_EVENT_ENTITIES_READY], entities);
 }
+
+/* Network field types in the loader (nettypes.c): a plan's ask applied once the configuration loads, the widest of the
+ * loaded mods' asks winning; a live change adding a wider ask, taking it out (back to the plan's), replacing a mod's
+ * ask; an ask whose expectation is not the game's type leaves it alone. */
+static void NetTypesFixture(void)
+{
+    HMODULE game = LoadLibraryW(L"fake_game.dll");
+    assert(game != NULL);
+    void* volatile* holder = (void* volatile*)(void*)GetProcAddress(game, "hellforge_fake_network_holder");
+    uint8_t rows[2 * 0x18] = {0}, config[0x20] = {0};
+    uint32_t hashes[2] = {(uint32_t)(Murmur64A("deposit_value", 13) >> 32), (uint32_t)(Murmur64A("other_value", 11) >> 32)};
+    for (int i = 0; i < 2; i++) { memcpy(rows + i * 0x18, &hashes[i], 4); rows[i * 0x18 + 12] = 1; rows[i * 0x18 + 13] = i ? 8 : 10; }
+    *(uint32_t*)(config + 0x10) = 2;
+    *(uint8_t**)(config + 0x18) = rows;
+    void* cell = config;
+    void* holderBefore = *holder;
+    *holder = &cell;
+    char module[64];
+    uint32_t rva = g_networkRva;
+    memcpy(module, g_networkModule, sizeof module);
+    snprintf(g_networkModule, sizeof g_networkModule, "fake_game.dll");
+    g_networkRva = (uint32_t)((uintptr_t)holder - (uintptr_t)game);
+    int asks = g_netAskCount, types = g_netTypeCount, mods = g_modCount;
+    LONG fired[HF_EVENT_MODS_CHANGED + 1];
+    for (int event = 0; event <= HF_EVENT_MODS_CHANGED; event++) { fired[event] = g_fired[event]; if (event >= 1 && event <= 4) InterlockedExchange(&g_fired[event], 1); }
+
+    /* the plan's ask (mod a), and one that expects another type (left alone) */
+    char l1[] = "nettype\ta\tdeposit_value\t1\t10\t0\t14", l2[] = "nettype\ta\tother_value\t1\t9\t0\t12", *f[8];
+    assert(!NetParse(f, Split(l1, f, 8)) && !NetParse(f, Split(l2, f, 8)));
+    NetApplyAll();
+    assert(rows[13] == 14 && rows[0x18 + 13] == 8);
+
+    g_liveGameState = TxnFixtureGameState;
+    g_livePlayers = TxnFixturePlayers;
+    g_txnInline = 1;
+    AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 1; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
+    char reply[512], sent[2048];
+    const char* add[] = {"modbegin\t1\tn1\tsolo\tx", "modorder\t2\tn1\t0\ta", "modorder\t3\tn1\t1\tb", "modorder\t4\tn1\t2\tnet.wide",
+        "modadd\t5\tn1\tnet.wide\tnet\t0123456789abcdef\tC:\\mods\\wide\t-", "modnet\t6\tn1\tnet.wide\tdeposit_value\t1\t10\t0\t16", "modcommit\t7\tn1"};
+    TxnRun(add, 7, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    assert(strstr(sent, "modresult\tn1\tok\n") && rows[13] == 16);
+    const char* replace[] = {"modbegin\t8\tn2\tsolo\tx", "modorder\t9\tn2\t0\ta", "modorder\t10\tn2\t1\tb", "modorder\t11\tn2\t2\tnet.wide",
+        "modreplace\t12\tn2\tnet.wide\tnet\tfedcba9876543210\tC:\\mods\\wide\t-", "modnet\t13\tn2\tnet.wide\tdeposit_value\t1\t10\t0\t15", "modcommit\t14\tn2"};
+    TxnRun(replace, 7, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    assert(strstr(sent, "modresult\tn2\tok\n") && rows[13] == 15);
+    const char* remove[] = {"modbegin\t15\tn3\tsolo\tx", "modorder\t16\tn3\t0\ta", "modorder\t17\tn3\t1\tb", "modremove\t18\tn3\tnet.wide", "modcommit\t19\tn3"};
+    TxnRun(remove, 5, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    assert(strstr(sent, "modresult\tn3\tok\n") && rows[13] == 14); /* back to the plan's ask */
+    TxnSend("modbegin\t20\tn4\tsolo\tx", reply, sizeof reply);
+    TxnSend("modadd\t21\tn4\tnet.bad\tnet\t0123456789abcdef\tC:\\mods\\bad\t-", reply, sizeof reply);
+    TxnSend("modnet\t22\tn4\tnet.bad\tdeposit_value\t1\t10\t0\t40", reply, sizeof reply); /* past 31 bits */
+    assert(TxnRefused(reply, "malformed") && rows[13] == 14);
+    printf("  network field types: the plan's ask at network ready, the widest wins, live wider, replaced and taken out, 2 refusals\n");
+
+    AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 0; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
+    g_liveGameState = LiveGameState;
+    g_livePlayers = LivePlayers;
+    g_txnInline = 0;
+    for (int event = 0; event <= HF_EVENT_MODS_CHANGED; event++) InterlockedExchange(&g_fired[event], fired[event]);
+    g_netAskCount = asks;
+    g_netTypeCount = types;
+    g_modCount = mods;
+    memcpy(g_networkModule, module, sizeof module);
+    g_networkRva = rva;
+    *holder = holderBefore;
+}

@@ -391,6 +391,7 @@ static int CodeRemove(HfMod* mod, uint32_t reason)
     int kept = 0, reverted = JournalRevert(mod, &kept);
     EditsForget(mod);
     ExtrasForget(mod);
+    NetForget(mod);
     AcquireSRWLockExclusive(&g_passivesLock);
     int passives = g_passivesMod == mod;
     ReleaseSRWLockExclusive(&g_passivesLock);

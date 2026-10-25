@@ -9,7 +9,9 @@
  *   network_config <module> <rva hex>       ([[module+rva]] is the engine's network configuration)
  *   entity_region <size> <map header hex>
  *   component <name> <offset> <header hex> <index> <indices> <records> <record offset> <stride>
- *   mod <id> <folder> <dll> */
+ *   mod <id> <folder> <dll> [live]           (live: SDK 16, it may be taken out while the game runs)
+ *   stat <mod id> ...                       (stats.c)
+ *   nettype <mod id> <name> <kind> <expect bits> <expect min> <bits>   (a mod's networkFieldTypes: nettypes.c) */
 #define WIN32_LEAN_AND_MEAN
 #define HF_MOD_LOADER
 #include <windows.h>
@@ -528,19 +530,7 @@ static int ApiNetworkFieldType(const char* name, HfFieldType* type)
     return 0;
 }
 
-static int ApiSetNetworkFieldBits(HfMod* mod, const char* name, HfFieldType expect, int32_t bits)
-{
-    HfFieldType current;
-    if (ApiNetworkFieldType(name, &current)) { ApiLog(mod, "network field type %s: not found", name); return 1; }
-    if (expect.kind != 1 || bits <= expect.bits || bits > 31 || current.kind != expect.kind || current.min != expect.min)
-    { ApiLog(mod, "network field type %s left alone: only an integer type can be widened, to at most 31 bits", name); return 1; }
-    if (current.bits == bits) return 0;
-    if (current.bits != expect.bits) { ApiLog(mod, "network field type %s left alone: %d bits, expected %d", name, current.bits, expect.bits); return 1; }
-    uint8_t value = (uint8_t)bits;
-    if (ApiWrite(FindFieldType(name) + 13, &value, 1)) return 1;
-    ApiLog(mod, "network field type %s: %d -> %d bits", name, expect.bits, bits);
-    return 0;
-}
+#include "nettypes.c" /* what mods ask of the field types: the plan's nettype lines, set_network_field_bits, live changes */
 
 /* ---- entity component records ----------------------------------------------------------------------------------- */
 
@@ -880,7 +870,13 @@ static DWORD WINAPI Watch(void* parameter)
         if (g_fired[HF_EVENT_ENTITIES_READY]) StatsPerksReady();
         uintptr_t rows;
         uint32_t count;
-        if (!g_fired[HF_EVENT_NETWORK_READY] && !FieldTypes(&rows, &count)) { Note("network configuration ready (%u field types)", count); RegisterNetworkTypes(); Fire(HF_EVENT_NETWORK_READY); }
+        if (!g_fired[HF_EVENT_NETWORK_READY] && !FieldTypes(&rows, &count))
+        {
+            Note("network configuration ready (%u field types)", count);
+            RegisterNetworkTypes();
+            NetApplyAll(); /* the mods' networkFieldTypes (nettypes.c) */
+            Fire(HF_EVENT_NETWORK_READY);
+        }
         ULONGLONG elapsed = GetTickCount64() - started;
         static ULONGLONG lastRegionCheck;
         if (g_regionSize != 0 && (g_region == 0 || elapsed - lastRegionCheck > 1000))
@@ -978,6 +974,7 @@ static int ReadPlan(const wchar_t* path)
         char* f[16];
         int n = Split(line, f, 16);
         if (n > 0 && !strcmp(f[0], "stat")) { if (StatsParse(f, n)) { free(text); return 1; } continue; }
+        if (n > 0 && !strcmp(f[0], "nettype")) { if (NetParse(f, n)) { free(text); return 1; } continue; }
         /* an observation only feeds the editors' values: one that cannot be read is skipped, not the session's mods */
         if (n > 0 && !strcmp(f[0], "observe")) { if (StatsParseProbe(f, n)) g_statsProbesSkipped++; continue; }
         if (n == 2 && !strcmp(f[0], "stats_schema"))
