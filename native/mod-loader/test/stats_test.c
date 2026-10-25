@@ -1454,6 +1454,12 @@ static void LiveFixture(void)
     strcpy(line, "notice	19	brief	FRIEND TWO couldn't join	Their gameplay mods don't match yours.");
     LiveRequest(line, reply, sizeof reply); ApiNotice(NULL, &notice);
     assert(notice.version == 3 && notice.kind == HF_NOTICE_BRIEF && !strcmp(notice.text, "Their gameplay mods don't match yours."));
+    /* the live pipe is named after the run folder: the log folder, or, sandboxed, the run of its game folder */
+    wchar_t pipe[MAX_PATH];
+    assert(LivePipePath(L"C:\\HellForge\\logs\\sessions\\0123abcd", pipe, MAX_PATH) && !wcscmp(pipe, L"\\\\.\\pipe\\hellforge-live-0123abcd"));
+    assert(LivePipePath(L"C:\\HellForge\\logs\\sessions\\0123abcd\\game", pipe, MAX_PATH) && !wcscmp(pipe, L"\\\\.\\pipe\\hellforge-live-0123abcd"));
+    assert(LivePipePath(L"C:\\HellForge\\logs\\sessions\\0123abcd\\Game", pipe, MAX_PATH) && !wcscmp(pipe, L"\\\\.\\pipe\\hellforge-live-0123abcd"));
+    assert(!LivePipePath(L"game", pipe, MAX_PATH) && !LivePipePath(L"C:\\HellForge\\", pipe, MAX_PATH));
 
     for (int i = 0; i < g_fakeRecordCount; i++) free(g_fakeRecords[i].bytes);
     g_fakeRecordCount = g_componentCount = g_editCount = 0;
