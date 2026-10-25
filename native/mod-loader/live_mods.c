@@ -31,8 +31,10 @@
  * boot's events have all fired. One change at a time.
  *
  * Order of a commit: checks; a stat line naming another row waits for its packages; added and replaced code mods are set
- * up (a failure, or a refusal after it, takes them out again: live_code.c); the gate again; code mods taken out; the
- * stats layer (live_stats.c); the set-ups' load events; HF_EVENT_MODS_CHANGED to every mod. */
+ * up (a failure, or a refusal after it, takes them out again: live_code.c), what they register numbered as a boot of the
+ * change's mods would (live_content.c); the gate again and every number checked; the content installed (one freeze,
+ * one step on the game's thread); code mods taken out; the stats layer (live_stats.c); the set-ups' load events;
+ * HF_EVENT_MODS_CHANGED to every mod. */
 
 #include "live_code.c"  /* code mods set up and taken out (SDK 16) */
 #include "live_data.c"  /* game data: hot packages and overrides */
@@ -182,6 +184,8 @@ static unsigned TxnKinds(const char* text)
 }
 
 #include "live_stats.c" /* the stats layer: stat lines added, removed and replaced in load order */
+#include "live_content.c" /* numbered content: registered, numbered, installed and made owned; tombstones */
+#include "live_registry.c" /* weapons and entities */
 
 /* Why the session cannot take this mod's part of the change ("<reason>\t<why>" in why), or NULL. */
 static const char* TxnModCheck(TxnMod* t, char* why, size_t size)
@@ -344,9 +348,10 @@ static const char* TxnCodeStage(char* why, size_t size)
     return NULL;
 }
 
-/* A refused change: the code mods it set up are taken out again, the order put back. */
+/* A refused change: the code mods it set up are taken out again, what they registered with them, the order put back. */
 static void TxnUnstage(void)
 {
+    LiveContentUnstage();
     for (int i = 0; i < g_txn.modCount; i++)
     {
         TxnMod* t = &g_txn.mods[i];
@@ -446,17 +451,35 @@ static void TxnFinish(const char* refused)
     InterlockedExchange(&g_txn.committing, 0);
 }
 
-/* The gate again and the stats layer's checks, under both locks, then (when they pass) the parts that change the game:
- * code mods taken out, the stats layer, the set-ups' load events, HF_EVENT_MODS_CHANGED. */
+/* Stat lines whose field was not found: those naming an entity the change registered find it now. */
+static void TxnStatsResolve(void)
+{
+    for (int i = 0; i < g_txn.statCount; i++)
+    {
+        TxnStat* s = &g_txn.stats[i];
+        int later = 0;
+        const char* refused = NULL;
+        if (s->at == 0) s->at = TxnStatAddress(&s->edit, &later, &refused);
+    }
+}
+
+/* The gate again, the stats layer's checks and the content's numbers, under both locks, then (when they pass) the parts
+ * that change the game: the content, code mods taken out, the stats layer, the set-ups' load events,
+ * HF_EVENT_MODS_CHANGED. */
 static const char* TxnMake(char* why, size_t size)
 {
     AcquireSRWLockExclusive(&g_fieldsLock);
     AcquireSRWLockExclusive(&g_statsLock);
     const char* refused = TxnGate(); /* again: a friend may have joined meanwhile */
     if (refused == NULL) refused = TxnStatsCheck(why, size);
+    if (refused == NULL) refused = LiveNumbersCheck(why, size);
     ReleaseSRWLockExclusive(&g_statsLock);
     ReleaseSRWLockExclusive(&g_fieldsLock);
     if (refused != NULL) return refused;
+    int contentFailed = 0;
+    if ((refused = LiveContentMake(why, size, &contentFailed)) != NULL) return refused;
+    for (int i = 0; i < g_txn.modCount && contentFailed; i++) g_txn.mods[i].failed = 1;
+    TxnStatsResolve();
     TxnCodeRemove();
     AcquireSRWLockExclusive(&g_fieldsLock);
     AcquireSRWLockExclusive(&g_statsLock);
@@ -479,6 +502,7 @@ static DWORD WINAPI TxnWorker(void* parameter)
     (void)parameter;
     char why[512];
     const char* refused = TxnCheck(why, sizeof why);
+    if (refused == NULL) refused = LiveContentBegin(why, sizeof why);
     if (refused == NULL) refused = TxnStatsPrepare(why, sizeof why);
     if (refused == NULL) refused = HotPrepare(g_txn.data, g_txn.dataCount, g_txn.res, g_txn.resCount, why, sizeof why);
     if (refused == NULL) refused = TxnCodeStage(why, sizeof why);

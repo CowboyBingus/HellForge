@@ -118,6 +118,15 @@ static volatile LONG g_fireCount;
 static HfMod* g_liveSetup;
 /* A mod being taken out by a live change: what it asks to add is refused (live_code.c). */
 static int ModGone(const HfMod* mod) { return mod != NULL && mod->removing; }
+/* Numbered content a live set-up registers (live_content.c): the kinds numbered in call order, where a registration's
+ * entry goes (the array's next one, or a stand-in for the entry of a mod the change takes out; NULL when the change's
+ * numbering refuses it), and which entries a mod taken out left (tomb) or the change takes out (gone). */
+enum { LC_STRATAGEM, LC_PROJECTILE, LC_DAMAGE, LC_BEHAVIOUR, LC_ABILITY, LC_KINDS, LC_WEAPON = LC_KINDS }; /* weapons: tombs only */
+static void* LiveEntry(int kind, HfMod* mod, const char* name, uint32_t* index);
+static int LiveTomb(int kind, uint32_t index);
+static int LiveGone(int kind, uint32_t index);
+/* Where content installs write game memory: ApiWrite at boot, a live change's batch (live_content.c LivePut). */
+typedef int (*PutFn)(uintptr_t address, const void* bytes, size_t size);
 static uintptr_t g_region;
 static SRWLOCK g_lock = SRWLOCK_INIT;
 static int g_hooksReady;
@@ -1037,9 +1046,9 @@ static int ReadPlan(const wchar_t* path)
 }
 
 #include "live.c"
-#include "lua_bridge.c"
-#include "live_mods.c" /* after lua_bridge.c: it adds mods under the bridge's lock */
 #include "netapply.c" /* after live.c: the co-op role */
+#include "lua_bridge.c"
+#include "live_mods.c" /* after lua_bridge.c: it adds mods under the bridge's lock; after netapply.c: live weapons extend its switch */
 #include "netreap.c"
 #include "coop_diag.c" /* after live.c: the co-op role */
 

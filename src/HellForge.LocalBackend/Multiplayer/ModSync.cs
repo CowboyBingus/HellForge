@@ -912,7 +912,7 @@ public sealed class LiveSyncDisplay(LiveEditServer live) : ISyncDisplay
                     if (!(await live.SyncModAsync(view.Version, i, ModSyncPlan.ActionName(item.Action), ModSets.ClassName(item.Mod.Class), item.Mod.Bytes, item.Mod.Id,
                             item.Mod.Name, item.Mod.Version, item.Mod.Url)).Ok) return false;
                 }
-            return (await live.SyncStateAsync(view.Version, view.State, view.Host, view.Bytes, view.Done, items.Count, view.Live, message)).Ok;
+            return (await live.SyncStateAsync(new SyncStateLine(view.Version, view.State, view.Host, view.Bytes, view.Done, items.Count, view.Live, message))).Ok;
         }
         finally { order.Release(); }
     }

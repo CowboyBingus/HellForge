@@ -2731,9 +2731,9 @@ static void SetupOrderFixture(void)
 /* The behaviour stubs against a synthetic game (behaviours.c InstallBehaviours): every pinned function and dispatch site
  * as reviewed, then the resume stub run. A HellForge behaviour resumes as its base does (the transport as 667: its
  * flight target re-sent on other machines), any other id takes the switch's default. */
-static void BehaviourStubsFixture(void)
+/* A synthetic game for the behaviour stubs: every pinned function and dispatch site as reviewed. */
+static uint8_t* BehaviourGame(size_t size)
 {
-    size_t size = 0x1000000;
     uint8_t* game = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     assert(game);
     for (int f = 0; f < F_COUNT; f++) memcpy(game + kBhvFunctions[f].rva, kBhvFunctions[f].pin, 32);
@@ -2745,14 +2745,14 @@ static void BehaviourStubsFixture(void)
     }
     memcpy(game + kBhvSites[S_RESUME].ja - 6, kBhvResumePin, sizeof kBhvResumePin);
     memcpy(game + BHV_RESUME_SWITCH, kBhvResumeSwitchPin, sizeof kBhvResumeSwitchPin);
-    HfMod* mod = &g_mods[0];
-    g_behaviourCount = 0; g_behaviourState = 0;
-    HfBehaviour transport = {sizeof transport}, turret = {sizeof turret};
-    transport.base = HF_BEHAVIOUR_PELICAN_TRANSPORT;
-    turret.base = HF_BEHAVIOUR_PELICAN_TURRET;
-    assert(ApiAddBehaviour(mod, &transport) == BHV_FIRST && ApiAddBehaviour(mod, &turret) == BHV_FIRST + 1);
-    assert(InstallBehaviours((uintptr_t)game) == 1 && g_behaviourState == 1);
-    /* the switch, resume's end and the branch's own target, after the pins were checked: each answers what it was given */
+    return game;
+}
+
+/* Once the stubs are in: resume's switch, its end and the branch's own target answer what they were given, and the
+ * patched branch is resume as the game would call it. */
+typedef int (*ResumeFn)(void* ctx, uint32_t index);
+static ResumeFn BehaviourResume(uint8_t* game)
+{
     static const uint8_t cases[] = {0x89, 0xD0, 0xC3};                          /* mov eax, edx; ret */
     static const uint8_t none[] = {0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0xC3};          /* mov eax, -1; ret */
     static const uint8_t onward[] = {0xB8, 0xFE, 0xFF, 0xFF, 0xFF, 0xC3};        /* mov eax, -2; ret */
@@ -2761,13 +2761,26 @@ static void BehaviourStubsFixture(void)
     memcpy(game + kBhvSites[S_RESUME].target, onward, sizeof onward);
     int32_t rel;
     memcpy(&rel, game + kBhvSites[S_RESUME].ja + 2, 4);
-    typedef int (*ResumeFn)(void* ctx, uint32_t index);
-    ResumeFn resume = (ResumeFn)(game + kBhvSites[S_RESUME].ja + 6 + rel);
+    return (ResumeFn)(game + kBhvSites[S_RESUME].ja + 6 + rel);
+}
+
+static void BehaviourStubsFixture(void)
+{
+    size_t size = 0x1000000;
+    uint8_t* game = BehaviourGame(size);
+    HfMod* mod = &g_mods[0];
+    g_behaviourCount = 0; g_behaviourState = 0;
+    HfBehaviour transport = {sizeof transport}, turret = {sizeof turret};
+    transport.base = HF_BEHAVIOUR_PELICAN_TRANSPORT;
+    turret.base = HF_BEHAVIOUR_PELICAN_TURRET;
+    assert(ApiAddBehaviour(mod, &transport) == BHV_FIRST && ApiAddBehaviour(mod, &turret) == BHV_FIRST + 1);
+    assert(InstallBehaviours((uintptr_t)game) == 1 && g_behaviourState == 1);
+    ResumeFn resume = BehaviourResume(game);
     assert((uint8_t*)resume < game || (uint8_t*)resume >= game + size); /* patched into HellForge's block */
     assert(resume(NULL, BHV_FIRST) == (int)(BHV_PELICAN_TRANSPORT - BHV_RESUME_FIRST));   /* 694 resumes as 667 */
     assert(resume(NULL, BHV_FIRST + 1) == (int)(BHV_PELICAN_TURRET - BHV_RESUME_FIRST)); /* 695 as 645 */
     assert(resume(NULL, BHV_FIRST + 2) == -2 && resume(NULL, 300) == -2 && resume(NULL, BHV_PELICAN_TRANSPORT) == -2); /* every other id as before */
-    g_behaviourCount = 0; g_behaviourState = 0; g_bhvGame = 0;
+    g_behaviourCount = 0; g_behaviourState = 0; g_bhvGame = 0; g_bhvBlock = NULL;
     VirtualFree(game, 0, MEM_RELEASE);
 }
 
@@ -3144,6 +3157,7 @@ static void HookChainFixture(void)
 }
 
 #include "live_mods_test.c" /* after the helpers it shares (Edit, FixtureLoad) */
+#include "live_content_test.c" /* after live_mods_test.c and the behaviour and registry helpers */
 
 int main(int argc, char** argv)
 {
@@ -3160,6 +3174,9 @@ int main(int argc, char** argv)
     EditsForgetFixture();
     NetTypesFixture();
     HotDataFixture();
+    ContentNumbersFixture();
+    ContentInstallFixture();
+    ContentWeaponsFixture();
     LuaBridgeFixture();
     ActionsFixture();
     PassivesFixture();
@@ -3193,6 +3210,7 @@ int main(int argc, char** argv)
     WeaponOrderFixture();
     SetupOrderFixture();
     BehaviourStubsFixture();
+    ContentBehaviourFixture();
     ExtraFixtures();
     MeleeFixture();
     Component* c = &g_components[0]; g_componentCount = 1;

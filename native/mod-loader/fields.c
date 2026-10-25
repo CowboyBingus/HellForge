@@ -1105,17 +1105,28 @@ static int ApiEditEntity(HfMod* mod, const HfEditDef* def)
     return QueueChanges(mod, def->entity, &ch, carried, mounts) ? 1 : 0;
 }
 
-/* SDK 7: the index-th piece of mod content: stratagems, then entities, projectiles and damage, in the order added. A
- * stratagem without editor entities of its own lists each payload entity a mod added, for the entity it copies. */
+/* The entry of a kind's list that is the index-th one a mod taken out did not leave (live_content.c), or count when
+ * there is none; *index is then what is left of it for the next kind. */
+static uint32_t ContentAt(int kind, uint32_t count, uint32_t* index)
+{
+    for (uint32_t i = 0; i < count; i++)
+        if (!LiveTomb(kind, i) && (*index)-- == 0) return i;
+    return count;
+}
+
+/* SDK 7: the index-th piece of mod content: stratagems, then entities, projectiles and damage, in the order added (what
+ * a mod taken out added is left out). A stratagem without editor entities of its own lists each payload entity a mod
+ * added, for the entity it copies. */
 static int ApiContent(HfMod* mod, uint32_t index, HfContent* out)
 {
     if (out == NULL || out->size < offsetof(HfContent, editor_entities) + sizeof out->editor_entities) return 0;
     uint32_t size = out->size;
     HfContent c = {0};
     #define GIVE() (memcpy(out, &c, size < sizeof c ? size : sizeof c), 1) /* no more than the caller's struct holds */
-    if (index < g_stratagemCount)
+    uint32_t at = ContentAt(LC_STRATAGEM, g_stratagemCount, &index);
+    if (at < g_stratagemCount)
     {
-        Stratagem* s = &g_stratagems[index];
+        Stratagem* s = &g_stratagems[at];
         if (s->editorEntities[0].entity == 0)
             for (uint32_t p = 0, n = 0; p < s->payloadCount && n < STR_MAX_PAYLOAD; p++)
                 for (int i = 0; i < g_weaponCount; i++)
@@ -1125,25 +1136,23 @@ static int ApiContent(HfMod* mod, uint32_t index, HfContent* out)
             s->title[0] ? s->title : NULL, s->iconName[0] ? s->iconName : NULL, s->editorLike, s->editorEntities, NULL, s->category};
         return GIVE();
     }
-    index -= g_stratagemCount;
     for (int i = 0; i < g_weaponCount; i++)
-        if (g_weapons[i].plain && g_weapons[i].state != -1 && index-- == 0)
+        if (g_weapons[i].plain && g_weapons[i].state != -1 && g_weapons[i].state != 2 && !LiveTomb(LC_WEAPON, (uint32_t)i) && index-- == 0)
         {
             Weapon* w = &g_weapons[i];
             c = (HfContent){size, HF_KIND_ENTITY, w->entity, w->baseEntity, 0, w->mod->id, w->mod->folder, w->name,
                 w->title[0] ? w->title : NULL, NULL, 0, NULL, w->designation[0] ? w->designation : NULL};
             return GIVE();
         }
-    if (index < g_projectileCount)
+    if ((at = ContentAt(LC_PROJECTILE, g_projectileCount, &index)) < g_projectileCount)
     {
-        Projectile* p = &g_projectiles[index];
+        Projectile* p = &g_projectiles[at];
         c = (HfContent){size, HF_KIND_PROJECTILE, p->type, p->base, p->damage, p->mod->id, p->mod->folder, p->name, NULL, NULL, 0, NULL};
         return GIVE();
     }
-    index -= g_projectileCount;
-    if (index < g_damageCount)
+    if ((at = ContentAt(LC_DAMAGE, g_damageCount, &index)) < g_damageCount)
     {
-        Damage* d = &g_damages[index];
+        Damage* d = &g_damages[at];
         c = (HfContent){size, HF_KIND_DAMAGE, d->id, d->base, 0, d->mod->id, d->mod->folder, d->name, NULL, NULL, 0, NULL};
         return GIVE();
     }
@@ -1161,19 +1170,21 @@ static uint64_t ApiFind(uint32_t kind, const char* name)
     switch (kind)
     {
     case HF_KIND_ENTITY:
-        for (int i = 0; i < g_weaponCount; i++) if (g_weapons[i].state != -1 && !strcmp(g_weapons[i].name, name)) return g_weapons[i].entity;
+        for (int i = 0; i < g_weaponCount; i++)
+            if (g_weapons[i].state != -1 && !LiveTomb(LC_WEAPON, (uint32_t)i) && !strcmp(g_weapons[i].name, name)) return g_weapons[i].entity;
         break;
     case HF_KIND_ITEM:
-        for (int i = 0; i < g_weaponCount; i++) if (!g_weapons[i].plain && g_weapons[i].state != -1 && !strcmp(g_weapons[i].name, name)) return g_weapons[i].id;
+        for (int i = 0; i < g_weaponCount; i++)
+            if (!g_weapons[i].plain && g_weapons[i].state != -1 && !LiveTomb(LC_WEAPON, (uint32_t)i) && !strcmp(g_weapons[i].name, name)) return g_weapons[i].id;
         break;
     case HF_KIND_STRATAGEM:
-        for (uint32_t i = 0; i < g_stratagemCount; i++) if (!strcmp(g_stratagems[i].name, name)) return g_stratagems[i].type;
+        for (uint32_t i = 0; i < g_stratagemCount; i++) if (!LiveTomb(LC_STRATAGEM, i) && !strcmp(g_stratagems[i].name, name)) return g_stratagems[i].type;
         break;
     case HF_KIND_PROJECTILE:
-        for (uint32_t i = 0; i < g_projectileCount; i++) if (!strcmp(g_projectiles[i].name, name)) return g_projectiles[i].type;
+        for (uint32_t i = 0; i < g_projectileCount; i++) if (!LiveTomb(LC_PROJECTILE, i) && !strcmp(g_projectiles[i].name, name)) return g_projectiles[i].type;
         break;
     case HF_KIND_DAMAGE:
-        for (uint32_t i = 0; i < g_damageCount; i++) if (!strcmp(g_damages[i].name, name)) return g_damages[i].id;
+        for (uint32_t i = 0; i < g_damageCount; i++) if (!LiveTomb(LC_DAMAGE, i) && !strcmp(g_damages[i].name, name)) return g_damages[i].id;
         break;
     }
     return 0;

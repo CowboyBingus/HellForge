@@ -22,6 +22,11 @@ public sealed record LiveApplies(string When, bool Verified)
     } + (Verified ? "" : " (expected)");
 }
 
+// Mod sync's state for the in-game editor (LiveEditServer.SyncStateAsync): the offer's version, its state word, the host,
+// the download's bytes and how many are done, the offer's mods, and the message. Live: answering "restart" changes the
+// running game's mods instead of restarting it (HF_SYNC_LIVE, SDK 16).
+public readonly record struct SyncStateLine(int Version, string State, string Host, long Bytes, long Done, int Mods, bool Live, string Message);
+
 public sealed record LiveResult(bool Ok, string Detail, uint? Bits = null)
 {
     public static readonly LiveResult NotConnected = new(false, "the game is not connected");
@@ -164,9 +169,9 @@ public sealed class LiveEditServer : IAsyncDisposable
     public Task<LiveResult> SyncModAsync(int version, int index, string action, string modClass, long bytes, string id, string name, string modVersion, string? url = null) =>
         SendAsync("syncmod", string.Join('\t', Invariant(version), Invariant(index), action, modClass, Invariant(bytes), Field(id), Field(name), Field(modVersion),
             ModCatalog.WebAddress(url) ?? "-"));
-    // live: answering "restart" changes the running game's mods instead of restarting it (HF_SYNC_LIVE, SDK 16).
-    public Task<LiveResult> SyncStateAsync(int version, string state, string host, long bytes, long done, int mods, bool live, string message) =>
-        SendAsync("syncstate", string.Join('\t', Invariant(version), state, Field(host), Invariant(bytes), Invariant(done), Invariant(mods), live ? "1" : "0", Field(message)));
+    public Task<LiveResult> SyncStateAsync(SyncStateLine line) =>
+        SendAsync("syncstate", string.Join('\t', Invariant(line.Version), line.State, Field(line.Host), Invariant(line.Bytes), Invariant(line.Done),
+            Invariant(line.Mods), line.Live ? "1" : "0", Field(line.Message)));
 
     static string Invariant(long number) => number.ToString(CultureInfo.InvariantCulture);
     // Text inside one field: no tabs, line breaks or other control characters, at most 200 characters.

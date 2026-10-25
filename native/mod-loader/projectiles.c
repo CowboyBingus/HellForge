@@ -71,12 +71,13 @@ static uint32_t ApiAddProjectile(HfMod* mod, const HfProjectile* def)
     }
     char identity[256];
     const char* name = def->name != NULL && def->name[0] ? Identity(mod, def->name, identity, sizeof identity) : "(unnamed)";
-    if (g_fired[HF_EVENT_PROJECTILES_READY] || g_projectileState != 0)
+    int live = g_liveSetup != NULL && g_liveSetup == mod; /* a mod set up while the game runs (live_content.c) */
+    if (!live && (g_fired[HF_EVENT_PROJECTILES_READY] || g_projectileState != 0))
     {
         ApiLog(mod, "add_projectile(%s): too late; call it from hellforge_mod_init", name);
         return 0;
     }
-    if (g_projectileCount >= PRJ_MAX_NEW)
+    if (!live && g_projectileCount >= PRJ_MAX_NEW)
     {
         ApiLog(mod, "add_projectile(%s): mods added %u new projectile types already (HellForge's room)", name, PRJ_MAX_NEW);
         return 0;
@@ -92,22 +93,25 @@ static uint32_t ApiAddProjectile(HfMod* mod, const HfProjectile* def)
         return 0;
     }
     for (uint32_t i = 0; i < g_projectileCount; i++)
-        if (strcmp(g_projectiles[i].name, name) == 0)
+        if (!LiveGone(LC_PROJECTILE, i) && strcmp(g_projectiles[i].name, name) == 0)
         {
             ApiLog(mod, "add_projectile(%s): already added by %s", name, g_projectiles[i].mod->id);
             return 0;
         }
-    Projectile* p = &g_projectiles[g_projectileCount];
+    uint32_t index = g_projectileCount;
+    Projectile* p = live ? (Projectile*)LiveEntry(LC_PROJECTILE, mod, name, &index) : &g_projectiles[index];
+    if (p == NULL) return 0;
     memset(p, 0, sizeof *p);
     p->mod = mod;
     snprintf(p->name, sizeof p->name, "%s", name);
-    p->type = PRJ_VANILLA + g_projectileCount;
+    p->type = PRJ_VANILLA + index;
     p->base = def->base;
     p->damage = def->damage;
     p->visualFrom = def->visual_from;
     p->spawnEffect = def->spawn_effect;
     if (def->size >= offsetof(HfProjectile, flight_effect) + sizeof def->flight_effect) p->flightEffect = def->flight_effect;
-    g_projectileCount++;
+    MemoryBarrier(); /* the entry is whole before the count shows it */
+    if (index == g_projectileCount) g_projectileCount++;
     ApiLog(mod, "adding projectile %s as type %u: a copy of type %u%s%s", p->name, p->type, p->base,
         p->damage ? ", its own damage" : "", p->visualFrom ? ", the look of another type" : "");
     return p->type;
@@ -117,7 +121,7 @@ static uintptr_t ApiProjectileRow(uint32_t type)
 {
     if (g_projectileState != 1) return 0;
     for (uint32_t i = 0; i < g_projectileCount; i++)
-        if (g_projectiles[i].type == type) return (uintptr_t)g_projectiles[i].row;
+        if (g_projectiles[i].type == type && !LiveTomb(LC_PROJECTILE, i)) return (uintptr_t)g_projectiles[i].row;
     return 0;
 }
 
@@ -164,6 +168,68 @@ static int RefuseProjectiles(const char* why)
     return 1;
 }
 
+/* A new type's row: its base's (from the game's own list, which keeps every vanilla row), with what the mod gave it. 1
+ * done, 0 not loaded yet, -1 refused (why). */
+static int ProjectileRow(Projectile* p, uintptr_t game, const char** why)
+{
+    uint64_t base = 0, look = 0;
+    *why = "a base row is not loaded";
+    if (SafeRead(game + PRJ_TABLE + (uintptr_t)p->base * 8, &base, 8) || base == 0) return 0;
+    if (p->visualFrom && (SafeRead(game + PRJ_TABLE + (uintptr_t)p->visualFrom * 8, &look, 8) || look == 0)) return 0;
+    *why = "a base row does not name its type";
+    if (SafeRead(base, p->row, PRJ_ROW) || *(uint32_t*)p->row != p->base) return -1;
+    if (look != 0 && SafeRead(look + PRJ_VISUAL_AT, p->row + PRJ_VISUAL_AT, PRJ_VISUAL_SIZE)) return 0;
+    if (p->spawnEffect != 0) memcpy(p->row + PRJ_VISUAL_AT, &p->spawnEffect, 8);
+    if (p->flightEffect != 0) memcpy(p->row + PRJ_FLIGHT_AT, &p->flightEffect, 8);
+    if (p->damage != 0 && DamageUsable(p->damage)) memcpy(p->row + PRJ_DAMAGE_AT, &p->damage, 4);
+    else if (p->damage != 0) ApiLog(p->mod, "projectile %s keeps its base's damage: damage %u was not added", p->name, p->damage);
+    memcpy(p->row, &p->type, 4);
+    return 1;
+}
+
+/* The instructions that address the list, pointed at HellForge's block. NULL, or why not. */
+static const char* ProjectileMove(uintptr_t game, const uint8_t* table, PutFn put)
+{
+    for (size_t i = 0; i < sizeof kProjectileSites / sizeof kProjectileSites[0]; i++)
+    {
+        int32_t disp = SiteDisplacement((uintptr_t)table, game, &kProjectileSites[i]);
+        if (put(game + kProjectileSites[i].rva + kProjectileSites[i].dispAt, &disp, 4))
+        {
+            /* Unreachable in practice (the pages are writable); the list stays usable through both copies. */
+            Note("projectiles: could not rewrite the instruction at 0x%x; %zu of %zu moved", kProjectileSites[i].rva, i,
+                sizeof kProjectileSites / sizeof kProjectileSites[0]);
+            return "an instruction could not be rewritten";
+        }
+    }
+    return NULL;
+}
+
+/* Both type bounds raised to `bound` (below 0x19F: the low byte changes only). NULL, or why not. */
+static const char* ProjectileRaise(uintptr_t game, uint32_t bound, PutFn put)
+{
+    return put(game + PRJ_BOUND_A + 2, &bound, 4) || put(game + PRJ_BOUND_B + 3, &bound, 4) ? "could not raise the type bounds" : NULL;
+}
+
+/* The moved list and a row for every new type HellForge has room for, in one block kept for the session (the game reads
+ * it until it exits). */
+static uint8_t* g_projectileBlock;
+#define PRJ_ROWS_AT ((PRJ_VANILLA + PRJ_MAX_NEW) * 8)
+
+static void ProjectilesInstalledLog(void)
+{
+    for (uint32_t i = 0; i < g_projectileCount; i++)
+    {
+        uint32_t damage;
+        uint64_t spawn, flight;
+        if (g_projectiles[i].row == NULL || LiveTomb(LC_PROJECTILE, i)) continue;
+        memcpy(&damage, g_projectiles[i].row + PRJ_DAMAGE_AT, 4);
+        memcpy(&spawn, g_projectiles[i].row + PRJ_VISUAL_AT, 8);
+        memcpy(&flight, g_projectiles[i].row + PRJ_FLIGHT_AT, 8);
+        ApiLog(g_projectiles[i].mod, "projectile %s is type %u (damage id %u, spawn effect %016llx, flight effect %016llx)",
+            g_projectiles[i].name, g_projectiles[i].type, damage, (unsigned long long)spawn, (unsigned long long)flight);
+    }
+}
+
 /* Called from the watch loop until it returns 1: moves the damage list if mods added damage, then installs the rows,
  * once the game has loaded its settings. */
 static int InstallProjectiles(void)
@@ -179,57 +245,26 @@ static int InstallProjectiles(void)
     if (g_projectileCount == 0) { g_projectileState = 1; return 1; }
     const char* why = ProjectilePinsFailed(game);
     if (why != NULL) return graceOver ? RefuseProjectiles(why) : 0;
-    /* the moved list and every new row in one block, kept for the session (the game reads it until it exits) */
-    static uint8_t* table;
-    if (table == NULL) table = AllocateNearGame(game, (size_t)(PRJ_VANILLA + PRJ_MAX_NEW) * 8 + (size_t)PRJ_MAX_NEW * PRJ_ROW);
+    if (g_projectileBlock == NULL) g_projectileBlock = AllocateNearGame(game, PRJ_ROWS_AT + (size_t)PRJ_MAX_NEW * PRJ_ROW);
+    uint8_t* table = g_projectileBlock;
     if (table == NULL) return RefuseProjectiles("no memory within 2 GB of game.dll for the moved list");
-    uint8_t* rows = table + (PRJ_VANILLA + PRJ_MAX_NEW) * 8;
     for (uint32_t i = 0; i < g_projectileCount; i++)
     {
-        Projectile* p = &g_projectiles[i];
-        uint64_t base = 0, look = 0;
-        if (SafeRead(game + PRJ_TABLE + (uintptr_t)p->base * 8, &base, 8) || base == 0) return 0;
-        if (p->visualFrom && (SafeRead(game + PRJ_TABLE + (uintptr_t)p->visualFrom * 8, &look, 8) || look == 0)) return 0;
-        p->row = rows + i * PRJ_ROW;
-        if (SafeRead(base, p->row, PRJ_ROW) || *(uint32_t*)p->row != p->base) return RefuseProjectiles("a base row does not name its type");
-        if (look != 0 && SafeRead(look + PRJ_VISUAL_AT, p->row + PRJ_VISUAL_AT, PRJ_VISUAL_SIZE)) return 0;
-        if (p->spawnEffect != 0) memcpy(p->row + PRJ_VISUAL_AT, &p->spawnEffect, 8);
-        if (p->flightEffect != 0) memcpy(p->row + PRJ_FLIGHT_AT, &p->flightEffect, 8);
-        if (p->damage != 0 && DamageUsable(p->damage)) memcpy(p->row + PRJ_DAMAGE_AT, &p->damage, 4);
-        else if (p->damage != 0) ApiLog(p->mod, "projectile %s keeps its base's damage: damage %u was not added", p->name, p->damage);
-        memcpy(p->row, &p->type, 4);
+        g_projectiles[i].row = table + PRJ_ROWS_AT + i * PRJ_ROW;
+        int made = ProjectileRow(&g_projectiles[i], game, &why);
+        if (made <= 0) return made < 0 ? RefuseProjectiles(why) : 0;
     }
     /* The whole list first (the vanilla pointers, then the new rows'), then the instructions, then the bounds: no code
      * reads the new list before it is complete, nor a new type before its instructions read the new list. */
     if (SafeRead(game + PRJ_TABLE, table, PRJ_VANILLA * 8)) return RefuseProjectiles("the projectile list is unreadable");
     for (uint32_t i = 0; i < g_projectileCount; i++) memcpy(table + (size_t)g_projectiles[i].type * 8, &g_projectiles[i].row, 8);
-    for (size_t i = 0; i < sizeof kProjectileSites / sizeof kProjectileSites[0]; i++)
-    {
-        int32_t disp = SiteDisplacement((uintptr_t)table, game, &kProjectileSites[i]);
-        if (ApiWrite(game + kProjectileSites[i].rva + kProjectileSites[i].dispAt, &disp, 4))
-        {
-            /* Unreachable in practice (the pages are writable); the list stays usable through both copies. */
-            Note("projectiles: could not rewrite the instruction at 0x%x; %zu of %zu moved", kProjectileSites[i].rva, i,
-                sizeof kProjectileSites / sizeof kProjectileSites[0]);
-            return RefuseProjectiles("an instruction could not be rewritten");
-        }
-    }
+    if ((why = ProjectileMove(game, table, ApiWrite)) != NULL) return RefuseProjectiles(why);
     g_projectileTable = table;
     uint32_t bound = PRJ_VANILLA + g_projectileCount;
-    if (ApiWrite(game + PRJ_BOUND_A + 2, &bound, 4) || ApiWrite(game + PRJ_BOUND_B + 3, &bound, 4))
-        return RefuseProjectiles("could not raise the type bounds");
+    if ((why = ProjectileRaise(game, bound, ApiWrite)) != NULL) return RefuseProjectiles(why);
     g_projectileState = 1;
     Note("projectiles: the list moved to 0x%llx (%zu instructions) with %u new type(s) (bounds raised to %u)",
         (unsigned long long)(uintptr_t)table, sizeof kProjectileSites / sizeof kProjectileSites[0], g_projectileCount, bound);
-    for (uint32_t i = 0; i < g_projectileCount; i++)
-    {
-        uint32_t damage;
-        uint64_t spawn, flight;
-        memcpy(&damage, g_projectiles[i].row + PRJ_DAMAGE_AT, 4);
-        memcpy(&spawn, g_projectiles[i].row + PRJ_VISUAL_AT, 8);
-        memcpy(&flight, g_projectiles[i].row + PRJ_FLIGHT_AT, 8);
-        ApiLog(g_projectiles[i].mod, "projectile %s is type %u (damage id %u, spawn effect %016llx, flight effect %016llx)",
-            g_projectiles[i].name, g_projectiles[i].type, damage, (unsigned long long)spawn, (unsigned long long)flight);
-    }
+    ProjectilesInstalledLog();
     return 1;
 }
