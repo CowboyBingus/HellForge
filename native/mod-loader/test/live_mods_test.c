@@ -494,3 +494,88 @@ static void NetTypesFixture(void)
     g_networkRva = rva;
     *holder = holderBefore;
 }
+
+/* Game data in a live change (live_data.c), against a fake engine: a data mod's hot package loaded on the game thread
+ * and its overrides set once its targets are there; replaced (its old overrides go unless set again); taken out with a
+ * restore the session owns (kept by later changes); refused when a target is missing or the package never loads. */
+static uint64_t g_fakeLoaded[8], g_fakeOverrides[16][3], g_fakeCleared[16][2], g_fakePresent[8];
+static int g_fakeLoadedCount, g_fakeOverrideCount, g_fakeClearedCount, g_fakePresentCount, g_fakeNeverLoads;
+static void FakeHotLoad(uint64_t package) { g_fakeLoaded[g_fakeLoadedCount++] = package; }
+static uint64_t FakeHotState(uint64_t package)
+{
+    for (int i = 0; i < g_fakeLoadedCount; i++) if (g_fakeLoaded[i] == package && !g_fakeNeverLoads) return PKG_RESIDENT;
+    return PKG_WAITING;
+}
+static void FakeHotOverride(uint64_t type, uint64_t name, uint64_t target)
+{
+    g_fakeOverrides[g_fakeOverrideCount][0] = type; g_fakeOverrides[g_fakeOverrideCount][1] = name; g_fakeOverrides[g_fakeOverrideCount++][2] = target;
+}
+static void FakeHotClear(uint64_t type, uint64_t name) { g_fakeCleared[g_fakeClearedCount][0] = type; g_fakeCleared[g_fakeClearedCount++][1] = name; }
+static uint8_t FakeHotCanGet(uint64_t type, uint64_t name)
+{
+    for (int i = 0; i < g_fakePresentCount; i++) if (g_fakePresent[i] == name) return 1;
+    return 0;
+}
+
+static void HotDataFixture(void)
+{
+    int mods = g_modCount, overrides = g_hotOverrideCount;
+    LONG fired[HF_EVENT_MODS_CHANGED + 1];
+    for (int event = 0; event <= HF_EVENT_MODS_CHANGED; event++) { fired[event] = g_fired[event]; if (event >= 1 && event <= 4) InterlockedExchange(&g_fired[event], 1); }
+    g_hotLoad = FakeHotLoad; g_hotOverride = FakeHotOverride; g_hotClear = FakeHotClear; g_hotCanGet = FakeHotCanGet;
+    g_packageState = FakeHotState;
+    g_hotTimeoutMs = 300;
+    g_fakePresent[g_fakePresentCount++] = 0x1111111111111111ull; /* generation names in the packages */
+    g_fakePresent[g_fakePresentCount++] = 0x2222222222222222ull;
+    g_fakePresent[g_fakePresentCount++] = 0x3333333333333333ull;
+    g_liveGameState = TxnFixtureGameState;
+    g_livePlayers = TxnFixturePlayers;
+    g_txnInline = 1;
+    AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 1; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
+    char reply[512], sent[2048];
+    const char* add[] = {"modbegin\t1\td1\tsync\tx", "modorder\t2\td1\t0\ta", "modorder\t3\td1\t1\tb", "modorder\t4\td1\t2\tdata.mod",
+        "modadd\t5\td1\tdata.mod\tdata\t0123456789abcdef\tC:\\mods\\data\t-", "moddata\t6\td1\tdata.mod\t00000000000000a1",
+        "modres\t7\td1\tdata.mod\tcccccccccccccccc\taaaaaaaaaaaaaaaa\t1111111111111111", "modcommit\t8\td1"};
+    TxnRun(add, 8, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    assert(strstr(sent, "modresult\td1\tok\n") && g_fakeLoadedCount == 1 && g_fakeLoaded[0] == 0xA1 && g_fakeOverrideCount == 1 &&
+        g_fakeOverrides[0][1] == 0xAAAAAAAAAAAAAAAAull && g_fakeOverrides[0][2] == 0x1111111111111111ull);
+    /* replaced: a new package, the same name set again (not cleared) */
+    const char* replace[] = {"modbegin\t9\td2\tsync\tx", "modorder\t10\td2\t0\ta", "modorder\t11\td2\t1\tb", "modorder\t12\td2\t2\tdata.mod",
+        "modreplace\t13\td2\tdata.mod\tdata\tfedcba9876543210\tC:\\mods\\data\t-", "moddata\t14\td2\tdata.mod\t00000000000000a2",
+        "modres\t15\td2\tdata.mod\tcccccccccccccccc\taaaaaaaaaaaaaaaa\t2222222222222222", "modcommit\t16\td2"};
+    TxnRun(replace, 8, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    assert(strstr(sent, "modresult\td2\tok\n") && g_fakeClearedCount == 0 && g_fakeOverrides[1][2] == 0x2222222222222222ull);
+    /* taken out, the game's own bytes back through an override the session owns */
+    const char* remove[] = {"modbegin\t17\td3\tsync\tx", "modorder\t18\td3\t0\ta", "modorder\t19\td3\t1\tb", "modremove\t20\td3\tdata.mod",
+        "moddata\t21\td3\t-\t00000000000000a3", "modres\t22\td3\t-\tcccccccccccccccc\taaaaaaaaaaaaaaaa\t3333333333333333", "modcommit\t23\td3"};
+    TxnRun(remove, 7, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    assert(strstr(sent, "modresult\td3\tok\n") && g_fakeOverrides[2][2] == 0x3333333333333333ull && g_hotOverrideCount == overrides + 1 &&
+        !strcmp(g_hotOverrides[overrides].owner, "-"));
+    /* refused: a target not in the packages, and a package that never loads; nothing set */
+    int set = g_fakeOverrideCount;
+    const char* missing[] = {"modbegin\t24\td4\tsync\tx", "modorder\t25\td4\t0\ta", "modorder\t26\td4\t1\tb", "modorder\t27\td4\t2\tdata.mod",
+        "modadd\t28\td4\tdata.mod\tdata\t0123456789abcdef\tC:\\mods\\data\t-", "moddata\t29\td4\tdata.mod\t00000000000000a4",
+        "modres\t30\td4\tdata.mod\tcccccccccccccccc\tbbbbbbbbbbbbbbbb\t4444444444444444", "modcommit\t31\td4"};
+    TxnRun(missing, 8, reply, sizeof reply);
+    assert(TxnResult("d4", "packages") && g_fakeOverrideCount == set);
+    g_fakeNeverLoads = 1;
+    const char* never[] = {"modbegin\t32\td5\tsync\tx", "modorder\t33\td5\t0\ta", "modorder\t34\td5\t1\tb", "modorder\t35\td5\t2\tdata.mod",
+        "modadd\t36\td5\tdata.mod\tdata\t0123456789abcdef\tC:\\mods\\data\t-", "moddata\t37\td5\tdata.mod\t00000000000000a5", "modcommit\t38\td5"};
+    TxnRun(never, 7, reply, sizeof reply);
+    assert(TxnResult("d5", "packages") && g_fakeOverrideCount == set);
+    printf("  live data: a hot package loaded and its overrides set, replaced, taken out with the session's restore, 2 refusals\n");
+
+    AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 0; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
+    g_liveGameState = LiveGameState;
+    g_livePlayers = LivePlayers;
+    g_txnInline = 0;
+    g_hotLoad = NULL; g_hotOverride = NULL; g_hotClear = NULL; g_hotCanGet = NULL;
+    g_packageState = NULL;
+    g_hotTimeoutMs = HOT_TIMEOUT_MS;
+    g_hotOverrideCount = overrides;
+    for (int event = 0; event <= HF_EVENT_MODS_CHANGED; event++) InterlockedExchange(&g_fired[event], fired[event]);
+    g_modCount = mods;
+}

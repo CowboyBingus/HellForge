@@ -12,6 +12,8 @@
  *              <shared> <unverified> <label>          a plan's stat line after "stat", for a mod added or replaced
  *   modnet     <seq> <txn> <mod id> <name> <kind> <expect bits> <expect min> <bits>   a networkFieldTypes entry of a mod added
  *              or replaced (nettypes.c)
+ *   moddata    <seq> <txn> <mod id or -> <package id hex>                  a hot package the change needs (live_data.c)
+ *   modres     <seq> <txn> <mod id or -> <type hex> <name hex> <target hex> an override of a resource's name (live_data.c)
  *   modremove  <seq> <txn> <mod id>
  *   modcommit  <seq> <txn>
  *   modabort   <seq> <txn>
@@ -31,6 +33,9 @@
  * Order of a commit: checks; a stat line naming another row waits for its packages; added and replaced code mods are set
  * up (a failure, or a refusal after it, takes them out again: live_code.c); the gate again; code mods taken out; the
  * stats layer (live_stats.c); the set-ups' load events; HF_EVENT_MODS_CHANGED to every mod. */
+
+#include "live_code.c"  /* code mods set up and taken out (SDK 16) */
+#include "live_data.c"  /* game data: hot packages and overrides */
 
 #define TXN_MODS 64
 enum { TXN_ADD, TXN_REMOVE, TXN_REPLACE };
@@ -73,6 +78,10 @@ static struct
     int fieldCount, fieldCapacity;
     TxnNet nets[TXN_NETS];
     int netCount;
+    TxnData data[HOT_PACKAGES + 1];
+    int dataCount;
+    TxnRes res[HOT_OVERRIDES];
+    int resCount;
     int ordersBefore[MAX_MODS]; /* the mods' order before the change, put back when it is refused */
 } g_txn;
 /* A retired stat entry's mod: never loaded, so every pass skips the entry. */
@@ -121,7 +130,7 @@ static void TxnReset(void)
 {
     g_txn.open = 0;
     g_txn.id[0] = 0;
-    g_txn.orderCount = g_txn.modCount = g_txn.statCount = g_txn.fieldCount = g_txn.netCount = 0;
+    g_txn.orderCount = g_txn.modCount = g_txn.statCount = g_txn.fieldCount = g_txn.netCount = g_txn.dataCount = g_txn.resCount = 0;
 }
 
 static void LiveModsAbort(const char* why)
@@ -173,7 +182,6 @@ static unsigned TxnKinds(const char* text)
 }
 
 #include "live_stats.c" /* the stats layer: stat lines added, removed and replaced in load order */
-#include "live_code.c"  /* code mods set up and taken out (SDK 16) */
 
 /* Why the session cannot take this mod's part of the change ("<reason>\t<why>" in why), or NULL. */
 static const char* TxnModCheck(TxnMod* t, char* why, size_t size)
@@ -185,7 +193,6 @@ static const char* TxnModCheck(TxnMod* t, char* why, size_t size)
     if (t->action != TXN_ADD && ModRunsCode(t->old) && CodeRemovable(t->old, why, size) != NULL) return why;
     if ((t->kinds & TXN_CODE) && !(t->kinds & TXN_LIVE))
     { snprintf(why, size, "capability\t%s runs code that does not declare \"live\": true, which changes at the next session", t->id); return why; }
-    if (t->kinds & TXN_DATA) { snprintf(why, size, "capability\t%s changes game data, which changes at the next session", t->id); return why; }
     const char* own = present ? TxnStatsOwn(t->old) : NULL;
     if (own != NULL) { snprintf(why, size, "capability\t%s: %s", t->id, own); return why; }
     return NULL;
@@ -400,6 +407,15 @@ static void TxnNetApply(void)
     ReleaseSRWLockExclusive(&g_netLock);
 }
 
+/* Game data: the overrides of the mods taken out or replaced go, the change's are set (live_data.c). */
+static void TxnDataApply(void)
+{
+    const char* gone[TXN_MODS];
+    int goneCount = 0;
+    for (int i = 0; i < g_txn.modCount; i++) if (g_txn.mods[i].action != TXN_ADD) gone[goneCount++] = g_txn.mods[i].id;
+    if (goneCount > 0 || g_txn.resCount > 0) HotApply(gone, goneCount, g_txn.res, g_txn.resCount);
+}
+
 /* The change's results for the backend, and the change done. refused: "<reason>\t<why>", or NULL when it was made. */
 static void TxnFinish(const char* refused)
 {
@@ -449,6 +465,7 @@ static const char* TxnMake(char* why, size_t size)
     ReleaseSRWLockExclusive(&g_statsLock);
     ReleaseSRWLockExclusive(&g_fieldsLock);
     TxnNetApply();
+    TxnDataApply();
     int order[TXN_MODS], count = 0;
     TxnCodeOrder(order, &count);
     for (int k = 0; k < count; k++) CodeReplay(g_txn.mods[order[k]].mod);
@@ -463,6 +480,7 @@ static DWORD WINAPI TxnWorker(void* parameter)
     char why[512];
     const char* refused = TxnCheck(why, sizeof why);
     if (refused == NULL) refused = TxnStatsPrepare(why, sizeof why);
+    if (refused == NULL) refused = HotPrepare(g_txn.data, g_txn.dataCount, g_txn.res, g_txn.resCount, why, sizeof why);
     if (refused == NULL) refused = TxnCodeStage(why, sizeof why);
     if (refused == NULL) refused = TxnMake(why, sizeof why);
     if (refused != NULL) TxnUnstage();
@@ -575,6 +593,37 @@ static void TxnNetLine(char** f, int n, char* reply, size_t size)
     snprintf(reply, size, "%s\tok\tnow", f[1]);
 }
 
+/* A data line's owner: "-" (the session's) or a mod the change adds or replaces with data. */
+static int TxnDataOwner(const char* owner)
+{
+    const TxnMod* t = strcmp(owner, "-") ? TxnFind(owner) : NULL;
+    return !strcmp(owner, "-") || (t != NULL && t->action != TXN_REMOVE && (t->kinds & TXN_DATA));
+}
+
+/* moddata <owner> <package>, modres <owner> <type> <name> <target>. */
+static void TxnDataLine(int res, char** f, int n, char* reply, size_t size)
+{
+    uint64_t a = 0, b = 0, c = 0;
+    int ok = n == (res ? 7 : 5) && strlen(f[3]) < sizeof g_txn.data[0].owner && TxnDataOwner(f[3]) && HotHex(f[4], &a) &&
+        (!res || (HotHex(f[5], &b) && HotHex(f[6], &c)));
+    if (!ok) { TxnRefuse(reply, size, f[1], "malformed", res ? "modres" : "moddata"); return; }
+    if (res ? g_txn.resCount == HOT_OVERRIDES : g_txn.dataCount == HOT_PACKAGES)
+    { TxnRefuse(reply, size, f[1], "capacity", res ? "a change holds 4096 overrides at most" : "a change holds 64 packages at most"); return; }
+    if (res)
+    {
+        TxnRes* r = &g_txn.res[g_txn.resCount++];
+        *r = (TxnRes){"", a, b, c};
+        snprintf(r->owner, sizeof r->owner, "%s", f[3]);
+    }
+    else
+    {
+        TxnData* d = &g_txn.data[g_txn.dataCount++];
+        *d = (TxnData){"", a};
+        snprintf(d->owner, sizeof d->owner, "%s", f[3]);
+    }
+    snprintf(reply, size, "%s\tok\tnow", f[1]);
+}
+
 /* One of the change's lines (its verb starts with "mod"): 1 when it was one, with the reply written. */
 static int LiveModsRequest(char* line, char* reply, size_t size)
 {
@@ -586,8 +635,8 @@ static int LiveModsRequest(char* line, char* reply, size_t size)
     const char *verb = f[0], *seq = f[1], *txn = f[2];
     int begin = !strcmp(verb, "modbegin"), order = !strcmp(verb, "modorder"), stat = !strcmp(verb, "modstat"), commit = !strcmp(verb, "modcommit"),
         abort = !strcmp(verb, "modabort"), mod = !strcmp(verb, "modadd") || !strcmp(verb, "modreplace") || !strcmp(verb, "modremove"),
-        net = !strcmp(verb, "modnet");
-    if (!(begin || order || stat || commit || abort || mod || net)) return 0;
+        net = !strcmp(verb, "modnet"), data = !strcmp(verb, "moddata"), res = !strcmp(verb, "modres");
+    if (!(begin || order || stat || commit || abort || mod || net || data || res)) return 0;
     if (g_txn.committing) { snprintf(reply, size, "%s\trefused\tbusy\tchange %s is being made", seq, g_txn.id); return 1; }
     if (begin) { TxnBeginLine(f, n, reply, size); return 1; }
     if (!g_txn.open || strcmp(txn, g_txn.id)) { snprintf(reply, size, "%s\trefused\tmalformed\tno change %s is under way", seq, txn); return 1; }
@@ -596,6 +645,7 @@ static int LiveModsRequest(char* line, char* reply, size_t size)
     else if (order) TxnOrderLine(f, n, reply, size);
     else if (mod) TxnModLine(verb, f, n, reply, size);
     else if (net) TxnNetLine(f, n, reply, size);
+    else if (data || res) TxnDataLine(res, f, n, reply, size);
     else TxnStatLine(f, n, reply, size);
     return 1;
 }
