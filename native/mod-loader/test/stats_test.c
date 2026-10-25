@@ -3156,6 +3156,8 @@ int main(int argc, char** argv)
     LiveFixture();
     LiveSyncFixture();
     LiveModsFixture();
+    LiveCodeFixture();
+    EditsForgetFixture();
     LuaBridgeFixture();
     ActionsFixture();
     PassivesFixture();

@@ -13,16 +13,22 @@
  *   modremove  <seq> <txn> <mod id>
  *   modcommit  <seq> <txn>
  *   modabort   <seq> <txn>
- * kinds: what the mod carries, comma separated: stats (stat lines), code (a DLL), live (its manifest's "live": true, SDK
- * 16), net (network field types), data (game data). Each line answers <seq> ok now, or <seq> refused <reason> <why>; a
- * refusal ends the change. modcommit answers "ok queued" at once: the change runs on a thread of its own (it may wait for
- * packages, run mods' set-up and take a step on the game's thread), and the loader then sends on its own
- * "modstate <txn> <mod id> <added|removed|replaced> <applied> <refused>" for each mod and "modresult <txn> ok" or
- * "modresult <txn> refused <reason> <why>". Reasons: state, coop, busy, capability, capacity, malformed, packages.
+ * kinds: what the mod carries, comma separated: stats (stat lines), code (a DLL: <dll> is its path), live (its manifest's
+ * "live": true, SDK 16), net (network field types), data (game data). Each line answers <seq> ok now, or <seq> refused
+ * <reason> <why>; a refusal ends the change. modcommit answers "ok queued" at once: the change runs on a thread of its
+ * own (it may wait for packages, run mods' set-up and take a step on the game's thread), and the loader then sends on
+ * its own "modstate <txn> <mod id> <added|removed|replaced> <applied> <refused>" for each mod and "modresult <txn> ok",
+ * "modresult <txn> refused <reason> <why>" (nothing changed), or "modresult <txn> failed <why>" (made, but something of
+ * a mod taken out may be left: the backend restarts the session). Reasons: state, coop, busy, capability, capacity,
+ * malformed, packages.
  *
- * The gate: no friend in the game (this game hosts alone, or plays solo) at modbegin and again at the commit; not while
- * the game loads (its prepare states). Everything but stats only on the ship or the title screen, once the boot's events
- * have all fired. One change at a time. */
+ * The gate: no friend in the game (this game hosts alone, or plays solo) at modbegin and again before anything changes;
+ * not while the game loads (its prepare states). Anything but stats only on the ship or the title screen, once the
+ * boot's events have all fired. One change at a time.
+ *
+ * Order of a commit: checks; a stat line naming another row waits for its packages; added and replaced code mods are set
+ * up (a failure, or a refusal after it, takes them out again: live_code.c); the gate again; code mods taken out; the
+ * stats layer (live_stats.c); the set-ups' load events; HF_EVENT_MODS_CHANGED to every mod. */
 
 #define TXN_MODS 64
 enum { TXN_ADD, TXN_REMOVE, TXN_REPLACE };
@@ -37,8 +43,9 @@ typedef struct TxnMod
     char hash[17];
     char folder[MAX_PATH * 3];
     char dll[MAX_PATH * 3]; /* UTF-8, "-" none */
-    HfMod* mod;             /* the session's entry it changes, or the one it was added as */
-    int applied, refused, waiting;
+    HfMod* old;             /* the session's entry it changes (removed or replaced), or NULL */
+    HfMod* mod;             /* its entry after the change (added or replaced) */
+    int applied, refused, failed;
 } TxnMod;
 typedef struct TxnStat { StatEdit edit; int mod; uintptr_t at; } TxnStat;
 /* A field the change touched: where, its size, what it held before any stats mod (known 0: a deferred edit holds it,
@@ -60,6 +67,7 @@ static struct
     int statCount, statCapacity;
     TxnField* fields;
     int fieldCount, fieldCapacity;
+    int ordersBefore[MAX_MODS]; /* the mods' order before the change, put back when it is refused */
 } g_txn;
 /* A retired stat entry's mod: never loaded, so every pass skips the entry. */
 static HfMod g_retiredMod = {.id = "retired"};
@@ -130,12 +138,16 @@ static TxnMod* TxnFind(const char* id)
     return NULL;
 }
 
-/* The session's mod of that id the loader started or added (not a Lua mod), or NULL. */
+/* The session's running entry of that id the loader started or added (not a Lua mod, not one taken out, not a new
+ * version being set up beside it), or NULL. */
 static HfMod* TxnSessionMod(const char* id)
 {
-    for (int i = 0; i < g_modCount; i++) if (!g_mods[i].lua && !strcmp(g_mods[i].id, id)) return &g_mods[i];
+    for (int i = 0; i < g_modCount; i++)
+        if (!g_mods[i].lua && !g_mods[i].removed && !g_mods[i].staging && !strcmp(g_mods[i].id, id)) return &g_mods[i];
     return NULL;
 }
+
+static int ModRunsCode(const HfMod* mod) { return mod != NULL && mod->loaded && wcscmp(mod->dll, L"-"); }
 
 /* "stats,code,live" as TXN_ flags; 0 when a kind is unknown or none is given. */
 static unsigned TxnKinds(const char* text)
@@ -155,20 +167,21 @@ static unsigned TxnKinds(const char* text)
 }
 
 #include "live_stats.c" /* the stats layer: stat lines added, removed and replaced in load order */
+#include "live_code.c"  /* code mods set up and taken out (SDK 16) */
 
 /* Why the session cannot take this mod's part of the change ("<reason>\t<why>" in why), or NULL. */
-static const char* TxnModCheck(const TxnMod* t, char* why, size_t size)
+static const char* TxnModCheck(TxnMod* t, char* why, size_t size)
 {
-    HfMod* mod = TxnSessionMod(t->id);
-    int present = mod != NULL && mod->loaded;
+    t->old = TxnSessionMod(t->id);
+    int present = t->old != NULL && t->old->loaded;
     if (t->action == TXN_ADD && present) { snprintf(why, size, "malformed\t%s is already loaded", t->id); return why; }
     if (t->action != TXN_ADD && !present) { snprintf(why, size, "malformed\t%s is not loaded", t->id); return why; }
-    /* what the session runs of it now, and what it will run */
-    int code = mod != NULL && present && wcscmp(mod->dll, L"-");
-    if (code || (t->kinds & TXN_CODE)) { snprintf(why, size, "capability\t%s runs code (a DLL), which changes at the next session", t->id); return why; }
+    if (t->action != TXN_ADD && ModRunsCode(t->old) && CodeRemovable(t->old, why, size) != NULL) return why;
+    if ((t->kinds & TXN_CODE) && !(t->kinds & TXN_LIVE))
+    { snprintf(why, size, "capability\t%s runs code that does not declare \"live\": true, which changes at the next session", t->id); return why; }
     if (t->kinds & TXN_NET) { snprintf(why, size, "capability\t%s changes network field types, which change at the next session", t->id); return why; }
     if (t->kinds & TXN_DATA) { snprintf(why, size, "capability\t%s changes game data, which changes at the next session", t->id); return why; }
-    const char* own = mod != NULL && present ? TxnStatsOwn(mod) : NULL;
+    const char* own = present ? TxnStatsOwn(t->old) : NULL;
     if (own != NULL) { snprintf(why, size, "capability\t%s: %s", t->id, own); return why; }
     return NULL;
 }
@@ -191,7 +204,7 @@ static const char* TxnOrderCheck(char* why, size_t size)
     {
         const HfMod* mod = &g_mods[i];
         const TxnMod* t = TxnFind(mod->id);
-        if (mod->lua || !mod->loaded || (t != NULL && t->action == TXN_REMOVE)) continue;
+        if (mod->lua || !mod->loaded || mod->removed || (t != NULL && t->action == TXN_REMOVE)) continue;
         int listed = 0;
         for (int k = 0; k < g_txn.orderCount && !listed; k++) listed = !strcmp(g_txn.order[k], mod->id);
         if (!listed) { snprintf(why, size, "malformed\tthe order leaves out %s", mod->id); return why; }
@@ -207,7 +220,7 @@ static const char* TxnCheck(char* why, size_t size)
     for (int i = 0; i < g_txn.modCount; i++)
     {
         HfMod* running = TxnSessionMod(g_txn.mods[i].id);
-        int wide = (g_txn.mods[i].kinds & ~(unsigned)TXN_STATS) || (running != NULL && running->loaded && wcscmp(running->dll, L"-"));
+        int wide = (g_txn.mods[i].kinds & ~(unsigned)TXN_STATS) || ModRunsCode(running);
         const char* refused = wide ? TxnGateWide() : NULL;
         if (refused == NULL) refused = TxnModCheck(&g_txn.mods[i], why, size);
         if (refused != NULL) return refused;
@@ -215,16 +228,20 @@ static const char* TxnCheck(char* why, size_t size)
     const char* order = TxnOrderCheck(why, size);
     if (order != NULL) return order;
     int adds = 0;
-    for (int i = 0; i < g_txn.modCount; i++) adds += g_txn.mods[i].action == TXN_ADD && TxnSessionMod(g_txn.mods[i].id) == NULL;
+    for (int i = 0; i < g_txn.modCount; i++) adds += g_txn.mods[i].action != TXN_REMOVE && (g_txn.mods[i].kinds & TXN_CODE || TxnSessionMod(g_txn.mods[i].id) == NULL);
     if (g_modCount + adds > MAX_MODS) { snprintf(why, size, "capacity\tthe session has %d mods, the most it can hold", MAX_MODS); return why; }
     return NULL;
 }
 
-/* An added mod's entry: the one it had (a mod removed earlier in the session, its slot kept), else a new one in g_mods.
- * NULL when the mods are full. */
-static HfMod* TxnModEntry(const TxnMod* t)
+/* A new entry in g_mods for a mod added or replaced (a code mod's new version is set up beside the old one: staging),
+ * or, for a stats mod, the one it had (a mod removed earlier in the session, its slot kept). NULL when the mods are
+ * full. */
+static HfMod* TxnModEntry(const TxnMod* t, int fresh)
 {
-    HfMod* mod = TxnSessionMod(t->id);
+    HfMod* mod = fresh ? NULL : TxnSessionMod(t->id);
+    if (mod == NULL && !fresh)
+        for (int i = 0; i < g_modCount && mod == NULL; i++)
+            if (!g_mods[i].lua && g_mods[i].removed && !wcscmp(g_mods[i].dll, L"-") && !strcmp(g_mods[i].id, t->id)) mod = &g_mods[i];
     HANDLE log = INVALID_HANDLE_VALUE;
     if (mod == NULL)
     {
@@ -244,6 +261,7 @@ static HfMod* TxnModEntry(const TxnMod* t)
         m->log = log;
         log = INVALID_HANDLE_VALUE;
         m->order = g_modCount;
+        m->staging = fresh;
         MemoryBarrier(); /* the entry is whole before anything counting the mods sees it */
         g_modCount++;
         mod = m;
@@ -251,6 +269,7 @@ static HfMod* TxnModEntry(const TxnMod* t)
     if (mod != NULL)
     {
         snprintf(mod->folder, sizeof mod->folder, "%s", t->folder);
+        mod->removed = 0;
         mod->loaded = 1;
     }
     ReleaseSRWLockExclusive(&g_luaLock);
@@ -258,16 +277,101 @@ static HfMod* TxnModEntry(const TxnMod* t)
     return mod;
 }
 
-/* The mods' entries and their new order: added ones made, removed ones unloaded. */
+/* The change's load order on the mods it keeps, adds and sets up (their hooks and edits sort by it); the order before
+ * is kept, to put back if the change is refused. */
+static void TxnAssignOrder(void)
+{
+    for (int i = 0; i < g_modCount; i++) g_txn.ordersBefore[i] = g_mods[i].order;
+    for (int i = 0; i < g_txn.orderCount; i++)
+    {
+        const TxnMod* t = TxnFind(g_txn.order[i]);
+        HfMod* mod = t != NULL && t->mod != NULL ? t->mod : TxnSessionMod(g_txn.order[i]);
+        if (mod != NULL) mod->order = i;
+        if (t != NULL && t->old != NULL) t->old->order = i; /* the running version keeps its place until it goes */
+    }
+}
+
+static void TxnRestoreOrder(void)
+{
+    for (int i = 0; i < g_modCount; i++) if (!g_mods[i].staging) g_mods[i].order = g_txn.ordersBefore[i];
+}
+
+/* The set-up order of the change's code mods: by id, as at boot (live_code.c, co-op numbering). */
+static void TxnCodeOrder(int order[TXN_MODS], int* count)
+{
+    *count = 0;
+    for (int i = 0; i < g_txn.modCount; i++) if (g_txn.mods[i].action != TXN_REMOVE && (g_txn.mods[i].kinds & TXN_CODE)) order[(*count)++] = i;
+    for (int i = 1; i < *count; i++)
+        for (int j = i; j > 0 && strcmp(g_txn.mods[order[j - 1]].id, g_txn.mods[order[j]].id) > 0; j--)
+        {
+            int k = order[j];
+            order[j] = order[j - 1];
+            order[j - 1] = k;
+        }
+}
+
+/* Added and replaced code mods: their new entries, DLLs and hellforge_mod_init, in set-up order. NULL, or why not
+ * ("<reason>\t<why>"; the set-ups are taken out again by TxnUnstage). */
+static const char* TxnCodeStage(char* why, size_t size)
+{
+    int order[TXN_MODS], count = 0;
+    TxnCodeOrder(order, &count);
+    for (int k = 0; k < count; k++)
+    {
+        TxnMod* t = &g_txn.mods[order[k]];
+        t->mod = TxnModEntry(t, 1);
+        if (t->mod == NULL) { snprintf(why, size, "capacity\tthe session has %d mods, the most it can hold", MAX_MODS); return why; }
+        t->mod->live = 1;
+    }
+    TxnAssignOrder();
+    for (int k = 0; k < count; k++)
+    {
+        TxnMod* t = &g_txn.mods[order[k]];
+        if (CodeLoad(t->mod, t->dll, why, size) != NULL || CodeInit(t->mod, why, size) != NULL) return why;
+    }
+    return NULL;
+}
+
+/* A refused change: the code mods it set up are taken out again, the order put back. */
+static void TxnUnstage(void)
+{
+    for (int i = 0; i < g_txn.modCount; i++)
+    {
+        TxnMod* t = &g_txn.mods[i];
+        if (t->mod == NULL || !t->mod->staging) continue;
+        if (t->mod->module != NULL) CodeRemove(t->mod, HF_UNLOAD_REMOVE);
+        t->mod->loaded = 0;
+        t->mod->removed = 1;
+        t->mod->staging = 0;
+        t->mod = NULL;
+    }
+    TxnRestoreOrder();
+}
+
+/* The running code mods the change takes out (removed, or replaced by a new version); then the new versions run. */
+static void TxnCodeRemove(void)
+{
+    for (int i = 0; i < g_txn.modCount; i++)
+    {
+        TxnMod* t = &g_txn.mods[i];
+        if (t->action == TXN_ADD || !ModRunsCode(t->old)) continue;
+        t->failed = CodeRemove(t->old, t->action == TXN_REPLACE ? HF_UNLOAD_REPLACE : HF_UNLOAD_REMOVE);
+    }
+    for (int i = 0; i < g_txn.modCount; i++) if (g_txn.mods[i].mod != NULL) g_txn.mods[i].mod->staging = 0;
+}
+
+/* The mods' entries after the change: stats mods added (a new entry, or the one they had) and replaced (the same
+ * entry), removed ones unloaded. Under both locks. */
 static void TxnApplyMods(void)
 {
     for (int i = 0; i < g_txn.modCount; i++)
     {
         TxnMod* t = &g_txn.mods[i];
-        t->mod = t->action == TXN_ADD ? TxnModEntry(t) : TxnSessionMod(t->id);
-        if (t->mod == NULL || t->action == TXN_ADD) continue;
-        if (t->action == TXN_REMOVE) t->mod->loaded = 0;
-        else snprintf(t->mod->folder, sizeof t->mod->folder, "%s", t->folder);
+        if (t->action == TXN_REMOVE) { if (t->old != NULL) t->old->loaded = 0; continue; }
+        if (t->mod == NULL) t->mod = t->action == TXN_ADD ? TxnModEntry(t, 0) : t->old;
+        if (t->mod == NULL) continue;
+        snprintf(t->mod->folder, sizeof t->mod->folder, "%s", t->folder);
+        if (t->old != NULL && t->old != t->mod) t->old->loaded = 0; /* replaced by a new version */
     }
     for (int i = 0; i < g_txn.orderCount; i++)
     {
@@ -280,6 +384,7 @@ static void TxnApplyMods(void)
 static void TxnFinish(const char* refused)
 {
     char line[640];
+    int failed = 0;
     if (refused != NULL)
     {
         snprintf(line, sizeof line, "modresult\t%s\trefused\t%s", g_txn.id, refused);
@@ -291,35 +396,55 @@ static void TxnFinish(const char* refused)
         for (int i = 0; i < g_txn.modCount; i++)
         {
             const TxnMod* t = &g_txn.mods[i];
+            failed |= t->failed;
             snprintf(line, sizeof line, "modstate\t%s\t%s\t%s\t%d\t%d", g_txn.id, t->id, kTxnActions[t->action], t->applied, t->refused);
             LiveQueue(line);
-            Note("live mod change %s: %s %s, %d stats edit(s) applied, %d refused", g_txn.id, t->id, kTxnActions[t->action], t->applied, t->refused);
+            Note("live mod change %s: %s %s, %d stats edit(s) applied, %d refused%s", g_txn.id, t->id, kTxnActions[t->action], t->applied, t->refused,
+                t->failed ? "; something of its old version may be left" : "");
         }
-        snprintf(line, sizeof line, "modresult\t%s\tok", g_txn.id);
+        snprintf(line, sizeof line, failed ? "modresult\t%s\tfailed\tsomething of a mod taken out may be left; restart the session to be sure" :
+            "modresult\t%s\tok", g_txn.id);
         LiveQueue(line);
     }
     TxnReset();
     InterlockedExchange(&g_txn.committing, 0);
 }
 
-/* The change itself, on its own thread: checked, prepared, then made under the fields' and the stats' locks (the order
- * set_live and set_stat take them). */
+/* The gate again and the stats layer's checks, under both locks, then (when they pass) the parts that change the game:
+ * code mods taken out, the stats layer, the set-ups' load events, HF_EVENT_MODS_CHANGED. */
+static const char* TxnMake(char* why, size_t size)
+{
+    AcquireSRWLockExclusive(&g_fieldsLock);
+    AcquireSRWLockExclusive(&g_statsLock);
+    const char* refused = TxnGate(); /* again: a friend may have joined meanwhile */
+    if (refused == NULL) refused = TxnStatsCheck(why, size);
+    ReleaseSRWLockExclusive(&g_statsLock);
+    ReleaseSRWLockExclusive(&g_fieldsLock);
+    if (refused != NULL) return refused;
+    TxnCodeRemove();
+    AcquireSRWLockExclusive(&g_fieldsLock);
+    AcquireSRWLockExclusive(&g_statsLock);
+    TxnApplyMods();
+    TxnStatsApply();
+    ReleaseSRWLockExclusive(&g_statsLock);
+    ReleaseSRWLockExclusive(&g_fieldsLock);
+    int order[TXN_MODS], count = 0;
+    TxnCodeOrder(order, &count);
+    for (int k = 0; k < count; k++) CodeReplay(g_txn.mods[order[k]].mod);
+    Deliver(HF_EVENT_MODS_CHANGED);
+    return NULL;
+}
+
+/* The change itself, on its own thread. */
 static DWORD WINAPI TxnWorker(void* parameter)
 {
     (void)parameter;
     char why[512];
     const char* refused = TxnCheck(why, sizeof why);
     if (refused == NULL) refused = TxnStatsPrepare(why, sizeof why);
-    if (refused == NULL)
-    {
-        AcquireSRWLockExclusive(&g_fieldsLock);
-        AcquireSRWLockExclusive(&g_statsLock);
-        refused = TxnGate(); /* again: a friend may have joined meanwhile */
-        if (refused == NULL) refused = TxnStatsCheck(why, sizeof why);
-        if (refused == NULL) { TxnApplyMods(); TxnStatsApply(); }
-        ReleaseSRWLockExclusive(&g_statsLock);
-        ReleaseSRWLockExclusive(&g_fieldsLock);
-    }
+    if (refused == NULL) refused = TxnCodeStage(why, sizeof why);
+    if (refused == NULL) refused = TxnMake(why, sizeof why);
+    if (refused != NULL) TxnUnstage();
     TxnFinish(refused);
     return 0;
 }

@@ -247,3 +247,181 @@ static void LiveModsFixture(void)
     g_editCount = savedEdits;
     InterlockedExchange(&g_statsComponentsReady, 0);
 }
+
+/* A live code mod (live_code.c, SDK 16): the real live_test_mod.dll set up while the game runs (its load events replayed,
+ * its hook and its write in), replaced by a copy of itself (the old one's hook out and its write put back, its unload
+ * told why), taken out (the game as before), and refused without "live" or when its DLL is missing. */
+static LONG LiveTestValue(HMODULE module, const char* name) { return *(volatile LONG*)(void*)GetProcAddress(module, name); }
+
+static void LiveCodeFixture(void)
+{
+    ApiInit(); /* the table a mod gets, as the loader builds it at its start */
+    wchar_t self[MAX_PATH], v1[MAX_PATH], v2[MAX_PATH];
+    GetModuleFileNameW(NULL, self, MAX_PATH);
+    *wcsrchr(self, L'\\') = 0;
+    swprintf(v1, MAX_PATH, L"%ls\\live_test_mod.dll", self);
+    swprintf(v2, MAX_PATH, L"%ls\\live_test_mod_v2.dll", self);
+    assert(CopyFileW(v1, v2, FALSE));
+    HMODULE game = LoadLibraryW(L"fake_game.dll");
+    assert(game != NULL);
+    typedef int (*Target)(int);
+    Target target = (Target)(void*)GetProcAddress(game, "hellforge_fake_target");
+    volatile uint32_t* cell = (volatile uint32_t*)(void*)GetProcAddress(game, "hellforge_fake_cell");
+    assert(target(5) == 16 && *cell == 5);
+    char path1[MAX_PATH * 3], path2[MAX_PATH * 3], folder[MAX_PATH * 3], line[2048], reply[512], sent[4096];
+    WideCharToMultiByte(CP_UTF8, 0, v1, -1, path1, sizeof path1, NULL, NULL);
+    WideCharToMultiByte(CP_UTF8, 0, v2, -1, path2, sizeof path2, NULL, NULL);
+    WideCharToMultiByte(CP_UTF8, 0, self, -1, folder, sizeof folder, NULL, NULL);
+
+    /* the game on the ship, every load event fired in the boot's order */
+    LONG fired[HF_EVENT_MODS_CHANGED + 1];
+    for (int event = 0; event <= HF_EVENT_MODS_CHANGED; event++) fired[event] = g_fired[event];
+    HfEvent order[4] = {HF_EVENT_GAME_LOADED, HF_EVENT_PROJECTILES_READY, HF_EVENT_NETWORK_READY, HF_EVENT_ENTITIES_READY}, orderBefore[4];
+    memcpy(orderBefore, g_fireOrder, sizeof orderBefore);
+    LONG countBefore = g_fireCount;
+    for (int event = HF_EVENT_GAME_LOADED; event <= HF_EVENT_PROJECTILES_READY; event++) InterlockedExchange(&g_fired[event], 1);
+    memcpy(g_fireOrder, order, sizeof order);
+    g_fireCount = 4;
+    int mods = g_modCount;
+    g_liveGameState = TxnFixtureGameState;
+    g_livePlayers = TxnFixturePlayers;
+    g_txnInline = 1;
+    AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 1; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
+
+    /* added: set up, then the four load events, then MODS_CHANGED */
+    TxnSend("modbegin\t1\tc1\tsync\tdigest", reply, sizeof reply);
+    TxnSend("modorder\t2\tc1\t0\ta", reply, sizeof reply);
+    TxnSend("modorder\t3\tc1\t1\tb", reply, sizeof reply);
+    TxnSend("modorder\t4\tc1\t2\tlive.test", reply, sizeof reply);
+    snprintf(line, sizeof line, "modadd\t5\tc1\tlive.test\tcode,live\t0123456789abcdef\t%s\t%s", folder, path1);
+    TxnSend(line, reply, sizeof reply);
+    assert(!strcmp(reply, "5\tok\tnow"));
+    TxnSend("modcommit\t6\tc1", reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    HMODULE first = GetModuleHandleW(v1);
+    if (strstr(sent, "modresult\tc1\tok\n") == NULL) fprintf(stderr, "  live code mods: sent %s\n", sent);
+    assert(strstr(sent, "modresult\tc1\tok\n") && first != NULL);
+    assert(LiveTestValue(first, "live_test_phase") == HF_LOAD_LIVE && LiveTestValue(first, "live_test_loaded") == 1 &&
+        LiveTestValue(first, "live_test_changed") == 1);
+    assert(target(5) == 23 && *cell == 42 && g_modCount == mods + 1 && g_mods[mods].loaded && g_mods[mods].order == 2);
+
+    /* replaced by its copy: the old one unloaded (REPLACE), out of the chain, its write put back; the new one in */
+    TxnSend("modbegin\t7\tc2\tsync\tdigest", reply, sizeof reply);
+    TxnSend("modorder\t8\tc2\t0\ta", reply, sizeof reply);
+    TxnSend("modorder\t9\tc2\t1\tb", reply, sizeof reply);
+    TxnSend("modorder\t10\tc2\t2\tlive.test", reply, sizeof reply);
+    snprintf(line, sizeof line, "modreplace\t11\tc2\tlive.test\tcode,live\tfedcba9876543210\t%s\t%s", folder, path2);
+    TxnSend(line, reply, sizeof reply);
+    TxnSend("modcommit\t12\tc2", reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    HMODULE second = GetModuleHandleW(v2);
+    assert(strstr(sent, "modresult\tc2\tok\n") && second != NULL && second != first);
+    assert(LiveTestValue(first, "live_test_unloaded") == HF_UNLOAD_REPLACE && LiveTestValue(first, "live_test_changed") == 1);
+    assert(LiveTestValue(second, "live_test_loaded") == 1 && LiveTestValue(second, "live_test_changed") == 1);
+    assert(target(5) == 23 && *cell == 42 && g_mods[mods].removed && !g_mods[mods].loaded && g_mods[mods + 1].loaded);
+
+    /* taken out: the game as before it came */
+    TxnSend("modbegin\t13\tc3\tsync\tdigest", reply, sizeof reply);
+    TxnSend("modorder\t14\tc3\t0\ta", reply, sizeof reply);
+    TxnSend("modorder\t15\tc3\t1\tb", reply, sizeof reply);
+    TxnSend("modremove\t16\tc3\tlive.test", reply, sizeof reply);
+    TxnSend("modcommit\t17\tc3", reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    assert(strstr(sent, "modresult\tc3\tok\n") && LiveTestValue(second, "live_test_unloaded") == HF_UNLOAD_REMOVE);
+    assert(target(5) == 16 && *cell == 5 && !g_mods[mods + 1].loaded && LiveTestValue(second, "live_test_changed") == 1);
+
+    /* refused: code without "live", and a DLL that is not there (its set-up taken out again, nothing changed) */
+    TxnSend("modbegin\t18\tc4\tsync\tdigest", reply, sizeof reply);
+    TxnSend("modorder\t19\tc4\t0\ta", reply, sizeof reply);
+    TxnSend("modorder\t20\tc4\t1\tb", reply, sizeof reply);
+    TxnSend("modorder\t21\tc4\t2\tlive.test", reply, sizeof reply);
+    snprintf(line, sizeof line, "modadd\t22\tc4\tlive.test\tcode\t0123456789abcdef\t%s\t%s", folder, path1);
+    TxnSend(line, reply, sizeof reply);
+    TxnSend("modcommit\t23\tc4", reply, sizeof reply);
+    assert(TxnResult("c4", "capability"));
+    TxnSend("modbegin\t24\tc5\tsync\tdigest", reply, sizeof reply);
+    TxnSend("modorder\t25\tc5\t0\ta", reply, sizeof reply);
+    TxnSend("modorder\t26\tc5\t1\tb", reply, sizeof reply);
+    TxnSend("modorder\t27\tc5\t2\tlive.test", reply, sizeof reply);
+    snprintf(line, sizeof line, "modadd\t28\tc5\tlive.test\tcode,live\t0123456789abcdef\t%s\t%s\\no_such_mod.dll", folder, folder);
+    TxnSend(line, reply, sizeof reply);
+    TxnSend("modcommit\t29\tc5", reply, sizeof reply);
+    assert(TxnResult("c5", "capability") && !g_mods[g_modCount - 1].loaded && g_mods[g_modCount - 1].removed && target(5) == 16 && *cell == 5);
+    printf("  live code mods: set up while the game runs (events replayed, hook and write in), replaced, taken out, 2 refusals\n");
+
+    AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 0; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
+    g_liveGameState = LiveGameState;
+    g_livePlayers = LivePlayers;
+    g_txnInline = 0;
+    for (int event = 0; event <= HF_EVENT_MODS_CHANGED; event++) InterlockedExchange(&g_fired[event], fired[event]);
+    memcpy(g_fireOrder, orderBefore, sizeof orderBefore);
+    g_fireCount = countBefore;
+    g_modCount = mods;
+}
+
+/* A mod's deferred edits taken out (live_code.c EditsForget, FieldRestack): of two mods' edits of one field, the earlier
+ * one out keeps the later's value; the later one out shows what was under both; an edit queued in a live set-up goes
+ * under a later mod's, in load order; under a live edit the field keeps the live value and the live edit's reset value
+ * follows the edits under it. */
+static void EditsForgetFixture(void)
+{
+    int savedComponents = g_componentCount, savedFake = g_fakeRecordCount, savedEdits = g_editCount, mods = g_modCount;
+    Component savedComponent = g_components[0];
+    LONG entities = g_fired[HF_EVENT_ENTITIES_READY];
+    Component* c = &g_components[0];
+    memset(c, 0, sizeof *c);
+    strcpy(c->name, "WeaponMagazineComponentData"); c->index = 5; c->stride = 160;
+    g_componentCount = 1;
+    g_fieldRecord = FakeFieldRecord;
+    InterlockedExchange(&g_fired[HF_EVENT_ENTITIES_READY], 1);
+    uint8_t* record = FakeRecordOf("WeaponMagazineComponentData", 0x77, 160, 0);
+    HfMod* m[3];
+    for (int i = 0; i < 3; i++)
+    {
+        m[i] = &g_mods[mods + i];
+        memset(m[i], 0, sizeof *m[i]);
+        snprintf(m[i]->id, sizeof m[i]->id, "edits.%d", i);
+        m[i]->loaded = 1; m[i]->log = INVALID_HANDLE_VALUE; m[i]->order = 100 + i; wcscpy(m[i]->dll, L"x.dll");
+    }
+    g_modCount = mods + 3;
+    HfField capacity = HF_FIELD(WeaponMagazine, capacity);
+    HfValue v200 = HF_U32(200), v300 = HF_U32(300), v999 = HF_U32(999);
+    const SdkComponent* resolved = NULL;
+    uint32_t at = ResolveField(m[0], "fixture", &capacity, &resolved)->offset, value;
+    #define CAPACITY() (memcpy(&value, record + at, 4), value)
+    memcpy(record + at, &(uint32_t){100}, 4);
+
+    assert(!ApiSetField(m[0], 0x77, &capacity, &v200) && !ApiSetField(m[1], 0x77, &capacity, &v300) && CAPACITY() == 300);
+    EditsForget(m[0]);
+    assert(CAPACITY() == 300 && g_editCount == savedEdits + 1 && g_edits[savedEdits].hasBefore && *(uint32_t*)g_edits[savedEdits].before == 100);
+    EditsForget(m[1]);
+    assert(CAPACITY() == 100 && g_editCount == savedEdits);
+
+    /* a live set-up's edit goes under the later mod's: the field keeps the later value */
+    assert(!ApiSetField(m[1], 0x77, &capacity, &v300) && CAPACITY() == 300);
+    g_liveSetup = m[0];
+    assert(!ApiSetField(m[0], 0x77, &capacity, &v200));
+    g_liveSetup = NULL;
+    assert(CAPACITY() == 300 && g_editCount == savedEdits + 2 && g_edits[savedEdits].mod == m[0] && *(uint32_t*)g_edits[savedEdits + 1].before == 200);
+
+    /* under a live edit: the field keeps it; its reset value is what the deferred edits now make */
+    assert(ApiSetLive(m[2], 0x77, &capacity, &v999, 0) && CAPACITY() == 999);
+    EditsForget(m[1]);
+    FieldEdit* live = NULL;
+    for (int i = 0; i < g_editCount; i++) if (g_edits[i].live) live = &g_edits[i];
+    assert(CAPACITY() == 999 && live != NULL && *(uint32_t*)live->original == 200);
+    EditsForget(m[2]);
+    assert(CAPACITY() == 200);
+    EditsForget(m[0]);
+    assert(CAPACITY() == 100 && g_editCount == savedEdits);
+    #undef CAPACITY
+    printf("  live mods: a mod's deferred edits taken out (the later's value stays, the field's own comes back), a live set-up's edit in load order, under a live edit\n");
+
+    free(record);
+    g_fakeRecordCount = savedFake;
+    g_fieldRecord = ComponentRecordOf;
+    g_components[0] = savedComponent;
+    g_componentCount = savedComponents;
+    g_modCount = mods;
+    InterlockedExchange(&g_fired[HF_EVENT_ENTITIES_READY], entities);
+}

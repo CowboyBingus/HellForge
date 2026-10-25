@@ -33,6 +33,7 @@ typedef struct SdkContent { uint32_t kind; const char* name; uint64_t id; } SdkC
 
 #define FIELD_MAX_EDITS (1 << 20) /* a sanity bound: the list grows as mods and editors add edits */
 #define FIELD_MAX_DEFS 64
+#define FIELD_BEFORE 64
 
 enum { EDIT_COPY, EDIT_SET, EDIT_TAG };
 
@@ -53,6 +54,10 @@ typedef struct FieldEdit
     int waiting;            /* its table is not loaded yet */
     int hasOriginal;        /* live: the bytes from before it, for a reset */
     uint8_t original[8];
+    /* deferred (not live): the bytes the field held under it when it applied, so a live change can take it out again
+     * (live_code.c FieldRestack); fields of at most FIELD_BEFORE bytes */
+    int hasBefore;
+    uint8_t before[FIELD_BEFORE];
     int failed;             /* refused on the last load (logged once per load) */
     int refNoted;           /* a reference's wait for its packages is logged */
     uintptr_t address;      /* where its bytes were when it last applied (get_stat names a live edit's holder by it) */
@@ -399,11 +404,26 @@ static int EditRoom(void)
     return 1;
 }
 
+static void FieldRestack(const FieldEdit* field, const uint8_t* bottom); /* live_code.c */
+
 static int QueueEdit(FieldEdit edit)
 {
+    if (ModGone(edit.mod)) { ApiLog(edit.mod, "deferred edit refused: the mod is being taken out"); return 1; }
     AcquireSRWLockExclusive(&g_fieldsLock);
     int refused = !EditRoom();
     if (refused) ApiLog(edit.mod, "deferred edits: mods queued %d already", FIELD_MAX_EDITS);
+    else if (g_liveSetup != NULL && edit.mod == g_liveSetup)
+    {
+        /* a mod set up while the game runs (live_code.c): in load order among the edits, and the field's deferred edits
+         * applied again over what was under them, so a later mod's value stays on top */
+        int at = g_editCount;
+        while (at > 0 && ModLoadIndex(g_edits[at - 1].mod) > ModLoadIndex(edit.mod)) at--;
+        memmove(&g_edits[at + 1], &g_edits[at], (size_t)(g_editCount - at) * sizeof g_edits[0]);
+        g_edits[at] = edit;
+        g_editCount++;
+        ReportConflicts(&g_edits[at], at);
+        if (edit.table || g_fired[HF_EVENT_ENTITIES_READY]) FieldRestack(&g_edits[at], NULL);
+    }
     else if (g_modsSettingUp)
     {
         /* while the mods set up (in id order): in load order among the queued edits; reported and applied once all have
@@ -565,6 +585,7 @@ static void ApplyEdit(FieldEdit* e)
     /* under a value Local Stats saved (not written; its original is taken when it does apply) */
     if (e->live && ModRank(e->mod) < RANK_EDITOR && SavedEditorValue((uintptr_t)at, e->field->size)) { e->failed = 0; return; }
     if (e->live && !e->hasOriginal && e->field->size <= sizeof e->original) { memcpy(e->original, at, e->field->size); e->hasOriginal = 1; }
+    if (!e->live && !e->hasBefore && e->field->size <= sizeof e->before) { memcpy(e->before, at, e->field->size); e->hasBefore = 1; }
     if (e->kind == EDIT_COPY)
     {
         const uint8_t* source = EditRecord(e, e->from, 1, &waiting);
@@ -673,7 +694,7 @@ static void ApplyFieldEdits(void)
 {
     AcquireSRWLockExclusive(&g_fieldsLock);
     g_packagesInferred = 0;
-    for (int i = 0; i < g_editCount; i++) { g_edits[i].failed = 0; if (!g_edits[i].table) g_edits[i].hasOriginal = 0; }
+    for (int i = 0; i < g_editCount; i++) { g_edits[i].failed = 0; if (!g_edits[i].table) g_edits[i].hasOriginal = g_edits[i].hasBefore = 0; }
     for (int i = 0; i < g_editCount; i++) ApplyEdit(&g_edits[i]);
     if (g_editCount > 0)
     {
@@ -862,6 +883,7 @@ static void LiveLeave(int index)
 static int ApiSetLive(HfMod* mod, HfRef target, const HfField* field, const HfValue* value, uint32_t flags)
 {
     const SdkComponent* c = NULL;
+    if (value != NULL && ModGone(mod)) return 0;
     const SdkField* f = mod != NULL ? ResolveField(mod, "set_live", field, &c) : NULL;
     if (f == NULL) return 0;
     AcquireSRWLockExclusive(&g_fieldsLock);

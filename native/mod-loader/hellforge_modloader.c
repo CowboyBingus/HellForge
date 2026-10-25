@@ -42,6 +42,17 @@ struct HfMod
     int lua;        /* a Lua mod (lua.<name>), registered through the Lua bridge while the game runs (lua_bridge.c) */
     char name[128]; /* a Lua mod's name as its runtime gave it (SDK 10, mods) */
     int order;      /* its place in load order (0 loads first): its index, until a live change reorders (live_mods.c) */
+    /* SDK 16, live mods (live_code.c): its manifest's "live": true (the plan's "live", or a live change's), so it may be
+     * set up and taken out while the game runs; how it was set up (HF_LOAD_BOOT, HF_LOAD_LIVE); taken out, or being:
+     * the API refuses what it would add then; its DLL's image (the writes and threads it started are known by address);
+     * its optional hellforge_mod_unload. */
+    int live;
+    uint32_t phase;
+    volatile LONG removing;
+    int removed;
+    int staging; /* a new version set up beside the running one until the change is made (live_mods.c) */
+    uintptr_t imageBase, imageEnd;
+    int (*unload)(const HfApi* api, HfMod* mod, uint32_t reason);
 };
 
 typedef struct Component
@@ -96,7 +107,15 @@ static void SetupOrder(int order[MAX_MODS])
 }
 static Callback g_callbacks[MAX_CALLBACKS];
 static int g_callbackCount;
-static volatile LONG g_fired[5];
+static SRWLOCK g_callbacksLock = SRWLOCK_INIT; /* a live change takes a mod's callbacks out (live_code.c) */
+static volatile LONG g_fired[HF_EVENT_MODS_CHANGED + 1];
+/* The load events in the order they fired (a mod set up while the game runs hears them in it: live_code.c). */
+static HfEvent g_fireOrder[4];
+static volatile LONG g_fireCount;
+/* The mod a live change is setting up (live_code.c): on() calls it back after its init, not inside it. */
+static HfMod* g_liveSetup;
+/* A mod being taken out by a live change: what it asks to add is refused (live_code.c). */
+static int ModGone(const HfMod* mod) { return mod != NULL && mod->removing; }
 static uintptr_t g_region;
 static SRWLOCK g_lock = SRWLOCK_INIT;
 static int g_hooksReady;
@@ -658,20 +677,34 @@ static int ApiSubscribe(HfMod* mod, uint32_t kind, HfListener listener, void* us
 #include "shots.c" /* after actions.c: the players (event_polls.c), RefCheck (refs.c), the field records (fields.c) */
 #include "rounds.c" /* after shots.c: its players and wielders; the projectile and damage lists (projectiles.c, damage.c) */
 
-static void Deliver(HfEvent event)
+/* An event to the mods registered for it (only: one mod's, a live set-up's replay), from a copy of the list taken
+ * under its lock, so a callback may register more. */
+static void DeliverTo(HfEvent event, const HfMod* only)
 {
+    static Callback copy[MAX_CALLBACKS];
+    static SRWLOCK copying = SRWLOCK_INIT; /* the copy is one: the watch thread and a live change never deliver at once */
+    AcquireSRWLockExclusive(&copying);
+    int n = 0;
+    AcquireSRWLockShared(&g_callbacksLock);
     for (int i = 0; i < g_callbackCount; i++)
-        if (g_callbacks[i].event == event && g_callbacks[i].mod->loaded)
-        {
-            Note("event %d -> %s", (int)event, g_callbacks[i].mod->id);
-            g_callbacks[i].function(g_callbacks[i].mod, event, g_callbacks[i].user);
-        }
+        if (g_callbacks[i].event == event && g_callbacks[i].mod->loaded && (only == NULL || g_callbacks[i].mod == only)) copy[n++] = g_callbacks[i];
+    ReleaseSRWLockShared(&g_callbacksLock);
+    for (int i = 0; i < n; i++)
+    {
+        Note("event %d -> %s", (int)event, copy[i].mod->id);
+        copy[i].function(copy[i].mod, event, copy[i].user);
+    }
+    ReleaseSRWLockExclusive(&copying);
 }
+
+static void Deliver(HfEvent event) { DeliverTo(event, NULL); }
 
 static void Fire(HfEvent event)
 {
     if (event == HF_EVENT_ENTITIES_READY) StratagemPayloadsCheck(); /* nothing calls in an entity that is not there */
     if (event == HF_EVENT_ENTITIES_READY) ApplyFieldEdits(); /* SDK 6 deferred edits, before any mod hears of it */
+    LONG at = g_fireCount;
+    if (!g_fired[event] && at < 4) { g_fireOrder[at] = event; InterlockedExchange(&g_fireCount, at + 1); }
     InterlockedExchange(&g_fired[event], 1);
     Deliver(event);
 }
@@ -680,9 +713,14 @@ static uint64_t ApiResourceHash(const char* name) { return name != NULL ? Murmur
 
 static int ApiOn(HfMod* mod, HfEvent event, HfEventCallback callback, void* user)
 {
-    if (mod == NULL || callback == NULL || event < HF_EVENT_GAME_LOADED || event > HF_EVENT_PROJECTILES_READY || g_callbackCount >= MAX_CALLBACKS) return 1;
-    g_callbacks[g_callbackCount++] = (Callback){mod, event, callback, user};
-    if (g_fired[event]) callback(mod, event, user);
+    if (mod == NULL || callback == NULL || event < HF_EVENT_GAME_LOADED || event > HF_EVENT_MODS_CHANGED || ModGone(mod)) return 1;
+    AcquireSRWLockExclusive(&g_callbacksLock);
+    int ok = g_callbackCount < MAX_CALLBACKS;
+    if (ok) g_callbacks[g_callbackCount++] = (Callback){mod, event, callback, user};
+    ReleaseSRWLockExclusive(&g_callbacksLock);
+    if (!ok) return 1;
+    /* an event that fired already calls back at once, but not inside a live set-up: its replay delivers them in order */
+    if (event != HF_EVENT_MODS_CHANGED && g_fired[event] && mod != g_liveSetup) callback(mod, event, user);
     return 0;
 }
 
@@ -978,13 +1016,14 @@ static int ReadPlan(const wchar_t* path)
             c->stride = (uint32_t)strtoul(f[8], NULL, 10);
             if (ParseHex(f[3], c->header, 28) == 28 && c->offset >= 4) g_componentCount++;
         }
-        else if (n == 4 && strcmp(f[0], "mod") == 0 && g_modCount < MAX_MODS)
+        else if ((n == 4 || (n == 5 && !strcmp(f[4], "live"))) && strcmp(f[0], "mod") == 0 && g_modCount < MAX_MODS)
         {
             HfMod* mod = &g_mods[g_modCount];
             mod->order = g_modCount++;
             snprintf(mod->id, sizeof mod->id, "%s", f[1]);
             snprintf(mod->folder, sizeof mod->folder, "%s", f[2]);
             Utf8ToWide(f[3], mod->dll, MAX_PATH);
+            mod->live = n == 5; /* SDK 16: it may be taken out while the game runs */
         }
     }
     free(text);
@@ -1009,6 +1048,19 @@ static int ReadPlan(const wchar_t* path)
 
 typedef int (*InitFunction)(const HfApi* api, HfMod* mod);
 
+/* The SDK's table of functions, handed to every mod. */
+static void ApiInit(void)
+{
+    g_api = (HfApi){HF_MOD_SDK_VERSION, sizeof(HfApi), ApiLog, ApiBuildId, ApiModId, ApiModFolder, ApiOn, ApiModuleBase, ApiFindPattern,
+        SafeRead, ApiModWrite, ApiModWriteU32If, ApiHook, ApiNetworkFieldType, ApiSetNetworkFieldBits, ApiComponentRecord, ApiAddWeapon, ApiWeaponEntity, ApiAddProjectile, ApiProjectileRow, ApiAddDamage, ApiDamageRow, ApiResourceHash,
+        ApiAddStratagem, ApiStratagemRow, ApiAddEntity, ApiAddBehaviour, ApiAddDifficulty, ApiDifficultyRow,
+        ApiRegisterEntity, ApiCopyField, ApiSetField, ApiSetTag, ApiMount, ApiRecord, ApiFind, ApiEditEntity, ApiSetLive, ApiGetLive, ApiSetPassives, ApiGetPassives,
+        ApiOnGameThread, ApiLoadPackage, ApiLastLog, ApiLogsFolder, ApiGetStat, ApiSession, ApiSubscribe, ApiGameState, ApiContent, ApiAddAbility, ApiAddStratagemCategory, ApiSetStat, ApiCopyRow, ApiMods,
+        ApiHeal, ApiHealLimb, ApiInjure, ActLimbState, ApiApplyStatus, ApiAddVelocity, ApiResupply, ApiSpawnExplosion, ApiSpawnProjectile,
+        ApiCreditToPlayer, ApiFreezeTimer, ApiSpawnPelican, ApiModifyShots, ApiHoming, ApiStopShots, ApiNotice, ApiHookEx, ApiCodeMatches, ApiReadCode, ApiSyncState, ApiSyncMod, ApiSyncAnswer, ApiStatsSource,
+        ApiLoadPhase, ApiUnhook};
+}
+
 __declspec(dllexport) int hellforge_loader_start(const wchar_t* plan)
 {
     if (plan == NULL || ReadPlan(plan))
@@ -1023,13 +1075,7 @@ __declspec(dllexport) int hellforge_loader_start(const wchar_t* plan)
     g_log = OpenLog(L"modloader.log");
     if (g_statsProbesSkipped) Note("stats: %d observation(s) in the plan could not be read and are not shown", g_statsProbesSkipped);
     Note("HellForge mod loader, SDK %d, game build %s: %d code mod(s)", HF_MOD_SDK_VERSION, g_build, g_modCount);
-    g_api = (HfApi){HF_MOD_SDK_VERSION, sizeof(HfApi), ApiLog, ApiBuildId, ApiModId, ApiModFolder, ApiOn, ApiModuleBase, ApiFindPattern,
-        SafeRead, ApiWrite, ApiWriteU32If, ApiHook, ApiNetworkFieldType, ApiSetNetworkFieldBits, ApiComponentRecord, ApiAddWeapon, ApiWeaponEntity, ApiAddProjectile, ApiProjectileRow, ApiAddDamage, ApiDamageRow, ApiResourceHash,
-        ApiAddStratagem, ApiStratagemRow, ApiAddEntity, ApiAddBehaviour, ApiAddDifficulty, ApiDifficultyRow,
-        ApiRegisterEntity, ApiCopyField, ApiSetField, ApiSetTag, ApiMount, ApiRecord, ApiFind, ApiEditEntity, ApiSetLive, ApiGetLive, ApiSetPassives, ApiGetPassives,
-        ApiOnGameThread, ApiLoadPackage, ApiLastLog, ApiLogsFolder, ApiGetStat, ApiSession, ApiSubscribe, ApiGameState, ApiContent, ApiAddAbility, ApiAddStratagemCategory, ApiSetStat, ApiCopyRow, ApiMods,
-        ApiHeal, ApiHealLimb, ApiInjure, ActLimbState, ApiApplyStatus, ApiAddVelocity, ApiResupply, ApiSpawnExplosion, ApiSpawnProjectile,
-        ApiCreditToPlayer, ApiFreezeTimer, ApiSpawnPelican, ApiModifyShots, ApiHoming, ApiStopShots, ApiNotice, ApiHookEx, ApiCodeMatches, ApiReadCode, ApiSyncState, ApiSyncMod, ApiSyncAnswer, ApiStatsSource};
+    ApiInit();
     int setupOrder[MAX_MODS];
     SetupOrder(setupOrder);
     if (g_modCount > 1) Note("code mods are set up in the order of their ids (the same on every machine); their edits apply in load order");
@@ -1043,6 +1089,7 @@ __declspec(dllexport) int hellforge_loader_start(const wchar_t* plan)
         mod->log = OpenLog(logName);
         if (!wcscmp(mod->dll, L"-")) { mod->loaded = 1; Note("%s: data-only stats mod loaded", mod->id); continue; }
         mod->module = LoadLibraryExW(mod->dll, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+        ModImage(mod); /* live_code.c: its image, and its unload export */
         InitFunction init = mod->module != NULL ? (InitFunction)(void*)GetProcAddress(mod->module, "hellforge_mod_init") : NULL;
         /* Mods built before the rename (HD2 Beyond The Stars) export bts_mod_init; the API is the same. */
         if (init == NULL && mod->module != NULL) init = (InitFunction)(void*)GetProcAddress(mod->module, "bts_mod_init");

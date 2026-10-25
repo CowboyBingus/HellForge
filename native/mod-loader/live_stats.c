@@ -64,21 +64,30 @@ static uintptr_t TxnStatAddress(StatEdit* e, int* later, const char** why)
     return at;
 }
 
-/* The edits above the stats layers at a field: whether a code mod's deferred edit holds any of its bytes, and the lowest
- * live edit of exactly this field (NULL none). Called with g_fieldsLock held. */
-static FieldEdit* TxnAbove(uintptr_t at, uint32_t size, int* deferred)
+/* The edits above the stats layers at a field: whether a code mod's deferred edit holds any of its bytes (the lowest one
+ * of exactly this field in *under, else NULL), and the lowest live edit of exactly this field (NULL none). Called with
+ * g_fieldsLock held. */
+static FieldEdit* TxnAboveUnder(uintptr_t at, uint32_t size, int* deferred, FieldEdit** under)
 {
     *deferred = 0;
+    *under = NULL;
     FieldEdit* lowest = NULL;
     for (int i = 0; i < g_editCount; i++)
     {
         FieldEdit* e = &g_edits[i];
         if (e->failed || e->waiting || e->address == 0 || e->kind == EDIT_TAG) continue;
         if (e->address >= at + size || e->address + e->field->size <= at) continue;
-        if (!e->live) *deferred = 1;
-        else if (lowest == NULL && e->address == at && e->field->size == size) lowest = e;
+        int exact = e->address == at && e->field->size == size;
+        if (!e->live) { *deferred = 1; if (*under == NULL && exact) *under = e; }
+        else if (lowest == NULL && exact) lowest = e;
     }
     return lowest;
+}
+
+static FieldEdit* TxnAbove(uintptr_t at, uint32_t size, int* deferred)
+{
+    FieldEdit* under;
+    return TxnAboveUnder(at, size, deferred, &under);
 }
 
 static TxnField* TxnFieldAt(uintptr_t at, uint32_t size)
@@ -161,8 +170,10 @@ static int TxnLayerApply(const TxnField* f)
     if (best >= 0) top = g_stats[best].value;
     else if (!f->known) return 1; /* under a deferred edit with no stats left: nothing to write, nothing known to restore */
     int deferred = 0;
-    FieldEdit* live = TxnAbove(f->at, f->size, &deferred);
-    if (deferred) return 1;
+    FieldEdit* under = NULL;
+    FieldEdit* live = TxnAboveUnder(f->at, f->size, &deferred, &under);
+    /* under a code mod's deferred edit: its value stays, and the new top is what taking it out puts back */
+    if (deferred) { if (under != NULL && under->hasBefore) memcpy(under->before, &top, f->size); return 1; }
     if (live != NULL) { if (live->hasOriginal) memcpy(live->original, &top, f->size); return 1; }
     if (TxnUnderExtra(f, top)) return 1;
     uint32_t now = 0, check = 0;
@@ -265,7 +276,7 @@ static void TxnTouchFields(void)
     {
         StatEdit* e = &g_stats[i];
         const TxnMod* t = e->mod != NULL ? TxnFind(e->mod->id) : NULL;
-        if (t != NULL && t->action != TXN_ADD && e->mod == TxnSessionMod(t->id) && e->applied) TxnTouch(e->address, StatSize(e), e);
+        if (t != NULL && t->action != TXN_ADD && e->mod == t->old && e->applied) TxnTouch(e->address, StatSize(e), e);
     }
     for (int i = 0; i < g_txn.statCount; i++) if (g_txn.stats[i].at) TxnTouch(g_txn.stats[i].at, StatSize(&g_txn.stats[i].edit), &g_txn.stats[i].edit);
 }
@@ -314,16 +325,17 @@ static void TxnPlaceStats(void)
     }
 }
 
-/* The stats part of the change, once checked: removals and replacements retire their entries, the added lines take
- * slots, then each touched field gets its new top. Both locks held; after TxnApplyMods. */
+/* The stats part of the change, once checked: removals and replacements retire their entries (the old version's), the
+ * added lines take slots (the new version's), then each touched field gets its new top. Both locks held; after
+ * TxnApplyMods. */
 static void TxnStatsApply(void)
 {
     TxnTouchFields();
     for (int i = 0; i < g_txn.modCount; i++)
     {
         const TxnMod* t = &g_txn.mods[i];
-        if (t->action == TXN_ADD || t->mod == NULL) continue;
-        for (int k = 0; k < g_statCount; k++) if (g_stats[k].mod == t->mod) TxnRetire(&g_stats[k]);
+        if (t->action == TXN_ADD || t->old == NULL) continue;
+        for (int k = 0; k < g_statCount; k++) if (g_stats[k].mod == t->old) TxnRetire(&g_stats[k]);
     }
     TxnPlaceStats();
     for (int i = 0; i < g_txn.fieldCount; i++)
