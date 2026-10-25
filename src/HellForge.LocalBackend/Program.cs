@@ -100,8 +100,10 @@ try
     var warClock = new WarClock();
     var accountKeys = new AccountKeys();
     var presence = new FriendPresence();
-    // The mod loader writes the session's registered weapons beside the backend's evidence folder.
-    var registeredItems = new RegisteredItems(Path.Combine(Path.GetDirectoryName(evidence)!, "registered-items.json"));
+    // --sandbox: the session's game runs at low integrity, so it writes only into the run's game folder (PlaySession's
+    // gameOut), and the pipes it opens carry a low label (PipeServer)
+    var sandboxed = options.GetValueOrDefault("--sandbox") == "true";
+    var registeredItems = new RegisteredItems(RegisteredItems.PathFor(evidence, sandboxed));
     // Premium content mods build on: a copy of a premium base follows the player's ownership, and the mods mods-stage
     // locked (--premium-locked: their declared premium list is not owned) add nothing to the inventory.
     if (profile?.Ownership is { } ownership) registeredItems.OwnsBase = ownership.IsAllowed;
@@ -138,8 +140,7 @@ try
         options.GetValueOrDefault("--fixture-override"), options.GetValueOrDefault("--capture-mission-bodies") == "true", warClock, accountKeys, liveWar, presence, registeredItems, openWar, warSeed, dealSubfactions, dealSeaf);
     await app.StartAsync(lifetime.Token);
     var pipeName = options.GetValueOrDefault("--pipe");
-    // --sandbox: the session's game runs at low integrity, so the pipes it opens carry a low label (PipeServer)
-    HellForge.Core.PipeServer.LowIntegrityClients = options.GetValueOrDefault("--sandbox") == "true";
+    HellForge.Core.PipeServer.LowIntegrityClients = sandboxed;
     // --mod-list <file>: the digest's mods one by one (ModlistDiff's form), so a refused join can say which differ
     var modList = options.GetValueOrDefault("--mod-list") is { } modListFile ? File.ReadAllText(modListFile) : null;
     await using var multiplayer = pipeName != null
