@@ -18,7 +18,7 @@ Nothing here has a date, and stability comes first.
 | Public lobbies, privacy, invites, kicking | Testing | Built for 0.3.0; needs two-PC tests |
 | Faster mod sync | Testing | Built for 0.3.0 |
 | Lockdown: strangers off by default, narrowed network block, mods held read-only | Testing | Built for 0.3.0-dev.5 (PR 24); needs in-game tests |
-| Sandbox (the game at low integrity, Steam through a broker) | Experimental | Built for 0.3.0-dev.5, off by default (Settings > Sandbox); a mission, a controller and two-PC co-op untested |
+| Sandbox (the game at low integrity, Steam through a broker) | Testing | On by default since the 0.3.0 beta (Settings > Sandbox), Windows only; old installations get the WFP block on their first sandboxed session |
 | Host-leaves fix | Next | Planned |
 | Co-op tools for mods | Next | Planned |
 | Cyberstan missions | Testing | Built for 0.3.0-dev.4 (All planets open); difficulty 11 left |
