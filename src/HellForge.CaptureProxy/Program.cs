@@ -121,6 +121,14 @@ Log("upstream " + string.Join(", ", upstreamIps) + ":443");
 
 string? caThumbprint = null;
 X509Certificate2 serverCert;
+// A crash from here on would leave the hosts line and the CA trusted: an exception nothing catches is logged with its
+// cause and they are removed before the process ends (the cleanup below runs only once the listener exists).
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+{
+    Log("crashed: " + (e.ExceptionObject is Exception error ? CaptureDiagnostics.Chain(error) : e.ExceptionObject));
+    if (manageHosts) Step("hosts cleanup", RemoveHosts);
+    if (manageCa) Step("CA cleanup", () => RemoveCas(null));
+};
 if (manageCa)
 {
     var crlListener = new TcpListener(IPAddress.Loopback, 0);
@@ -142,7 +150,7 @@ if (manageCa)
     caThumbprint = ca.Thumbprint;
     Log("CA installed");
     serverCert = MakeLeaf(ca, host, cdp);
-    StartCrlServer(crlListener, new CertificateRevocationListBuilder().Build(ca, BigInteger.One, DateTimeOffset.UtcNow.AddDays(1),
+    StartCrlServer(crlListener, new CertificateRevocationListBuilder().Build(ca, BigInteger.One, new DateTimeOffset(ca.NotAfter),
         HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, DateTimeOffset.UtcNow.AddDays(-1)));
 }
 else serverCert = MakeLeaf(null, host, null);
@@ -713,6 +721,9 @@ static X509Certificate2 MakeLeaf(X509Certificate2? issuer, string name, byte[]? 
     if (cdp != null) request.CertificateExtensions.Add(new X509Extension("2.5.29.31", cdp, false));
     var notBefore = DateTimeOffset.UtcNow.AddDays(-1);
     var notAfter = DateTimeOffset.UtcNow.AddDays(1);
+    // Never past the CA's own end: made a moment after the CA (installing it can take over a second), "a day from now"
+    // was later than the CA's, and the request threw (2026-10-26: the capture crashed with the CA left trusted).
+    if (issuer != null && notAfter > issuer.NotAfter) notAfter = issuer.NotAfter;
     using var certificate = issuer == null ? request.CreateSelfSigned(notBefore, notAfter)
         : request.Create(issuer, notBefore, notAfter, RandomNumberGenerator.GetBytes(8)).CopyWithPrivateKey(key);
     // SslStream needs the key in a form Schannel can use; a PKCS#12 round trip gives it one.
