@@ -309,6 +309,23 @@ static class InventorySyncTests
             "A hand-edited rule a category does not offer was taken.");
         check(!edited.Includes("packages") && edited.RuleFor("packages") == ImportRule.Vanilla, "A valid hand-edited choice was dropped.");
         check(!AccountImportSettings.Load(Path.Combine(root, "import-settings", "missing.json")).AutoApply, "A missing file is not the defaults.");
+
+        // Warbond unlocks have no checkbox: as in vanilla by default, every item, or none; never left out by include alone.
+        var warbonds = new AccountImportSettings();
+        check(warbonds.Includes("warbondItems") && warbonds.RuleFor("warbondItems") == ImportRule.Merge, "Warbond unlocks are not as in vanilla by default.");
+        warbonds.Set("warbondItems", false, ImportRule.All);
+        check(warbonds.Includes("warbondItems") && warbonds.RuleFor("warbondItems") == ImportRule.All, "Unchecking a category without a checkbox left it out.");
+        warbonds.Set("warbondItems", true, ImportRule.None);
+        check(!warbonds.Includes("warbondItems"), "None still imports warbond unlocks.");
+        check(RefusesArgument(() => warbonds.Set("warbondItems", true, ImportRule.Vanilla)) && RefusesArgument(() => warbonds.Set("armory", true, ImportRule.All)),
+            "A rule a category does not offer was taken.");
+        File.WriteAllText(path, """{"categories":{"warbondItems":{"include":false,"rule":"Merge"}}}""");
+        check(AccountImportSettings.Load(path).RuleFor("warbondItems") == ImportRule.None && !AccountImportSettings.Load(path).Includes("warbondItems"),
+            "An older file that left warbond items out does not load as None.");
+        File.WriteAllText(path, """{"categories":{"warbondItems":{"include":true,"rule":"Vanilla"}}}""");
+        check(AccountImportSettings.Load(path).RuleFor("warbondItems") == ImportRule.Merge, "An older Use vanilla for warbond items was not reset to the default.");
+        warbonds.Save(path);
+        check(AccountImportSettings.Load(path).RuleFor("warbondItems") == ImportRule.None, "None did not save and load back.");
     }
 
     static bool RefusesArgument(Action action)

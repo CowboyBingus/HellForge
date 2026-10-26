@@ -28,6 +28,7 @@ static class AccountSyncTests
         SuperCredits(root, check);
         Seals(root, paid, ids, check);
         Imports(root, ids, check);
+        WarbondChoices(root, paid, ids, check);
         DuplicateItems(root, ids, check);
         ModItems(root, paid, check);
     }
@@ -255,6 +256,53 @@ static class AccountSyncTests
             Items(ProfileStore.Load(file)).ContainsKey(LocalArmoryItem) && Experience(ProfileStore.Load(file)) == Math.Max(firstXp, 485592),
             "Restore did not put the backup back.");
         check(ProfileBackups.List(profileDir) is [{ Reason: "restore" }, ..] && ProfileBackups.List(profileDir).Count == 3, "Restore did not back up the profile it replaced.");
+    }
+
+    // Warbond unlocks: as on the vanilla account, every item of each warbond the account owns, or none. Ownership is the
+    // snapshot's: the free warbond and the one whose token it holds; another warbond's items are never unlocked.
+    static void WarbondChoices(string root, PaidContentSet paid, Ids ids, Action<bool, string> check)
+    {
+        var owned = paid.OwnedWarbonds(new HashSet<uint> { ids.OwnedToken }).ToList();
+        check(owned.Count == 2 && owned.Any(w => w.Tokens.Length == 0) && owned.Any(w => w.Tokens.Contains(ids.OwnedToken)),
+            "Owned warbonds are not the free one and the one whose token the snapshot holds.");
+        check(paid.Warbonds.Count == 25 && paid.Warbonds.All(w => w.Items.Length > 0) && paid.Warbonds.Sum(w => w.Items.Length) == 585,
+            "Not every warbond's page items are listed.");
+
+        // Each choice imports into its own fresh starter profile.
+        JsonObject Imported(ImportRule rule)
+        {
+            var (dir, _) = Install(root, "warbond-" + rule, ids);
+            using var store = ProfileStore.Open(dir, "starter");
+            var settings = new AccountImportSettings();
+            settings.Set("warbondItems", false, rule);
+            store.Import(Snapshot(dir), settings, paid);
+            return store.Current();
+        }
+        static HashSet<long> Unlocked(JsonObject profile) =>
+            [.. (profile["progression"]!["purchasedSeasonPassItems"] as JsonArray ?? []).Select(Whole)];
+
+        var asVanilla = Imported(ImportRule.Merge);
+        check(Unlocked(asVanilla).IsSupersetOf([871, 872]) && Items(asVanilla).ContainsKey(ids.OwnedWarbondItem),
+            "As in vanilla did not take the account's warbond unlocks (a category without a checkbox ignored include: false).");
+
+        var every = Imported(ImportRule.All);
+        var expected = owned.SelectMany(w => w.Items).Select(i => i.ItemId).ToHashSet();
+        check(Unlocked(every).IsSupersetOf(expected) && Unlocked(every).IsSupersetOf([871, 872]), "Every item did not unlock each owned warbond's items.");
+        var items = Items(every);
+        check(owned.SelectMany(w => w.Items).All(i => items.ContainsKey(i.MixId)) && !items.ContainsKey(ids.OtherWarbondItem),
+            "Every item did not add the owned warbonds' items, or added another warbond's.");
+        check(!items.Keys.Any(PaidContentSet.IsSuperCredits) && !items.ContainsKey(ids.OwnedToken) && !items.Keys.Any(paid.IsPaid),
+            "Every item added Super Credits or a paid item.");
+
+        var none = Imported(ImportRule.None);
+        var (fresh, _) = Install(root, "warbond-starter", ids);
+        JsonObject starter;
+        using (var store = ProfileStore.Open(fresh, "starter")) starter = store.Current();
+        check(Unlocked(none).SetEquals(Unlocked(starter)) && !Items(none).ContainsKey(ids.OwnedWarbondItem), "None imported warbond unlocks.");
+
+        check(Command(AccountCommands.Preview, fresh, Player, out var preview) == 0, "The preview failed.");
+        using var review = JsonDocument.Parse(preview);
+        check(review.RootElement.GetProperty("warbonds").GetString() == $"2 warbonds you own hold {expected.Count} unlocks", "The preview's warbonds line is wrong: " + preview);
     }
 
     static int Command(Func<string, string?, ulong?, TextWriter, TextWriter, int> command, string profileDir, ulong account, out string text)

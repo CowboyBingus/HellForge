@@ -60,8 +60,9 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
 - **Sync Inventory** (Profile > Account sync) brings your own HELLDIVERS 2 account's inventory and progression into a
   profile, after one Windows prompt. A review then shows each category (level and XP, medals, requisition and samples,
   warbond and armory items, ship modules, weapon levels, ship name, tutorial) side by side, and nothing changes until
-  Apply. Your choices are kept per profile. The game stays connected until you close it, and a sync that cannot read
-  your progression fails and keeps the last complete snapshot (#45).
+  Apply. Warbond unlocks come as on your account, every item of the warbonds you own, or none; which warbonds you own
+  always follows the sync. Your choices are kept per profile. The game stays connected until you close it, and a sync
+  that cannot read your progression fails and keeps the last complete snapshot (#45).
 - Profile backups: every import or restore first saves the profile, the newest 10 are kept, and Profile lists them with
   Restore backup (#45).
 

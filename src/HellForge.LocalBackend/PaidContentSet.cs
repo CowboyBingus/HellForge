@@ -23,7 +23,14 @@ public sealed class PaidContentSet
     // comes from the player's sealed inventory, never from Steam's DLC list. The premium warbond DLCs are tokens, paid already.
     static readonly uint[] SteamDlcPackages = [.. HellForge.Core.PremiumContent.SteamDlc.Values.SelectMany(packages => packages)];
 
+    // One warbond: its id, the tokens that own it (none for Helldivers Mobilize, which is free), and its pages' items
+    // (seasonPassItemId, itemMixId). Two warbonds' pages are all repeatable items; the account's purchases of them are
+    // recorded like any other, so they are listed too.
+    public sealed record Warbond(uint Id, uint[] Tokens, (long ItemId, uint MixId)[] Items);
+
     readonly Dictionary<uint, uint[]> warbondItemTokens;
+
+    public IReadOnlyList<Warbond> Warbonds { get; private init; } = [];
 
     // Premium warbond tokens, items sold for Super Credits and Steam DLC gear.
     public HashSet<uint> MixIds { get; }
@@ -76,8 +83,25 @@ public sealed class PaidContentSet
         paid.UnionWith(SoldForSuperCredits().Where(Bought));
         paid.UnionWith(dlc);
         var gated = tokensByItem.Where(entry => !freeItems.Contains(entry.Key)).ToDictionary(entry => entry.Key, entry => entry.Value.ToArray());
-        return new PaidContentSet(warbondTokens, dlc, paid, gated, warbondItems, currencies);
+        return new PaidContentSet(warbondTokens, dlc, paid, gated, warbondItems, currencies) { Warbonds = ReadWarbonds(data.RootElement) };
     }
+
+    static List<Warbond> ReadWarbonds(JsonElement data) =>
+        [.. data.GetProperty("seasonPassDetails").EnumerateObject().Select(entry => entry.Value).Select(pass =>
+        {
+            var id = pass.GetProperty("id32").GetUInt32();
+            var tokens = id == HellForge.Core.PremiumContent.FreeWarbond ? [] : pass.GetProperty("premiumTokenMixIds").EnumerateArray().Select(t => t.GetUInt32()).ToArray();
+            var items = pass.GetProperty("seasonPassPages").EnumerateArray()
+                .SelectMany(page => page.GetProperty("seasonPassItems").EnumerateArray())
+                .Select(item => (item.GetProperty("seasonPassItemId").GetInt64(), item.GetProperty("itemMixId").GetUInt32()))
+                .ToArray();
+            return new Warbond(id, tokens, items);
+        })];
+
+    // The warbonds an inventory owns: the free one, and each one whose token it holds. Ownership is never chosen in an
+    // import: it always follows the sealed snapshot.
+    public IEnumerable<Warbond> OwnedWarbonds(IReadOnlySet<uint> inventory) =>
+        Warbonds.Where(warbond => warbond.Tokens.Length == 0 || warbond.Tokens.Any(inventory.Contains));
 
     static IEnumerable<uint> WarbondPageItems(JsonElement pass) =>
         pass.GetProperty("seasonPassPages").EnumerateArray()

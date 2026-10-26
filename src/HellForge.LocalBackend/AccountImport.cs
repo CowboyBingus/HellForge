@@ -25,10 +25,31 @@ static class AccountImport
         var items = ItemList(merged);
         foreach (var (category, kind) in ItemCategories)
             if (settings.Includes(category)) MergeItems(items, snapshot.Inventory.RootElement, kind, settings.RuleFor(category), paid);
-        foreach (var superCredits in items.OfType<JsonObject>().Where(i => KindOf(i, paid) == Kind.SuperCredits).ToList()) items.Remove(superCredits);
         if (snapshot.Progression?.RootElement is { ValueKind: JsonValueKind.Object } vanilla)
             MergeProgression((JsonObject)merged["progression"]!, vanilla, settings);
+        if (settings.Includes("warbondItems") && settings.RuleFor("warbondItems") == ImportRule.All)
+            UnlockOwnedWarbonds(items, (JsonObject)merged["progression"]!, OwnedWarbondItems(snapshot, paid), paid);
+        foreach (var superCredits in items.OfType<JsonObject>().Where(i => KindOf(i, paid) == Kind.SuperCredits).ToList()) items.Remove(superCredits);
         return merged;
+    }
+
+    // The once-bought items of every warbond the snapshot owns (PaidContentSet.OwnedWarbonds), by their unlock id.
+    static List<(long ItemId, uint MixId)> OwnedWarbondItems(AccountSnapshot snapshot, PaidContentSet paid) =>
+        [.. paid.OwnedWarbonds(snapshot.Items().Select(MixId).OfType<uint>().ToHashSet()).SelectMany(warbond => warbond.Items).DistinctBy(item => item.ItemId)];
+
+    // All: each owned warbond item's unlock record and the item itself, besides what the profile holds already. An item
+    // that is not a plain warbond item (Super Credits, a paid item, a currency) is never added.
+    static void UnlockOwnedWarbonds(JsonArray items, JsonObject progression, List<(long ItemId, uint MixId)> owned, PaidContentSet paid)
+    {
+        var unlocked = new SortedSet<long>((progression["purchasedSeasonPassItems"] as JsonArray ?? []).OfType<JsonValue>().Select(Whole).OfType<long>());
+        unlocked.UnionWith(owned.Select(item => item.ItemId));
+        progression["purchasedSeasonPassItems"] = new JsonArray([.. unlocked.Select(id => (JsonNode?)id)]);
+        var held = items.OfType<JsonObject>().Select(MixId).OfType<uint>().ToHashSet();
+        foreach (var mixId in owned.Select(item => item.MixId))
+        {
+            var item = new JsonObject { ["mixId"] = mixId, ["amount"] = 1, ["isDiscovered"] = true };
+            if (KindOf(item, paid) == Kind.Warbond && held.Add(mixId)) items.Add((JsonNode?)item);
+        }
     }
 
     static void MergeProgression(JsonObject progression, JsonElement vanilla, AccountImportSettings settings)
@@ -134,8 +155,17 @@ static class AccountImport
         {
             ["categories"] = categories,
             ["premium"] = Premium(tokens, owned.Count - tokens - dlc, dlc),
+            ["warbonds"] = OwnedWarbondsText(snapshot, paid),
             ["capturedUtc"] = snapshot.Seal.CapturedUtc.ToString("O", CultureInfo.InvariantCulture)
         };
+    }
+
+    // "23 warbonds you own hold 512 unlocks": what the All choice unlocks.
+    static string OwnedWarbondsText(AccountSnapshot snapshot, PaidContentSet paid)
+    {
+        var warbonds = paid.OwnedWarbonds(snapshot.Items().Select(MixId).OfType<uint>().ToHashSet()).ToList();
+        var unlocks = warbonds.SelectMany(warbond => warbond.Items).Select(item => item.ItemId).Distinct().Count();
+        return Counted(warbonds.Count, "warbond you own holds", "warbonds you own hold") + " " + Counted(unlocks, "unlock", "unlocks");
     }
 
     static JsonObject Pair(string hellforge, string vanilla) => new() { ["hellforge"] = hellforge, ["vanilla"] = vanilla };
