@@ -78,6 +78,9 @@ public static unsafe class ModLoaderSmoke
             .Append($"entity_region\t{profile.EntityRegionSize}\t{profile.MapHeader}\n")
             .Append($"component\tDepositComponentData\t{schema.Offset}\t{schema.Header}\t{schema.Index}\t{schema.Indices}\t{schema.Records}\t{schema.RecordOffset}\t{schema.Stride}\n")
             .Append($"mod\ttest.hook\t{hookFolder}\t{Path.Combine(hookFolder, "hook_test_mod.dll")}\n")
+            .Append("mod_version\ttest.hook\t9.9.9-smoke\n")
+            // a DLL that is not there: modloader.log gives Windows' error
+            .Append($"mod\ttest.missing\t{hookFolder}\t{Path.Combine(hookFolder, "missing.dll")}\n")
             .Append($"mod\ttest.hook2\t{hookFolder2}\t{Path.Combine(hookFolder2, "hook_test_mod.dll")}\n")
             .Append($"mod\tskyeshade.machine-gun-10k-code\t{gunFolder}\t{Path.Combine(gunFolder, "machine_gun_10k.dll")}\n");
         // The Stratagem Compendium: every definition, field and value it registers is accepted (no game data needed yet).
@@ -129,6 +132,11 @@ public static unsafe class ModLoaderSmoke
                 "The Stratagem Compendium's only refusals are the smoke plan's missing components: " + Log("mod-skyeshade.stratagem-compendium.log"));
         }
         Expect(Log("mod-test.hook.log").Contains("pattern found the pin"), "find_pattern finds the pin");
+        var hookHash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(hookFolder, "hook_test_mod.dll"))));
+        Expect(Log("modloader.log").Contains($"test.hook: version 9.9.9-smoke, hook_test_mod.dll, SHA-256 {hookHash}"),
+            "modloader.log gives a code mod's version and its DLL's SHA-256");
+        Expect(Log("modloader.log").Contains("test.hook2: version not given, hook_test_mod.dll, SHA-256 " + hookHash), "A mod without a version line says so");
+        Expect(Log("modloader.log").Contains("test.missing: not loaded (the DLL could not be loaded: error 126: "), "A DLL that does not load gives its error");
         Expect(CloudSmoke.OpensDated(Path.Combine(root, "modloader.log")), "modloader.log opens with its dated line");
         Expect(CloudSmoke.OpensDated(Path.Combine(root, "mod-test.hook.log")), "A mod's log opens with its dated line");
         Expect(target(5) == 2016, "Both detours run, each calling the next, then the original");

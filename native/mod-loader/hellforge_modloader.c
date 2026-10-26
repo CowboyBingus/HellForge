@@ -9,7 +9,8 @@
  *   network_config <module> <rva hex>       ([[module+rva]] is the engine's network configuration)
  *   entity_region <size> <map header hex>
  *   component <name> <offset> <header hex> <index> <indices> <records> <record offset> <stride>
- *   mod <id> <folder> <dll> */
+ *   mod <id> <folder> <dll>
+ *   mod_version <id> <version>              (a code mod's version, for modloader.log) */
 #define WIN32_LEAN_AND_MEAN
 #define HF_MOD_LOADER
 #include <windows.h>
@@ -43,6 +44,7 @@ struct HfMod
     char last[512]; /* its last log line (last_log: why a call was refused) */
     int lua;        /* a Lua mod (lua.<name>), registered through the Lua bridge while the game runs (lua_bridge.c) */
     char name[128]; /* a Lua mod's name as its runtime gave it (SDK 10, mods) */
+    char version[64]; /* a code mod's version, from the plan (mod_identity.c) */
 };
 
 typedef struct Component
@@ -82,6 +84,7 @@ static int g_modCount;
  * player's load order (2026-10-18: friends with the same mods in another order). g_mods stays in load order: the
  * deferred edits queued while they set up apply in it (fields.c), so the top mod still wins a conflict. */
 static int g_modsSettingUp;
+static void PlanModVersion(const char* id, const char* version); /* mod_identity.c */
 static int ModLoadIndex(const HfMod* mod) { return mod >= g_mods && mod < g_mods + g_modCount ? (int)(mod - g_mods) : MAX_MODS; }
 /* The code mods' set-up order: indices into g_mods by mod id. */
 static void SetupOrder(int order[MAX_MODS])
@@ -992,7 +995,9 @@ static void PlanData(char** f, int n)
         snprintf(mod->id, sizeof mod->id, "%s", f[1]);
         snprintf(mod->folder, sizeof mod->folder, "%s", f[2]);
         Utf8ToWide(f[3], mod->dll, MAX_PATH);
+        mod->version[0] = 0;
     }
+    else if (n == 3 && strcmp(f[0], "mod_version") == 0) PlanModVersion(f[1], f[2]);
 }
 
 /* One line of the plan. 1 when it refuses the plan. */
@@ -1038,6 +1043,8 @@ static int ReadPlan(const wchar_t* path)
 #include "netreap.c"
 #include "coop_diag.c" /* after live.c: the co-op role */
 
+#include "mod_identity.c" /* the version, SHA-256 and load error of each code mod */
+
 typedef int (*InitFunction)(const HfApi* api, HfMod* mod);
 
 /* One mod of the plan set up: its log opened, then a code mod's DLL loaded and its hellforge_mod_init called. */
@@ -1048,13 +1055,21 @@ static void SetupMod(HfMod* mod)
     swprintf(logName, 128, L"mod-%hs.log", mod->id);
     mod->log = OpenLog(logName);
     if (!wcscmp(mod->dll, L"-")) { mod->loaded = 1; Note("%s: data-only stats mod loaded", mod->id); return; }
+    NoteModIdentity(mod);
     mod->module = LoadLibraryExW(mod->dll, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    char why[320] = "it exports no hellforge_mod_init";
+    if (mod->module == NULL)
+    {
+        char error[288];
+        LoadError(GetLastError(), error, sizeof error);
+        snprintf(why, sizeof why, "the DLL could not be loaded: %s", error);
+    }
     InitFunction init = mod->module != NULL ? (InitFunction)(void*)GetProcAddress(mod->module, "hellforge_mod_init") : NULL;
     /* Mods built before the rename (HD2 Beyond The Stars) export bts_mod_init; the API is the same. */
     if (init == NULL && mod->module != NULL) init = (InitFunction)(void*)GetProcAddress(mod->module, "bts_mod_init");
     if (init == NULL)
     {
-        Note("%s: not loaded (%s)", mod->id, mod->module == NULL ? "the DLL could not be loaded" : "it exports no hellforge_mod_init");
+        Note("%s: not loaded (%s)", mod->id, why);
         if (mod->module != NULL) FreeLibrary(mod->module);
         return;
     }
