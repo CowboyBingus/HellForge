@@ -10,6 +10,7 @@
 #include "rounds_test.c"
 #include "network_types_test.c"
 #include "crash_notes_test.c"
+#include "log_header_test.c"
 
 static StatEdit Edit(int mod, uint32_t value, uint32_t offset, int own)
 {
@@ -3348,6 +3349,7 @@ int main(int argc, char** argv)
         free(heap);
     }
     CrashNotesFixture();
+    LogHeaderFixture();
     DifficultyFixture();
     NetSwitchFixture();
     NetworkTypesFixture();

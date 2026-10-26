@@ -96,6 +96,7 @@ sealed partial class PlaySession(PlayOptions options)
         // folder (this runner's files, the backend's evidence and the DLL it loads) stays out of its reach.
         gameOut = options.Sandbox ? LowIntegrityHelper.CreateLowFolder(Path.Combine(run, "game")) : run;
         log = new StreamWriter(Path.Combine(run, "session.log"), append: true, new UTF8Encoding(false));
+        Say(LogHeader.Line(DateTimeOffset.Now, utcTimes: false));
         result["runId"] = runId;
         result["status"] = "preparing";
         result["gameLaunched"] = false;

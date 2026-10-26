@@ -21,6 +21,9 @@ and the newest ten are kept. The launcher's CONSOLE page has an **Open session l
 | `hooks.tsv` | every hooked function, with its hooks in the order they run (owner, priority) |
 | `engine-logs/` | the game's own logs, when the launcher's **Engine log** setting is on (`play --engine-log yes`) |
 
+Each log's first line gives the local date and time it was opened and the offset from UTC; the lines after it give a
+time of day only, in UTC (`session.log`: local time).
+
 In code, `hf->last_log(mod)` returns your mod's last log line, so it can show why a call that returned 0 was refused.
 
 ## Before the game starts

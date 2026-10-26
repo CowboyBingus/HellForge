@@ -56,6 +56,15 @@ static class CrashReportTests
             check(SessionFacts.From(JsonDocument.Parse("[]").RootElement) == null, "An old session's missing facts were read.");
         });
 
+        test("A log's dated line: the local date and time, the offset from UTC and which times follow", () =>
+        {
+            check(LogHeader.Line(new DateTimeOffset(2026, 10, 26, 5, 34, 56, TimeSpan.FromHours(-7)), utcTimes: true) ==
+                "log opened 2026-10-26 05:34:56 local time (UTC-07:00); the times below are UTC", "West of UTC.");
+            check(LogHeader.Line(new DateTimeOffset(2026, 10, 26, 18, 4, 56, new TimeSpan(5, 30, 0)), utcTimes: false) ==
+                "log opened 2026-10-26 18:04:56 local time (UTC+05:30); the times below are local", "East of UTC, local times.");
+            check(LogHeader.Line(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero), utcTimes: true).Contains("(UTC+00:00)"), "UTC itself.");
+        });
+
         test("System facts: Windows 11 by its build, NVIDIA's driver number, and what this PC says", () =>
         {
             check(SystemFacts.Describe(10, 0, 26100, 4652, "24H2") == "Windows 11 24H2 (10.0.26100.4652)" && SystemFacts.Describe(10, 0, 19044, 2364, null) == "Windows 10 (10.0.19044.2364)",

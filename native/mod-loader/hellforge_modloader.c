@@ -24,6 +24,7 @@
 #include "MinHook.h"
 #include "hde/hde64.h" /* MinHook's instruction decoder: FarHook */
 #include "../common/hf_privacy.h"
+#include "../common/hf_log_header.h"
 
 #define MAX_MODS 192 /* code and stats mods from the plan, then Lua mods (lua_bridge.c) */
 #define MAX_COMPONENTS 64
@@ -128,11 +129,14 @@ static void Note(const char* format, ...)
     va_end(arguments);
 }
 
+/* A log of the session's folder, opened to append, its dated line first (hf_log_header.h: the lines carry UTC times). */
 static HANDLE OpenLog(const wchar_t* name)
 {
     wchar_t path[MAX_PATH];
     if (!g_logs[0] || swprintf(path, MAX_PATH, L"%ls\\%ls", g_logs, name) < 0) return INVALID_HANDLE_VALUE;
-    return CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE file = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HfLogHeader(file);
+    return file;
 }
 
 /* While the live editor's request runs, its mod's last message is kept: the reason a refusal gives (live.c). */

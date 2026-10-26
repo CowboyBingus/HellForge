@@ -129,6 +129,8 @@ public static unsafe class ModLoaderSmoke
                 "The Stratagem Compendium's only refusals are the smoke plan's missing components: " + Log("mod-skyeshade.stratagem-compendium.log"));
         }
         Expect(Log("mod-test.hook.log").Contains("pattern found the pin"), "find_pattern finds the pin");
+        Expect(CloudSmoke.OpensDated(Path.Combine(root, "modloader.log")), "modloader.log opens with its dated line");
+        Expect(CloudSmoke.OpensDated(Path.Combine(root, "mod-test.hook.log")), "A mod's log opens with its dated line");
         Expect(target(5) == 2016, "Both detours run, each calling the next, then the original");
         Expect(WaitFor(() => Marshal.ReadInt32(record) == 10000 && Marshal.ReadInt32(record + 4) == 10000 && Marshal.ReadInt32(record + 8) == 5000),
             "The Machine Gun mod fills the backpack's deposit record once the entity data is ready");
