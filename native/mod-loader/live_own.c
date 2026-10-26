@@ -4,11 +4,12 @@
  * copy; entities already spawned keep the values they copied at their spawn (KB hellforge-live-mod-sync-re-runtime, 4).
  * Included by live_mods.c before live_stats.c.
  *
- * A component's first copy moves the whole table (the game is pointed at HellForge's copy), and an entity's copy no longer
- * follows its shared record, so a copy is made only where nothing HellForge holds would be left behind: no stats entry,
- * field edit or live value at an address in the table (a move) or in the entity's record (a copy). Otherwise the change
- * is refused, and a restart gives the entity its record as the entity data loads. A copy is never taken back: a removed
- * mod's own line leaves the field's bottom in it. */
+ * A component's first copy moves the whole table (the game is pointed at HellForge's copy, which holds the same bytes):
+ * every address HellForge holds in it follows into the copy (HeldFollow), so taking a mod out later restores where the
+ * game reads; a live change's registrations move tables the same way (live_registry.c). An entity's copy no longer
+ * follows its shared record, so it is made only where nothing HellForge holds is in that record (no stats entry, field
+ * edit or live value): otherwise the change is refused, and a restart gives the entity its record as the entity data
+ * loads. A copy is never taken back: a removed mod's own line leaves the field's bottom in it. */
 
 /* HellForge's copy of a component's table, when the game reads it (registry.c OwnRecord made it), or NULL. */
 static OwnedTable* TxnOwnedTable(uint32_t component, const uint8_t* table)
@@ -24,6 +25,29 @@ static int TxnHeld(uintptr_t from, uintptr_t to)
     for (int i = 0; i < g_editCount; i++) if (!g_edits[i].failed && g_edits[i].address >= from && g_edits[i].address < to) return 1;
     for (int i = 0; i < g_liveExtraCount; i++) if (g_liveExtra[i].address >= from && g_liveExtra[i].address < to) return 1;
     return 0;
+}
+
+/* A table a copy moved: the stats entries, field edits and live values HellForge holds in it follow into the copy. Under
+ * both locks. */
+static void HeldFollow(const OwnedTable* owned)
+{
+    uintptr_t from = (uintptr_t)owned->from, to = from + owned->fromBytes, moved = (uintptr_t)owned->index;
+    for (int i = 0; i < g_statCount; i++) if (g_stats[i].address >= from && g_stats[i].address < to) g_stats[i].address = moved + (g_stats[i].address - from);
+    for (int i = 0; i < g_editCount; i++) if (g_edits[i].address >= from && g_edits[i].address < to) g_edits[i].address = moved + (g_edits[i].address - from);
+    for (int i = 0; i < g_liveExtraCount; i++)
+        if (g_liveExtra[i].address >= from && g_liveExtra[i].address < to) g_liveExtra[i].address = moved + (g_liveExtra[i].address - from);
+}
+
+/* The tables copies moved from g_owned[first] on (a live change's registrations, on the game thread): what HellForge
+ * holds in them follows. */
+static void HeldFollowFrom(int first)
+{
+    if (first >= g_ownedCount) return;
+    AcquireSRWLockExclusive(&g_fieldsLock);
+    AcquireSRWLockExclusive(&g_statsLock);
+    for (int i = first; i < g_ownedCount; i++) HeldFollow(&g_owned[i]);
+    ReleaseSRWLockExclusive(&g_statsLock);
+    ReleaseSRWLockExclusive(&g_fieldsLock);
 }
 
 /* An own line's component, its table in use and the entity's record there (index row +8), or NULL. */
@@ -62,7 +86,7 @@ static const char* TxnOwnRefused(const Component* c, uint8_t* table, uint32_t re
         "an edit or stat already holds a field of the record it would copy" : NULL;
     if (wanted >= REG_MAX_WEAPONS) return "HellForge's copy of its table has no room left";
     if (wanted == 0 && g_ownedCount >= REG_MAX_OWNED) return "HellForge copies no more tables";
-    return wanted == 0 && TxnHeld(records, records + (uintptr_t)c->records * c->stride) ? "an edit or stat already holds a field of its table, which the copy moves" : NULL;
+    return TxnHeld(at, at + c->stride) ? "an edit or stat already holds a field of the record it would copy" : NULL; /* the table's move takes the rest */
 }
 
 static const char* TxnOwnCheck(char* why, size_t size)
@@ -83,10 +107,17 @@ static const char* TxnOwnCheck(char* why, size_t size)
     return NULL;
 }
 
-/* A table a copy moved: the change's own addresses into it follow (nothing else held one: TxnOwnCheck). */
+/* A table a copy moved: the change's own addresses into it follow (what HellForge held there: HeldFollow). */
 static void TxnOwnFollow(uintptr_t from, uintptr_t to, uintptr_t moved)
 {
     for (int i = 0; i < g_txn.statCount; i++) if (g_txn.stats[i].at >= from && g_txn.stats[i].at < to) g_txn.stats[i].at = moved + (g_txn.stats[i].at - from);
+}
+
+/* A component's table the first copy moved: what HellForge held in it, and this change's lines at it, follow. */
+static void TxnOwnMoved(const Component* c, const uint8_t* table, const uint8_t* moved)
+{
+    HeldFollow(TxnOwnedTable(c->index, moved));
+    TxnOwnFollow((uintptr_t)table, (uintptr_t)table + c->recordOffset + (uintptr_t)c->records * c->stride, (uintptr_t)moved);
 }
 
 /* Under both locks, first in the stats part of the change: each own line's entity gets its copy, and every line of this
@@ -107,7 +138,7 @@ static void TxnOwnApply(void)
         uint8_t* copy = OwnRecord(state, c->index, c->stride, s->edit.resource, s->edit.resource);
         uint8_t* moved = StatePointer(state, REG_TABLES + 8 * c->index);
         if (copy == NULL) { s->at = 0; continue; } /* (checked: never) refused as the boot refuses it */
-        if (moved != table) TxnOwnFollow((uintptr_t)table, (uintptr_t)table + c->recordOffset + (uintptr_t)c->records * c->stride, (uintptr_t)moved);
+        if (moved != table) TxnOwnMoved(c, table, moved);
         from = moved != table ? (uintptr_t)moved + (from - (uintptr_t)table) : from;
         TxnOwnFollow(from, from + c->stride, (uintptr_t)copy);
         Note("live mod change %s: %016llx has a record of its own in component %u (%s)", g_txn.id, (unsigned long long)s->edit.resource, c->index,

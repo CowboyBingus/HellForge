@@ -184,7 +184,9 @@ static uint8_t* g_regList;      /* HellForge's copy of the short-id list (its 32
 static uint32_t g_regListCount; /* its entries */
 static uint8_t* g_armory;
 /* HellForge's copies of component tables that registered weapons have records of their own in (besides component 29). */
-typedef struct OwnedTable { uint32_t component, stride, first, next, end; uint8_t* index; } OwnedTable;
+/* from: the table the copy was made of (fromBytes after its header), which HellForge's addresses in it follow out of
+ * (live_own.c HeldFollow). */
+typedef struct OwnedTable { uint32_t component, stride, first, next, end; uint8_t* index; uint8_t* from; uint32_t fromBytes; } OwnedTable;
 static OwnedTable g_owned[REG_MAX_OWNED];
 static int g_ownedCount;
 static EntityLoaderFn g_entityLoader;
@@ -641,7 +643,7 @@ static uint8_t* OwnRecord(uint8_t* state, uint32_t c, uint32_t stride, uint64_t 
         if (copy == NULL) return NULL;
         memcpy(copy, table - 32, 32 + (size_t)bytes);
         owned = &g_owned[g_ownedCount++];
-        *owned = (OwnedTable){c, stride, first, first, first + REG_MAX_WEAPONS, copy + 32};
+        *owned = (OwnedTable){c, stride, first, first, first + REG_MAX_WEAPONS, copy + 32, table, bytes};
         SetStatePointer(state, REG_TABLES + 8 * c, owned->index);
         Note("registry: component %u copied (%u slots, %u-byte records, new records from %u)", c, slots, stride, first);
     }

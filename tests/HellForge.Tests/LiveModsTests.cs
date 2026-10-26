@@ -124,5 +124,22 @@ static class LiveModsTests
             File.WriteAllText(file, File.ReadAllText(file).Replace(read.Mods[0].Hash, "nothex"));
             reject(() => SessionMods.Read(file));
         });
+
+        test("Live mod changes: a change's target is read back from its folders, a cosmetic pack and a host's downloaded mod among them", () =>
+        {
+            var mods = Path.Combine(root, "live-target");
+            Mod(mods, "s1", stats: Rpm);
+            var pack = Path.Combine(mods, "a-pack");
+            Directory.CreateDirectory(pack);
+            var (archive, _, _) = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts> { [new(ResourceTypes.Texture, 0x1234)] = new([1, 2, 3, 4], [], []) });
+            File.WriteAllBytes(Path.Combine(pack, "9ba626afa44a3aa3.patch_0"), archive);
+            Mod(Path.Combine(mods, SyncedStore.FolderName), "h1", stats: Rpm.Replace("900", "800"));
+            var session = Session(mods);
+            var folders = session.Select(m => m.Folder).Append(Path.Combine(mods, SyncedStore.FolderName, "h1")).Append("").ToList();
+            var target = LiveModPlan.TargetOf(mods, folders);
+            check(target.Select(m => m.Id).SequenceEqual(session.Select(m => m.Id).Append("h1")) && target.Any(m => m.Pack != null) &&
+                target.Single(m => m.Id == "h1").Stats.Count == 1, "The target's folders did not read back: " + string.Join(", ", target.Select(m => m.Id)));
+            reject(() => LiveModPlan.TargetOf(mods, [Path.Combine(mods, "not-a-mod")]));
+        });
     }
 }

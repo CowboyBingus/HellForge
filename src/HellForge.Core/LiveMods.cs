@@ -94,6 +94,15 @@ public sealed record LiveModPlan(IReadOnlyList<LiveModChange> Changes, IReadOnly
     // Whether the change needs the session's tools first: a source mod's build, or game data to package.
     public bool NeedsPreparation => Changes.Any(c => c.Mod != null && (c.Mod.HasSource || HasData(c.Mod)) || c.Was?.Data == true);
 
+    // A change's target from its mods' folders (HellForge.Cli mods-live --target): the mods the Mods page lists as it
+    // loads them (cosmetic packs and archives among them, which have no manifest of their own there), a host's mod
+    // downloaded by mod sync (mods/.synced, which the page does not list) from its manifest.
+    public static List<ModManifest> TargetOf(string modsFolder, IEnumerable<string> folders)
+    {
+        var listed = ModCatalog.Load(modsFolder).Mods.ToDictionary(m => Path.GetFullPath(m.Folder), StringComparer.OrdinalIgnoreCase);
+        return [.. folders.Where(f => f.Length > 0).Select(f => listed.TryGetValue(Path.GetFullPath(f), out var mod) ? mod : ModCatalog.Parse(f, EntityProfile.Current))];
+    }
+
     public static LiveModPlan Make(SessionMods current, IReadOnlyList<ModManifest> target)
     {
         var changes = new List<LiveModChange>();

@@ -85,6 +85,7 @@ static struct
     TxnRes res[HOT_OVERRIDES];
     int resCount;
     int ordersBefore[MAX_MODS]; /* the mods' order before the change, put back when it is refused */
+    int orderSaved;             /* ordersBefore holds this change's: a change refused before it set the order keeps it */
 } g_txn;
 /* A retired stat entry's mod: never loaded, so every pass skips the entry. */
 static HfMod g_retiredMod = {.id = "retired"};
@@ -133,6 +134,7 @@ static void TxnReset(void)
     g_txn.open = 0;
     g_txn.id[0] = 0;
     g_txn.orderCount = g_txn.modCount = g_txn.statCount = g_txn.fieldCount = g_txn.netCount = g_txn.dataCount = g_txn.resCount = 0;
+    g_txn.orderSaved = 0;
 }
 
 static void LiveModsAbort(const char* why)
@@ -233,11 +235,13 @@ static const char* TxnOrderCheck(char* why, size_t size)
 static const char* TxnCheck(char* why, size_t size)
 {
     const char* gate = TxnGate();
+    if (gate == NULL && (g_txn.dataCount > 0 || g_txn.resCount > 0)) gate = TxnGateWide(); /* game data, whoever's */
     if (gate != NULL) return gate;
     for (int i = 0; i < g_txn.modCount; i++)
     {
         HfMod* running = TxnSessionMod(g_txn.mods[i].id);
-        int wide = (g_txn.mods[i].kinds & ~(unsigned)TXN_STATS) || ModRunsCode(running);
+        /* more than stats: what the change brings (its kinds), or what a running version takes with it (code, field types) */
+        int wide = (g_txn.mods[i].kinds & ~(unsigned)TXN_STATS) || ModRunsCode(running) || NetAsksOf(running);
         const char* refused = wide ? TxnGateWide() : NULL;
         if (refused == NULL) refused = TxnModCheck(&g_txn.mods[i], why, size);
         if (refused != NULL) return refused;
@@ -299,6 +303,7 @@ static HfMod* TxnModEntry(const TxnMod* t, int fresh)
 static void TxnAssignOrder(void)
 {
     for (int i = 0; i < g_modCount; i++) g_txn.ordersBefore[i] = g_mods[i].order;
+    g_txn.orderSaved = 1;
     for (int i = 0; i < g_txn.orderCount; i++)
     {
         const TxnMod* t = TxnFind(g_txn.order[i]);
@@ -310,6 +315,7 @@ static void TxnAssignOrder(void)
 
 static void TxnRestoreOrder(void)
 {
+    if (!g_txn.orderSaved) return;
     for (int i = 0; i < g_modCount; i++) if (!g_mods[i].staging) g_mods[i].order = g_txn.ordersBefore[i];
 }
 

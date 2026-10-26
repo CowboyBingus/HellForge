@@ -852,7 +852,7 @@ static DWORD WINAPI Watch(void* parameter)
             {
                 if (difficultySeen == 0) difficultySeen = GetTickCount64();
                 if (g_game == 0) g_game = game;
-                InstallDifficulty(game, GetTickCount64() - difficultySeen >= 20000);
+                InstallDifficultyPolled(game, GetTickCount64() - difficultySeen >= 20000);
             }
         }
         if ((g_statCount || g_statsProbeCount) && !(g_statsTablesDone[0] && g_statsTablesDone[1] && g_statsTablesDone[2]) && g_fired[HF_EVENT_GAME_LOADED])

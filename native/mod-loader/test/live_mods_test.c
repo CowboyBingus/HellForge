@@ -188,11 +188,16 @@ static void LiveModsFixture(void)
     TxnSend("modstat\t45\tr3\tnobody\tcomponent\tFixture\t0000000000000001\t0\t0\tu32\t00000001\t-\t0\t1\t0\tx", reply, sizeof reply);
     assert(TxnRefused(reply, "malformed") && !g_txn.open);
 
-    /* refused at the commit: queued, then a modresult saying why, and nothing changed */
+    /* refused at the commit: queued, then a modresult saying why, and nothing changed (the order neither: refused before
+     * it set the order, it does not put back an earlier change's) */
+    int orders[8];
+    assert(g_modCount <= 8);
+    for (int i = 0; i < g_modCount; i++) orders[i] = g_mods[i].order;
     const char* removeCode[] = {"modbegin\t46\tr5\tsolo\tx", "modorder\t47\tr5\t0\ta", "modorder\t48\tr5\t1\tc", "modremove\t49\tr5\tb",
         "modcommit\t50\tr5"};
     TxnRun(removeCode, 5, reply, sizeof reply);
     assert(!strcmp(reply, "50\tok\tqueued") && TxnResult("r5", "capability") && g_mods[1].loaded);
+    for (int i = 0; i < g_modCount; i++) assert(g_mods[i].order == orders[i]);
     const char* own[] = {"modbegin\t51\tr6\tsolo\tx", "modorder\t52\tr6\t0\ta", "modorder\t53\tr6\t1\tc", "modorder\t54\tr6\t2\tb",
         "modorder\t55\tr6\t3\te", "modadd\t56\tr6\te\tstats\t3333333333333333\tC:\\mods\\e\t-",
         "modstat\t57\tr6\te\tcomponent\tFixture\t0000000000000001\t0\t0\tu32\t00000001\t-\t1\t0\t0\te own", "modcommit\t58\tr6"};
@@ -264,20 +269,26 @@ static void OwnLiveFixture(void)
     Component* c = &g_components[0];
     g_componentCount = 1;
     memset(c, 0, sizeof *c);
-    strcpy(c->name, "Fixture"); c->index = 998; c->indices = 4; c->records = 2; c->recordOffset = 64; c->stride = 16;
-    uint32_t extent = 96;
+    strcpy(c->name, "Fixture"); c->index = 998; c->indices = 4; c->records = 3; c->recordOffset = 64; c->stride = 16;
+    uint32_t extent = 112;
     memcpy(c->header + 16, &extent, 4);
     g_txnState = calloc(1, REG_TABLES + 8 * 1000);
-    uint8_t* block = calloc(1, 32 + 96);
+    uint8_t* block = calloc(1, 32 + 112);
     uint8_t* table = block + 32;
     memcpy(block, &c->index, 4);
     memcpy(block + 4, c->header, 28);
     *(uint64_t*)(table + 16) = 1;                                            /* entity 1: record 0 */
     *(uint64_t*)(table + 32) = 2; *(uint32_t*)(table + 40) = 1;              /* entity 2: record 1 */
+    *(uint64_t*)(table + 48) = 3; *(uint32_t*)(table + 56) = 2;              /* entity 3: record 2 */
     uint32_t* records = (uint32_t*)(table + 64);
-    records[0] = 10; records[4] = 20; records[5] = 21;
+    records[0] = 10; records[4] = 20; records[5] = 21; records[9] = 9;
     assert(!SetStatePointer(g_txnState, REG_TABLES + 8 * c->index, table));
+    /* the boot pass: a sets entity 3's +4 to 0x55 (the table's first copy takes it along) */
+    g_stats[0] = Edit(0, 0x55, 4, 0);
+    g_stats[0].resource = 3; g_stats[0].record = 2;
+    g_statCount = 1;
     FixtureLoad(g_txnState);
+    assert(records[9] == 0x55 && g_stats[0].applied && g_stats[0].address == (uintptr_t)&records[9]);
     g_liveEntityState = TxnFixtureState;
     g_livePlayers = TxnFixturePlayers;
     g_liveGameState = TxnFixtureGameState;
@@ -297,8 +308,10 @@ static void OwnLiveFixture(void)
     memcpy(&mine, FindRow(copy, 4, 16, 2) + 8, 4);
     const uint32_t* own = (const uint32_t*)(copy + 64 + (size_t)mine * 16);
     if (strstr(sent, "modresult\to1\tok\n") == NULL) fprintf(stderr, "  own live: sent %s\n", sent);
-    assert(strstr(sent, "modresult\to1\tok\n") && copy != table && g_ownedCount == savedOwned + 1 && mine >= 2);
+    assert(strstr(sent, "modresult\to1\tok\n") && copy != table && g_ownedCount == savedOwned + 1 && mine >= 3);
     assert(own[0] == 0x63 && own[1] == 0x64 && records[4] == 20 && records[5] == 21);
+    uint32_t* held = (uint32_t*)(copy + 64 + 2 * 16 + 4);
+    assert(*held == 0x55 && g_stats[0].address == (uintptr_t)held); /* a's entry followed into the copy */
     /* entity 1's own +0: into HellForge's copy, no move */
     const char* second[] = {"modbegin\t8\to2\tsolo\tx", "modorder\t9\to2\t0\ta", "modorder\t10\to2\t1\te", "modorder\t11\to2\t2\tf",
         "modadd\t12\to2\tf\tstats\t4444444444444444\tC:\\mods\\f\t-",
@@ -316,8 +329,13 @@ static void OwnLiveFixture(void)
     TxnSent(sent, sizeof sent);
     memcpy(&mine, FindRow(copy, 4, 16, 2) + 8, 4);
     own = (const uint32_t*)(copy + 64 + (size_t)mine * 16);
-    assert(strstr(sent, "modresult\to3\tok\n") && mine >= 2 && own[0] == 20 && own[1] == 21);
-    printf("  live own records: the table copied at the first, a second copy in it, a removed mod's copy keeps the bottoms\n");
+    assert(strstr(sent, "modresult\to3\tok\n") && mine >= 3 && own[0] == 20 && own[1] == 21);
+    /* a out: its field goes back where the game reads it (the copy); the old table is left as it was */
+    const char* removeA[] = {"modbegin\t20\to4\tsolo\tx", "modorder\t21\to4\t0\tf", "modremove\t22\to4\ta", "modcommit\t23\to4"};
+    TxnRun(removeA, 4, reply, sizeof reply);
+    TxnSent(sent, sizeof sent);
+    assert(strstr(sent, "modresult\to4\tok\n") && *held == 9 && records[9] == 0x55);
+    printf("  live own records: the table copied at the first (a held field follows it), a second copy in it, a removed mod's copy keeps the bottoms\n");
 
     AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 0; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
     g_liveEntityState = EntityState;
@@ -559,6 +577,12 @@ static void NetTypesFixture(void)
     TxnRun(replace, 7, reply, sizeof reply);
     TxnSent(sent, sizeof sent);
     assert(strstr(sent, "modresult\tn2\tok\n") && rows[13] == 15);
+    /* taken out in a mission: refused, as an addition is (its asks change the network schema) */
+    const char* inMission[] = {"modbegin\t23\tn5\tsolo\tx", "modorder\t24\tn5\t0\ta", "modorder\t25\tn5\t1\tb", "modremove\t26\tn5\tnet.wide", "modcommit\t27\tn5"};
+    g_txnGameState = HF_STATE_MISSION;
+    TxnRun(inMission, 5, reply, sizeof reply);
+    g_txnGameState = HF_STATE_SHIP;
+    assert(TxnResult("n5", "state") && rows[13] == 15);
     const char* remove[] = {"modbegin\t15\tn3\tsolo\tx", "modorder\t16\tn3\t0\ta", "modorder\t17\tn3\t1\tb", "modremove\t18\tn3\tnet.wide", "modcommit\t19\tn3"};
     TxnRun(remove, 5, reply, sizeof reply);
     TxnSent(sent, sizeof sent);
@@ -567,7 +591,7 @@ static void NetTypesFixture(void)
     TxnSend("modadd\t21\tn4\tnet.bad\tnet\t0123456789abcdef\tC:\\mods\\bad\t-", reply, sizeof reply);
     TxnSend("modnet\t22\tn4\tnet.bad\tdeposit_value\t1\t10\t0\t40", reply, sizeof reply); /* past 31 bits */
     assert(TxnRefused(reply, "malformed") && rows[13] == 14);
-    printf("  network field types: the plan's ask at network ready, the widest wins, live wider, replaced and taken out, 2 refusals\n");
+    printf("  network field types: the plan's ask at network ready, the widest wins, live wider, replaced and taken out, 3 refusals (one in a mission)\n");
 
     AcquireSRWLockExclusive(&g_liveOutLock); g_liveConnected = 0; g_liveOutUsed = 0; ReleaseSRWLockExclusive(&g_liveOutLock);
     g_liveGameState = LiveGameState;

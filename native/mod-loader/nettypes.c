@@ -122,6 +122,16 @@ static void NetApplyAll(void)
     ReleaseSRWLockExclusive(&g_netLock);
 }
 
+/* Whether a mod asks for any field type's width (a live change taking it out changes the network schema). */
+static int NetAsksOf(const HfMod* mod)
+{
+    int asks = 0;
+    AcquireSRWLockShared(&g_netLock);
+    for (int i = 0; i < g_netAskCount && !asks; i++) asks = g_netAsks[i].mod == mod;
+    ReleaseSRWLockShared(&g_netLock);
+    return mod != NULL && asks;
+}
+
 /* A live change: the asks of the mods it takes out go, those of the mods it adds come (net: its modnet asks), and every
  * type either named is written to its new width. */
 static void NetForget(const HfMod* mod)

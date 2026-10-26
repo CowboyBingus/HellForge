@@ -117,7 +117,8 @@ static void* LiveEntry(int kind, HfMod* mod, const char* name, uint32_t* index)
     if (!g_lcOpen) snprintf(why, sizeof why, "no live change is setting mods up");
     else if (at >= k->max) snprintf(why, sizeof why, "HellForge has room for %u", k->max);
     else if (at < g_lcBefore[kind] && !LiveStandsIn(kind, at, mod, name))
-        snprintf(why, sizeof why, "a boot of these mods numbers it %u, which %s holds", k->first + at, LiveModAt(kind, at) ? LiveModAt(kind, at)->id : "another");
+        snprintf(why, sizeof why, LiveTomb(kind, at) ? "a boot of these mods numbers it %u, which %s left when it was taken out this session" :
+            "a boot of these mods numbers it %u, which %s holds", k->first + at, LiveModAt(kind, at) ? LiveModAt(kind, at)->id : "another mod");
     else if (at >= g_lcBefore[kind] && at != count) snprintf(why, sizeof why, "a boot of these mods numbers it %u, not the next (%u)", k->first + at, k->first + count);
     if (why[0]) { LiveRefuse(mod, k->name, name, why); return NULL; }
     *index = at;
@@ -525,10 +526,9 @@ static const char* LiveDifficulty(LivePlan* plan, char* why, size_t size)
     if (g_difficultyState < 0) { ApiLog(g_difficulty.mod, "difficulty %s not installed: level 11 was refused when the game started", g_difficulty.name); return NULL; }
     if (g_difficultyState == 0) { snprintf(why, size, "state\tthe game has not checked its difficulties yet; try again in a moment"); return why; }
     if (!DifficultyCapPins(plan->game)) { snprintf(why, size, "capability\tdifficulty: the game's highest-level lookup is not the reviewed one"); return why; }
-    g_difficultyState = 0;
     g_writeQueue = LivePut;
     g_writeQueueThread = GetCurrentThreadId();
-    int done = InstallDifficulty(plan->game, 1);
+    int done = InstallDifficulty(plan->game, 1); /* not through state 0, which the Watch thread installs on */
     g_writeQueueThread = 0;
     if (!done || g_difficultyState != 1)
     {
@@ -626,7 +626,7 @@ static void LiveScrubVerify(void* arg)
 
 static const char* LiveRegistryPrepare(LivePlan* plan, char* why, size_t size); /* live_registry.c */
 static void LiveRegistryStep(LivePlan* plan);
-static void LiveRegistryCarry(void);
+static void LiveRegistryCarry(LivePlan* plan);
 
 /* On the game thread: selection categories, weapons and entities, then the items. */
 static void LiveContentStep(void* arg)
@@ -643,6 +643,7 @@ static void LiveContentStep(void* arg)
 /* Whether the change adds, replaces or takes out any content. */
 static int LiveContentAny(void)
 {
+    if (g_difficultyLive) return 1; /* a level 11 a set-up added (LiveDifficulty installs it) */
     if (g_weaponCount > g_lcWeaponsBefore) return 1;
     for (int i = 0; i < g_lcWeaponsBefore; i++) if (LiveLeaves(g_weapons[i].mod)) return 1;
     for (int kind = 0; kind < LC_KINDS; kind++)
@@ -690,7 +691,8 @@ static void LiveInstalled(const LivePlan* plan)
     if (plan->difficulty)
     {
         g_difficultyLive = 0;
-        g_difficultyOnGameThread = g_liveOnGameThread;
+        /* the Watch thread's tick tries while no other step is under way (the fixture's runs in place) */
+        g_difficultyOnGameThread = g_liveOnGameThread == LiveOnGameThreadNow ? LiveOnGameThreadTry : g_liveOnGameThread;
         InterlockedExchange(&g_difficultyCapPending, 1);
     }
 }
@@ -727,7 +729,7 @@ static const char* LiveContentMake(char* why, size_t size, int* failed)
     const char* refused = LivePrepare(&plan, why, size);
     if (refused != NULL) return refused;
     if (plan.items.count > 0 && !OwnProve()) Note("items: the game's catalogue functions are not the reviewed ones; new items are not owned until the next session");
-    LiveRegistryCarry();
+    LiveRegistryCarry(&plan);
     LiveRetire(&plan);
     if (LiveFreezeNeeded()) LiveFreeze();
     LiveInstalled(&plan);

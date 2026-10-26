@@ -191,9 +191,31 @@ static void LiveStepDetour(void* manager, float dt)
     g_liveStepOriginal(manager, dt);
 }
 
-/* Runs fn(arg) on the game thread and waits for it (at most 10 s). 1 when it ran. Without the update hooked nothing runs
- * there (game-thread callbacks, listeners and actions are refused then), so fn runs here. */
+/* One step at a time: a second caller's would take the first's function out of the slot. */
+static SRWLOCK g_liveStepLock = SRWLOCK_INIT;
+
+static int LiveOnGameThreadLocked(void (*fn)(void*), void* arg);
+
+/* Runs fn(arg) on the game thread and waits for it (at most 10 s), after any step under way. 1 when it ran. Without the
+ * update hooked nothing runs there (game-thread callbacks, listeners and actions are refused then), so fn runs here. */
 static int LiveOnGameThreadNow(void (*fn)(void*), void* arg)
+{
+    AcquireSRWLockExclusive(&g_liveStepLock);
+    int ran = LiveOnGameThreadLocked(fn, arg);
+    ReleaseSRWLockExclusive(&g_liveStepLock);
+    return ran;
+}
+
+/* The same unless a step is under way: then 0 at once, for a caller that tries again later (DifficultyCapTick). */
+static int LiveOnGameThreadTry(void (*fn)(void*), void* arg)
+{
+    if (!TryAcquireSRWLockExclusive(&g_liveStepLock)) return 0;
+    int ran = LiveOnGameThreadLocked(fn, arg);
+    ReleaseSRWLockExclusive(&g_liveStepLock);
+    return ran;
+}
+
+static int LiveOnGameThreadLocked(void (*fn)(void*), void* arg)
 {
     uintptr_t game = ApiModuleBase("game.dll", NULL);
     if (g_tickState != 1 || game == 0) { fn(arg); return 1; }

@@ -284,15 +284,15 @@ try
         case "mods-live":
         {
             // A live change of a running session's mods (LiveModPlan.NeedsPreparation): its source mods built and its game
-            // data packaged (LiveData) before the session's backend sends the loader the change. --liveTarget: the mods the
+            // data packaged (LiveData) before the session's backend sends the loader the change. --target: the mods the
             // session runs after it, one folder per line in load order; --seed: unique to the change.
             var liveInstall = new InstallLayout(Required("--install"));
             if (!liveInstall.Exists) throw new InvalidDataException($"{liveInstall.Root} is not a HellForge installation.");
             var running = SessionMods.Read(Required("--session-mods"));
-            var liveTarget = File.ReadAllLines(Required("--liveTarget")).Where(l => l.Length > 0).Select(f => ModCatalog.Parse(f, EntityProfile.Current)).ToList();
+            var liveTarget = LiveModPlan.TargetOf(liveInstall.Mods, File.ReadAllLines(Required("--target")));
             var livePlan = LiveModPlan.Make(running, liveTarget);
             var changing = livePlan.Changes.Select(c => c.Mod).OfType<ModManifest>().Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
-            // every data mod of the liveTarget with its data built (the change's, and those that stay: their bytes come back
+            // every data mod of the target with its data built (the change's, and those that stay: their bytes come back
             // where a removed mod's go); the change's source mods built
             var (withData, liveProblems) = ModDataCache.Prepare(liveInstall, liveTarget.Where(m => changing.Contains(m.Id) || LiveModPlan.HasData(m)).ToList(), Console.Error.WriteLine);
             var (liveBuilt, liveBuildProblems) = ModBuilds.Prepare(liveInstall, ModSdk.Find(liveInstall.Root), withData.Where(m => changing.Contains(m.Id)).ToList(),

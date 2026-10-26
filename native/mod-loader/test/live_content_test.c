@@ -487,7 +487,21 @@ static void ContentWeaponsFixture(void)
     HfMod* x3 = ContentMod("x");
     ContentChange(NULL, x3);
     assert(ContentEntity(x3, base, name) == second && ContentCommit() && !LiveTomb(LC_WEAPON, 1) && g_weapons[1].mod == x3 && g_weaponCount == 2);
-    printf("  live content: entities registered live in resource id order (copies made at the first), a new version's and a returning one's kept, 3 refusals\n");
+    /* a returning loadout weapon (not a plain entity) is owned again: its item went back when its mod was taken out */
+    static LivePlan carried;
+    memset(&carried, 0, sizeof carried);
+    int plain = g_weapons[1].plain, before = g_lcWeaponsBefore;
+    g_weapons[1].plain = 0;
+    g_weapons[2] = g_weapons[1]; /* its set-up's twin */
+    g_weaponCount = 3;
+    g_lcWeaponsBefore = 2;
+    g_lrCarry[1] = 2;
+    LiveRegistryCarry(&carried);
+    assert(g_weaponCount == 2 && carried.items.count == 1 && carried.items.items[0].kind == OWN_WEAPON &&
+        carried.items.items[0].mixId == g_weapons[1].id && carried.items.items[0].baseMixId == g_weapons[1].base && !carried.items.items[0].take);
+    g_weapons[1].plain = plain;
+    g_lcWeaponsBefore = before;
+    printf("  live content: entities registered live in resource id order (copies made at the first), a new version's and a returning one's kept (a weapon owned again), 3 refusals\n");
 
     memset(g_lcTomb, 0, sizeof g_lcTomb);
     g_weaponCount = 0; g_loadoutTable = NULL; g_regList = NULL; g_regListCount = 0; g_ownedCount = 0;
@@ -500,6 +514,8 @@ static void ContentWeaponsFixture(void)
 /* A live level 11 (difficulty.c, live_content.c): one needing the boot's buffers (a larger map) refused, a plain one
  * taken (and unstaged); the install's writes queued for the freeze instead of made; the cap's override found as
  * 0x12E7990 finds it and raised to 11; its unlock item copied from level 10's and owned only when level 10's is. */
+static void CountStep(void* arg) { (*(int*)arg)++; }
+
 static void ContentDifficultyFixture(void)
 {
     ContentEventsSave();
@@ -510,10 +526,11 @@ static void ContentDifficultyFixture(void)
     ContentChange(NULL, m);
     HfDifficulty big = {sizeof big, .name = "big", .title = "Big", .map_scale = 2.0f};
     g_liveSetup = m;
-    assert(ApiAddDifficulty(m, &big) == 0 && g_lcRefused[0] && !g_difficultyAdded);
+    assert(ApiAddDifficulty(m, &big) == 0 && g_lcRefused[0] && !g_difficultyAdded && !LiveContentAny());
     g_lcRefused[0] = 0;
     HfDifficulty plain = {sizeof plain, .name = "plain", .title = "Plain", .encounter_points = 900.0f};
     assert(ApiAddDifficulty(m, &plain) == DIF_VANILLA + 1 && g_difficultyAdded && g_difficultyLive);
+    assert(LiveContentAny()); /* a change with nothing but the level 11 is still content to install */
     g_liveSetup = NULL;
     LiveContentUnstage();
     TxnReset();
@@ -550,14 +567,20 @@ static void ContentDifficultyFixture(void)
     DifficultyCapStep(game);
     assert(*(uint32_t*)(entry + 0x18) == 7);
     free(entries); free(config); free(game);
+    /* the cap's tick never takes the slot of a game-thread step under way: it tries, and runs once none is */
+    int capRan = 0;
+    AcquireSRWLockExclusive(&g_liveStepLock);
+    assert(!LiveOnGameThreadTry(CountStep, &capRan) && capRan == 0);
+    ReleaseSRWLockExclusive(&g_liveStepLock);
+    assert(LiveOnGameThreadTry(CountStep, &capRan) && capRan == 1);
     /* the unlock item: level 10's copied; owned when level 10's is */
     FakeCatalogue();
-    FakeOwnAdd(0, kDifficultyItems[DIF_VANILLA - 1], kDifficultyItems[DIF_VANILLA - 1], 0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, 16, 1);
+    FakeOwnAdd(0, kDifficultyItems[DIF_VANILLA - 1], kDifficultyItems[DIF_VANILLA - 1], 0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, 0, 1); /* level 10's unlock item: category 0, as the login files it */
     OwnBatch batch = {.items = {{OWN_DIFFICULTY, 0xD1FF, 0, 0, kDifficultyItems[DIF_VANILLA - 1], 0}}, .count = 1};
     g_fakeOwnedCount = 0;
     OwnBatchStep(&batch);
-    assert(batch.added == 1 && batch.owned == 0 && OwnEntry((uintptr_t)g_fakeCatalogue, 0xD1FF, 0, 16) >= 0);
-    int level10 = OwnEntry((uintptr_t)g_fakeCatalogue, kDifficultyItems[DIF_VANILLA - 1], 0, 16);
+    assert(batch.added == 1 && batch.owned == 0 && OwnEntry((uintptr_t)g_fakeCatalogue, 0xD1FF, 0, 0) >= 0);
+    int level10 = OwnEntry((uintptr_t)g_fakeCatalogue, kDifficultyItems[DIF_VANILLA - 1], 0, 0);
     *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, level10) + 0x14) = 2;
     OwnBatch again = {.items = {{OWN_DIFFICULTY, 0xD1FF, 0, 0, kDifficultyItems[DIF_VANILLA - 1], 0}}, .count = 1};
     OwnBatchStep(&again);

@@ -115,15 +115,18 @@ static const char* LiveWeaponsCheck(char* why, size_t size)
     return NULL;
 }
 
-/* Once the change is made: each carried registration is the new version's; the set-ups' twins of them go. */
-static void LiveRegistryCarry(void)
+/* Once the change is made: each carried registration is the new version's, its item owned again (a mod taken out gave
+ * it back); the set-ups' twins of them go. */
+static void LiveRegistryCarry(LivePlan* plan)
 {
     for (int e = 0; e < g_lcWeaponsBefore; e++)
         if (g_lrCarry[e] >= 0)
         {
-            g_weapons[e].mod = g_weapons[g_lrCarry[e]].mod;
+            Weapon* w = &g_weapons[e];
+            w->mod = g_weapons[g_lrCarry[e]].mod;
             g_lcTomb[LC_WEAPON][e] = 0; /* a mod back with what it had: no longer a tombstone */
-            ApiLog(g_weapons[e].mod, "%s: its registration is kept", g_weapons[e].name);
+            if (!w->plain) LiveOwn(plan, (OwnItem){OWN_WEAPON, w->id, 0, 0, w->base, 0});
+            ApiLog(w->mod, "%s: its registration is kept", w->name);
         }
     int kept = g_lcWeaponsBefore;
     for (int p = g_lcWeaponsBefore; p < g_weaponCount; p++) if (!LiveWeaponIsCarry(p)) g_weapons[kept++] = g_weapons[p];
@@ -252,7 +255,7 @@ static void LiveRegistryStep(LivePlan* plan)
     }
     ctx.late = 1;
     g_lrNetBefore = g_networkTypeCount;
-    int order[REG_MAX_WEAPONS];
+    int order[REG_MAX_WEAPONS], ownedBefore = g_ownedCount;
     WeaponOrder(order);
     for (int k = 0; k < g_weaponCount; k++)
     {
@@ -260,6 +263,7 @@ static void LiveRegistryStep(LivePlan* plan)
         if (w->state != 2) continue;
         if (RegisterOne(&ctx, w) && !w->plain) LiveOwn(plan, (OwnItem){OWN_WEAPON, w->id, 0, 0, w->base, 0});
     }
+    HeldFollowFrom(ownedBefore); /* a table a registration moved takes the stats and edits held in it along */
     if (ctx.appended == 0 && first) { VirtualFree(ctx.index - 32, 0, MEM_RELEASE); VirtualFree(ctx.list, 0, MEM_RELEASE); return; }
     RegistryPublish(&ctx, first);
     LiveNetworkTypes();

@@ -108,6 +108,10 @@ static void OwnAppend(const uint8_t* source, uint32_t mixId, uint32_t itemId, ui
 /* One item to make owned: a stratagem (copies of its base's category 11 item and category 10 child), a weapon (its base's
  * root item and children) or a difficulty's unlock item (level 10's copied, owned when level 10's is: RegisteredItems.cs). */
 enum { OWN_WEAPON, OWN_STRATAGEM, OWN_DIFFICULTY };
+/* Why an item was not added: its base is not in the catalogue as the login built it. */
+static const char* const kOwnNoBase[] = {"a new weapon's base has no root item in the catalogue; it is owned from the next session",
+    "a new stratagem's base has no item in the catalogue; it is owned from the next session",
+    "level 10's unlock item is not in the catalogue; level 11's is owned from the next session"};
 typedef struct OwnItem { int kind; uint32_t mixId, stable, baseStable, baseMixId; int take; } OwnItem;
 typedef struct OwnBatch { OwnItem items[OWN_ITEMS]; int count, added, owned, taken; const char* why; } OwnBatch;
 
@@ -142,10 +146,11 @@ static int OwnWeapon(uintptr_t manager, const OwnItem* item)
     return added;
 }
 
-/* A difficulty's unlock item: a copy of level 10's (category 16) under its own id. */
+/* A difficulty's unlock item: a copy of level 10's under its own id (by its id: the login files it under category 0,
+ * seen 2026-10-25). */
 static int OwnDifficulty(uintptr_t manager, const OwnItem* item)
 {
-    int base = OwnEntry(manager, item->baseMixId, 0, 16);
+    int base = OwnEntry(manager, item->baseMixId, 0, 0);
     if (base < 0) return 0;
     OwnAppend(OwnRecordAt(manager, base), item->mixId, item->mixId, 0);
     return 1;
@@ -163,6 +168,8 @@ static int OwnOwned(uintptr_t manager, uint32_t mixId)
 static void OwnBatchStep(void* arg)
 {
     OwnBatch* b = (OwnBatch*)arg;
+    /* a change whose items are all found on this step (weapons: LiveRegistryStep) has not proven the functions yet */
+    if (g_ownApply == NULL && !OwnProve()) { b->why = "the game's catalogue functions are not the reviewed ones; new items are owned from the next session"; return; }
     uintptr_t manager = g_ownManager != NULL ? g_ownManager() : 0;
     if (manager == 0 || *(const uint32_t*)(manager + OWN_CATALOGUE) != 2 || *(const uint32_t*)(manager + OWN_INVENTORY) != 2)
     { b->why = "the game's catalogue is not loaded"; return; }
@@ -174,7 +181,7 @@ static void OwnBatchStep(void* arg)
         if (OwnEntry(manager, item->mixId, 0, 0) >= 0) continue; /* in the catalogue already (taken out and back) */
         if (*(const uint32_t*)(manager + OWN_COUNT) + 16 > OWN_MAX) { b->why = "the game's catalogue is full"; break; }
         int added = item->kind == OWN_STRATAGEM ? OwnStratagem(manager, item) : item->kind == OWN_WEAPON ? OwnWeapon(manager, item) : OwnDifficulty(manager, item);
-        if (added == 0) continue;
+        if (added == 0) { if (b->why == NULL) b->why = kOwnNoBase[item->kind]; continue; }
         b->added += added;
         appended = 1;
     }
