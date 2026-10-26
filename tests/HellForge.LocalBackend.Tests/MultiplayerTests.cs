@@ -115,8 +115,8 @@ static class MultiplayerTests
         var added = host.Next("lobby.memberAdded", check);
         check(admitted.TryPeek(out var listedFirst) && listedFirst.Peer == GuestId && !listedFirst.GameKnew,
             "The joiner is admitted as a P2P peer before the host's game hears of it");
-        Thread.Sleep(100);
-        check(Math.Abs(guest.Clock.Seconds - 5_000_000) <= 1, "The friend's war time follows the host's");
+        // (the host's own clock, not the value it was set to: both run on while the war.clock frame is on its way)
+        check(Poll.Until(() => Math.Abs(guest.Clock.Seconds - host.Clock.Seconds) <= 1), "The friend's war time follows the host's");
         network.Join(StrangerId + 20).Send(GuestId, new Frame("war.clock").Add(7).Encode(), true);
         Thread.Sleep(100);
         check(guest.Clock.Seconds >= 5_000_000, "War time from a machine that hosts no joined lobby is ignored");

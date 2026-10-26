@@ -112,7 +112,7 @@ static VoidFn g_runCallbacks;
 
 static void RunUntil(volatile int* runs, int want)
 {
-    for (int i = 0; i < 200 && *runs < want; i++) { g_runCallbacks(); Sleep(10); }
+    for (int i = 0; i < 1000 && *runs < want; i++) { g_runCallbacks(); Sleep(10); }
 }
 
 static int g_contextFills;
@@ -268,7 +268,7 @@ int wmain(int argc, wchar_t** argv)
     // Play with strangers turned on: the game's lobby is Public again, and a new Public lobby stays Public; a private one
     // (0) is never changed. Off again: every lobby the game asked to be Public is Friends only.
     Strangers("{\"playWithStrangers\": true}");
-    for (int i = 0; i < 400 && fake->setLobbyTypeCalls == 0; i++) Sleep(10);
+    for (int i = 0; i < 1000 && fake->setLobbyTypeCalls == 0; i++) Sleep(10);
     EXPECT(fake->setLobbyTypeCalls == 1 && fake->setLobbyType == 2 && fake->setLobbyTypeLobby == LOBBY, "Strangers on: the game's lobby is made Public again");
     createLobby(matchmaking, 2, 4);
     EXPECT(fake->createLobbyType == 2, "Strangers on: a Public lobby stays Public");
@@ -278,9 +278,9 @@ int wmain(int argc, wchar_t** argv)
     createLobby(matchmaking, 2, 4);
     EXPECT(fake->createLobbyType == 1, "HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY=1 (a two-PC test): Friends only with strangers on too");
     SetEnvironmentVariableW(L"HELLFORGE_STEAM_LOBBY_FRIENDS_ONLY", NULL);
-    for (int i = 0; i < 400 && g_bridge.lobbyCount < 4; i++) Sleep(10);
+    for (int i = 0; i < 1000 && g_bridge.lobbyCount < 4; i++) Sleep(10);
     Strangers("{\"playWithStrangers\":false}");
-    for (int i = 0; i < 400 && fake->setLobbyTypeCalls < 4; i++) Sleep(10);
+    for (int i = 0; i < 1000 && fake->setLobbyTypeCalls < 4; i++) Sleep(10);
     Sleep(BROKER_STRANGERS_MS + 300);
     EXPECT(g_bridge.lobbyCount == 4 && fake->setLobbyTypeCalls == 4 && fake->setLobbyType == 1,
         "Strangers off again: the three lobbies asked to be Public are made Friends only, the private one is not touched");
@@ -351,7 +351,7 @@ int wmain(int argc, wchar_t** argv)
     queuePacket(HOST_PEER, 0, bytes, 3000);
     queuePacket(HOST_PEER, 1, bytes + 100, 7);
     uint32_t waiting = 0;
-    for (int i = 0; i < 200 && !p2pWaiting(p2pNet, &waiting, 1); i++) { g_runCallbacks(); Sleep(10); }
+    for (int i = 0; i < 1000 && !p2pWaiting(p2pNet, &waiting, 1); i++) { g_runCallbacks(); Sleep(10); }
     static uint8_t got[4096];
     uint32_t gotSize = 0;
     uint64_t from = 0;

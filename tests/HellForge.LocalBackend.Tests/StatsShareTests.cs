@@ -185,5 +185,12 @@ static class StatsShareTests
             "Without the host: the joiner's own values: " + string.Join(" | ", left));
         check(Eventually(() => !File.Exists(guestHostValues) && !File.Exists(guestHostStats) && !File.Exists(guestHostMounts)), "Without the host: its files are gone (the editor's own come back).");
         check(log.Any(l => l.Contains("sent this host's Local Stats")), "The host logged what it sent.");
+
+        // Notices (a refused join's, a kick's) reach the game in the order they were made, though each is sent off the
+        // caller's thread.
+        for (var i = 0; i < 100; i++) guestShare.Notice("brief", "n" + i, ["line"]);
+        var notices = game.Take(100);
+        check(notices.SequenceEqual(Enumerable.Range(0, 100).Select(i => $"notice\tbrief\tn{i}\tline")),
+            $"Notices reach the game in order ({notices.Count}): " + string.Join(" | ", notices.Take(8)));
     }
 }

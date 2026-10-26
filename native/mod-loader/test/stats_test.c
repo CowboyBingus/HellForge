@@ -3083,7 +3083,8 @@ static void HookChainFixture(void)
     wchar_t savedLogs[MAX_PATH];
     wcscpy(savedLogs, g_logs);
     GetTempPathW(MAX_PATH, g_logs);
-    wcscat(g_logs, L"hellforge-hook-chain");
+    /* this process's own folder: another run at the same time writes and deletes its own hooks.tsv */
+    swprintf(g_logs + wcslen(g_logs), MAX_PATH - wcslen(g_logs), L"hellforge-hook-chain-%lu", GetCurrentProcessId());
     CreateDirectoryW(g_logs, NULL);
 
     /* HellForge's own first: the function runs through it */

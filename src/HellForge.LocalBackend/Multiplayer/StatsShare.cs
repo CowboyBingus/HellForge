@@ -67,6 +67,9 @@ public sealed class StatsShare : IAsyncDisposable
     readonly StatsSync sync = new();
     readonly SemaphoreSlim applying = new(1, 1);
     readonly object gate = new();
+    // Notices go to the game one after another, in the order they were made (each continues the one before).
+    readonly object noticesGate = new();
+    Task notices = Task.CompletedTask;
     readonly Timer timer;
     // host: the file last read, its version, whether friends play with it, and the friends that have it
     string? mine, mineMods, mineSettings, mineMounts;
@@ -279,11 +282,16 @@ public sealed class StatsShare : IAsyncDisposable
     public void Notice(string kind, string title, IReadOnlyList<string> lines)
     {
         if (!live.Connected || live.Mismatched) { log($"Notice not shown, the game is not connected: {title}"); return; }
-        _ = Task.Run(async () =>
-        {
-            var result = await live.NoticeAsync(kind, title, lines);
-            log(result.Ok ? $"Notice shown in the game: {title}" : $"Notice not shown ({result.Detail}): {title}");
-        });
+        // Off the caller's thread (it may hold the lobby service's lock), as a Task.Run each would be, but never overtaking
+        // an earlier notice: the game gets them in the order they were made.
+        lock (noticesGate) notices = notices.ContinueWith(_ => ShowNotice(kind, title, lines), CancellationToken.None,
+            TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+    }
+
+    async Task ShowNotice(string kind, string title, IReadOnlyList<string> lines)
+    {
+        var result = await live.NoticeAsync(kind, title, lines);
+        log(result.Ok ? $"Notice shown in the game: {title}" : $"Notice not shown ({result.Detail}): {title}");
     }
 
     // Whether the lobby plays with its host's stats, as the game is told (HfApi stats_source): joined to a host who shares
