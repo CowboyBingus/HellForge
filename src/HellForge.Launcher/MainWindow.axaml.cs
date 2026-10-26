@@ -78,10 +78,11 @@ public partial class MainWindow : Window
         InitializeMods();
         InitializeWeaponLevels();
         InitializeSettingsImport();
+        InitializeSync();
         Nav.SelectionChanged += (_, _) => ShowPage(Nav.SelectedIndex);
         DiscordButton.Click += (_, _) => OpenLink(DiscordInvite);
         ToolTip.SetTip(DiscordButton, "Support, news and mods: the HellForge Discord (" + DiscordInvite + ")");
-        PlayButton.Click += (_, _) => { if (runner.IsRunning) RequestStop(); else Start(); };
+        PlayButton.Click += (_, _) => PlayClicked();
         ProfileCombo.SelectionChanged += (_, _) => OnProfileSelected();
         TemplateCombo.SelectionChanged += (_, _) => ShowTemplateDescription();
         NewProfileButton.Click += (_, _) => ShowNewProfileForm(!NewProfileForm.IsVisible);
@@ -216,6 +217,13 @@ public partial class MainWindow : Window
     }
 
     // modSync: start with a host's mods after a mod sync (the backend stopped the last session for it).
+    void PlayClicked()
+    {
+        if (runner.IsRunning) RequestStop();
+        else if (SyncBusy) SetStatus("Inventory sync is running. Play once it finishes.", Phase.Idle);
+        else Start();
+    }
+
     void Start(string? modSync = null)
     {
         if (runner.IsRunning) return;
@@ -330,6 +338,7 @@ public partial class MainWindow : Window
     void RefreshState()
     {
         ShowProfile();
+        RefreshSync();
         if (runDirectory == null && launchedUtc != default) FindRun();
         if (runDirectory != null) RefreshRun();
         var runnerExited = runner.CollectExited();
@@ -499,6 +508,7 @@ public partial class MainWindow : Window
         ImportSettingsStatus.Text = "";
         ShowProfile();
         UpdateSettingsImport();
+        UpdateSyncStatus();
     }
 
     void ShowTemplateDescription()

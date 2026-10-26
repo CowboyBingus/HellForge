@@ -164,7 +164,7 @@ sealed partial class PlaySession(PlayOptions options)
         profileName = Path.GetFileName(profileDirectory);
         if (!System.Text.RegularExpressions.Regex.IsMatch(profileName, "^[a-z0-9-]{1,32}$")) throw new SessionFailure("The profile folder name is not a valid profile name.");
         RecoverStandIns();
-        StageMods();
+        StageMods(profileDirectory);
         // The player's mods are held read-only so nothing the game runs can change or plant a mod.
         try { modsHold = ModsHold.Take(install.Mods); }
         catch (IOException error) { throw new SessionFailure(error.Message); }
@@ -225,13 +225,15 @@ sealed partial class PlaySession(PlayOptions options)
 
     // Mods: stage data mods (and remove the last session's) before the copy's files are locked; --progress lets the
     // launcher show source mods being compiled.
-    void StageMods()
+    void StageMods(string profileDirectory)
     {
         var loaderPlan = Path.Combine(run, "modloader-plan.txt");
         // --modset: the gameplay mods with their content hashes, for the backend (mod sync); --sync: after a mod sync, the
         // host's mods instead of the player's own (ModSyncSession).
+        // --premium-snapshot, --premium-locked: mods built on premium content follow the profile's account snapshot
+        // (HellForge.Core PremiumMods); the locked ones' items stay out of the inventory (the backend's --premium-locked).
         string[] stage = ["mods-stage", "--install", install.Root, "--plan", loaderPlan, "--logs", gameOut, "--progress", Path.Combine(run, "mod-builds.json"),
-            "--modset", ModSetFile];
+            "--modset", ModSetFile, .. PremiumStageArguments(profileDirectory)];
         if (options.ModSync != null) stage = [.. stage, "--sync", Path.GetFullPath(options.ModSync)];
         var planText = HellForgeCli(stage);
         if (Tools.ParseJson(planText ?? "") is not JsonObject plan) throw new SessionFailure("Mods could not be loaded; see cli-output.txt in this session's log folder.");
@@ -341,6 +343,14 @@ sealed partial class PlaySession(PlayOptions options)
     string? rejoinFile;
     // The session's mod set (mods-stage --modset), for the backend's mod sync.
     string ModSetFile => Path.Combine(run, "modset.json");
+
+    // The mods whose items stay locked for this player (mods-stage --premium-locked), for the backend.
+    string PremiumLockedFile => Path.Combine(run, "premium-locked.json");
+
+    // mods-stage's premium check: the locked mods' file, and the profile's account snapshot when it has a place for one.
+    string[] PremiumStageArguments(string profileDirectory) => InventorySync.SnapshotDirectoryFromProfileDir(profileDirectory) is { } snapshot
+        ? ["--premium-locked", PremiumLockedFile, "--premium-snapshot", snapshot]
+        : ["--premium-locked", PremiumLockedFile];
 
     // What asked the session to stop: "stop" (the launcher) or "mod-sync" (the backend, to restart with a host's mods).
     string ReadSignal()
@@ -970,7 +980,7 @@ sealed partial class PlaySession(PlayOptions options)
         if (!File.Exists(backend)) throw new SessionFailure("The local backend is missing; reinstall HellForge.");
         var start = new ProcessStartInfo(backend) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in new[] { "--port", install.BackendPort.ToString(), "--startup-fixtures", "true", "--lifetime-seconds", "0", "--evidence", evidence,
-                     "--profile-dir", profileDirectoryUsed, "--capture-mission-bodies", "true" }) start.ArgumentList.Add(argument);
+                     "--profile-dir", profileDirectoryUsed, "--capture-mission-bodies", "true", "--premium-locked", PremiumLockedFile }) start.ArgumentList.Add(argument);
         if (options.Template != null) { start.ArgumentList.Add("--profile-template"); start.ArgumentList.Add(options.Template); }
         if (options.Sandbox) { start.ArgumentList.Add("--sandbox"); start.ArgumentList.Add("true"); }
         WarArguments(start);
