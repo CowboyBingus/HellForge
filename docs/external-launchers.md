@@ -58,7 +58,7 @@ standard error and exits with 1.
 
 | Command | What it does |
 |---|---|
-| `status` | Prints the versions (HellForge, engine, mod SDK, game build), readiness (`ready.gameCopy`, `ready.sessionRunner`, `ready.linuxNamespace`), how the copy is kept off the internet (`networkBlock`: `wfp`, `firewall` or `linux-netns`), the launcher's settings, the last session and whether one is running. |
+| `status` | Prints the versions (HellForge, engine, mod SDK, game build), readiness (`ready.gameCopy`, `ready.sessionRunner`, `ready.linuxNamespace`), how the copy is kept off the internet (`networkBlock`: `wfp`, `firewall` or `linux-netns`), the launcher's settings, the last session, whether one is running, and the language packs in the copy (`languages`; English is always there). |
 | `profiles` | Lists the profiles (name, template, folder, used, selected) and the templates. `--create <name> --template <template>` makes a profile; the name is 1 to 32 lowercase letters, digits or hyphens. |
 | `mods` | Prints the Mods page's list, top first. Each mod has its id, name, version, description, enabled, group, tags, folder, archive (its zip, if it came as one), removable, and a pack's options. Also printed: the folder's problems, the modlist code friends compare (null when no gameplay mod is on) and the path of `hellforge-mods.json`. |
 | `mod-add --file <path>` | Adds a mod the way the Mods page's "Add mods..." does: a `.zip`, `.rar` or `.7z`, a folder mod's `hellforge-mod.json`, or a cosmetic pack's `manifest.json`. A mod with the same id is replaced (an update). |
@@ -71,6 +71,8 @@ standard error and exits with 1.
 | `play` | Starts a session (see [Sessions](#sessions)). |
 | `stop [--run <run folder>] [--wait yes]` | Asks the running session to close the game and clean up, as STOP does. Without `--run` it stops the newest session. |
 | `fetch-war` | Fetches the live galactic war into `live-war.json`. The Linux scripts run this before a session. |
+| `languages [--steam-root <Steam folder>]` | Lists the language packs pinned for the supported build: `name`, `dlcAppId`, `bytes`, `inCopy`, `installedInSteam` (the player owns and installed that language in Steam) and the `command` to paste into Steam's console to download it at the pinned manifest. |
+| `language-add --name <language> [--steam-root <Steam folder>] [--keep yes\|no]` | Copies one pack from Steam's download into the game copy, every file checked against the pinned list, then deletes the download unless `--keep yes`. Refused while a session runs, and until Steam has finished the download. |
 
 The tags in `mods` are `source`, `code`, `stats`, `data`, `pack`, `lua`, `bundled` and `local-stats`. The Mods page does
 not show Local Stats (the in-game editor's saved changes, always on and never compared between friends); `mods` still
