@@ -30,7 +30,8 @@ jobs:
           python-version: '3.10'   # the oldest the lint supports (scripts/lint/README.md)
       - name: The lint's own tests
         run: python -m unittest discover -s scripts/lint/tests -v
-      # fails on a violation that is new, or worse than scripts/lint/lint-baseline.json has it
+      # fails on an error rule's violation (R12-R14) that scripts/lint/lint-baseline.json does not have; a new R10, R11 or
+      # R15 one and a known one that grew only warn (scripts/lint/README.md, "The baseline")
       - name: scripts/lint/lint.py check
         run: python scripts/lint/lint.py check
 
