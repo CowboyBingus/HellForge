@@ -156,6 +156,19 @@ static const char* LiveRegistryPrepare(LivePlan* plan, char* why, size_t size)
     return NULL;
 }
 
+/* An entity's network type at index, a copy of type found's, not yet counted. The copy owns its field lists
+ * (CopyNetworkEntry): a byte copy's were freed twice when the game quit. */
+static void LiveNetworkEntry(const Weapon* w, uint32_t index, int found)
+{
+    if (CopyNetworkEntry(g_netEntries + (size_t)index * 80, g_netEntries + (size_t)found * 80))
+        ApiLog(w->mod, "%s: its network type keeps its base's field lists (no memory for its own)", w->name);
+    memcpy(g_netEntries + (size_t)index * 80, &w->shortId, 4);
+    memcpy(g_netOwn + (size_t)index * 4, &index, 4);
+    g_netValues[index] = g_netValues[found];
+    g_networkTypes[g_networkTypeCount++] = (NetworkType){index, (uint32_t)found, w->entity, w->copies, w->name, w->mod};
+    ApiLog(w->mod, "%s: network entity type %u (a copy of type %d)", w->name, index, found);
+}
+
 /* The network types of the entities registered since the step began, appended to the arrays RegisterNetworkTypes made
  * (count + REG_MAX_WEAPONS each); the first ever made by it. Entries first, the counts last. */
 static void LiveNetworkTypes(void)
@@ -180,14 +193,9 @@ static void LiveNetworkTypes(void)
         uint32_t index = count + added;
         if (found < 0 || w->shortId <= lastKey || index >= g_networkVanillaTypes + REG_MAX_WEAPONS)
         { ApiLog(w->mod, "%s: no network type to copy (base short id %u); joining games with it may fail", w->name, w->baseShortId); continue; }
-        memcpy(g_netEntries + (size_t)index * 80, g_netEntries + (size_t)found * 80, 80);
-        memcpy(g_netEntries + (size_t)index * 80, &w->shortId, 4);
-        memcpy(g_netOwn + (size_t)index * 4, &index, 4);
-        g_netValues[index] = g_netValues[found];
+        LiveNetworkEntry(w, index, found);
         lastKey = w->shortId;
         added++;
-        g_networkTypes[g_networkTypeCount++] = (NetworkType){index, (uint32_t)found, w->entity, w->copies, w->name, w->mod};
-        ApiLog(w->mod, "%s: network entity type %u (a copy of type %d)", w->name, index, found);
     }
     if (added == 0) return;
     uint32_t pair[2] = {count + added, count + added};
