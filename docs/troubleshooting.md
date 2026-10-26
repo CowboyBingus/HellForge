@@ -238,7 +238,8 @@ they are on unless you switch them off.
 
 ## Collecting logs
 
-Every session keeps its logs in `logs\sessions\<session>\` in the installation; the newest ten sessions are kept.
+Every session keeps its logs in `logs\sessions\<session>\` in the installation; the newest ten sessions are kept, and
+of the older ones the five newest that ended in a crash.
 
 To send them to someone, open the Console page and press Save logs to Desktop. It zips the latest session's folder to
 your Desktop as `HellForge-logs-<date>-<time>.zip`, with the game's console logs. If a session is still running, files in

@@ -5,8 +5,8 @@ for refusing something, crashes, and testing with friends.
 
 ## The logs
 
-Every session has a folder, `<installation>/logs/sessions/<session>/`. `logs/play-session.json` names the newest one,
-and the newest ten are kept. The launcher's CONSOLE page has an **Open session logs** button for the current one.
+Every session has a folder, `<installation>/logs/sessions/<session>/`. `logs/play-session.json` names the newest one.
+The newest ten are kept, and of the older ones the five newest that ended in a crash. The launcher's CONSOLE page has an **Open session logs** button for the current one.
 
 | File | Has |
 |---|---|

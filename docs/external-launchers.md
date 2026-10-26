@@ -196,7 +196,8 @@ installation.
 ### Logs
 
 Each session has its own folder, `logs\sessions\<runId>\`, and `logs\play-session.json` names the newest one (`"run"`).
-Only the newest ten are kept. These are the files to show a player:
+Only the newest ten are kept, and of the older ones the five newest that ended in a crash. These are the files to show
+a player:
 
 | File | What it holds |
 |---|---|
