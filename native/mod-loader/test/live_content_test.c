@@ -371,7 +371,9 @@ static void ContentTakeovers(uintptr_t g, uint8_t* history, HfMod* n)
     assert(g_fakeOwnedCount == owned + 1 && g_fakeOwned[owned] == g_stratagems[1].item && *(uint32_t*)(g_fakeCatalogue + OWN_COUNT) == records + 2);
 
     int child = OwnEntry((uintptr_t)g_fakeCatalogue, WeaponChild(nStable, nItem), nStable, 0), sorts = g_fakeSorts;
-    *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, child) + 0xC) = 0;
+    int root = OwnEntry((uintptr_t)g_fakeCatalogue, nItem, nItem, 0);
+    *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, child) + 0xC) = 0; /* as the game's sort filed them in game */
+    *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, root) + 0xC) = 0;
     *(uint32_t*)(loadout + LS_SLOTS + 2 * LS_SLOT) = type;
     *(uint32_t*)(loadout + LS_SLOT_COUNT) = 3;
     pairs[2] = g_stratagems[1].stable;
@@ -381,11 +383,12 @@ static void ContentTakeovers(uintptr_t g, uint8_t* history, HfMod* n)
     ContentSecond(NULL, n2);
     assert(ContentStratagem(n2, "t", 0) == type && g_lcShadowed[LC_STRATAGEM][1] == LC_STAND_OVER && ContentCommit() && g_stratagems[1].mod == n2);
     assert(*(uint8_t**)(g_stratagemTable + type * 8) != row && ContentCooldown(type) == 0.0f && g_editCount == edits && g_fakeTakes == takes + 1 &&
-        g_fakeOwned[owned + 1] == nItem && g_fakeSorts == sorts + 1 && *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, child) + 0xC) == 10);
+        g_fakeOwned[owned + 1] == nItem && g_fakeSorts == sorts + 1 && *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, child) + 0xC) == 10 &&
+        *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, root) + 0xC) == 11);
     assert(*(uint32_t*)(loadout + LS_SLOT_COUNT) == 2 && pairs[2] == 0 && n->removed);
     g_tableRow = TableRowOf;
     printf("  live content: a taken-out stratagem's type taken over by another mod (5 refusals: its packages held twice, the loadout screen, "
-        "an edit of the row, a pin not decoded); its edits follow, items given back before owned, a returning child filed again\n");
+        "an edit of the row, a pin not decoded); its edits follow, items given back before owned, a returning item and child filed again\n");
 }
 
 /* m out and k in (k sorts before m and n): k's damage, projectile and stratagem take m's 650, 351 and 150 over, each a

@@ -171,16 +171,24 @@ static int OwnAppendItem(uintptr_t manager, const OwnItem* item)
     return item->kind == OWN_WEAPON ? OwnWeapon(manager, item) : OwnDifficulty(manager, item);
 }
 
-/* A stratagem back in the catalogue (its mod taken out and set up again this session): the sort files a stratagem child
- * whose stable id no stratagem row has under category 0 in its record, for good (0x136E6A0), which it did if another mod
- * took its type over meanwhile; its child goes back to category 10 before the next sort. 1 when it did. */
+/* A record's category set back (0: none to set). 1 when it changed. */
+static int OwnRefile(uintptr_t manager, int entry, uint32_t category)
+{
+    uint32_t* at = entry >= 0 ? (uint32_t*)(OwnRecordAt(manager, entry) + 0xC) : NULL;
+    if (at == NULL || *at == category) return 0;
+    *at = category;
+    return 1;
+}
+
+/* A stratagem back in the catalogue (its mod taken out and set up again this session): the sort files a stratagem's item
+ * and child that no stratagem row names under category 0 in their records, for good (0x136E6A0), which it did if another
+ * mod took its type over meanwhile (seen in game 2026-10-25); they go back to 11 and 10 before the next sort. 1 when
+ * either did. */
 static int OwnRestore(uintptr_t manager, const OwnItem* item)
 {
-    int child = item->kind == OWN_STRATAGEM ? OwnEntry(manager, WeaponChild(item->stable, item->mixId), item->stable, 0) : -1;
-    uint32_t* category = child >= 0 ? (uint32_t*)(OwnRecordAt(manager, child) + 0xC) : NULL;
-    if (category == NULL || *category == 10) return 0;
-    *category = 10;
-    return 1;
+    if (item->kind != OWN_STRATAGEM) return 0;
+    int root = OwnRefile(manager, OwnEntry(manager, item->mixId, item->mixId, 0), 11);
+    return OwnRefile(manager, OwnEntry(manager, WeaponChild(item->stable, item->mixId), item->stable, 0), 10) | root;
 }
 
 /* The batch's new records appended (and stratagems back filed again): 1 when the catalogue changed. */
