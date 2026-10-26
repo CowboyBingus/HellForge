@@ -24,7 +24,7 @@ public static class InventorySync
     // Written by the proxy once it listens; the launcher opens the game only then.
     public const string ListeningFile = "capture-state.json";
     // The proxy's own line in the hosts file, above its mapping.
-    public const string HostsMarker = "# HellForge-CaptureProxy";
+    public const string HostsMarker = CaptureHosts.Marker;
     public const string ProxyExe = "HellForge.CaptureProxy.exe";
     public const int TimeoutMinutes = 10;
     const string GameProcess = "helldivers2";

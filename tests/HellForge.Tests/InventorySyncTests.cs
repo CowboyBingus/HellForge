@@ -35,6 +35,8 @@ static class InventorySyncTests
             check(InventorySync.FindCaptureProxy(install) == proxy, "The installed capture was not found.");
         });
 
+        test("The capture's hosts line never joins the player's last entry, and cleanup removes only the capture's lines", () => Hosts(root, check));
+
         test("A snapshot seal holds only for its files, its Steam account and this installation's key", () => Seals(root, check));
 
         test("A capture becomes the snapshot only sealed and with an inventory list; a newer one without progression drops the older progression", () =>
@@ -46,6 +48,26 @@ static class InventorySyncTests
         test("Profile backups are kept newest first, ten at most, and only profile copies count", () => Backups(root, check));
 
         test("Import choices default per category, keep what the file sets and refuse rules a category does not offer", () => Settings(root, check));
+    }
+
+    static void Hosts(string root, Action<bool, string> check)
+    {
+        const string Host = "api.example.test";
+        var folder = Directory.CreateDirectory(Path.Combine(root, "hosts")).FullName;
+        // Notepad leaves no newline after the last entry; an empty file and one ending in a newline too.
+        foreach (var (name, original) in new[] { ("no-newline", "# player\r\n0.0.0.0 foo.com"), ("newline", "0.0.0.0 foo.com\r\n"), ("empty", "") })
+        {
+            var hosts = Path.Combine(folder, name);
+            File.WriteAllText(hosts, original);
+            CaptureHosts.Add(hosts, Host);
+            var lines = File.ReadAllLines(hosts);
+            check(lines.Contains(CaptureHosts.Marker) && lines.Contains("127.0.0.1 " + Host), name + ": the capture's lines are not lines of their own.");
+            check(!original.Contains("foo", StringComparison.Ordinal) || lines.Contains("0.0.0.0 foo.com"), name + ": the player's last entry was changed.");
+            check(CaptureHosts.Remove(hosts, Host), name + ": cleanup found nothing.");
+            check(File.ReadAllLines(hosts).SequenceEqual(original.Split("\r\n", StringSplitOptions.RemoveEmptyEntries)), name + ": cleanup changed the player's entries.");
+            check(!CaptureHosts.Remove(hosts, Host), name + ": a second cleanup removed more.");
+        }
+        check(!CaptureHosts.Remove(Path.Combine(folder, "missing"), Host), "Cleanup of a missing file removed something.");
     }
 
     static void Seals(string root, Action<bool, string> check)

@@ -10,7 +10,7 @@
 // that Steam account (HellForge.Core SnapshotSeal) before it exits; the backend unlocks premium items only from a seal.
 //
 //   --cleanup      only remove a hosts line and CA left by a run that was killed
-//   --no-hosts --no-ca --loopback --listen-port 8443 --real-ip <ip>   local plumbing test, no system changes
+//   --no-hosts --no-ca --listen-port 8443 --real-ip <ip>   local plumbing test, no system changes
 
 using System.Diagnostics;
 using System.Globalization;
@@ -25,7 +25,6 @@ using System.Text;
 using System.Text.Json;
 using HellForge.Core;
 
-const string HostsMarker = "# HellForge-CaptureProxy";
 const string CaName = "HellForge Capture CA";
 const string LoginPath = "/api/Account/Login", ProgressionPath = "/api/Progression", InventoryPath = "/api/Progression/inventory";
 var hostsPath = Path.Combine(Environment.SystemDirectory, "drivers", "etc", "hosts");
@@ -36,7 +35,7 @@ List<IPAddress>? fixedUpstream = null;
 var outputPath = Path.Combine(AppContext.BaseDirectory, "real-inventory.json");
 string? progressionPath = null;
 var evidenceDir = Path.Combine(AppContext.BaseDirectory, "capture");
-bool manageHosts = true, manageCa = true, loopbackOnly = false, cleanupOnly = false;
+bool manageHosts = true, manageCa = true, cleanupOnly = false;
 var timeoutMin = 10;
 string? sealKey = null;
 ulong? steamAccount = null;
@@ -57,14 +56,13 @@ try
             case "--timeout-min": timeoutMin = Math.Max(1, int.Parse(Next(), CultureInfo.InvariantCulture)); break;
             case "--no-hosts": manageHosts = false; break;
             case "--no-ca": manageCa = false; break;
-            case "--loopback": loopbackOnly = true; break;
             case "--cleanup": cleanupOnly = true; break;
             case "--seal-key": sealKey = Next(); break;
             case "--steam-account": steamAccount = ulong.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
             case "--help":
                 Console.WriteLine("HellForge.CaptureProxy [--output <file>] [--progression <file>] [--evidence <dir>] [--timeout-min <n>]");
                 Console.WriteLine("  [--seal-key <file> --steam-account <SteamID64>] [--host <name>] [--listen-port <n>] [--real-ip <ip>]");
-                Console.WriteLine("  [--no-hosts] [--no-ca] [--loopback] | --cleanup");
+                Console.WriteLine("  [--no-hosts] [--no-ca] | --cleanup");
                 return 0;
             default: throw new ArgumentException("Unknown argument: " + args[i]);
         }
@@ -140,7 +138,8 @@ if (manageCa)
 }
 else serverCert = MakeLeaf(null, host, null);
 
-var listener = new TcpListener(loopbackOnly ? IPAddress.Loopback : IPAddress.Any, listenPort);
+// Loopback only: the hosts line points the API host at 127.0.0.1, and nothing else on the network may log in through us.
+var listener = new TcpListener(IPAddress.Loopback, listenPort);
 var cleaned = 0;
 void Cleanup()
 {
@@ -454,19 +453,14 @@ static void Run(string file, string arguments)
 
 void RemoveHosts()
 {
-    if (!File.Exists(hostsPath)) return;
-    var lines = File.ReadAllLines(hostsPath);
-    var kept = lines.Where(line => !line.Contains(HostsMarker, StringComparison.OrdinalIgnoreCase) &&
-        !line.Trim().Equals("127.0.0.1 " + host, StringComparison.OrdinalIgnoreCase)).ToArray();
-    if (kept.Length == lines.Length) return;
-    File.WriteAllLines(hostsPath, kept);
+    if (!CaptureHosts.Remove(hostsPath, host)) return;
     Run("ipconfig", "/flushdns");
     Log("hosts line removed");
 }
 
 void AddHosts()
 {
-    File.AppendAllLines(hostsPath, [HostsMarker, "127.0.0.1 " + host]);
+    CaptureHosts.Add(hostsPath, host);
     Run("ipconfig", "/flushdns");
 }
 
