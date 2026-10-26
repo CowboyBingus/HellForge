@@ -137,7 +137,7 @@ static class OpenWarTests
                 $"Faction {faction}: several subfactions across its planets.");
 
         // served by the backend in place of the frozen war
-        await using var app = LocalBackend.Create(0, Path.Combine(root, "open-war-backend"), LoginMode.LocalSession, true, openWar: true);
+        await using var app = LocalBackend.Create(new BackendSettings(0, Path.Combine(root, "open-war-backend"), LoginMode.LocalSession) { StartupFixtures = true, OpenWar = true });
         await app.StartAsync();
         try
         {
