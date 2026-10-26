@@ -104,6 +104,10 @@ sealed class PlaySession(PlayOptions options)
         result["play"] = true;
         result["installRoot"] = install.Root;
         result["engine"] = typeof(PlaySession).Assembly.GetName().Version?.ToString();
+        // the versions, the system and the settings, first in the log and kept for a crash report (CrashReport)
+        var facts = SessionHeader.Facts(options, (string?)result["engine"] ?? "unknown");
+        result["report"] = facts.ToJson();
+        foreach (var line in facts.Lines()) Say(line);
         File.WriteAllText(Path.Combine(install.Logs, "play-session.json"),
             new JsonObject { ["runId"] = runId, ["run"] = run, ["startedUtc"] = (string?)result["startedUtc"] }.ToJsonString());
         try
@@ -208,9 +212,10 @@ sealed class PlaySession(PlayOptions options)
         modList = (string?)plan["modlist"];
         modNative = (bool?)plan["native"] == true;
         nativeFolders = (plan["nativeFolders"] as JsonArray)?.Select(f => (string?)f).OfType<string>().ToList();
+        var loadedMods = (plan["mods"] as JsonArray ?? []).Select(m => $"{(string?)m!["id"]} {(string?)m["version"]}").ToList();
         result["mods"] = new JsonObject
         {
-            ["loaded"] = new JsonArray((plan["mods"] as JsonArray ?? []).Select(m => (JsonNode?)JsonValue.Create($"{(string?)m!["id"]} {(string?)m["version"]}")).ToArray()),
+            ["loaded"] = new JsonArray(loadedMods.Select(m => (JsonNode?)JsonValue.Create(m)).ToArray()),
             ["problems"] = plan["problems"]?.DeepClone() ?? new JsonArray(),
             ["stagedFiles"] = (plan["staged"] as JsonArray)?.Count ?? 0,
             ["codeMods"] = plan["codeMods"]?.DeepClone(),
@@ -222,6 +227,7 @@ sealed class PlaySession(PlayOptions options)
             Say($"Playing with {syncedWith}'s mods (mod sync).");
             if (options.ModSync != null) rejoinFile = Path.GetFullPath(options.ModSync);
         }
+        SayMods(loadedMods);
         foreach (var problem in plan["problems"] as JsonArray ?? []) Say("Mod not loaded: " + (string?)problem);
 
         // The player's mods are held read-only so nothing the game runs can change or plant a mod.
@@ -279,6 +285,13 @@ sealed class PlaySession(PlayOptions options)
             result["installedDllSha256"] = Tools.Sha256(Path.Combine(normal, "data", "game", "game.dll"));
         }
         profileDirectoryUsed = profileDirectory;
+    }
+
+    // The session's mods, each with its version and content hash, for a bug report to say exactly which mods ran.
+    void SayMods(List<string> loaded)
+    {
+        Say($"Mods: {loaded.Count} loaded, modlist digest {modDigest}");
+        foreach (var line in SessionFacts.ModLines(loaded, SessionFiles.ReadJson(ModSetFile))) Say(line);
     }
 
     string modDigest = "none", profileDirectoryUsed = "";
