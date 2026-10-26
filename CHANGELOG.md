@@ -95,6 +95,8 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
 - Setup on a full drive blamed Steam's files instead of asking for space (e9e1d63).
 - Rejoining could fail when the host answered before the join started (821aa23).
 - The game crashed as it quit with a mod's added weapon, such as the R-40 Sightliner (#64).
+- Mods together could add only 64 weapons and entities: in a large modpack the last ones were left out, such as a
+  stratagem missing from the stratagem select. Now 192, the most the game's network allows (#79).
 - "Required loopback/egress controls failed." stopped every session on some installations outside drive C: (or moved to
   another folder), where the network block had stopped holding after a restart. The session now places the block again
   by itself, with one Windows prompt, and a failed check says which part failed (#75).
