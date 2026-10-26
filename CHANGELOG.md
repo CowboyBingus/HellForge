@@ -62,7 +62,9 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
   warbond and armory items, ship modules, weapon levels, ship name, tutorial) side by side, and nothing changes until
   Apply. Warbond unlocks come as on your account, every item of the warbonds you own, or none; which warbonds you own
   always follows the sync. Your choices are kept per profile. The game stays connected until you close it, and a sync
-  that cannot read your progression fails and keeps the last complete snapshot (#45).
+  that cannot read your progression fails and keeps the last complete snapshot (#45). Experimental: during a sync the
+  normal game shows "Could not connect to Easy Anti Cheat network" after the login and closes itself; the sync is
+  complete by then.
 - Profile backups: every import or restore first saves the profile, the newest 10 are kept, and Profile lists them with
   Restore backup (#45).
 
