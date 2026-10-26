@@ -113,26 +113,35 @@ static class Launch
             var alive = running();
             if (SessionFiles.ReadJson(result) is { } state)
             {
-                if (!problemsShown && state.TryGetProperty("mods", out var mods) && mods.ValueKind == JsonValueKind.Object &&
-                    mods.TryGetProperty("problems", out var problems) && problems.ValueKind == JsonValueKind.Array)
-                {
-                    problemsShown = true;
-                    var list = problems.EnumerateArray().Where(p => p.ValueKind == JsonValueKind.String).Select(p => p.GetString()).ToList();
-                    if (list.Count > 0) Emit(new { @event = "mod-problems", problems = list });
-                }
-                var status = SessionFiles.Text(state, "status");
-                if (status.Length > 0 && status != last)
-                {
-                    last = status;
-                    var failure = SessionFiles.Text(state, "failure");
-                    Emit(new { @event = "status", status, failure = failure.Length > 0 ? failure : null });
-                }
+                problemsShown = problemsShown || EmitProblems(state);
+                last = EmitStatus(state, last);
             }
             if (!alive) break;
             Thread.Sleep(1000);
         }
         Emit(new { @event = "ended", status = last, result, logs = run });
         return last == "observed" ? 0 : 1;
+    }
+
+    // The mods' problems, once result.json lists them (an empty list prints nothing): true when it does.
+    static bool EmitProblems(JsonElement state)
+    {
+        if (!(state.TryGetProperty("mods", out var mods) && mods.ValueKind == JsonValueKind.Object &&
+            mods.TryGetProperty("problems", out var problems) && problems.ValueKind == JsonValueKind.Array))
+            return false;
+        var list = problems.EnumerateArray().Where(p => p.ValueKind == JsonValueKind.String).Select(p => p.GetString()).ToList();
+        if (list.Count > 0) Emit(new { @event = "mod-problems", problems = list });
+        return true;
+    }
+
+    // The run's status when it changed since the last one reported; returns the status reported last.
+    static string EmitStatus(JsonElement state, string last)
+    {
+        var status = SessionFiles.Text(state, "status");
+        if (status.Length == 0 || status == last) return last;
+        var failure = SessionFiles.Text(state, "failure");
+        Emit(new { @event = "status", status, failure = failure.Length > 0 ? failure : null });
+        return status;
     }
 
     // stop: asks the session runner to close the game and clean up, as the launcher's STOP does.
@@ -392,30 +401,8 @@ static class Launch
         var pack = mod.Pack ?? throw new ArgumentException($"{id} is not a cosmetic pack with options.");
         var off = mod.PackChoice.Off.ToHashSet(StringComparer.Ordinal);
         var sub = new Dictionary<string, string>(mod.PackChoice.Sub, StringComparer.Ordinal);
-        if (options.TryGetValue("--all", out var all))
-        {
-            if (options.ContainsKey("--option")) throw new ArgumentException("--all goes without --option.");
-            if (Yes(options, "--all", true)) off.Clear();
-            else off.UnionWith(pack.Options.Select(o => o.Name));
-        }
-        else
-        {
-            var name = options.GetValueOrDefault("--option") ?? throw new ArgumentException("Missing --option (or --all).");
-            var option = pack.Options.FirstOrDefault(o => o.Name == name) ?? throw new ArgumentException(
-                $"{id} has no option named {name}; it has: {string.Join(", ", pack.Options.Select(o => o.Name))}.");
-            if (options.ContainsKey("--on"))
-            {
-                if (Yes(options, "--on", true)) off.Remove(name);
-                else off.Add(name);
-            }
-            if (options.TryGetValue("--variant", out var variant))
-            {
-                if (option.SubOptions.All(s => s.Name != variant)) throw new ArgumentException(option.SubOptions.Count == 0
-                    ? $"{name} has no variants." : $"{name} has no variant named {variant}; it has: {string.Join(", ", option.SubOptions.Select(s => s.Name))}.");
-                sub[name] = variant;
-            }
-            if (!options.ContainsKey("--on") && !options.ContainsKey("--variant")) throw new ArgumentException("Missing --on or --variant.");
-        }
+        if (options.ContainsKey("--all")) PickAll(options, pack, off);
+        else PickOption(options, id, pack, off, sub);
         ModSettings.SetChoice(install.Mods, id, new CosmeticPacks.Choice(off, sub));
         var saved = Find(install, id);
         return new
@@ -428,6 +415,34 @@ static class Launch
                 picked = saved.PackChoice.Sub.GetValueOrDefault(o.Name)
             })
         };
+    }
+
+    // mod-pack --all: every option on or off.
+    static void PickAll(Dictionary<string, string> options, CosmeticPacks.Pack pack, HashSet<string> off)
+    {
+        if (options.ContainsKey("--option")) throw new ArgumentException("--all goes without --option.");
+        if (Yes(options, "--all", true)) off.Clear();
+        else off.UnionWith(pack.Options.Select(o => o.Name));
+    }
+
+    // mod-pack --option: that option on or off (--on), its variant (--variant), or both.
+    static void PickOption(Dictionary<string, string> options, string id, CosmeticPacks.Pack pack, HashSet<string> off, Dictionary<string, string> sub)
+    {
+        var name = options.GetValueOrDefault("--option") ?? throw new ArgumentException("Missing --option (or --all).");
+        var option = pack.Options.FirstOrDefault(o => o.Name == name) ?? throw new ArgumentException(
+            $"{id} has no option named {name}; it has: {string.Join(", ", pack.Options.Select(o => o.Name))}.");
+        if (options.ContainsKey("--on"))
+        {
+            if (Yes(options, "--on", true)) off.Remove(name);
+            else off.Add(name);
+        }
+        if (options.TryGetValue("--variant", out var variant))
+        {
+            if (option.SubOptions.All(s => s.Name != variant)) throw new ArgumentException(option.SubOptions.Count == 0
+                ? $"{name} has no variants." : $"{name} has no variant named {variant}; it has: {string.Join(", ", option.SubOptions.Select(s => s.Name))}.");
+            sub[name] = variant;
+        }
+        if (!options.ContainsKey("--on") && !options.ContainsKey("--variant")) throw new ArgumentException("Missing --on or --variant.");
     }
 
     // settings: the launcher's saved choices (launcher-settings.json), which play and HellForge.exe's PLAY both start from.
