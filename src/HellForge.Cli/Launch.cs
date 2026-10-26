@@ -195,6 +195,8 @@ static class Launch
                 lastStatus = state is { } s ? SessionFiles.Text(s, "status") : null,
                 lastFailure = state is { } f && SessionFiles.Text(f, "failure") is { Length: > 0 } failure ? failure : null
             },
+            // the language packs in the copy (languages: the ones pinned, and how to add them); English is always there
+            languages = SupportedLanguages.Current.InCopy(install.Game).Select(l => l.Name),
             logs = install.Logs,
             mods = install.Mods
         };
@@ -315,6 +317,48 @@ static class Launch
         var mod = candidates.Single();
         var added = ModInstaller.Add(install, mod);
         return new { mod.Id, mod.Name, mod.Version, installed = added, replaced = mod.Replaces };
+    }
+
+    // languages: the language packs pinned for the build, which are in the game copy and which Steam has installed (the
+    // ones worth adding), each with the download_depot command that fetches it at the pinned manifest.
+    public static object Languages(Dictionary<string, string> options)
+    {
+        var install = Install(options);
+        var list = SupportedLanguages.Current;
+        var game = SteamLocator.FindGame(options.GetValueOrDefault("--steam-root"));
+        var installed = game != null ? list.InstalledIn(game.ManifestPath).Select(l => l.Name).ToHashSet() : new HashSet<string>();
+        var inCopy = list.InCopy(install.Game).Select(l => l.Name).ToHashSet();
+        return new
+        {
+            buildId = list.BuildId,
+            languages = list.Languages.Select(l => new
+            {
+                name = l.Name,
+                dlcAppId = l.DlcAppId,
+                bytes = l.TotalBytes,
+                inCopy = inCopy.Contains(l.Name),
+                installedInSteam = installed.Contains(l.Name),
+                command = SteamDepotDownload.Commands(l.AsBuild(SupportedBuild.Current)).Single()
+            })
+        };
+    }
+
+    // language-add: copies one pack from Steam's download of it (its download_depot command) into the game copy, every
+    // file hashed against the pinned list, then removes the download unless --keep yes.
+    public static object LanguageAdd(Dictionary<string, string> options, string name)
+    {
+        var install = Install(options);
+        NoSession();
+        var language = SupportedLanguages.Current.Find(name)
+            ?? throw new ArgumentException($"No language pack {name} is pinned for build {SupportedBuild.Current.BuildId}.");
+        var steamRoot = options.GetValueOrDefault("--steam-root") ?? SteamLocator.SteamRoot()
+            ?? throw new ArgumentException("Missing --steam-root: Steam was not found.");
+        var pack = language.AsBuild(SupportedBuild.Current);
+        if (!SteamDepotDownload.IsComplete(steamRoot, pack))
+            throw new InvalidDataException($"Steam has not downloaded the {name} pack yet; run {SteamDepotDownload.Commands(pack).Single()} in Steam's console.");
+        GameCopier.CopyFromDepots(steamRoot, install.Game, pack);
+        if (!Yes(options, "--keep", false)) SteamDepotDownload.Delete(steamRoot, pack);
+        return new { name, files = language.Files.Count, bytes = language.TotalBytes, inCopy = pack.IsComplete(install.Game) };
     }
 
     public static object ModRemove(Dictionary<string, string> options, string id)
