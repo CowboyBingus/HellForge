@@ -72,16 +72,19 @@ goes to the running game, and the console says what changed:
 - **Code mods that declare `"live": true`** are set up while the game runs, and taken out again (a source mod is built
   first, which can take a moment). New stratagems, weapons, entities, projectiles, damage types, behaviours and abilities
   they add are numbered as a fresh start with your mods would number them, and the game owns their items at once. What
-  a mod taken out added stays out of sight: out of the armory's items you own, the stratagem picker and your loadout.
-  Their items come back only through the next session.
+  a mod taken out added stays out of sight: out of the armory's items you own, the stratagem picker and your loadout,
+  until the mod comes back. Its stratagems', projectiles', damage types', behaviours' and abilities' numbers pass to
+  another mod's new ones where a fresh start would number those, so joining a host whose content mods differ from yours
+  changes them live; its weapons and entities keep their numbers until the next session.
 - **Data mods** (game patches and data specs) reach the game as a package of their own. Objects already in the world
   keep their old look until they are made again (a respawn, the next mission).
 - **A level 11 difficulty** is added at once when it has no larger maps or extra objectives; it can be picked once no
   menu is open. Hell Forge's larger maps need a new session, as does taking a difficulty out.
 - **Everything else is saved for the next session,** and the page says why: code without `"live": true`, Lua mods,
   cosmetic packs, a new order, and whatever the game refuses (for example content a fresh start would number another
-  way, because your mods differ in what they add before it). The order and packs' options stay locked while a session
-  runs.
+  way, because a mod that stays adds something before it, or a new weapon or entity where a mod taken out this session
+  had its number). A stratagem that takes over a removed one's number waits for the loadout screen to close. The order
+  and packs' options stay locked while a session runs.
 - **Only while no friend is in your game, on the ship or the title screen.** Friends need the same mods, so the game
   refuses a change while one is connected; stats alone also change in a mission. After a change, friends who join need
   your new mods, which mod sync offers them.

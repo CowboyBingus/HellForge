@@ -57,12 +57,17 @@ Then your mod may be set up after the game has started, and taken out before it 
 What a live mod registers is numbered as a fresh start of the session's mods would number it: code mods are set up in
 the order of their ids, and each one's stratagems, projectiles, damage types, behaviours and abilities are numbered in
 its call order; weapons and entities by their resource ids. Friends with the same mods therefore number them alike, as
-co-op needs. The change is refused (a restart) when that number is not free: another mod that stays holds it, or a mod
-taken out this session held it (until the next session only that mod's own entries, under the same names, take it
-back). A new version of your mod that registers the same names again takes over its old numbers.
+co-op needs. A number that a mod taken out this session held goes to whatever a fresh start numbers there: another
+mod's stratagem, projectile, damage type, behaviour or ability takes it over, so a player whose content mods differ from
+a host's takes the host's live. A stratagem's number passes only while the game holds none of the old stratagem's
+packages, which on the ship it does not; the loadout screen must be closed. A weapon's or entity's number stays the
+removed mod's until the next session. The change is refused (a restart) when the number is not free: another mod that
+stays holds it, a weapon or entity taken out held it, a mod that stays edits that row by its number (`set_field`,
+`set_live`), or a mod back this session would get a number other than its own old one. A new version of your mod that
+registers the same names again keeps its old numbers; entries under other names take them over as another mod's would.
 
 New items are owned at once (the catalogue's copies of the base's items, as the backend makes them at login). What a mod
-taken out registered stays in the game's tables, so nothing that still holds it breaks, but it leaves `content()`,
+taken out registered stays in the game's memory, so nothing that still holds it breaks, but it leaves `content()`,
 `find()`, the items you own and the loadout: a removed stratagem leaves every loadout, since a host that lacks it would
 crash on receiving it.
 

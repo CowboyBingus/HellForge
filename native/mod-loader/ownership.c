@@ -164,7 +164,6 @@ static int OwnOwned(uintptr_t manager, uint32_t mixId)
     return state == 2 || state == 4;
 }
 
-/* On the game thread: the batch's records appended, the catalogue sorted, and each item owned (or, take, given back). */
 /* One item's records appended, copies of its base's: how many (0: its base is not in the catalogue). */
 static int OwnAppendItem(uintptr_t manager, const OwnItem* item)
 {
@@ -172,14 +171,27 @@ static int OwnAppendItem(uintptr_t manager, const OwnItem* item)
     return item->kind == OWN_WEAPON ? OwnWeapon(manager, item) : OwnDifficulty(manager, item);
 }
 
-/* The batch's new records appended: 1 when any was. */
+/* A stratagem back in the catalogue (its mod taken out and set up again this session): the sort files a stratagem child
+ * whose stable id no stratagem row has under category 0 in its record, for good (0x136E6A0), which it did if another mod
+ * took its type over meanwhile; its child goes back to category 10 before the next sort. 1 when it did. */
+static int OwnRestore(uintptr_t manager, const OwnItem* item)
+{
+    int child = item->kind == OWN_STRATAGEM ? OwnEntry(manager, WeaponChild(item->stable, item->mixId), item->stable, 0) : -1;
+    uint32_t* category = child >= 0 ? (uint32_t*)(OwnRecordAt(manager, child) + 0xC) : NULL;
+    if (category == NULL || *category == 10) return 0;
+    *category = 10;
+    return 1;
+}
+
+/* The batch's new records appended (and stratagems back filed again): 1 when the catalogue changed. */
 static int OwnAppendAll(uintptr_t manager, OwnBatch* b)
 {
     int appended = 0;
     for (int i = 0; i < b->count; i++)
     {
         const OwnItem* item = &b->items[i];
-        if (item->take || OwnEntry(manager, item->mixId, 0, 0) >= 0) continue; /* given back, or in the catalogue already */
+        if (item->take) continue; /* given back */
+        if (OwnEntry(manager, item->mixId, 0, 0) >= 0) { appended |= OwnRestore(manager, item); continue; } /* in the catalogue already */
         if (*(const uint32_t*)(manager + OWN_COUNT) + 16 > OWN_MAX) { b->why = "the game's catalogue is full"; break; }
         int added = OwnAppendItem(manager, item);
         if (added == 0 && b->why == NULL) b->why = kOwnNoBase[item->kind];
@@ -189,6 +201,7 @@ static int OwnAppendAll(uintptr_t manager, OwnBatch* b)
     return appended;
 }
 
+/* On the game thread: the batch's records appended, the catalogue sorted, and each item owned (or, take, given back). */
 static void OwnBatchStep(void* arg)
 {
     OwnBatch* b = (OwnBatch*)arg;
@@ -202,11 +215,13 @@ static void OwnBatchStep(void* arg)
         memset((void*)(manager + OWN_STARTS), 0, 24 * 4);
         g_ownSort();
     }
+    /* every item given back before any is owned: one a change gives back and owns (a new version renumbering its
+     * stratagems) stays owned */
+    for (int i = 0; i < b->count; i++) if (b->items[i].take) { g_ownRemove(manager, b->items[i].mixId, 1); b->taken++; }
     for (int i = 0; i < b->count; i++)
     {
         const OwnItem* item = &b->items[i];
-        if (item->take) { g_ownRemove(manager, item->mixId, 1); b->taken++; }
-        else if (OwnEntry(manager, item->mixId, 0, 0) >= 0 && (item->kind != OWN_DIFFICULTY || OwnOwned(manager, item->baseMixId)))
+        if (!item->take && OwnEntry(manager, item->mixId, 0, 0) >= 0 && (item->kind != OWN_DIFFICULTY || OwnOwned(manager, item->baseMixId)))
         { g_ownApply(manager, item->mixId, 1, 0, NULL, 0); b->owned++; }
     }
 }

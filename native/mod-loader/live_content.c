@@ -7,10 +7,13 @@
  * Numbering. A boot sets the code mods up in the order of their ids and numbers what each registers in its call order
  * (SetupOrder), so every machine with the same mods numbers alike. A live change sets its mods up in that order too, and
  * each registration takes the number a boot of the change's mods would give it (LiveEntry): after everything the
- * change's mods with lower ids registered. That number must be the next one, or one that a mod the change takes out or
- * replaces held under the same name (its new version stands in for that entry until the change is made). Any other
- * number refuses the change: only a restart numbers the content as the host does. After the set-ups, every mod that
- * stays is checked the same way (LiveNumbersCheck): a mod whose numbers a boot would move refuses the change.
+ * change's mods with lower ids registered. That number must be the next one, or one that a mod the change takes out (or
+ * one taken out earlier this session: a tombstone) holds. The registration stands in for that entry until the change is
+ * made: the entry itself again (a new version's, or its mod back), or another mod's, which takes the number over (KB
+ * hellforge-live-mod-sync-tombstone-reuse; LiveTakeoversCheck says when the game lets it). A mod back this session comes
+ * back at its old number. Any other number refuses the change: only a restart numbers the content as the host does.
+ * After the set-ups, every mod that stays is checked the same way (LiveNumbersCheck): a mod whose numbers a boot would
+ * move refuses the change.
  *
  * Install, once the whole change is checked (LiveContentMake):
  *   1. on the change's thread: each list's pins checked, rows built from their bases, blocks allocated, and every write
@@ -31,22 +34,26 @@
 #include "loadout_scrub.c" /* the loadout without what a removed mod added */
 
 #define LC_MAX 64 /* entries of any kind HellForge has room for */
-typedef struct LiveKind { const char* name; void* entries; size_t stride, nameAt; uint32_t* count; uint32_t max, first; } LiveKind;
+/* table: the settings table edits name its rows in by their number (fields.c), or NULL */
+typedef struct LiveKind { const char* name; void* entries; size_t stride, nameAt; uint32_t* count; uint32_t max, first; const char* table; } LiveKind;
 _Static_assert(offsetof(Stratagem, mod) == 0 && offsetof(Projectile, mod) == 0 && offsetof(Damage, mod) == 0 && offsetof(Behaviour, mod) == 0 &&
     offsetof(Ability, mod) == 0, "every content entry begins with its mod");
 _Static_assert(STR_MAX_NEW <= LC_MAX && PRJ_MAX_NEW <= LC_MAX && DMG_MAX_NEW <= LC_MAX && BHV_MAX <= LC_MAX && ABL_MAX <= LC_MAX &&
     REG_MAX_WEAPONS <= LC_MAX, "a kind's flags fit");
 static const LiveKind kLiveKinds[LC_KINDS] = {
-    {"stratagem", g_stratagems, sizeof(Stratagem), offsetof(Stratagem, name), &g_stratagemCount, STR_MAX_NEW, STR_VANILLA},
-    {"projectile", g_projectiles, sizeof(Projectile), offsetof(Projectile, name), &g_projectileCount, PRJ_MAX_NEW, PRJ_VANILLA},
-    {"damage", g_damages, sizeof(Damage), offsetof(Damage, name), &g_damageCount, DMG_MAX_NEW, DMG_VANILLA},
-    {"behaviour", g_behaviours, sizeof(Behaviour), 0, &g_behaviourCount, BHV_MAX, BHV_FIRST}, /* unnamed: its mod's, by place */
-    {"ability", g_abilities, sizeof(Ability), 0, &g_abilityCount, ABL_MAX, ABL_FIRST},
+    {"stratagem", g_stratagems, sizeof(Stratagem), offsetof(Stratagem, name), &g_stratagemCount, STR_MAX_NEW, STR_VANILLA, "StratagemDefinition"},
+    {"projectile", g_projectiles, sizeof(Projectile), offsetof(Projectile, name), &g_projectileCount, PRJ_MAX_NEW, PRJ_VANILLA, "ProjectileSettings"},
+    {"damage", g_damages, sizeof(Damage), offsetof(Damage, name), &g_damageCount, DMG_MAX_NEW, DMG_VANILLA, "DamageInfo"},
+    {"behaviour", g_behaviours, sizeof(Behaviour), 0, &g_behaviourCount, BHV_MAX, BHV_FIRST, NULL}, /* unnamed: its mod's, by place */
+    {"ability", g_abilities, sizeof(Ability), 0, &g_abilityCount, ABL_MAX, ABL_FIRST, NULL},
 };
 
 static uint8_t g_lcTomb[LC_KINDS + 1][LC_MAX];  /* entries a mod taken out left (LC_WEAPON: g_weapons) */
 static uint32_t g_lcBefore[LC_KINDS];          /* the entries before the change's set-ups; after them, the set-ups' */
-static uint8_t* g_lcShadow[LC_KINDS];          /* stand-ins, by index, for entries of mods the change takes out */
+static uint8_t* g_lcShadow[LC_KINDS];          /* stand-ins, by index, for entries of mods taken out */
+/* How each stand-in stands in (0: none): the entry's new version, the entry back at its tombstone, or another mod's
+ * entry taking over the number (the entry it replaces goes as a mod taken out does). */
+enum { LC_STAND_SAME = 1, LC_STAND_BACK, LC_STAND_OVER };
 static uint8_t g_lcShadowed[LC_KINDS][LC_MAX];
 static int g_lcOpen;                           /* a change's set-ups are registering */
 static char g_lcRefused[320];                  /* the first registration the numbering refused: "<reason>\t<why>" */
@@ -90,15 +97,29 @@ static uint32_t LiveNumbered(int kind, const HfMod* mod)
     return numbered;
 }
 
-/* Whether a registration may stand in for the entry at index: one a mod taken out (or its old version) holds, under the
- * same mod id and, for a named kind, the same name. */
+/* The tombstone a named registration had before its mod was taken out this session (its number), or -1. One another
+ * registration of the change takes over no longer names it. */
+static int LiveTombNamed(int kind, const char* name)
+{
+    const LiveKind* k = &kLiveKinds[kind];
+    for (uint32_t i = 0; i < g_lcBefore[kind] && k->nameAt != 0 && name != NULL; i++)
+        if (LiveTomb(kind, i) && !g_lcShadowed[kind][i] && !strcmp((const char*)LiveAt(kind, i) + k->nameAt, name)) return (int)i;
+    return -1;
+}
+
+/* How a registration may stand in for the entry at index (LC_STAND_..., 0: it may not). The entry must be one a mod taken
+ * out holds: a tombstone, or one the change takes out. Under the same mod id and, for a named kind, the same name, it is
+ * that entry again; else the registration takes the number over, unless it is itself back from a tombstone elsewhere
+ * (a stratagem's stable id must name one type). */
 static int LiveStandsIn(int kind, uint32_t index, const HfMod* mod, const char* name)
 {
     const LiveKind* k = &kLiveKinds[kind];
     const uint8_t* entry = LiveAt(kind, index);
     const HfMod* old = *(HfMod* const*)entry;
-    if (g_lcShadowed[kind][index] || old == NULL || strcmp(old->id, mod->id) || (!LiveTomb(kind, index) && !LiveLeaves(old))) return 0;
-    return k->nameAt == 0 || (name != NULL && !strcmp((const char*)entry + k->nameAt, name));
+    int tomb = LiveTomb(kind, index);
+    if (g_lcShadowed[kind][index] || old == NULL || (!tomb && !LiveLeaves(old))) return 0;
+    if (!strcmp(old->id, mod->id) && (k->nameAt == 0 || (name != NULL && !strcmp((const char*)entry + k->nameAt, name)))) return tomb ? LC_STAND_BACK : LC_STAND_SAME;
+    return LiveTombNamed(kind, name) >= 0 ? 0 : LC_STAND_OVER;
 }
 
 static void LiveRefuse(HfMod* mod, const char* kind, const char* name, const char* why)
@@ -108,22 +129,35 @@ static void LiveRefuse(HfMod* mod, const char* kind, const char* name, const cha
         name != NULL ? name : "", why);
 }
 
+/* Why a registration cannot take number index (what holds it), in why. */
+static void LiveHeldWhy(int kind, uint32_t index, const char* name, char* why, size_t size)
+{
+    const LiveKind* k = &kLiveKinds[kind];
+    int back = LiveTombNamed(kind, name);
+    if (back >= 0 && (uint32_t)back != index)
+        snprintf(why, size, "a boot of these mods numbers it %u, but it was %u before its mod was taken out this session", k->first + index, k->first + (uint32_t)back);
+    else
+        snprintf(why, size, "a boot of these mods numbers it %u, which %s holds", k->first + index, LiveModAt(kind, index) ? LiveModAt(kind, index)->id : "another mod");
+}
+
 static void* LiveEntry(int kind, HfMod* mod, const char* name, uint32_t* index)
 {
     const LiveKind* k = &kLiveKinds[kind];
     uint32_t at = g_lcOpen ? LiveNumbered(kind, mod) : 0, count = *k->count;
+    int stand = 0;
     char why[160];
     why[0] = 0;
     if (!g_lcOpen) snprintf(why, sizeof why, "no live change is setting mods up");
     else if (at >= k->max) snprintf(why, sizeof why, "HellForge has room for %u", k->max);
-    else if (at < g_lcBefore[kind] && !LiveStandsIn(kind, at, mod, name))
-        snprintf(why, sizeof why, LiveTomb(kind, at) ? "a boot of these mods numbers it %u, which %s left when it was taken out this session" :
-            "a boot of these mods numbers it %u, which %s holds", k->first + at, LiveModAt(kind, at) ? LiveModAt(kind, at)->id : "another mod");
+    else if (at < g_lcBefore[kind] && (stand = LiveStandsIn(kind, at, mod, name)) == 0) LiveHeldWhy(kind, at, name, why, sizeof why);
     else if (at >= g_lcBefore[kind] && at != count) snprintf(why, sizeof why, "a boot of these mods numbers it %u, not the next (%u)", k->first + at, k->first + count);
+    else if (at >= g_lcBefore[kind] && LiveTombNamed(kind, name) >= 0)
+        snprintf(why, sizeof why, "a boot of these mods numbers it %u, but it was %u before its mod was taken out this session", k->first + at,
+            k->first + (uint32_t)LiveTombNamed(kind, name));
     if (why[0]) { LiveRefuse(mod, k->name, name, why); return NULL; }
     *index = at;
     if (at >= g_lcBefore[kind]) return LiveAt(kind, at);
-    g_lcShadowed[kind][at] = 1;
+    g_lcShadowed[kind][at] = (uint8_t)stand;
     return g_lcShadow[kind] + at * k->stride;
 }
 
@@ -151,6 +185,60 @@ static const char* LiveKindCheck(int kind, char* why, size_t size)
     return NULL;
 }
 
+/* Whether a mod is one the change sets up (added, or a new version). */
+static int LiveIncoming(const HfMod* mod)
+{
+    for (int i = 0; i < g_txn.modCount; i++) if (g_txn.mods[i].action != TXN_REMOVE && g_txn.mods[i].mod == mod) return 1;
+    return 0;
+}
+
+/* Whether an edit names a settings row of the kind by its number (fields.c). */
+static int LiveRowEdit(const FieldEdit* e, int kind, uint32_t number)
+{
+    return kLiveKinds[kind].table != NULL && e->table && e->entity == number && !strcmp(e->component->component, kLiveKinds[kind].table);
+}
+
+/* An edit of a row that would stay with the row a takeover replaces, where a boot of these mods applies it to the new
+ * one: a deferred edit of a mod that stays, or a live edit of a mod not taken out. A mod taken out takes its edits with
+ * it, and the set-ups' deferred edits apply again to the new row (LiveEditsFollow). The edit's mod, or NULL.
+ * g_fieldsLock held. */
+static const HfMod* LiveRowEdited(int kind, uint32_t number)
+{
+    for (int i = 0; i < g_editCount; i++)
+    {
+        const FieldEdit* e = &g_edits[i];
+        if (!LiveRowEdit(e, kind, number) || e->failed || LiveLeaves(e->mod)) continue;
+        if (e->live || !LiveIncoming(e->mod)) return e->mod;
+    }
+    return NULL;
+}
+
+/* A takeover of entry index, right before the change is made: no edit of its row stays behind, and for a stratagem the
+ * game holds none of the old one's packages (loadout_scrub.c ScrubTakeover). NULL, or "<reason>\t<why>". */
+static const char* LiveTakeoverRefused(int kind, uint32_t index, char* why, size_t size)
+{
+    const LiveKind* k = &kLiveKinds[kind];
+    const HfMod* editor = LiveRowEdited(kind, k->first + index);
+    if (editor != NULL)
+    {
+        snprintf(why, size, "capability\t%s %u passes to %s, but %s's edit of it would stay with the old one (a boot of these mods gives it the new "
+            "one); a restart numbers it as the host does", k->name, k->first + index, (*(HfMod**)(g_lcShadow[kind] + index * k->stride))->id, editor->id);
+        return why;
+    }
+    if (kind != LC_STRATAGEM || g_stratagemState != 1) return NULL; /* not in the game: numbers only */
+    uintptr_t game = g_lcFixtureGame ? g_lcFixtureGame : ApiModuleBase("game.dll", NULL);
+    return game != 0 ? ScrubTakeover(game, k->first + index, why, size) : NULL;
+}
+
+/* Every takeover of the change (LiveTakeoverRefused). g_fieldsLock held. */
+static const char* LiveTakeoversCheck(char* why, size_t size)
+{
+    for (int kind = 0; kind < LC_KINDS; kind++)
+        for (uint32_t i = 0; i < g_lcBefore[kind]; i++)
+            if (g_lcShadowed[kind][i] == LC_STAND_OVER && LiveTakeoverRefused(kind, i, why, size) != NULL) return why;
+    return NULL;
+}
+
 static const char* LiveWeaponsCheck(char* why, size_t size); /* live_registry.c */
 
 static const char* LiveNumbersCheck(char* why, size_t size)
@@ -161,7 +249,8 @@ static const char* LiveNumbersCheck(char* why, size_t size)
         const char* refused = LiveKindCheck(kind, why, size);
         if (refused != NULL) return refused;
     }
-    return LiveWeaponsCheck(why, size);
+    const char* refused = LiveWeaponsCheck(why, size);
+    return refused != NULL ? refused : LiveTakeoversCheck(why, size);
 }
 
 /* Before the change's set-ups. */
@@ -372,12 +461,13 @@ static const char* LiveFailed(char* why, size_t size, const char* what, const ch
 }
 
 /* One of the change's stratagems: its row (in the block for a new type, else a spare one: the stood-in entry's row is in
- * use), its list entry and name, its item to own. NULL, or why not. */
+ * use), its list entry and name, its item to own (a new type's, one back at its tombstone, or one taking a type over: a
+ * new version keeps its item). NULL, or why not. */
 static const char* LiveStratagem(LivePlan* plan, uint8_t* table, uint32_t index, Stratagem* s, Stratagem* home)
 {
     static uint8_t* spare;
     static uint32_t spareUsed;
-    int added = index >= g_lcBefore[LC_STRATAGEM];
+    int added = index >= g_lcBefore[LC_STRATAGEM], owned = added || g_lcShadowed[LC_STRATAGEM][index] != LC_STAND_SAME;
     s->row = added ? table + STR_ROWS_AT + (size_t)index * STR_ROW : LiveSpareRow(&spare, &spareUsed, STR_ROW, STR_MAX_NEW);
     const char* failed = s->row != NULL ? StratagemRow(s, home, table) : NULL;
     if (s->row == NULL || failed != NULL) return failed != NULL ? failed : "no memory for its row";
@@ -388,7 +478,7 @@ static const char* LiveStratagem(LivePlan* plan, uint8_t* table, uint32_t index,
     uint64_t base = 0;
     uint32_t baseStable = 0;
     memcpy(&base, table + s->base * 8, 8);
-    if (added && base != 0 && !SafeRead(base + 4, &baseStable, 4)) LiveOwn(plan, (OwnItem){OWN_STRATAGEM, s->item, s->stable, baseStable, 0, 0});
+    if (owned && base != 0 && !SafeRead(base + 4, &baseStable, 4)) LiveOwn(plan, (OwnItem){OWN_STRATAGEM, s->item, s->stable, baseStable, 0, 0});
     return NULL;
 }
 
@@ -551,7 +641,8 @@ static void LiveLaunch(uintptr_t game)
     for (; f < L_COUNT; f++) if (SafeRead(game + kLaunchFunctions[f].rva, code, 32) || memcmp(code, kLaunchFunctions[f].pin, 32)) break;
     g_launchReady = f == L_COUNT;
     const Ability* holder = NULL;
-    for (uint32_t i = g_lcBefore[LC_ABILITY]; i < g_abilityCount && holder == NULL; i++) if (g_abilities[i].holdsLaunch) holder = &g_abilities[i];
+    for (uint32_t i = 0; i < g_abilityCount && holder == NULL; i++)
+        if ((i >= g_lcBefore[LC_ABILITY] || g_lcShadowed[LC_ABILITY][i]) && g_abilities[i].holdsLaunch) holder = &g_abilities[i];
     if (!g_launchReady || holder == NULL) { if (holder) ApiLog(holder->mod, "ability %u: game.dll 0x%x is not the reviewed function; its remote launches at once", holder->id, kLaunchFunctions[f].rva); return; }
     uint8_t* stub = !g_looseGuard && GuardPins(game) ? AllocateNearGame(game, 0x1000) : NULL;
     DWORD old;
@@ -568,15 +659,17 @@ static void LiveLaunch(uintptr_t game)
 
 static int LiveCarried(int weapon); /* live_registry.c: a registration a new version keeps */
 
-/* The entries of the mods the change takes out become tombstones (those a new version stands in for are replaced
- * instead); their items are given back. */
+/* The entries of the mods the change takes out become tombstones, their items given back. One a new version stands in
+ * for is replaced instead; one another mod takes over is replaced too, its item given back. Before the freeze: the
+ * entries are still theirs. */
 static void LiveRetire(LivePlan* plan)
 {
     for (int kind = 0; kind < LC_KINDS; kind++)
         for (uint32_t i = 0; i < g_lcBefore[kind]; i++)
         {
-            if (g_lcShadowed[kind][i] || LiveTomb(kind, i) || !LiveLeaves(LiveModAt(kind, i))) continue;
-            g_lcTomb[kind][i] = 1;
+            int over = g_lcShadowed[kind][i] == LC_STAND_OVER;
+            if ((g_lcShadowed[kind][i] && !over) || LiveTomb(kind, i) || !LiveLeaves(LiveModAt(kind, i))) continue;
+            if (!over) g_lcTomb[kind][i] = 1;
             if (kind == LC_STRATAGEM) LiveOwn(plan, (OwnItem){OWN_STRATAGEM, g_stratagems[i].item, 0, 0, 0, 1});
         }
     for (int i = 0; i < g_lcWeaponsBefore; i++)
@@ -588,12 +681,13 @@ static void LiveRetire(LivePlan* plan)
     }
 }
 
-/* What the change takes out that the loadout may hold: the stratagems and weapons LiveRetire makes tombstones. */
+/* What the change takes out that the loadout may hold: the stratagems and weapons LiveRetire makes tombstones or gives to
+ * another mod. */
 static void LiveScrubList(LivePlan* plan)
 {
     Scrub* s = &plan->scrub;
     for (uint32_t i = 0; i < g_lcBefore[LC_STRATAGEM] && s->typeCount < STR_MAX_NEW; i++)
-        if (!g_lcShadowed[LC_STRATAGEM][i] && !LiveTomb(LC_STRATAGEM, i) && LiveLeaves(g_stratagems[i].mod))
+        if ((!g_lcShadowed[LC_STRATAGEM][i] || g_lcShadowed[LC_STRATAGEM][i] == LC_STAND_OVER) && !LiveTomb(LC_STRATAGEM, i) && LiveLeaves(g_stratagems[i].mod))
         {
             s->types[s->typeCount] = g_stratagems[i].type;
             s->stables[s->typeCount++] = g_stratagems[i].stable;
@@ -697,6 +791,35 @@ static void LiveInstalled(const LivePlan* plan)
     }
 }
 
+/* A taken-over row's edits once the change is made: those of a mod taken out go with the old row (not written: the row
+ * they applied to is no longer the game's), and the set-ups' deferred edits, which applied to the old row while they
+ * ran, apply again over the new row's own bytes. Edits of mods that stay refused the takeover (LiveTakeoversCheck). */
+static void LiveRowEditsFollow(int kind, uint32_t number)
+{
+    for (int e = g_editCount - 1; e >= 0; e--) if (LiveRowEdit(&g_edits[e], kind, number) && LiveLeaves(g_edits[e].mod)) RemoveEdit(e);
+    for (int e = 0; e < g_editCount; e++)
+    {
+        const FieldEdit* edit = &g_edits[e];
+        int first = LiveRowEdit(edit, kind, number) && !edit->live && edit->field->size <= FIELD_BEFORE;
+        for (int o = 0; o < e && first; o++) first = !SameField(&g_edits[o], edit); /* each field once */
+        int waiting = 0;
+        uint8_t* row = first ? EditRecord(edit, number, 0, &waiting) : NULL;
+        uint8_t own[FIELD_BEFORE];
+        if (row == NULL) continue;
+        memcpy(own, row + edit->field->offset, edit->field->size);
+        FieldRestack(edit, own);
+    }
+}
+
+static void LiveEditsFollow(void)
+{
+    AcquireSRWLockExclusive(&g_fieldsLock);
+    for (int kind = 0; kind < LC_KINDS; kind++)
+        for (uint32_t i = 0; i < g_lcBefore[kind] && kLiveKinds[kind].table != NULL; i++)
+            if (g_lcShadowed[kind][i] == LC_STAND_OVER) LiveRowEditsFollow(kind, kLiveKinds[kind].first + i);
+    ReleaseSRWLockExclusive(&g_fieldsLock);
+}
+
 /* The game thread's step, the loadout's push checked a few frames on; 0 when something did not happen. */
 static int LiveSteps(LivePlan* plan)
 {
@@ -733,6 +856,7 @@ static const char* LiveContentMake(char* why, size_t size, int* failed)
     LiveRetire(&plan);
     if (LiveFreezeNeeded()) LiveFreeze();
     LiveInstalled(&plan);
+    LiveEditsFollow();
     *failed = !LiveSteps(&plan);
     WriteRegisteredItems();
     Note("live content: %d write(s) under one freeze (%d page(s)); %d catalogue record(s) added, %d item(s) owned, %d given back", g_lcWriteCount,

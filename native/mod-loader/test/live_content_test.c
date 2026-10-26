@@ -1,5 +1,5 @@
 /* Live content (live_content.c, live_registry.c, ownership.c): numbering as a boot of the change's mods numbers (by mod id,
- * then call order), stand-ins for a new version's entries, tombstones, refusals; the first move of the stratagem,
+ * then call order), stand-ins for a new version's entries, tombstones taken back and taken over, refusals; the first move of the stratagem,
  * damage and projectile lists and a later add, on a synthetic game image, with ownership in a fake catalogue; a live
  * behaviour in the stubs; live entities in a fake entity state. Included by stats_test.c after live_mods_test.c. */
 
@@ -98,19 +98,21 @@ static void ContentNumbersFixture(void)
     ContentChange(NULL, a);
     assert(ContentStratagem(a, "x", 0) == 0 && !ContentCommit() && g_stratagemCount == 1);
 
-    /* b's new version: the same stratagem stands in for its old one; another name would take its number, refused */
+    /* b's new version: the same stratagem stands in for its old one; one under another name takes its number over */
     HfMod* b2 = ContentMod("b");
     ContentChange(b, b2);
-    assert(ContentStratagem(b2, "one", 3) == STR_VANILLA && g_lcShadowed[LC_STRATAGEM][0] && g_stratagemCount == 1);
+    assert(ContentStratagem(b2, "one", 3) == STR_VANILLA && g_lcShadowed[LC_STRATAGEM][0] == LC_STAND_SAME && g_stratagemCount == 1);
     assert(ContentCommit() && g_stratagems[0].mod == b2 && g_stratagems[0].cooldown == 3);
     HfMod* b3 = ContentMod("b");
     ContentChange(b2, b3);
-    assert(ContentStratagem(b3, "two", 0) == 0 && !ContentCommit() && g_stratagems[0].mod == b2);
+    assert(ContentStratagem(b3, "two", 0) == STR_VANILLA && g_lcShadowed[LC_STRATAGEM][0] == LC_STAND_OVER && ContentCommit() && g_stratagems[0].mod == b3 &&
+        !strcmp(g_stratagems[0].name, "b:two") && g_stratagemCount == 1);
 
-    /* b out and c in: c's stratagem would take b's number under another mod: a restart */
-    ContentChange(b2, NULL);
+    /* b out and c in (a joiner with b syncing to a host with c): c's stratagem takes b's number over */
+    ContentChange(b3, NULL);
     ContentSecond(NULL, c);
-    assert(ContentStratagem(c, "x", 0) == 0 && !ContentCommit());
+    assert(ContentStratagem(c, "x", 0) == STR_VANILLA && g_lcShadowed[LC_STRATAGEM][0] == LC_STAND_OVER && ContentCommit() && g_stratagems[0].mod == c &&
+        !LiveTomb(LC_STRATAGEM, 0) && g_stratagemCount == 1);
 
     /* d and e in, whatever their load order: by id; d out while e stays would move e's number, refused; e out, back */
     HfMod* d = ContentMod("d");
@@ -128,7 +130,24 @@ static void ContentNumbersFixture(void)
     assert(ContentCommit() && LiveTomb(LC_STRATAGEM, 2) && ApiStratagemRow(STR_VANILLA + 2) == 0);
     HfMod* e2 = ContentMod("e");
     ContentChange(NULL, e2);
-    assert(ContentStratagem(e2, "z", 0) == STR_VANILLA + 2 && ContentCommit() && !LiveTomb(LC_STRATAGEM, 2) && g_stratagems[2].mod == e2);
+    assert(ContentStratagem(e2, "z", 0) == STR_VANILLA + 2 && g_lcShadowed[LC_STRATAGEM][2] == LC_STAND_BACK && ContentCommit() && !LiveTomb(LC_STRATAGEM, 2) &&
+        g_stratagems[2].mod == e2);
+
+    /* d and e out (tombstones 151, 152); e back alone: a boot numbers z 151, d's tombstone, but z was 152 (its stable id
+     * would name two types): refused. da in (between d and e) takes 151 over, and e is back at its own 152 */
+    ContentChange(d, NULL);
+    ContentSecond(e2, NULL);
+    assert(ContentCommit() && LiveTomb(LC_STRATAGEM, 1) && LiveTomb(LC_STRATAGEM, 2));
+    HfMod* e3 = ContentMod("e");
+    ContentChange(NULL, e3);
+    assert(ContentStratagem(e3, "z", 0) == 0 && !ContentCommit() && strstr(g_lcRefused, "it was 152 before") != NULL);
+    HfMod* da = ContentMod("da");
+    HfMod* e4 = ContentMod("e");
+    ContentChange(NULL, da);
+    ContentSecond(NULL, e4);
+    assert(ContentStratagem(da, "w", 0) == STR_VANILLA + 1 && g_lcShadowed[LC_STRATAGEM][1] == LC_STAND_OVER);
+    assert(ContentStratagem(e4, "z", 0) == STR_VANILLA + 2 && g_lcShadowed[LC_STRATAGEM][2] == LC_STAND_BACK && ContentCommit());
+    assert(g_stratagems[1].mod == da && g_stratagems[2].mod == e4 && !LiveTomb(LC_STRATAGEM, 1) && !LiveTomb(LC_STRATAGEM, 2) && g_stratagemCount == 3);
 
     /* behaviours (unnamed): numbered by mod id too */
     g_behaviourState = -1;
@@ -139,7 +158,17 @@ static void ContentNumbersFixture(void)
     assert(ApiAddBehaviour(f, &turret) == BHV_FIRST && ApiAddBehaviour(f, &turret) == BHV_FIRST + 1);
     g_liveSetup = NULL;
     assert(ContentCommit() && g_behaviourCount == 2);
-    printf("  live content: numbered by mod id then call order (load order aside), a new version stands in, tombstones, 4 refusals\n");
+    /* f out; g's behaviour takes 694 over (unnamed: a mod's own by place, so only a number) */
+    ContentChange(f, NULL);
+    assert(ContentCommit() && LiveTomb(LC_BEHAVIOUR, 0) && LiveTomb(LC_BEHAVIOUR, 1));
+    HfMod* g = ContentMod("g");
+    ContentChange(NULL, g);
+    g_liveSetup = g;
+    assert(ApiAddBehaviour(g, &turret) == BHV_FIRST && g_lcShadowed[LC_BEHAVIOUR][0] == LC_STAND_OVER);
+    g_liveSetup = NULL;
+    assert(ContentCommit() && g_behaviours[0].mod == g && !LiveTomb(LC_BEHAVIOUR, 0) && LiveTomb(LC_BEHAVIOUR, 1) && g_behaviourCount == 2);
+    printf("  live content: numbered by mod id then call order (load order aside), a new version stands in, tombstones taken back and "
+        "taken over by another mod, 3 refusals\n");
 
     memset(g_lcTomb, 0, sizeof g_lcTomb);
     g_stratagemCount = stratagems;
@@ -262,6 +291,120 @@ static int ListsAt(uintptr_t game, const DamageSite* sites, size_t count, uintpt
     return 1;
 }
 
+/* A stratagem row by its type, for edits (TableRowOf needs game.dll loaded). */
+static uintptr_t ContentTableRow(const char* component, uint64_t id, int* ready)
+{
+    *ready = 1;
+    uint64_t row = 0;
+    if (strcmp(component, "StratagemDefinition") || g_stratagemTable == NULL || id == 0 || id >= STR_VANILLA + g_stratagemCount) return 0;
+    memcpy(&row, g_stratagemTable + id * 8, 8);
+    return row != 0 && *(uint32_t*)(uintptr_t)row == id ? (uintptr_t)row : 0;
+}
+
+static float ContentCooldown(uint32_t type)
+{
+    float cooldown;
+    memcpy(&cooldown, *(uint8_t**)(g_stratagemTable + type * 8) + 0x68, 4);
+    return cooldown;
+}
+
+/* Another mod's stratagem takes n's tombstone (151) over, as a boot of m and p numbers it. Refused while the game holds
+ * 151's packages (a shared stratagem, a mission's loadout) or the loadout screen is open, and while a mod that stays has an
+ * edit of the row. Then its row in the list, its item appended and owned, its set-up's edit of the row on the new row.
+ * n back while p goes takes 151 over again: p's item given back and 151 out of the loadout, p's edit dropped (not written),
+ * n's child, which the game's sort filed under category 0 once 151 named p's stable id, filed under 10 again. */
+static void ContentTakeovers(uintptr_t g, uint8_t* history, HfMod* n)
+{
+    uint32_t type = STR_VANILLA + 1, nStable = g_stratagems[1].stable, nItem = g_stratagems[1].item;
+    uint8_t *shared = history + LS_SHARED, *copy = history + LS_COPY, *loadout = history + LS_LOADOUT;
+    uint32_t* pairs = (uint32_t*)(ScrubPointer(g + LS_PROFILE) + LS_PAIRS);
+    g_tableRow = ContentTableRow;
+    HfField cooldown = HF_FIELD(StratagemSettings, cooldown);
+    HfValue seven = HF_F32(7), nine = HF_F32(9);
+    HfMod* p = ContentMod("p");
+    HfMod* q = ContentMod("q");
+    *(uint32_t*)shared = type;
+    *(uint32_t*)(shared + 8) = 1;
+    ContentChange(NULL, p);
+    assert(ContentStratagem(p, "u", 0) == type && g_lcShadowed[LC_STRATAGEM][1] == LC_STAND_OVER && !ContentCommit() && LiveTomb(LC_STRATAGEM, 1));
+    *(uint32_t*)(shared + 8) = 0;
+    *(uint32_t*)(copy + LS_LOAD_TYPE) = 2;
+    *(uint32_t*)(copy + LS_SLOT_COUNT) = 1;
+    *(uint32_t*)(copy + LS_SLOTS) = type;
+    ContentChange(NULL, p);
+    assert(ContentStratagem(p, "u", 0) == type && !ContentCommit());
+    *(uint32_t*)(copy + LS_LOAD_TYPE) = 1; /* loaded for the ship: no stratagem packages */
+    static uint32_t screen = 11;
+    uint32_t* top = &screen;
+    memcpy((void*)(g + LS_MENU), &top, 8);
+    ContentChange(NULL, p);
+    assert(ContentStratagem(p, "u", 0) == type && !ContentCommit());
+    screen = 0;
+    int edits = g_editCount;
+    assert(ApiSetField(q, type, &cooldown, &nine) == 0 && g_editCount == edits + 1);
+    ContentChange(NULL, p);
+    assert(ContentStratagem(p, "u", 0) == type && !ContentCommit());
+    RemoveEdit(edits);
+
+    uint8_t* old = *(uint8_t**)(g_stratagemTable + type * 8);
+    int owned = g_fakeOwnedCount, takes = g_fakeTakes;
+    uint32_t records = *(uint32_t*)(g_fakeCatalogue + OWN_COUNT);
+    ContentChange(NULL, p);
+    assert(ContentStratagem(p, "u", 0) == type);
+    g_liveSetup = p;
+    assert(ApiSetField(p, type, &cooldown, &seven) == 0 && g_editCount == edits + 1); /* while it sets up: on n's row */
+    g_liveSetup = NULL;
+    assert(ContentCommit() && g_stratagems[1].mod == p && !LiveTomb(LC_STRATAGEM, 1) && BoundsAt(g, 2) && g_fakeTakes == takes);
+    uint8_t* row = *(uint8_t**)(g_stratagemTable + type * 8);
+    assert(row == g_stratagems[1].row && row != old && *(uint32_t*)(row + 4) == g_stratagems[1].stable && ContentCooldown(type) == 7.0f &&
+        !strcmp(*(const char**)(g_stratagemTable + STR_NAMES_AT + type * 8), "p:u"));
+    assert(g_fakeOwnedCount == owned + 1 && g_fakeOwned[owned] == g_stratagems[1].item && *(uint32_t*)(g_fakeCatalogue + OWN_COUNT) == records + 2);
+
+    int child = OwnEntry((uintptr_t)g_fakeCatalogue, WeaponChild(nStable, nItem), nStable, 0), sorts = g_fakeSorts;
+    *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, child) + 0xC) = 0;
+    *(uint32_t*)(loadout + LS_SLOTS + 2 * LS_SLOT) = type;
+    *(uint32_t*)(loadout + LS_SLOT_COUNT) = 3;
+    pairs[2] = g_stratagems[1].stable;
+    pairs[3] = 1;
+    HfMod* n2 = ContentMod("n");
+    ContentChange(p, NULL);
+    ContentSecond(NULL, n2);
+    assert(ContentStratagem(n2, "t", 0) == type && g_lcShadowed[LC_STRATAGEM][1] == LC_STAND_OVER && ContentCommit() && g_stratagems[1].mod == n2);
+    assert(*(uint8_t**)(g_stratagemTable + type * 8) != row && ContentCooldown(type) == 0.0f && g_editCount == edits && g_fakeTakes == takes + 1 &&
+        g_fakeOwned[owned + 1] == nItem && g_fakeSorts == sorts + 1 && *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, child) + 0xC) == 10);
+    assert(*(uint32_t*)(loadout + LS_SLOT_COUNT) == 2 && pairs[2] == 0 && n->removed);
+    g_tableRow = TableRowOf;
+    printf("  live content: a taken-out stratagem's type taken over by another mod (4 refusals: its packages held twice, the loadout screen, "
+        "an edit of the row); its edits follow, items given back before owned, a returning child filed again\n");
+}
+
+/* m out and k in (k sorts before m and n): k's damage, projectile and stratagem take m's 650, 351 and 150 over, each a
+ * new row in its list (m's stay where they were, for whatever holds them); m's stratagem out of the loadout, its item
+ * given back. */
+static void ContentTakeoverLists(uintptr_t g, HfMod* m)
+{
+    uint8_t *damageOld = *(uint8_t**)(g_damageTable + DMG_VANILLA * 8), *projectileOld = *(uint8_t**)(g_projectileTable + PRJ_VANILLA * 8);
+    uint8_t* loadout = (uint8_t*)ScrubPointer(g + LS_HISTORY) + LS_LOADOUT;
+    int takes = g_fakeTakes;
+    HfMod* k = ContentMod("k");
+    ContentChange(m, NULL);
+    ContentSecond(NULL, k);
+    HfDamage dd = {sizeof dd, .name = "d", .base = 7, .scale = 3};
+    g_liveSetup = k;
+    uint32_t damage = ApiAddDamage(k, &dd);
+    HfProjectile pp = {sizeof pp, .name = "p", .base = 5, .damage = damage};
+    uint32_t projectile = ApiAddProjectile(k, &pp);
+    g_liveSetup = NULL;
+    assert(damage == DMG_VANILLA && projectile == PRJ_VANILLA && ContentStratagem(k, "s", 2) == STR_VANILLA && g_lcShadowed[LC_DAMAGE][0] == LC_STAND_OVER &&
+        g_lcShadowed[LC_PROJECTILE][0] == LC_STAND_OVER && g_lcShadowed[LC_STRATAGEM][0] == LC_STAND_OVER && ContentCommit());
+    uint8_t *damageRow = *(uint8_t**)(g_damageTable + damage * 8), *projectileRow = *(uint8_t**)(g_projectileTable + projectile * 8);
+    assert(damageRow != damageOld && *(uint32_t*)damageRow == damage && *(uint32_t*)(damageRow + 4) == 300 && *(uint32_t*)(damageOld + 4) == 200);
+    assert(projectileRow != projectileOld && *(uint32_t*)projectileRow == projectile && *(uint32_t*)(projectileRow + PRJ_DAMAGE_AT) == damage);
+    assert(g_damages[0].mod == k && g_projectiles[0].mod == k && g_stratagems[0].mod == k && ContentCooldown(STR_VANILLA) == 2.0f && !LiveTomb(LC_STRATAGEM, 0));
+    assert(g_fakeTakes == takes + 1 && *(uint32_t*)(loadout + LS_SLOT_COUNT) == 1 && *(uint32_t*)(loadout + LS_SLOTS) == 118);
+    printf("  live content: a damage type, projectile and stratagem of a mod taken out taken over in one change (new rows; the old ones left)\n");
+}
+
 static void ContentInstallFixture(void)
 {
     ContentEventsSave();
@@ -317,7 +460,7 @@ static void ContentInstallFixture(void)
 
     /* n out: a tombstone, its item given back; its type stays in the list for whatever holds it, but not in the loadout:
      * out of the history's record (the later slots moved down) and the profile's pairs */
-    uint8_t* history = (uint8_t*)calloc(1, LS_RECORDS + 4);
+    uint8_t* history = (uint8_t*)calloc(1, LS_SHARED + LS_SHARED_COUNT * LS_SHARED_ENTRY);
     uint8_t* profile = (uint8_t*)calloc(1, 0x200);
     uint8_t* loadout = history + LS_LOADOUT;
     *(uint32_t*)(history + LS_RECORDS) = 1;
@@ -331,10 +474,13 @@ static void ContentInstallFixture(void)
     memcpy(game + LS_PROFILE, &profile, 8);
     memcpy(game + LS_MANAGER, &g_fakeCatalogue, 8);
     for (size_t i = 0; i < sizeof kLoadoutPins / sizeof kLoadoutPins[0]; i++) memcpy(game + kLoadoutPins[i].rva, kLoadoutPins[i].bytes, kLoadoutPins[i].size);
+    for (size_t i = 0; i < sizeof kHeldPins / sizeof kHeldPins[0]; i++) memcpy(game + kHeldPins[i].rva, kHeldPins[i].bytes, kHeldPins[i].size);
     ContentChange(n, NULL);
     assert(ContentCommit() && LiveTomb(LC_STRATAGEM, 1) && g_fakeTakes == 1 && ApiStratagemRow(STR_VANILLA + 1) == 0 && BoundsAt(g, 2));
     assert(*(uint32_t*)(loadout + LS_SLOT_COUNT) == 2 && *(uint32_t*)(loadout + LS_SLOTS) == STR_VANILLA && *(uint32_t*)(loadout + LS_SLOTS + LS_SLOT) == 118 &&
         *(uint32_t*)(loadout + LS_SLOTS + 2 * LS_SLOT) == 0 && pairs[0] == 0x1234 && pairs[2] == 0);
+    ContentTakeovers(g, history, n);
+    ContentTakeoverLists(g, m);
     /* a weapon going: the profile's back to the default and pushed; one the push did not reach set in the record */
     Scrub weapon = {.weapons = {0x777}, .weaponCount = 1};
     *(uint32_t*)(profile + 0x44) = 0x777;

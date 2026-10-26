@@ -6,7 +6,9 @@
  * and appends the set-ups' entities after the last one given; that must be where a boot of the change's mods would put
  * them (the entities that stay and the new ones, by resource id, numbered from the first after the vanilla ones). An
  * entity of a mod the change takes out keeps its short id (its rows stay: a tombstone), so a new entity numbered after it,
- * or one whose resource id sorts before an entity that stays, refuses the change. A new version's entity defined as its
+ * or one whose resource id sorts before an entity that stays, refuses the change: unlike the other kinds' numbers, a
+ * short id never passes to another mod's entity (it is the engine's entity type, and what the game keeps per type is not
+ * known; KB hellforge-live-mod-sync-tombstone-reuse). A new version's entity defined as its
  * old version's keeps the old registration (carried over); defined otherwise it refuses the change.
  *
  * Install, in the game thread's step (KB hellforge-live-mod-sync-re-runtime, "A late RegisterLate"): the registry's hooks

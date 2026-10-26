@@ -127,18 +127,99 @@ static int ScrubNeeded(uintptr_t game, const Scrub* s)
     return ScrubProfileHolds(ScrubPointer(game + LS_PROFILE), s);
 }
 
+/* Whether the loadout screen is open (it keeps copies of its own, and launches missions). */
+static int ScrubScreenOpen(uintptr_t game)
+{
+    uintptr_t ui = ScrubPointer(game + LS_UI), menu = ScrubPointer(game + LS_MENU);
+    uint32_t presenter = 0, top = 0;
+    return (ui != 0 && !SafeRead(ui + 0x4294, &presenter, 4) && presenter == 14) || (menu != 0 && !SafeRead(menu, &top, 4) && top == 11);
+}
+
 /* Why the loadout cannot be left as a boot would leave it now, or NULL. */
 static const char* ScrubReady(uintptr_t game)
 {
     if (!ScrubPinsMatch(game)) return "capability\tthe game's loadout code is not the reviewed one, so what the change takes out may stay in the loadout; a restart drops it";
-    uintptr_t manager = ScrubPointer(game + LS_MANAGER), history = ScrubPointer(game + LS_HISTORY), ui = ScrubPointer(game + LS_UI),
-        menu = ScrubPointer(game + LS_MENU);
-    uint32_t login = 0, records = 0, presenter = 0, top = 0;
+    uintptr_t manager = ScrubPointer(game + LS_MANAGER), history = ScrubPointer(game + LS_HISTORY);
+    uint32_t login = 0, records = 0;
     if (manager == 0 || SafeRead(manager + 0xDDCF8, &login, 4) || login != 12 || history == 0 || SafeRead(history + LS_RECORDS, &records, 4) || records == 0)
         return "state\tthe game has not finished logging in; try again in a moment";
-    if ((ui != 0 && !SafeRead(ui + 0x4294, &presenter, 4) && presenter == 14) || (menu != 0 && !SafeRead(menu, &top, 4) && top == 11))
-        return "state\tthe loadout screen is open; close it and try again";
+    if (ScrubScreenOpen(game)) return "state\tthe loadout screen is open; close it and try again";
     return NULL;
+}
+
+/* ---- a stratagem type another mod takes over (KB hellforge-live-mod-sync-tombstone-reuse) ---------------------------
+ * The game acquires a stratagem's packages, and releases them, from the row table[type] names at that moment
+ * (0x1753080; the package system counts holds per package id). A hold taken with the old row and released after another
+ * mod's row took the type would release that row's packages instead, which something else may still use. The holds that
+ * release stratagem packages: a loadout loaded for a mission (load type 2), each record's loaded copy (+0xA28) and those
+ * of players who left during it (PlayerHistory + 0x2FD10, 0x9F0 each, their count at + 0x2FD0C), and the shared
+ * stratagems (+0x45410: 64 entries of 0x6C, {type, choice, state}). On the ship all of them are empty: the ship's load
+ * unloads the left players' copies, reloads every record's for the ship (load type 1: weapons only) and the per-update
+ * pass (0x1367690) releases each shared stratagem no world object uses. With the loadout screen closed none can be
+ * taken before the change is made. */
+
+#define LS_COPY 0xA28u
+#define LS_LOAD_TYPE 0x9E4u
+#define LS_LEFT_COUNT 0x2FD0Cu
+#define LS_LEFT 0x2FD10u
+#define LS_LOADOUT_BYTES 0x9F0u
+#define LS_SHARED 0x45410u
+#define LS_SHARED_ENTRY 0x6Cu
+#define LS_SHARED_COUNT 64u
+
+static const LoadoutPin kHeldPins[] = {
+    {0x1368D29u, 47, {0x48, 0x8D, 0x81, 0x10, 0x54, 0x04, 0x00, 0x48, 0x8B, 0xFA, 0x48, 0x8B, 0xE9, 0x39, 0x58, 0x08, 0x74, 0x10, 0x44, 0x8B, 0x0A,
+        0x44, 0x39, 0x08, 0x75, 0x08, 0x8B, 0x4A, 0x04, 0x39, 0x48, 0x04, 0x74, 0x3F, 0x41, 0xFF, 0xC0, 0x48, 0x83, 0xC0, 0x6C, 0x41, 0x83, 0xF8, 0x40,
+        0x72, 0xDE}}, /* the shared stratagems: +0x45410, 64 of 0x6C, their state +8 */
+    {0x1369120u, 7, {0x83, 0xBA, 0xE4, 0x09, 0x00, 0x00, 0x00}}, /* a loaded copy's load type +0x9E4 */
+    {0x1364C60u, 15, {0xBE, 0x0C, 0x14, 0x00, 0x00, 0x00, 0x75, 0x35, 0x48, 0x8D, 0x8E, 0x28, 0x0A, 0x00, 0x00}}, /* the record's copy +0xA28 */
+    {0xAC5695u, 33, {0x39, 0x9F, 0x0C, 0xFD, 0x02, 0x00, 0x76, 0x28, 0x0F, 0x1F, 0x00, 0x8B, 0xC3, 0x48, 0x8B, 0xCF, 0x48, 0x69, 0xD0, 0xF0, 0x09, 0x00,
+        0x00, 0x48, 0x81, 0xC2, 0x10, 0xFD, 0x02, 0x00, 0x48, 0x03, 0xD7}}, /* the left players' copies, unloaded by the ship's load */
+};
+
+/* Whether a loaded copy of a loadout holds the type's packages: loaded for a mission and listing it. */
+static int ScrubCopyHolds(uintptr_t copy, uint32_t type)
+{
+    static uint8_t loadout[LS_LOADOUT_BYTES]; /* the change's thread only */
+    if (SafeRead(copy, loadout, sizeof loadout) || *(const uint32_t*)(loadout + LS_LOAD_TYPE) != 2) return 0;
+    uint32_t slots = *(const uint32_t*)(loadout + LS_SLOT_COUNT);
+    for (uint32_t k = 0; k < slots && k < LS_MAX_SLOTS; k++) if (*(const uint32_t*)(loadout + LS_SLOTS + k * LS_SLOT) == type) return 1;
+    return 0;
+}
+
+/* Whether the game holds packages of stratagem type `type` by its number (above). */
+static int ScrubTypeHolds(uintptr_t history, uint32_t type)
+{
+    uint32_t records = 0, left = 0;
+    SafeRead(history + LS_RECORDS, &records, 4);
+    SafeRead(history + LS_LEFT_COUNT, &left, 4);
+    for (uint32_t r = 0; r < records && r < LS_MAX_RECORDS; r++) if (ScrubCopyHolds(history + (uintptr_t)r * LS_RECORD + LS_COPY, type)) return 1;
+    for (uint32_t r = 0; r < left && r < LS_MAX_RECORDS; r++) if (ScrubCopyHolds(history + LS_LEFT + (uintptr_t)r * LS_LOADOUT_BYTES, type)) return 1;
+    static uint8_t shared[LS_SHARED_COUNT * LS_SHARED_ENTRY];
+    if (SafeRead(history + LS_SHARED, shared, sizeof shared)) return 1; /* unreadable: assume it holds */
+    for (uint32_t i = 0; i < LS_SHARED_COUNT; i++)
+    {
+        const uint8_t* entry = shared + i * LS_SHARED_ENTRY;
+        if (*(const uint32_t*)(entry + 8) != 0 && *(const uint32_t*)entry == type) return 1;
+    }
+    return 0;
+}
+
+/* Why another mod's stratagem cannot take type `type` now, or NULL. */
+static const char* ScrubTakeover(uintptr_t game, uint32_t type, char* why, size_t size)
+{
+    int pins = ScrubPinsMatch(game);
+    for (size_t i = 0; i < sizeof kHeldPins / sizeof kHeldPins[0] && pins; i++) pins = PinMatches(game + kHeldPins[i].rva, kHeldPins[i].bytes, kHeldPins[i].size);
+    if (!pins)
+        snprintf(why, size, "capability\tthe game's loadout code is not the reviewed one, so stratagem %u cannot pass to another mod; a restart numbers it as the host does", type);
+    else if (ScrubScreenOpen(game)) snprintf(why, size, "state\tthe loadout screen is open; close it and try again");
+    else
+    {
+        uintptr_t history = ScrubPointer(game + LS_HISTORY);
+        if (history == 0 || !ScrubTypeHolds(history, type)) return NULL;
+        snprintf(why, size, "state\tthe game still holds stratagem %u's packages (a mission's loadout or a shared stratagem); try again in a moment", type);
+    }
+    return why;
 }
 
 /* The stratagem types out of a loadout's slots (the later ones moved down, the freed last one zeroed). */
