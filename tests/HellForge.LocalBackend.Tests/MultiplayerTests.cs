@@ -81,6 +81,7 @@ static class MultiplayerTests
             try { Frame.Decode(bad); } catch (InvalidDataException) { rejected = true; }
             check(rejected, "A malformed frame decodes");
         }
+        DeliveryOrder(check);
 
         var network = new InMemoryNetwork();
         // The host's and the stranger's mods one by one (ModlistDiff's form): A at another version, B only the host's, C
@@ -278,6 +279,22 @@ static class MultiplayerTests
         var rejected = false;
         try { host.Keys.SetLocal("has spaces"); } catch (ArgumentException) { rejected = true; }
         check(rejected && host.Keys.Local == hostKey, "A malformed local key was accepted.");
+    }
+
+    // The in-memory network delivers a sender's frames to a receiver in the order they were sent, as a network does (a
+    // host's party.deviceLeft then party.networkGone came the other way round in CI, 2026-10-25).
+    static void DeliveryOrder(Action<bool, string> check)
+    {
+        const int count = 2000;
+        var network = new InMemoryNetwork();
+        var sender = network.Join(HostId);
+        var receiver = network.Join(GuestId);
+        var got = new BlockingCollection<int>();
+        receiver.Received += (_, bytes) => got.Add(BitConverter.ToInt32(bytes));
+        for (var i = 0; i < count; i++) sender.Send(GuestId, BitConverter.GetBytes(i), reliable: true);
+        var inOrder = true;
+        for (var i = 0; i < count && inOrder; i++) inOrder = got.TryTake(out var n, TimeSpan.FromSeconds(5)) && n == i;
+        check(inOrder, "The in-memory network delivers a sender's frames in the order they were sent");
     }
 
     static void PartyFlow(Action<bool, string> check)
