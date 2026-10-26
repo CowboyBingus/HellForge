@@ -96,6 +96,8 @@ public partial class MainWindow : Window
         OpenProfileButton.Click += (_, _) => OpenFolder(Selected.Folder);
         ConsoleLogsButton.Click += (_, _) => OpenFolder(runDirectory ?? paths.RunsFolder);
         ShareLogsButton.Click += (_, _) => SaveLogsToDesktop();
+        CrashReportButton.Click += (_, _) => SaveCrashReport();
+        CrashIssueButton.Click += (_, _) => OpenLink(CrashReport.IssuePage);
         SettingsLogsButton.Click += (_, _) => OpenFolder(runDirectory ?? paths.RunsFolder);
         OpenRootButton.Click += (_, _) => OpenFolder(paths.Root);
         ClearButton.Click += (_, _) => lines.Clear();
@@ -219,6 +221,8 @@ public partial class MainWindow : Window
         if (runner.IsRunning) return;
         runDirectory = null;  // Forget the previous run so its final state does not overwrite this one.
         launchedUtc = default;
+        crashRun = null;
+        CrashReportPanel.IsVisible = false;
         NoteSessionEditor();
         if (!StartPreflight()) return;
         // A name typed into the open new-profile form is created and used rather than dropped.
@@ -329,7 +333,11 @@ public partial class MainWindow : Window
         if (runDirectory == null && launchedUtc != default) FindRun();
         if (runDirectory != null) RefreshRun();
         var runnerExited = runner.CollectExited();
-        if (runnerExited) PruneSessionLogs();
+        if (runnerExited)
+        {
+            PruneSessionLogs();
+            OfferCrashReport(runDirectory);
+        }
         // Mod sync: the backend stopped the session so that it starts again with the host's mods it downloaded.
         if (runnerExited && TryModSyncRestart()) return;
         if (runnerExited && runDirectory == null) HandleEarlyExit();
@@ -838,6 +846,7 @@ public partial class MainWindow : Window
         if (ConfirmOverlay.IsVisible) return;
         ConfirmTitle.Text = "Session running";
         ConfirmText.Text = "A play session is running. Stop it and close the game?";
+        (ConfirmCancel.Content, ConfirmStop.Content) = ("Keep playing", "Stop and close"); // the crash report's question uses them too
         ConfirmButtons.IsVisible = true;
         ConfirmOverlay.IsVisible = true;
         confirm = new TaskCompletionSource<bool>();

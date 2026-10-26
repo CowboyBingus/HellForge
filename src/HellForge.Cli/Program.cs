@@ -50,7 +50,7 @@ try
             settings [--install <folder>] [--profile <name>] [--war live | frozen | open] [--local-playfab yes | no]
                      [--multiplayer yes | no] [--engine-log yes | no] [--crash-dump yes | no] [--sandbox yes | no]
                      [--strangers yes | no] [--game-options <options>]
-            logs [--install <folder>] [--run <session id>] [--export <file.zip>]
+            logs [--install <folder>] [--run <session id>] [--export <file.zip> | --crash-report <file.zip> [--dump yes | no]]
 
             inspect prints JSON; prepare makes a full, hash-verified, unpatched copy; supported-build lists a
             Steam-validated install's depot files and hashes (names and hashes only) for HellForge to target.
@@ -75,7 +75,9 @@ try
             run once started and returns; with it, one JSON line per status until the session ends (exit code 0 when it
             ended normally). stop asks the session to close the game. Mod changes wait until no session runs.
             settings saves the choices play and the launcher start from, and prints them. logs lists the sessions,
-            newest first (--run: one session's files); --export zips one as the launcher's Save logs to Desktop does.
+            newest first (--run: one session's files); --export zips one as the launcher's Save logs to Desktop does;
+            --crash-report makes the crash report the launcher's Save crash report makes (scrubbed further, for a public
+            issue), with the crash dump only with --dump yes. Nothing is uploaded.
             Close Steam and the game before prepare; installations must remain idle.
             Failed preparations retain preparing.lock and must not be used.
             """);
@@ -116,7 +118,7 @@ try
         "mod-order" => ["--install", "--ids"],
         "mod-pack" => ["--install", "--id", "--option", "--on", "--variant", "--all"],
         "settings" => ["--install", "--profile", "--war", "--local-playfab", "--multiplayer", "--engine-log", "--crash-dump", "--sandbox", "--strangers", "--game-options"],
-        "logs" => ["--install", "--run", "--export"],
+        "logs" => ["--install", "--run", "--export", "--crash-report", "--dump"],
         _ => throw new ArgumentException($"Unknown command: {args[0]}")
     };
     var options = new Dictionary<string, string>(StringComparer.Ordinal);
