@@ -53,6 +53,10 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
 - All planets open: missions on Meridia, Ivis, Moradesh, Calypso, Penta and Angel's Venture (#46).
 - Setup and every session check for the Visual C++ 2012 and 2015-2022 x64 runtimes, and name Microsoft's download for
   the one missing (8b4985e).
+- Editor: with HDR on in the game, the in-game editor draws in HDR too (HDR10 and scRGB), at the brightness Windows
+  gives SDR content, instead of looking washed out (#53).
+- Language packs: Japanese can be added to the game copy, so the game runs in Japanese instead of crashing when Steam
+  is set to it. For now through the command line, `HellForge.Cli language-add --name japanese` (#73).
 
 ### Changed
 
@@ -69,6 +73,9 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
 - Save logs to Desktop from a sandboxed session leaves out the game's AppData copy, saves and shader cache (#40).
 - The launcher says HellForge runs the game locally with co-op over Steam, not "offline", and its tagline is "Local
   HELLDIVERS 2" (e224491, #31).
+- Play asks Steam whether you own the game only when no check passed in the last 7 days on the same installation,
+  Steam account and game build, so HELLDIVERS 2 no longer flashes as running in Steam at every launch. Setup and Check
+  and repair always ask (#43, #69).
 
 ### Fixed
 
@@ -87,6 +94,7 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
 - "Network block was not installed: Linked target path." didn't say which path. It names the link now (#50).
 - Setup on a full drive blamed Steam's files instead of asking for space (e9e1d63).
 - Rejoining could fail when the host answered before the join started (821aa23).
+- The game crashed as it quit with a mod's added weapon, such as the R-40 Sightliner (#64).
 
 ### For mod makers
 
@@ -111,6 +119,10 @@ See [docs/external-launchers.md](docs/external-launchers.md).
 - `mods` still lists Local Stats (tag `local-stats`), and `mod-switch --id zz.local.stats --on no` is refused (#36).
 - `launcher-settings.json` gains `subfactionSeed`, `dealSubfactions` and `dealSeaf`, which `play --war open` uses
   (1440557, #38).
+- `play --full-ownership-check yes` asks Steam for this session even when a recent check holds. `result.json` gains
+  `ownershipCheck` (`full` or `recent`) and, for a reused check, `ownershipConfirmedUtc` (#69).
+- `languages` lists the language packs pinned for the supported build, and `language-add --name <language>` copies one
+  from Steam's download into the game copy. `status` prints `languages`, the packs in the copy (#73).
 
 ### For contributors
 
@@ -119,6 +131,14 @@ See [docs/external-launchers.md](docs/external-launchers.md).
 - A structure lint in CI, `py -3 scripts/lint/lint.py check` (#30).
 - `HELLFORGE_MULTI_INSTANCE=1` runs two HellForge installations on one PC as two players, for co-op tests
   ([docs/multi-instance.md](docs/multi-instance.md), #24).
+- The structure lint's known violations are fixed everywhere, so its baseline is empty: the mod loader, editor, Core
+  and CLI, backend, session runner, launcher, generator, Steam bridge and stand-ins, with no change in behaviour (#54,
+  #55, #56, #57, #58, #60).
+- CI builds and tests the native code (`Build-Engine.ps1 -NoSteamApi`, `Build-Editor.ps1 -Test -SkipOverlayTest`), and
+  an "Engine version" job warns when a pull request changes the engine and fails a release that ships it without an
+  `EngineVersion` bump (#66, #68).
+- Tests no longer use fixed ports, pipe names or sleeps, so two runs at once don't collide (#59, #71).
+- This changelog, and a Changelog checkbox in the pull request template (#67).
 
 ## 0.2.0-beta (2026-10-22)
 
