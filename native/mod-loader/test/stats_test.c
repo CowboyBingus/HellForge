@@ -8,6 +8,7 @@
 #include "director_test.c"
 #include "shots_test.c"
 #include "rounds_test.c"
+#include "network_types_test.c"
 
 static StatEdit Edit(int mod, uint32_t value, uint32_t offset, int own)
 {
@@ -3374,6 +3375,7 @@ int main(int argc, char** argv)
     }
     DifficultyFixture();
     NetSwitchFixture();
+    NetworkTypesFixture();
     {
         /* game.dll mapped at the top of the address space (a tester's PC: level 11 refused, "no memory within 2 GB"):
          * nothing fits above it, so the moved tables go below it, still within a signed 32-bit offset */
