@@ -215,7 +215,11 @@ static void RememberEntered(BrokerBridge* b, const uint8_t* data, uint32_t size)
 
 /* ---- Steam P2P (docs/steam-bridge.md "Steam P2P"): only with the game's co-op peers ---- */
 
-/* The backend's peers file, read when its time stamp moved (looked at every 500 ms, or now). */
+static uint64_t FileTicks(FILETIME t) { return (uint64_t)t.dwHighDateTime << 32 | t.dwLowDateTime; }
+
+/* The backend's peers file, read when its time stamp moved (looked at every 500 ms, or now). Writes within one tick of
+ * the system clock (about 16 ms: a lobby change and a join's peer) get the same stamp, so an unchanged stamp is trusted
+ * only once it was read more than a second after that stamp: a read between two such writes is not kept. */
 static void LoadPeers(BrokerBridge* b, int now)
 {
     if (!b->peersFile[0]) return;
@@ -224,8 +228,9 @@ static void LoadPeers(BrokerBridge* b, int now)
     b->peersChecked = tick;
     WIN32_FILE_ATTRIBUTE_DATA data;
     FILETIME stamp = GetFileAttributesExW(b->peersFile, GetFileExInfoStandard, &data) ? data.ftLastWriteTime : (FILETIME){ 0, 0 };
-    if (CompareFileTime(&stamp, &b->peersStamp) == 0) return;
+    if (CompareFileTime(&stamp, &b->peersStamp) == 0 && FileTicks(b->peersRead) > FileTicks(stamp) + 10000000ull) return;
     b->peersStamp = stamp;
+    GetSystemTimeAsFileTime(&b->peersRead);
     b->peerCount = 0;
     HANDLE file = CreateFileW(b->peersFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
     if (file == INVALID_HANDLE_VALUE) return;
