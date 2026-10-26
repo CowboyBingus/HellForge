@@ -6,17 +6,19 @@ using HellForge.Core;
 namespace HellForge.Launcher;
 
 // Profile > Account sync (HellForge.Core InventorySync): runs the elevated capture proxy, opens the normal game through Steam
-// once the proxy listens, and saves the player's sealed inventory and progression as the profile's snapshot. The backend
-// takes premium ownership from it on every Play; the rest is imported as the player chooses (AccountImportFlow). Polled
-// with the rest of the window, once a second, only while a sync runs.
+// once the proxy listens, and saves the player's sealed inventory and progression as the profile's snapshot as soon as the
+// proxy has sealed them. The proxy keeps the game connected until it exits. The backend takes premium ownership from the
+// snapshot on every Play; the rest is imported as the player chooses (AccountImportFlow). Polled with the rest of the
+// window, once a second, only while a sync runs.
 public partial class MainWindow
 {
     Process? syncProxy;
     LocalProfile? syncProfile;
     string? syncDir, syncSnapshotDir;
-    bool syncGameOpened, syncStarting;
+    bool syncGameOpened, syncStarting, syncTaken;
 
-    bool SyncBusy => syncProxy != null || syncStarting;
+    // Busy until the capture is taken; after that the proxy only keeps the game connected, and imports may run.
+    bool SyncBusy => syncProxy != null && !syncTaken || syncStarting;
 
     void InitializeSync()
     {
@@ -32,7 +34,8 @@ public partial class MainWindow
         var info = InventorySync.ReadMetadata(InventorySync.SnapshotDirectory(paths.InstallRoot, Selected.Name));
         SyncDetailText.Text = info == null ? "No snapshot yet. Sync to copy your real inventory into this profile."
             : "Last synced " + (info.CapturedUtc?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "at an unknown time") +
-              $": {info.Items:N0} items, " + (info.Experience is { } xp ? $"{xp:N0} XP." : "no progression captured.");
+              $": {info.Items:N0} items, " + (!info.Progression ? "no progression (a partial sync)."
+                  : info.Experience is { } xp ? $"{xp:N0} XP." : "progression captured.");
         UpdateImportControls();
         if (SyncBusy) return;
         var leftover = InventorySync.HasLeftoverRedirect();
@@ -49,6 +52,11 @@ public partial class MainWindow
     async Task StartSync()
     {
         if (SyncBusy || paths.InstallRoot == null || InventorySync.FindCaptureProxy(paths.InstallRoot) is not { } proxy) return;
+        if (syncProxy != null)
+        {
+            SetSyncStatus("The last sync still keeps HELLDIVERS 2 connected: close the game first.", Orange);
+            return;
+        }
         if (InventorySync.HasLeftoverRedirect())
         {
             await CleanUpSync(proxy);
@@ -77,7 +85,7 @@ public partial class MainWindow
             SetSyncStatus(failure ?? "Sync cancelled: it needs the administrator prompt.", failure != null ? Red : Orange);
             return;
         }
-        (syncProxy, syncProfile, syncDir, syncSnapshotDir, syncGameOpened) = (started, profile, folder, snapshot, false);
+        (syncProxy, syncProfile, syncDir, syncSnapshotDir, syncGameOpened, syncTaken) = (started, profile, folder, snapshot, false, false);
         SetSyncStatus("Starting the capture...", Gold);
         Append("Inventory sync: capture started for profile " + profile.Name + ". HELLDIVERS 2 opens through Steam; take it past the title screen.", LauncherLine);
     }
@@ -99,29 +107,51 @@ public partial class MainWindow
         if (!syncProxy.HasExited)
         {
             if (!syncGameOpened && InventorySync.IsListening(syncDir)) OpenGameForSync();
+            else if (!syncTaken && InventorySync.IsSealed(syncDir)) TakeCapture(syncProfile, syncDir, syncSnapshotDir);
             return;
         }
         var exitCode = syncProxy.ExitCode;
         syncProxy.Dispose();
         syncProxy = null;
         SyncButton.IsEnabled = true;
-        var error = exitCode == 0 ? InventorySync.FinalizeCapture(syncDir, syncSnapshotDir)
-            : syncGameOpened ? $"Nothing was captured within {InventorySync.TimeoutMinutes} minutes. Close the game and sync again."
-            : "The capture could not start: see " + Path.Combine(syncDir, "proxy.log") + ".";
-        var synced = syncProfile;
+        var (profile, folder, snapshot) = (syncProfile, syncDir, syncSnapshotDir);
         (syncProfile, syncDir, syncSnapshotDir) = (null, null, null);
+        if (syncTaken) ProxyClosed(exitCode, folder);
+        else if (exitCode == 0) TakeCapture(profile, folder, snapshot);
+        else SyncFailed(syncGameOpened ? $"Nothing was captured within {InventorySync.TimeoutMinutes} minutes. Close the game and sync again."
+            : "The capture could not start: see " + Path.Combine(folder, "proxy.log") + ".");
+        syncTaken = false;
         UpdateSyncStatus();
-        if (error == null)
-        {
-            Append("Inventory sync complete for profile " + synced.Name + ".", LauncherLine);
-            _ = AfterCaptureAsync(synced);
-        }
-        else
-        {
-            SetSyncStatus(error, Red);
-            Append("Inventory sync failed: " + error, Red);
-        }
     }
+
+    // The sealed capture becomes the profile's snapshot, while the proxy may still keep the game connected.
+    void TakeCapture(LocalProfile profile, string folder, string snapshot)
+    {
+        syncTaken = true;
+        if (InventorySync.FinalizeCapture(folder, snapshot) is { } error)
+        {
+            SyncFailed(error);
+            return;
+        }
+        UpdateSyncStatus();
+        var partial = InventorySync.ReadMetadata(snapshot) is not { Progression: true };
+        Append("Inventory sync complete for profile " + profile.Name + (partial ? ", without progression (see " + Path.Combine(folder, "proxy.log") + ")." : "."), LauncherLine);
+        if (syncProxy is { HasExited: false })
+            Append("Inventory sync: the game stays connected through the capture until you close it; then the hosts line and certificate are removed.", LauncherLine);
+        _ = AfterCaptureAsync(profile, partial ? Path.Combine(folder, "proxy.log") : null);
+    }
+
+    void SyncFailed(string error)
+    {
+        SetSyncStatus(error, Red);
+        Append("Inventory sync failed: " + error, Red);
+    }
+
+    static string ProxyClosedLine(int exitCode, string folder) => exitCode == 0
+        ? "Inventory sync: the game closed, and the capture removed its hosts line and certificate."
+        : "Inventory sync: the capture ended with an error; see " + Path.Combine(folder, "proxy.log") + ".";
+
+    void ProxyClosed(int exitCode, string folder) => Append(ProxyClosedLine(exitCode, folder), exitCode == 0 ? LauncherLine : Orange);
 
     void OpenGameForSync()
     {

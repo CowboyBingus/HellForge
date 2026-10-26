@@ -42,6 +42,12 @@ static class InventorySyncTests
         test("A capture becomes the snapshot only sealed and with an inventory list; a newer one without progression drops the older progression", () =>
             Finalize(root, check));
 
+        test("The capture's state says when it listens and when its files are sealed, for the launcher to take while the game plays on", () =>
+            State(root, check));
+
+        test("The capture logs a refused request's short fields, never a token-like value, and only names of headers and query parameters", () =>
+            Log(check));
+
         test("Steam's 32-bit account id is the SteamID64 of an individual account", () =>
             check(SteamAccount.FromAccountId(39734273) == 76561198000000001, "Wrong SteamID64."));
 
@@ -115,7 +121,7 @@ static class InventorySyncTests
         check(InventorySync.FinalizeCapture(sync, snapshot) == null, "A sealed capture was refused.");
         check(!File.Exists(Path.Combine(sync, InventorySync.InventoryFile)) && !File.Exists(Path.Combine(sync, SnapshotSeal.FileName)), "The capture's files stayed in the sync folder.");
         check(SnapshotSeal.Verify(snapshot, key) is { SteamAccount: Account }, "The moved snapshot no longer verifies.");
-        check(InventorySync.ReadMetadata(snapshot) is { Items: 2, Experience: 485592, CapturedUtc: not null }, "Metadata does not describe the capture.");
+        check(InventorySync.ReadMetadata(snapshot) is { Items: 2, Experience: 485592, Progression: true, CapturedUtc: not null }, "Metadata does not describe the capture.");
 
         File.WriteAllText(Path.Combine(sync, InventorySync.InventoryFile), Inventory);
         File.WriteAllText(Path.Combine(sync, InventorySync.ProgressionFile), "[1]");
@@ -126,7 +132,46 @@ static class InventorySyncTests
         check(InventorySync.FinalizeCapture(sync, snapshot) == null, "A sealed inventory-only capture was refused.");
         check(!File.Exists(Path.Combine(snapshot, InventorySync.ProgressionFile)) && SnapshotSeal.Verify(snapshot, key) != null,
             "Progression from an older capture stayed beside a newer inventory.");
-        check(InventorySync.ReadMetadata(snapshot) is { Items: 2, Experience: null }, "Metadata claims progression that was not captured.");
+        check(InventorySync.ReadMetadata(snapshot) is { Items: 2, Experience: null, Progression: false }, "Metadata claims progression that was not captured.");
+
+        // A progression without XP is still progression; a snapshot from before the flag has it exactly when it has XP.
+        File.WriteAllText(Path.Combine(sync, InventorySync.InventoryFile), Inventory);
+        File.WriteAllText(Path.Combine(sync, InventorySync.ProgressionFile), """{"onboardingState":128}""");
+        SnapshotSeal.Write(sync, key, Account, DateTime.UtcNow);
+        check(InventorySync.FinalizeCapture(sync, snapshot) == null && InventorySync.ReadMetadata(snapshot) is { Experience: null, Progression: true },
+            "A progression without XP reads as a partial sync.");
+        File.WriteAllText(Path.Combine(snapshot, InventorySync.MetadataFile), """{"items":2,"experience":7}""");
+        check(InventorySync.ReadMetadata(snapshot) is { Progression: true }, "An older snapshot with XP lost its progression.");
+        File.WriteAllText(Path.Combine(snapshot, InventorySync.MetadataFile), """{"items":2,"experience":null}""");
+        check(InventorySync.ReadMetadata(snapshot) is { Progression: false }, "An older snapshot without XP claims progression.");
+    }
+
+    static void State(string root, Action<bool, string> check)
+    {
+        var sync = Directory.CreateDirectory(Path.Combine(root, "sync-state")).FullName;
+        check(CaptureState.Read(sync) == null && !InventorySync.IsListening(sync) && !InventorySync.IsSealed(sync), "A missing state reads as a capture.");
+        CaptureState.Write(sync, 42, sealedCapture: false, progression: false);
+        check(InventorySync.IsListening(sync) && !InventorySync.IsSealed(sync), "A listening capture reads as sealed, or not as listening.");
+        CaptureState.Write(sync, 42, sealedCapture: true, progression: false);
+        check(InventorySync.IsSealed(sync) && CaptureState.Read(sync) is { Progression: false }, "A sealed partial capture reads wrong.");
+        File.WriteAllText(Path.Combine(sync, CaptureState.FileName), "{\"sealed\":");
+        check(!InventorySync.IsSealed(sync), "A half-written state reads as sealed.");
+    }
+
+    static void Log(Action<bool, string> check)
+    {
+        static string Error(string json) => CaptureLog.ErrorText(System.Text.Encoding.UTF8.GetBytes(json));
+        check(Error("""{"title":"Bad Request","status":400,"errors":{"version":["The version field is required."]}}""") ==
+            "title=Bad Request; status=400; errors.version[0]=The version field is required.", "An error body's fields are not logged.");
+        var session = new string('a', 40);
+        var redacted = Error($$"""{"error":"denied","session":"{{session}}"}""");
+        check(!redacted.Contains(session, StringComparison.Ordinal) && redacted.Contains("<40 characters>", StringComparison.Ordinal), "A token-like value reached the log.");
+        check(Error("<html>nope</html>") == "not JSON, 17 bytes" && CaptureLog.ErrorText([]) == "empty body", "A body that is not JSON is logged.");
+        check(Error($$"""{"message":"{{new string('x', 20)}} {{new string('y', 400)}}"}""").Length <= 303, "A long reason is not capped.");
+        check(Error("{\"message\":\"line\\nbreak\"}") == "message=line break", "A control character reached the log.");
+        check(CaptureLog.QueryNames("/api/Progression?season=5&id=123") == "id, season" && CaptureLog.QueryNames("/api/Progression") == "none",
+            "Query names are wrong, or values reached the log.");
+        check(CaptureLog.Names(["User-Agent", "authorization", "Accept"]) == "Accept, authorization, User-Agent", "Header names are not sorted.");
     }
 
     static void Backups(string root, Action<bool, string> check)

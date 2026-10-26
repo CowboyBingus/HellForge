@@ -12,9 +12,10 @@ namespace HellForge.Core;
 //
 // The capture proxy (app/capture/HellForge.CaptureProxy.exe) runs elevated: it maps the live API host to loopback in the
 // hosts file, trusts a per-run CA, terminates TLS for the normal game's login and, with that login's session, reads
-// /api/Progression and /api/Progression/inventory. It seals both for the signed-in Steam account (SnapshotSeal) and removes
-// the hosts line and the CA when it exits. The files land in a private sync folder under logs/, and FinalizeCapture moves
-// them into account-snapshot/<profile>/.
+// /api/Progression and /api/Progression/inventory. It seals both for the signed-in Steam account (SnapshotSeal) as soon as
+// the inventory is in, keeps forwarding the game's traffic until the game exits, and then removes the hosts line and the
+// CA. The files land in a private sync folder under logs/, and FinalizeCapture moves them into account-snapshot/<profile>/
+// once the capture's state (CaptureState) says they are sealed, while the game plays on.
 public static class InventorySync
 {
     public const string SnapshotFolder = "account-snapshot";
@@ -22,7 +23,7 @@ public static class InventorySync
     public const string ProgressionFile = SnapshotSeal.ProgressionFile;
     public const string MetadataFile = "snapshot.json";
     // Written by the proxy once it listens; the launcher opens the game only then.
-    public const string ListeningFile = "capture-state.json";
+    public const string ListeningFile = CaptureState.FileName;
     // The proxy's own line in the hosts file, above its mapping.
     public const string HostsMarker = CaptureHosts.Marker;
     public const string ProxyExe = "HellForge.CaptureProxy.exe";
@@ -69,7 +70,10 @@ public static class InventorySync
                 DateTime.TryParse(utc.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var when) ? when : null;
             var items = root.TryGetProperty("items", out var count) && count.ValueKind == JsonValueKind.Number && count.TryGetInt32(out var n) ? n : 0;
             long? experience = root.TryGetProperty("experience", out var xp) && xp.ValueKind == JsonValueKind.Number && xp.TryGetInt64(out var value) ? value : null;
-            return new SnapshotInfo(captured, items, experience);
+            // Snapshots from before the flag had progression exactly when they had XP.
+            var progression = root.TryGetProperty("progression", out var flag) && flag.ValueKind is JsonValueKind.True or JsonValueKind.False
+                ? flag.GetBoolean() : experience != null;
+            return new SnapshotInfo(captured, items, experience, progression);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -132,10 +136,14 @@ public static class InventorySync
 
     public static bool IsListening(string syncDir) => File.Exists(Path.Combine(syncDir, ListeningFile));
 
+    // The capture has sealed its files and keeps forwarding until the game exits: FinalizeCapture can take them now.
+    public static bool IsSealed(string syncDir) => CaptureState.Read(syncDir) is { Sealed: true };
+
     public static void OpenVanillaGame() =>
         Process.Start(new ProcessStartInfo("steam://rungameid/553850") { UseShellExecute = true })?.Dispose();
 
-    // After the proxy exits with success: moves its sealed files into the snapshot folder and writes the metadata.
+    // Once the proxy has sealed its capture (or exited with success): moves its sealed files into the snapshot folder and
+    // writes the metadata.
     // Returns null on success, or what went wrong. A previous snapshot is replaced only by a complete, sealed new one.
     public static string? FinalizeCapture(string syncDir, string snapshotDir)
     {
@@ -157,7 +165,8 @@ public static class InventorySync
             {
                 ["capturedUtc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                 ["items"] = items,
-                ["experience"] = experience
+                ["experience"] = experience,
+                ["progression"] = File.Exists(Path.Combine(snapshotDir, ProgressionFile))
             };
             File.WriteAllText(Path.Combine(snapshotDir, MetadataFile), metadata.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
             return null;
@@ -205,4 +214,5 @@ public static class InventorySync
     }
 }
 
-public sealed record SnapshotInfo(DateTime? CapturedUtc, int Items, long? Experience);
+// Progression: the capture got the account's progression too; without it only the inventory can be imported.
+public sealed record SnapshotInfo(DateTime? CapturedUtc, int Items, long? Experience, bool Progression);

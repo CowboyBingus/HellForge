@@ -3,11 +3,14 @@
 //
 // It maps the API host to 127.0.0.1 in the hosts file, trusts a per-run CA in LocalMachine\Root (with a CRL served on
 // loopback, since Schannel checks revocation), terminates the game's TLS and forwards every request unchanged to the real
-// API by IP. With the session the login returns it reads GET /api/Progression and GET /api/Progression/inventory, writes
-// them to --progression and --output, removes the hosts line and the CA, and exits 0 (1 when nothing was captured before
-// the timeout). Nothing else is kept: the log holds methods, the first two path segments, status codes and sizes, never
-// bodies, query strings, header values or the session. With --seal-key and --steam-account it seals the two files for
-// that Steam account (HellForge.Core SnapshotSeal) before it exits; the backend unlocks premium items only from a seal.
+// API by IP. With the session the login returns it reads GET /api/Progression and GET /api/Progression/inventory and
+// writes them to --progression and --output. With --seal-key and --steam-account it seals the two files for that Steam
+// account (HellForge.Core SnapshotSeal) as soon as the inventory is in, and says so in its state file (CaptureState), so
+// the launcher takes them while the game plays on; the backend unlocks premium items only from a seal. It then keeps
+// forwarding until the game exits, removes the hosts line and the CA, and exits 0 (1 when nothing was captured before
+// the timeout or the seal failed). Nothing else is kept: the log holds methods, the first two path segments, status codes
+// and sizes, and for the login and the capture's own reads the names of headers and query parameters and a refused
+// request's reason (CaptureLog), never bodies, values or the session.
 //
 //   --cleanup      only remove a hosts line and CA left by a run that was killed
 //   --no-hosts --no-ca --listen-port 8443 --real-ip <ip>   local plumbing test, no system changes
@@ -27,6 +30,9 @@ using HellForge.Core;
 
 const string CaName = "HellForge Capture CA";
 const string LoginPath = "/api/Account/Login", ProgressionPath = "/api/Progression", InventoryPath = "/api/Progression/inventory";
+const string GameProcess = "helldivers2";
+// The redirect stays while the game runs (ForwardUntilGameExits), but never past the certificates' day.
+const int ForwardHoursAtMost = 12;
 var hostsPath = Path.Combine(Environment.SystemDirectory, "drivers", "etc", "hosts");
 
 var host = "api.live.prod.thehelldiversgame.com";
@@ -91,7 +97,7 @@ catch (Exception error) when (error is IOException or UnauthorizedAccessExceptio
     Console.Error.WriteLine("Cannot use " + evidenceDir + ": " + error.Message);
     return 1;
 }
-var statePath = Path.Combine(evidenceDir, "capture-state.json");
+var statePath = Path.Combine(evidenceDir, CaptureState.FileName);
 // The sync folder stays private to this user.
 Run("icacls", $"\"{evidenceDir}\" /inheritance:r /grant:r \"{System.Security.Principal.WindowsIdentity.GetCurrent().Name}:(OI)(CI)F\"");
 
@@ -185,13 +191,15 @@ using var handler = new SocketsHttpHandler
 using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
 
 var captured = 0;
+var sealOk = false;
+// Cancelled when nothing was captured in time, and after a capture once the game exits (ForwardUntilGameExits).
 using var stop = new CancellationTokenSource(TimeSpan.FromMinutes(timeoutMin));
 try
 {
     if (manageHosts) AddHosts();
     listener.Start();
     Log($"listening on port {listenPort}");
-    File.WriteAllText(statePath, JsonSerializer.Serialize(new { pid = Environment.ProcessId, host, hosts = manageHosts, ca = caThumbprint != null }));
+    CaptureState.Write(evidenceDir, Environment.ProcessId, sealedCapture: false, progression: false);
     while (!stop.IsCancellationRequested)
     {
         TcpClient client;
@@ -205,11 +213,43 @@ finally
     Cleanup();
 }
 Log(captured == 1 ? "capture complete" : "nothing captured");
-if (captured != 1) return 1;
-if (sealKey == null) return 0;
-var sealWritten = Step("seal", () => SnapshotSeal.Write(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, sealKey, steamAccount!.Value, DateTime.UtcNow));
-if (sealWritten) Log("capture sealed");
-return sealWritten ? 0 : 1;
+return captured == 1 && sealOk ? 0 : 1;
+
+// Once the inventory is in: seal what was captured and tell the launcher, then keep the game's connection until it exits.
+void CompleteCapture()
+{
+    var progression = progressionPath != null && File.Exists(progressionPath);
+    sealOk = sealKey == null || Step("seal", () => SnapshotSeal.Write(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, sealKey, steamAccount!.Value, DateTime.UtcNow));
+    if (sealKey != null && sealOk) Log("capture sealed" + (progression ? "" : " without progression"));
+    Step("state", () => CaptureState.Write(evidenceDir, Environment.ProcessId, sealOk, progression));
+    _ = Task.Run(ForwardUntilGameExits);
+}
+
+// Ending the redirect right after the login was followed by Easy Anti-Cheat closing the game ("Could not connect to Easy
+// Anti Cheat network", live run 2026-10-26); the game most likely keeps the loopback address it resolved. So the redirect
+// and the CA stay until the game exits.
+async Task ForwardUntilGameExits()
+{
+    stop.CancelAfter(TimeSpan.FromHours(ForwardHoursAtMost));
+    Log("forwarding until the game exits");
+    try
+    {
+        while (IsGameRunning()) await Task.Delay(TimeSpan.FromSeconds(2), stop.Token);
+        Log("game exited");
+    }
+    catch (OperationCanceledException)
+    {
+        Log($"still forwarding after {ForwardHoursAtMost} hours: stopping");
+    }
+    stop.Cancel();
+}
+
+static bool IsGameRunning()
+{
+    var running = Process.GetProcessesByName(GameProcess);
+    foreach (var process in running) process.Dispose();
+    return running.Length > 0;
+}
 
 async Task Handle(TcpClient client)
 {
@@ -238,6 +278,7 @@ async Task Handle(TcpClient client)
         using var response = await http.SendAsync(upstream);
         var responseBody = await response.Content.ReadAsByteArrayAsync();
         Log($"{request.Method} {Shorten(path)} {(int)response.StatusCode} {responseBody.Length} bytes");
+        if (IsCapturePath(path)) LogDetail(request.Target, request.Headers.Keys, response, responseBody);
         if (response.IsSuccessStatusCode) await Capture(path, responseBody);
         await Respond(ssl, response, responseBody);
     }
@@ -245,11 +286,17 @@ async Task Handle(TcpClient client)
     {
         Log("request failed: " + error.GetType().Name);
     }
-    finally
-    {
-        // Only once this response is on its way, so the game's login completes before the redirect goes.
-        if (Volatile.Read(ref captured) == 1) stop.Cancel();
-    }
+}
+
+static bool IsCapturePath(string path) =>
+    path.Equals(LoginPath, StringComparison.OrdinalIgnoreCase) || path.Equals(ProgressionPath, StringComparison.OrdinalIgnoreCase) ||
+    path.Equals(InventoryPath, StringComparison.OrdinalIgnoreCase);
+
+// What a request the capture depends on carried (names only), and why it was refused.
+void LogDetail(string target, IEnumerable<string> headers, HttpResponseMessage response, byte[] body)
+{
+    Log("  headers: " + CaptureLog.Names(headers) + "; query: " + CaptureLog.QueryNames(target));
+    if (!response.IsSuccessStatusCode) Log("  refused: " + CaptureLog.ErrorText(body));
 }
 
 // The game's request as it was, to the real API (hop-by-hop headers left out).
@@ -277,9 +324,10 @@ static async Task Respond(SslStream ssl, HttpResponseMessage response, byte[] bo
     await ssl.FlushAsync();
 }
 
-// A failure here is logged and never keeps the response from the game.
+// A failure here is logged and never keeps the response from the game. Once sealed, nothing more is kept.
 async Task Capture(string path, byte[] body)
 {
+    if (Volatile.Read(ref captured) == 1) return;
     try
     {
         if (path.Equals(LoginPath, StringComparison.OrdinalIgnoreCase)) await ReadAccount(body);
@@ -319,6 +367,7 @@ async Task<byte[]?> Get(string path, string session)
     using var response = await http.SendAsync(request);
     var body = await response.Content.ReadAsByteArrayAsync();
     Log($"GET {path} {(int)response.StatusCode} {body.Length} bytes (login session)");
+    if (!response.IsSuccessStatusCode) Log("  refused: " + CaptureLog.ErrorText(body));
     return response.IsSuccessStatusCode ? body : null;
 }
 
@@ -333,10 +382,15 @@ void SaveProgression(byte[] body)
 void SaveInventory(byte[] body)
 {
     if (!IsJsonObject(body, "items")) { Log("inventory response has no items list"); return; }
-    if (Volatile.Read(ref captured) == 1) return;
-    WriteAtomically(outputPath, body);
-    Volatile.Write(ref captured, 1);
+    if (Interlocked.CompareExchange(ref captured, 1, 0) == 1) return;
+    try { WriteAtomically(outputPath, body); }
+    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+    {
+        Volatile.Write(ref captured, 0);  // a later inventory may still be saved
+        throw;
+    }
     Log("inventory saved");
+    CompleteCapture();
 }
 
 static bool IsJsonObject(byte[] body, string? requiredArray)
