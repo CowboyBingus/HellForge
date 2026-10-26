@@ -8,6 +8,7 @@
 #include "director_test.c"
 #include "shots_test.c"
 #include "rounds_test.c"
+#include "network_types_test.c"
 
 static StatEdit Edit(int mod, uint32_t value, uint32_t offset, int own)
 {
@@ -3083,7 +3084,8 @@ static void HookChainFixture(void)
     wchar_t savedLogs[MAX_PATH];
     wcscpy(savedLogs, g_logs);
     GetTempPathW(MAX_PATH, g_logs);
-    wcscat(g_logs, L"hellforge-hook-chain");
+    /* this process's own folder: another run at the same time writes and deletes its own hooks.tsv */
+    swprintf(g_logs + wcslen(g_logs), MAX_PATH - wcslen(g_logs), L"hellforge-hook-chain-%lu", GetCurrentProcessId());
     CreateDirectoryW(g_logs, NULL);
 
     /* HellForge's own first: the function runs through it */
@@ -3346,6 +3348,7 @@ int main(int argc, char** argv)
     }
     DifficultyFixture();
     NetSwitchFixture();
+    NetworkTypesFixture();
     {
         /* game.dll mapped at the top of the address space (a tester's PC: level 11 refused, "no memory within 2 GB"):
          * nothing fits above it, so the moved tables go below it, still within a signed 32-bit offset */
