@@ -46,7 +46,7 @@ The session runner's `src/HellForge.Session/EarlyConstructor.cs` is generated fr
 
 ## The package and its version
 
-The engine's version is `EngineVersion` in `Directory.Build.props` (currently 0.1.40). HellForge's own version,
+The engine's version is `EngineVersion` in `Directory.Build.props` (currently 0.1.41). HellForge's own version,
 `Version` in the same file, is separate (currently 0.3.0-beta).
 
 Besides the folders in the table, the package holds `engine.json` and the licences (`LICENSE`, `LICENSE-EXCEPTION`).

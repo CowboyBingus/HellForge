@@ -4,9 +4,13 @@ What changed in each HellForge release, newest first, as a player updating from 
 are GitHub issues and pull requests (#24); short hashes are commits on `dev`. Each pull request adds its lines under
 Unreleased, and a release renames that section ([CONTRIBUTING.md](CONTRIBUTING.md#changelog)).
 
-## Unreleased (0.3.0-beta)
+## Unreleased
 
-On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
+On `dev`, since 0.3.0-beta.
+
+## 0.3.0-beta (2026-10-26)
+
+[Release](https://github.com/SkyeShade/HellForge/releases/tag/v0.3.0-beta). Engine 0.1.41, mod SDK 15.
 
 ### Added
 
