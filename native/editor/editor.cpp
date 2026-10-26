@@ -271,38 +271,48 @@ static bool InputMessage(UINT message)
 /* The editor's sounds are posted on the window's thread, the game's main thread, as the game's own menus post theirs. */
 #define WM_EDITOR_SOUND (WM_APP + 0x46)
 
+/* The sounds asked for, posted on the window's thread. */
+static LRESULT SoundMessage()
+{
+    static int seen;
+    if (seen++ == 0) g_api->log(g_mod, "editor: sound requests reach the window's thread (%lu)", GetCurrentThreadId());
+    sounds::Flush();
+    return 0;
+}
+
+/* F8: the window opens or closes. */
+static void ToggleWindow()
+{
+    LONG open = !g_open;
+    if (!open) g_saveAt = 0; /* closing saves at once */
+    InterlockedExchange(&g_open, open);
+    if (open && g_clipCursor) g_clipCursor(NULL);
+}
+
+/* a button or the wheel where the mouse is (ImGui learns the position only from moves: the first click after opening,
+ * before any move, landed nowhere) */
+static void MouseAt(HWND window, UINT message, LPARAM l)
+{
+    if ((message >= WM_LBUTTONDOWN && message <= WM_MBUTTONDBLCLK) || (message >= WM_XBUTTONDOWN && message <= WM_XBUTTONDBLCLK))
+    {
+        ImGui::GetIO().AddMousePosEvent((float)(short)LOWORD(l), (float)(short)HIWORD(l));
+    }
+    else if (message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL)
+    {
+        POINT at = {(short)LOWORD(l), (short)HIWORD(l)};
+        ScreenToClient(window, &at);
+        ImGui::GetIO().AddMousePosEvent((float)at.x, (float)at.y);
+    }
+}
+
 static LRESULT CALLBACK EditorProc(HWND window, UINT message, WPARAM w, LPARAM l)
 {
-    if (message == WM_EDITOR_SOUND)
-    {
-        static int seen;
-        if (seen++ == 0) g_api->log(g_mod, "editor: sound requests reach the window's thread (%lu)", GetCurrentThreadId());
-        sounds::Flush();
-        return 0;
-    }
-    if (message == WM_KEYDOWN && w == VK_F8 && !(l & 0x40000000))
-    {
-        LONG open = !g_open;
-        if (!open) g_saveAt = 0; /* closing saves at once */
-        InterlockedExchange(&g_open, open);
-        if (open && g_clipCursor) g_clipCursor(NULL);
-        return 0;
-    }
+    if (message == WM_EDITOR_SOUND) return SoundMessage();
+    if (message == WM_KEYDOWN && w == VK_F8 && !(l & 0x40000000)) { ToggleWindow(); return 0; }
     if ((g_open || g_modal) && g_ready)
     {
         EnterCriticalSection(&g_lock);
-        /* a button or the wheel where the mouse is (ImGui learns the position only from moves: the first click after
-         * opening, before any move, landed nowhere) */
-        if ((message >= WM_LBUTTONDOWN && message <= WM_MBUTTONDBLCLK) || (message >= WM_XBUTTONDOWN && message <= WM_XBUTTONDBLCLK))
-        {
-            ImGui::GetIO().AddMousePosEvent((float)(short)LOWORD(l), (float)(short)HIWORD(l));
-        }
-        else if (message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL)
-        {
-            POINT at = {(short)LOWORD(l), (short)HIWORD(l)};
-            ScreenToClient(window, &at);
-            ImGui::GetIO().AddMousePosEvent((float)at.x, (float)at.y);
-        }
+        MouseAt(window, message, l);
         ImGui_ImplWin32_WndProcHandler(window, message, w, l);
         LeaveCriticalSection(&g_lock);
         if (InputMessage(message)) return message == WM_INPUT ? DefWindowProcW(window, message, w, l) : 0;
@@ -333,6 +343,9 @@ static std::string ModuleOf(const void* address)
     return out;
 }
 
+/* One more name in a list for the log ("a, b"). */
+static void AddFound(std::string& found, const std::string& name) { found += (found.empty() ? "" : ", ") + name; }
+
 /* The overlays known to draw into games that are loaded (and a dxgi.dll or d3d12.dll from outside System32: a wrapper,
  * ReShade say), for the log; said again only when the list changes (an overlay can come in late: RivaTuner waits 15 s
  * where Steam's is loaded). */
@@ -343,7 +356,7 @@ static void LogOverlays()
         L"GCLay64.dll", L"nvspcap64.dll", L"ReShade64.dll", L"SpecialK64.dll", L"fraps64.dll", L"action_x64.dll", L"PresentMon64.dll"};
     std::string found;
     for (const wchar_t* name : known)
-        if (HMODULE module = GetModuleHandleW(name)) found += (found.empty() ? "" : ", ") + ModuleOf((const void*)module);
+        if (HMODULE module = GetModuleHandleW(name)) AddFound(found, ModuleOf((const void*)module));
     wchar_t system[MAX_PATH];
     UINT length = GetSystemDirectoryW(system, MAX_PATH);
     for (const wchar_t* name : {L"dxgi.dll", L"d3d12.dll"})
@@ -351,7 +364,7 @@ static void LogOverlays()
         HMODULE module = GetModuleHandleW(name);
         wchar_t path[MAX_PATH];
         if (module != NULL && length > 0 && GetModuleFileNameW(module, path, MAX_PATH) && (_wcsnicmp(path, system, length) != 0 || path[length] != L'\\'))
-            found += (found.empty() ? "" : ", ") + ModuleOf((const void*)module) + " (not System32's: a wrapper?)";
+            AddFound(found, ModuleOf((const void*)module) + " (not System32's: a wrapper?)");
     }
     static std::string said = "?";
     if (found == said) return;
@@ -401,6 +414,31 @@ static void SeeQueue(ID3D12CommandQueue* queue, void* caller)
     }
 }
 
+/* The swap chain's own queue (own), once it is a queue: it ran lists here, or it has every queue's method table; NULL
+ * not yet. g_queuesLock is held. */
+static ID3D12CommandQueue* OwnQueue(ID3D12CommandQueue* own, const char** how)
+{
+    if (own == NULL) return NULL;
+    for (int i = 0; i < g_queueCount; i++)
+        if (g_queues[i].queue == own && g_queues[i].direct) { *how = "the swap chain's own"; return own; }
+    if (g_queueTable != NULL && Readable(own, sizeof(void*)) && *(void**)own == g_queueTable)
+    {
+        *how = "the swap chain's own (no lists seen on it yet)";
+        return own;
+    }
+    return NULL;
+}
+
+/* The direct queue that ran the most lists; NULL none. g_queuesLock is held. */
+static ID3D12CommandQueue* BusiestQueue()
+{
+    ID3D12CommandQueue* queue = NULL;
+    LONG most = 0;
+    for (int i = 0; i < g_queueCount; i++)
+        if (g_queues[i].direct && g_queues[i].calls > most) { most = g_queues[i].calls; queue = g_queues[i].queue; }
+    return queue;
+}
+
 /* The queue to draw on, from the first frames of a D3D12 swap chain: the swap chain's own, once it is a queue (it ran
  * lists here, or it has every queue's method table). Where that cannot be read (FindMethods found no offset: after 30
  * frames; what is there is no queue: after 120), the direct queue that ran the most lists (the game submits many a
@@ -409,21 +447,12 @@ static bool PickQueue(IDXGISwapChain3* swapChain)
 {
     static int waited;
     ID3D12CommandQueue* own = QueueOf(swapChain);
-    ID3D12CommandQueue* queue = NULL;
     const char* how = NULL;
     AcquireSRWLockExclusive(&g_queuesLock);
-    for (int i = 0; own != NULL && queue == NULL && i < g_queueCount; i++)
-        if (g_queues[i].queue == own && g_queues[i].direct) { queue = own; how = "the swap chain's own"; }
-    if (queue == NULL && own != NULL && g_queueTable != NULL && Readable(own, sizeof(void*)) && *(void**)own == g_queueTable)
-    {
-        queue = own;
-        how = "the swap chain's own (no lists seen on it yet)";
-    }
+    ID3D12CommandQueue* queue = OwnQueue(own, &how);
     if (queue == NULL && ++waited > (g_queueOffset == 0 ? 30 : 120))
     {
-        LONG most = 0;
-        for (int i = 0; i < g_queueCount; i++)
-            if (g_queues[i].direct && g_queues[i].calls > most) { most = g_queues[i].calls; queue = g_queues[i].queue; }
+        queue = BusiestQueue();
         how = g_queueOffset == 0 ? "a guess: the busiest direct queue (where a swap chain keeps its queue is unknown)" :
             "a guess: the busiest direct queue (the swap chain's own was not found)";
     }
@@ -589,110 +618,147 @@ static bool Initialize(IDXGISwapChain3* swapChain)
     return g_gameProc != NULL;
 }
 
+/* Direct3D 12: ImGui recorded into the back buffer about to be presented (its index), on the swap chain's queue, with a
+ * fence per back buffer. */
+static void Draw12(IDXGISwapChain3* swapChain, UINT index)
+{
+    ID3D12Resource* buffer = NULL;
+    if (FAILED(swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&buffer)))) return;
+    WaitFence(g_frameFence[index]);
+    g_allocators[index]->Reset();
+    g_list->Reset(g_allocators[index], NULL);
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv = g_rtvHeap->GetCPUDescriptorHandleForHeapStart();
+    rtv.ptr += (SIZE_T)index * g_rtvSize;
+    g_device->CreateRenderTargetView(buffer, NULL, rtv);
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = buffer;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    g_list->ResourceBarrier(1, &barrier);
+    g_list->OMSetRenderTargets(1, &rtv, FALSE, NULL);
+    g_list->SetDescriptorHeaps(1, &g_srvHeap);
+    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), g_list);
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+    g_list->ResourceBarrier(1, &barrier);
+    g_list->Close();
+    ID3D12CommandList* lists[] = {g_list};
+    g_execute(g_queue, 1, lists);
+    g_queue->Signal(g_fence, ++g_fenceValue);
+    g_frameFence[index] = g_fenceValue;
+    buffer->Release();
+}
+
+/* Direct3D 11 when the swap chain's device is one (a D3D12 swap chain's is not); Direct3D 12 once its queue is picked,
+ * and then only into a swap chain presenting on it. false: not this frame. */
+static bool PickDevice(IDXGISwapChain3* swapChain)
+{
+    if (g_queue != NULL || g_device11 != NULL) return g_device11 != NULL || OnOurQueue(swapChain);
+    ID3D11Device* device = NULL;
+    if (SUCCEEDED(swapChain->GetDevice(IID_PPV_ARGS(&device))) && device != NULL) { g_device11 = device; return true; }
+    return PickQueue(swapChain);
+}
+
+/* Drawing set up, on the first frame drawn (the editor stays off when it cannot be). */
+static void SetUp(IDXGISwapChain3* swapChain)
+{
+    if (!(g_device11 != NULL ? Initialize11(swapChain) : Initialize(swapChain))) { g_failed = 1; g_api->log(g_mod, "editor: could not set up drawing; the editor stays off"); }
+    else g_ready = 1;
+}
+
+/* The window opened or closed (F8, on the window's thread): the editor is told on the next frame. */
+static void FollowOpen()
+{
+    static bool shown;
+    if ((g_open != 0) == shown) return;
+    shown = g_open != 0;
+    if (shown) editorapp::Opened(); else editorapp::Closed();
+}
+
+/* A D3D12 back buffer of another format: ImGui's backend made again for it (after our last frame), with the shader for
+ * its HDR mode; false when it cannot be (drawing stops). */
+static bool NewFormat(IDXGISwapChain3* swapChain, DXGI_FORMAT format)
+{
+    WaitFence(g_fenceValue);
+    ImGui_ImplDX12_Shutdown();
+    g_format = format;
+    UpdateHdr(swapChain, g_format);
+    if (InitDx12Backend()) return true;
+    g_failed = 1;
+    return false;
+}
+
+/* the fonts at the window's scale: made again (after our last frame) when the screen or the interface size changes */
+static void BakeFonts(float width, float height)
+{
+    if (!ui::BuildFonts(editorapp::PixelScale(width, height))) return;
+    g_api->log(g_mod, "editor: fonts for %.0fx%.0f at %.3f pixels a unit", width, height, editorapp::PixelScale(width, height));
+    if (g_device11 != NULL) ImGui_ImplDX11_InvalidateDeviceObjects();
+    else
+    {
+        WaitFence(g_fenceValue);
+        ImGui_ImplDX12_InvalidateDeviceObjects();
+    }
+}
+
+/* ImGui's frame: the window, the MOD SYNC prompt alone, or HellForge's message alone (no input, the game's own cursor
+ * kept). */
+static void RecordFrame(bool modal, bool overlay, float width, float height)
+{
+    ImGuiIO& io = ImGui::GetIO();
+    io.MouseDrawCursor = !overlay;
+    if (overlay) io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+    else io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+    if (g_device11 != NULL) ImGui_ImplDX11_NewFrame();
+    else ImGui_ImplDX12_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+    if (overlay) editorapp::Overlay(ImGui::GetBackgroundDrawList(), width, height);
+    else if (modal) editorapp::Modal(ImGui::GetBackgroundDrawList(), width, height, io.DeltaTime);
+    else editorapp::Frame(ImGui::GetBackgroundDrawList(), width, height, io.DeltaTime);
+    ImGui::Render();
+}
+
+/* A frame of the editor drawn into the back buffer about to be presented; false when drawing must stop now (the swap
+ * chain cannot be read, or ImGui's D3D12 backend not made again for a new format). */
+static bool DrawFrame(IDXGISwapChain3* swapChain, bool modal, bool overlay)
+{
+    DXGI_SWAP_CHAIN_DESC desc;
+    if (FAILED(swapChain->GetDesc(&desc))) return false;
+    if (g_device11 == NULL && desc.BufferDesc.Format != g_format && !NewFormat(swapChain, desc.BufferDesc.Format)) return false;
+    if (g_device11 != NULL && desc.BufferDesc.Format != g_format)
+    {
+        /* Direct3D 11 makes its device objects again on the next frame, with the shader for the new format */
+        g_format = desc.BufferDesc.Format;
+        if (UpdateHdr(swapChain, g_format)) ImGui_ImplDX11_InvalidateDeviceObjects();
+    }
+    float width = (float)desc.BufferDesc.Width, height = (float)desc.BufferDesc.Height;
+    BakeFonts(width, height);
+    RecordFrame(modal, overlay, width, height);
+    UINT index = swapChain->GetCurrentBackBufferIndex() % MAX_BUFFERS;
+    if (g_device11 != NULL) Draw11(swapChain);
+    else Draw12(swapChain, index);
+    return true;
+}
+
 static void Render(IDXGISwapChain3* swapChain)
 {
-    if (g_failed) return;
-    /* Direct3D 11 when the swap chain's device is one (a D3D12 swap chain's is not); Direct3D 12 once its queue is picked */
-    if (g_queue == NULL && g_device11 == NULL)
-    {
-        ID3D11Device* device = NULL;
-        if (SUCCEEDED(swapChain->GetDevice(IID_PPV_ARGS(&device))) && device != NULL) g_device11 = device;
-        else if (!PickQueue(swapChain)) return;
-    }
-    else if (g_device11 == NULL && !OnOurQueue(swapChain)) return;
+    if (g_failed || !PickDevice(swapChain)) return;
     EnterCriticalSection(&g_lock);
-    if (!g_ready)
+    if (!g_ready) SetUp(swapChain);
+    if (g_ready)
     {
-        if (!(g_device11 != NULL ? Initialize11(swapChain) : Initialize(swapChain))) { g_failed = 1; g_api->log(g_mod, "editor: could not set up drawing; the editor stays off"); }
-        else g_ready = 1;
+        FollowOpen();
+        if (g_saveFailed) { InterlockedExchange(&g_saveFailed, 0); editorapp::SaveStatus(false, g_saveStatus); }
+        editorapp::Tick();
     }
-    static bool shown;
-    if (g_ready && (g_open != 0) != shown)
-    {
-        shown = g_open != 0;
-        if (shown) editorapp::Opened(); else editorapp::Closed();
-    }
-    if (g_ready && g_saveFailed) { InterlockedExchange(&g_saveFailed, 0); editorapp::SaveStatus(false, g_saveStatus); }
-    if (g_ready) editorapp::Tick();
     /* the window; while it is closed the MOD SYNC prompt alone over the game, or else HellForge's message (no input, the
      * game's own cursor kept) */
     bool modal = g_ready && !g_open && g_modal;
     bool overlay = g_ready && !g_open && !modal && editorapp::NoticeShown();
-    if (g_ready && (g_open || modal || overlay))
-    {
-        DXGI_SWAP_CHAIN_DESC desc;
-        if (FAILED(swapChain->GetDesc(&desc))) { LeaveCriticalSection(&g_lock); return; }
-        if (g_device11 == NULL && desc.BufferDesc.Format != g_format)
-        {
-            WaitFence(g_fenceValue);
-            ImGui_ImplDX12_Shutdown();
-            g_format = desc.BufferDesc.Format;
-            UpdateHdr(swapChain, g_format);
-            if (!InitDx12Backend()) { g_failed = 1; LeaveCriticalSection(&g_lock); return; }
-        }
-        else if (g_device11 != NULL && desc.BufferDesc.Format != g_format)
-        {
-            /* Direct3D 11 makes its device objects again on the next frame, with the shader for the new format */
-            g_format = desc.BufferDesc.Format;
-            if (UpdateHdr(swapChain, g_format)) ImGui_ImplDX11_InvalidateDeviceObjects();
-        }
-        /* the fonts at the window's scale: made again (after our last frame) when the screen or the interface size changes */
-        float width = (float)desc.BufferDesc.Width, height = (float)desc.BufferDesc.Height;
-        if (ui::BuildFonts(editorapp::PixelScale(width, height)))
-        {
-            g_api->log(g_mod, "editor: fonts for %.0fx%.0f at %.3f pixels a unit", width, height, editorapp::PixelScale(width, height));
-            if (g_device11 != NULL) ImGui_ImplDX11_InvalidateDeviceObjects();
-            else
-            {
-                WaitFence(g_fenceValue);
-                ImGui_ImplDX12_InvalidateDeviceObjects();
-            }
-        }
-        ImGuiIO& io = ImGui::GetIO();
-        io.MouseDrawCursor = !overlay;
-        if (overlay) io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-        else io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
-        if (g_device11 != NULL) ImGui_ImplDX11_NewFrame();
-        else ImGui_ImplDX12_NewFrame();
-        ImGui_ImplWin32_NewFrame();
-        ImGui::NewFrame();
-        if (overlay) editorapp::Overlay(ImGui::GetBackgroundDrawList(), width, height);
-        else if (modal) editorapp::Modal(ImGui::GetBackgroundDrawList(), width, height, io.DeltaTime);
-        else editorapp::Frame(ImGui::GetBackgroundDrawList(), width, height, io.DeltaTime);
-        ImGui::Render();
-
-        UINT index = swapChain->GetCurrentBackBufferIndex() % MAX_BUFFERS;
-        ID3D12Resource* buffer = NULL;
-        if (g_device11 != NULL) Draw11(swapChain);
-        else if (SUCCEEDED(swapChain->GetBuffer(swapChain->GetCurrentBackBufferIndex(), IID_PPV_ARGS(&buffer))))
-        {
-            WaitFence(g_frameFence[index]);
-            g_allocators[index]->Reset();
-            g_list->Reset(g_allocators[index], NULL);
-            D3D12_CPU_DESCRIPTOR_HANDLE rtv = g_rtvHeap->GetCPUDescriptorHandleForHeapStart();
-            rtv.ptr += (SIZE_T)index * g_rtvSize;
-            g_device->CreateRenderTargetView(buffer, NULL, rtv);
-            D3D12_RESOURCE_BARRIER barrier = {};
-            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            barrier.Transition.pResource = buffer;
-            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            g_list->ResourceBarrier(1, &barrier);
-            g_list->OMSetRenderTargets(1, &rtv, FALSE, NULL);
-            g_list->SetDescriptorHeaps(1, &g_srvHeap);
-            ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), g_list);
-            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-            g_list->ResourceBarrier(1, &barrier);
-            g_list->Close();
-            ID3D12CommandList* lists[] = {g_list};
-            g_execute(g_queue, 1, lists);
-            g_queue->Signal(g_fence, ++g_fenceValue);
-            g_frameFence[index] = g_fenceValue;
-            buffer->Release();
-        }
-    }
+    if (g_ready && (g_open || modal || overlay) && !DrawFrame(swapChain, modal, overlay)) { LeaveCriticalSection(&g_lock); return; }
     /* sounds asked for this frame (the closing one's too) go to the window's thread */
     if (g_ready && sounds::Waiting() && !sounds::OnGameThread()) PostMessageW(g_window, WM_EDITOR_SOUND, 0, 0);
     LeaveCriticalSection(&g_lock);
@@ -916,6 +982,46 @@ static void InFront(Watched& w, uint8_t* to)
  * there between frames. When presents stop reaching the editor, the code is watched closely for up to 100 ms to catch
  * that jump; none at all, and the code as it was before the editor, the editor's own hook is put back. */
 
+/* The code watched closely for a jump, for up to 100 ms while presents still do not reach the editor; NULL none. */
+static uint8_t* CatchJump(const uint8_t* code, LONG presents)
+{
+    uint8_t* to = NULL;
+    LARGE_INTEGER now, end, frequency;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&now);
+    end.QuadPart = now.QuadPart + frequency.QuadPart / 10;
+    while (to == NULL && now.QuadPart < end.QuadPart && g_presents == presents)
+    {
+        SwitchToThread();
+        to = LiveJump(code);
+        QueryPerformanceCounter(&now);
+    }
+    return to;
+}
+
+/* One method's look (Watchdog): reached, presents reached the editor since the last; resize, ResizeBuffers (no call
+ * every frame to tell by). */
+static void WatchOnce(Watched& w, bool reached, bool resize, LONG presents)
+{
+    if (w.code == NULL || !Readable(w.code, 8)) return;
+    uint8_t* to = LiveJump(w.code);
+    if (to != NULL) { InFront(w, to); return; }
+    if (reached || resize) return; /* drawing still, or ResizeBuffers */
+    to = CatchJump(w.code, presents);
+    if (to != NULL) { InFront(w, to); return; }
+    if (g_presents != presents) return;
+    if (w.putBack < 64 && PutBack(w))
+    {
+        if (w.putBack++ == 0) g_api->log(g_mod, "editor: %s's code was put back as it was before the editor (another overlay took its own hook "
+            "off); the editor's hook is back in place (said once)", w.name);
+        return;
+    }
+    uint8_t* code = w.code;
+    if (memcmp(code, w.before, 8) != 0 && !w.saidOther++)
+        g_api->log(g_mod, "editor: %s's code was changed by another program, not into a jump the editor follows (%02x %02x %02x %02x %02x); "
+            "the editor may no longer draw (said once)", w.name, code[0], code[1], code[2], code[3], code[4]);
+}
+
 static DWORD WINAPI Watchdog(void*)
 {
     LONG seen = 0;
@@ -925,36 +1031,7 @@ static DWORD WINAPI Watchdog(void*)
         LONG presents = g_presents;
         bool reached = presents != seen;
         seen = presents;
-        for (int m = 0; m < 3; m++)
-        {
-            Watched& w = g_watched[m];
-            if (w.code == NULL || !Readable(w.code, 8)) continue;
-            uint8_t* to = LiveJump(w.code);
-            if (to != NULL) { InFront(w, to); continue; }
-            if (reached || m == 2) continue; /* drawing still, or ResizeBuffers (no call every frame to tell by) */
-            LARGE_INTEGER now, end, frequency;
-            QueryPerformanceFrequency(&frequency);
-            QueryPerformanceCounter(&now);
-            end.QuadPart = now.QuadPart + frequency.QuadPart / 10;
-            while (to == NULL && now.QuadPart < end.QuadPart && g_presents == presents)
-            {
-                SwitchToThread();
-                to = LiveJump(w.code);
-                QueryPerformanceCounter(&now);
-            }
-            if (to != NULL) { InFront(w, to); continue; }
-            if (g_presents != presents) continue;
-            if (w.putBack < 64 && PutBack(w))
-            {
-                if (w.putBack++ == 0) g_api->log(g_mod, "editor: %s's code was put back as it was before the editor (another overlay took its own hook "
-                    "off); the editor's hook is back in place (said once)", w.name);
-                continue;
-            }
-            uint8_t* code = w.code;
-            if (memcmp(code, w.before, 8) != 0 && !w.saidOther++)
-                g_api->log(g_mod, "editor: %s's code was changed by another program, not into a jump the editor follows (%02x %02x %02x %02x %02x); "
-                    "the editor may no longer draw (said once)", w.name, code[0], code[1], code[2], code[3], code[4]);
-        }
+        for (int m = 0; m < 3; m++) WatchOnce(g_watched[m], reached, m == 2, presents);
     }
 }
 
@@ -972,6 +1049,16 @@ static void Watch(int i, const char* name, void* code, void* const* detours, voi
         g_api->log(g_mod, "editor: %s: its code as its module's file has it was not read; the editor's hook is not put back if an overlay puts the code back", name);
     }
     w.code = (uint8_t*)code;
+}
+
+/* Where a swap chain keeps the queue it presents on: the first place in it holding the queue's address. */
+static void FindQueueOffset(IDXGISwapChain1* swapChain, ID3D12CommandQueue* queue)
+{
+    IDXGISwapChain3* chain3 = NULL; /* the object Present is called on */
+    if (FAILED(swapChain->QueryInterface(IID_PPV_ARGS(&chain3)))) return;
+    for (size_t at = sizeof(void*); at < 0x2000 && g_queueOffset == 0 && Readable((const char*)chain3 + at, sizeof(void*)); at += sizeof(void*))
+        if (*(void* const*)((const char*)chain3 + at) == (void*)queue) g_queueOffset = at;
+    chain3->Release();
 }
 
 /* The addresses of the swap chain's and the queue's methods: a throwaway device, queue and swap chain on a hidden
@@ -1008,13 +1095,7 @@ static bool FindMethods(void** present, void** present1, void** resize, void** e
         *execute = commands[10]; /* ID3D12CommandQueue::ExecuteCommandLists */
         g_slotPresent = &chain[8]; g_slotResize = &chain[13]; g_slotPresent1 = &chain[22]; g_slotExecute = &commands[10];
         g_queueTable = commands;
-        IDXGISwapChain3* chain3 = NULL; /* the object Present is called on */
-        if (SUCCEEDED(swapChain->QueryInterface(IID_PPV_ARGS(&chain3))))
-        {
-            for (size_t at = sizeof(void*); at < 0x2000 && g_queueOffset == 0 && Readable((const char*)chain3 + at, sizeof(void*)); at += sizeof(void*))
-                if (*(void* const*)((const char*)chain3 + at) == (void*)queue) g_queueOffset = at;
-            chain3->Release();
-        }
+        FindQueueOffset(swapChain, queue);
         found = true;
     }
     if (swapChain) swapChain->Release();
@@ -1060,6 +1141,26 @@ static bool FindMethods11(void** present, void** present1, void** resize)
     return found;
 }
 
+/* The hooked methods kept first, should an overlay hook their code over the editor's later (Watchdog). */
+static void WatchHooks(void* present, void* present1, void* resize)
+{
+    Watch(0, "Present", present, kPresentAgain, (void**)g_presentAgain);
+    Watch(1, "Present1", present1, kPresent1Again, (void**)g_present1Again);
+    Watch(2, "ResizeBuffers", resize, kResizeAgain, (void**)g_resizeAgain);
+    HANDLE thread = CreateThread(NULL, 0, Watchdog, NULL, 0, NULL);
+    if (thread != NULL) CloseHandle(thread);
+}
+
+/* a Direct3D 11 swap chain's methods, hooked too where they are other code than the D3D12 one's */
+static void HookD3D11(HfMod* mod, void* present, void* present1, void* resize)
+{
+    void *present11, *present1_11, *resize11;
+    if (!FindMethods11(&present11, &present1_11, &resize11)) return;
+    if (present11 != present) g_api->hook(mod, (uintptr_t)present11, (void*)Present11Detour, (void**)&g_present11);
+    if (present1_11 != present1) g_api->hook(mod, (uintptr_t)present1_11, (void*)Present1_11Detour, (void**)&g_present1_11);
+    if (resize11 != resize) g_api->hook(mod, (uintptr_t)resize11, (void*)Resize11Detour, (void**)&g_resize11);
+}
+
 static void Start(HfMod* mod, HfEvent event, void* user)
 {
     editorapp::AddModContent(); /* every mod has registered its content by now; before the first frame */
@@ -1076,23 +1177,8 @@ static void Start(HfMod* mod, HfEvent event, void* user)
         !HookMethod(mod, "ResizeBuffers", resize, g_slotResize, (void*)ResizeBuffersDetour, (void**)&g_resize) &&
         !HookMethod(mod, "Present", present, g_slotPresent, (void*)PresentDetour, (void**)&g_present) &&
         !HookMethod(mod, "Present1", present1, g_slotPresent1, (void*)Present1Detour, (void**)&g_present1);
-    /* and kept first, should an overlay hook their code over the editor's later (Watchdog) */
-    if (hooked)
-    {
-        Watch(0, "Present", present, kPresentAgain, (void**)g_presentAgain);
-        Watch(1, "Present1", present1, kPresent1Again, (void**)g_present1Again);
-        Watch(2, "ResizeBuffers", resize, kResizeAgain, (void**)g_resizeAgain);
-        HANDLE thread = CreateThread(NULL, 0, Watchdog, NULL, 0, NULL);
-        if (thread != NULL) CloseHandle(thread);
-    }
-    /* a Direct3D 11 swap chain's methods, hooked too where they are other code than the D3D12 one's */
-    void *present11, *present1_11, *resize11;
-    if (hooked && FindMethods11(&present11, &present1_11, &resize11))
-    {
-        if (present11 != present) g_api->hook(mod, (uintptr_t)present11, (void*)Present11Detour, (void**)&g_present11);
-        if (present1_11 != present1) g_api->hook(mod, (uintptr_t)present1_11, (void*)Present1_11Detour, (void**)&g_present1_11);
-        if (resize11 != resize) g_api->hook(mod, (uintptr_t)resize11, (void*)Resize11Detour, (void**)&g_resize11);
-    }
+    if (hooked) WatchHooks(present, present1, resize);
+    if (hooked) HookD3D11(mod, present, present1, resize);
     if (hooked && user32 != NULL)
     {
         g_api->hook(mod, (uintptr_t)GetProcAddress(user32, "ClipCursor"), (void*)ClipCursorDetour, (void**)&g_clipCursor);
