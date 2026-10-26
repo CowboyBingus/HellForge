@@ -3,7 +3,7 @@
 
 ## Release HellForge X.Y.Z
 
-Changelog:
+Changelog (this release's section of `CHANGELOG.md`):
 
 ## Checklist
 
@@ -15,6 +15,9 @@ Changelog:
   blocker tickets
 - [ ] 6. The version is bumped (`Directory.Build.props`), the roadmap and the README are updated, and the changelog is
   written
+- [ ] 6a. `CHANGELOG.md`: Unreleased is renamed to `X.Y.Z-beta (date)`, a new empty Unreleased is above it, and every
+  issue its Fixed lines name is closed or listed here for closing; the GitHub release notes are written from that
+  section
 - [ ] 6b. If any `HellForge.Cli` command or its JSON changed, `docs/external-launchers.md` is updated and the change is
   in the changelog, so launchers that use the CLI know before the release lands
 
