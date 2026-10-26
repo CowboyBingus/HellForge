@@ -136,6 +136,44 @@ public static class InventorySync
 
     public static bool IsListening(string syncDir) => File.Exists(Path.Combine(syncDir, ListeningFile));
 
+    // The launcher's side of a sync, beside the capture's proxy.log: one timestamped line per step. A folder the launcher
+    // cannot write (a standard account, where the capture runs as the administrator) only loses these lines.
+    public const string LauncherLogFile = "launcher.log";
+
+    public static void Note(string syncDir, string message)
+    {
+        try { File.AppendAllText(Path.Combine(syncDir, LauncherLogFile), DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Trace.WriteLine("sync note lost: " + error.Message); }
+    }
+
+    // Copies Easy Anti-Cheat's launcher logs written since the sync started (under %APPDATA%\EasyAntiCheat, one per game
+    // deployment) into the sync folder as eac-<deployment>.log, and says whether the game wrote a crash report. Returns
+    // what it found, for launcher.log.
+    public static IReadOnlyList<string> CollectGameLogs(string syncDir, DateTime sinceUtc, string? appData = null)
+    {
+        appData ??= Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var found = new List<string>();
+        var eac = Path.Combine(appData, "EasyAntiCheat");
+        var logs = Directory.Exists(eac) ? Directory.EnumerateFiles(eac, "anticheatlauncher.log", SearchOption.AllDirectories) : [];
+        foreach (var log in logs.Where(file => File.GetLastWriteTimeUtc(file) >= sinceUtc))
+        {
+            var copy = Path.Combine(syncDir, "eac-" + Path.GetFileName(Path.GetDirectoryName(log)) + ".log");
+            try
+            {
+                File.Copy(log, copy, overwrite: true);
+                found.Add("Easy Anti-Cheat launcher log copied to " + Path.GetFileName(copy));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { found.Add("Easy Anti-Cheat launcher log not copied: " + error.Message); }
+        }
+        if (found.Count == 0) found.Add("no Easy Anti-Cheat launcher log written since the sync started");
+        var crashes = Path.Combine(appData, "Arrowhead", "Helldivers2", "crash_data");
+        var reports = Directory.Exists(crashes) ? Directory.EnumerateFileSystemEntries(crashes, "*", SearchOption.AllDirectories)
+            .Where(entry => File.GetLastWriteTimeUtc(entry) >= sinceUtc).ToList() : [];
+        found.Add(reports.Count == 0 ? "no game crash report since the sync started"
+            : $"the game wrote {reports.Count} crash report file(s) since the sync started, under " + crashes);
+        return found;
+    }
+
     // The capture has sealed its files and keeps forwarding until the game exits: FinalizeCapture can take them now.
     public static bool IsSealed(string syncDir) => CaptureState.Read(syncDir) is { Sealed: true };
 

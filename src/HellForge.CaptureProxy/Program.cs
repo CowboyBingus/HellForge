@@ -9,9 +9,11 @@
 // account (HellForge.Core SnapshotSeal) as soon as the inventory is in, and says so in its state file (CaptureState), so
 // the launcher takes them while the game plays on; the backend unlocks premium items only from a seal. It then keeps
 // forwarding until the game exits, removes the hosts line and the CA, and exits 0 (1 when nothing was captured before
-// the timeout or the seal failed). Nothing else is kept: the log holds methods, the first two path segments, status codes
-// and sizes, and for the login and the capture's own reads the names of headers and query parameters and a refused
-// request's reason (CaptureLog), never bodies, values or the session.
+// the timeout or the seal failed). Nothing else is kept. The log (proxy.log) is detailed but holds no values: for every
+// connection its TLS version, cipher and SNI, timings and where it failed; for every request and response the method, the
+// first two path segments, status, sizes, content types and the names of headers and query parameters; a refused
+// request's reason (CaptureLog); the key-and-count shape of what the capture keeps (CaptureDiagnostics); the game's and
+// Easy Anti-Cheat's processes; and a summary. Never bodies, header or query values, or the session.
 //
 //   --cleanup      only remove a hosts line and CA left by a run that was killed
 //   --no-hosts --no-ca --listen-port 8443 --real-ip <ip>   local plumbing test, no system changes
@@ -169,15 +171,18 @@ using var handler = new SocketsHttpHandler
         foreach (var ip in upstreamIps)
         {
             var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            var connecting = Stopwatch.StartNew();
             try
             {
                 using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
                 connectTimeout.CancelAfter(TimeSpan.FromSeconds(6));
                 await socket.ConnectAsync(new IPEndPoint(ip, 443), connectTimeout.Token);
+                Log($"upstream connected to {ip}:443 in {CaptureDiagnostics.Milliseconds(connecting)}");
                 return new NetworkStream(socket, ownsSocket: true);
             }
             catch (Exception error) when (error is SocketException or OperationCanceledException)
             {
+                Log($"upstream {ip}:443 failed after {CaptureDiagnostics.Milliseconds(connecting)}: {CaptureDiagnostics.Chain(error)}");
                 last = error;
                 socket.Dispose();
             }
@@ -196,19 +201,26 @@ var sealOk = false;
 // The login's client headers, repeated on the capture's own reads (CaptureHeaders): the API refuses a read without
 // Accept-Language, which is how a live sync sealed an inventory and no progression (2026-10-26).
 Dictionary<string, string>? loginHeaders = null;
+var connections = 0;
+var tally = new CaptureTally();
+var lastRequest = Stopwatch.StartNew();
 // Cancelled when nothing was captured in time, and after a capture once the game exits (ForwardUntilGameExits).
 using var stop = new CancellationTokenSource(TimeSpan.FromMinutes(timeoutMin));
 try
 {
+    LogStart();
     if (manageHosts) AddHosts();
+    LogResolution();
     listener.Start();
     Log($"listening on port {listenPort}");
     CaptureState.Write(evidenceDir, Environment.ProcessId, sealedCapture: false, progression: false);
+    _ = Task.Run(WatchProcesses);
     while (!stop.IsCancellationRequested)
     {
         TcpClient client;
         try { client = await listener.AcceptTcpClientAsync(stop.Token); }
         catch (OperationCanceledException) { break; }
+        lastRequest.Restart();
         _ = Task.Run(() => Handle(client));
     }
 }
@@ -217,7 +229,67 @@ finally
     Cleanup();
 }
 Log(captured == 1 ? "capture complete" : "nothing captured");
+LogSummary();
 return captured == 1 && sealOk ? 0 : 1;
+
+// What this run is, so a log from another PC or build can be read on its own.
+void LogStart()
+{
+    var exe = Environment.ProcessPath;
+    var built = exe != null ? File.GetLastWriteTimeUtc(exe).ToString("u", CultureInfo.InvariantCulture) : "unknown";
+    var elevated = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent())
+        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+    Log($"capture built {built}, {Environment.OSVersion.VersionString}, .NET {Environment.Version}, elevated {(elevated ? "yes" : "no")}");
+    Log($"options: host {host}, port {listenPort}, timeout {timeoutMin} min, hosts line {(manageHosts ? "yes" : "no")}, " +
+        $"CA {(manageCa ? "yes" : "no")}, progression {(progressionPath != null ? "yes" : "no")}, seal {(sealKey != null ? "yes" : "no")}");
+}
+
+// Where the system now sends the API's name: 127.0.0.1 when the hosts line holds.
+void LogResolution()
+{
+    try { Log($"system DNS: {host} -> {string.Join(", ", Dns.GetHostAddresses(host).Select(address => address.ToString()))}"); }
+    catch (SocketException error) { Log($"system DNS: {host} does not resolve: {error.SocketErrorCode}"); }
+}
+
+void LogSummary()
+{
+    Log($"summary: {connections} connections, {tally.Total} requests answered by the API");
+    foreach (var line in tally.Lines()) Log("  " + line);
+}
+
+// The game's and Easy Anti-Cheat's processes coming and going, and a heartbeat every 30 seconds, for the whole run.
+async Task WatchProcesses()
+{
+    var seen = new Dictionary<int, string>();
+    var beat = Stopwatch.StartNew();
+    while (!stop.IsCancellationRequested)
+    {
+        LogProcessChanges(seen);
+        if (beat.Elapsed >= TimeSpan.FromSeconds(30))
+        {
+            beat.Restart();
+            Log($"status: {connections} connections, {tally.Total} requests, last connection {lastRequest.Elapsed.TotalSeconds:F0} s ago, " +
+                $"game {(seen.ContainsValue(GameProcess) ? "running" : "not running")}, captured {(Volatile.Read(ref captured) == 1 ? "yes" : "no")}");
+        }
+        try { await Task.Delay(TimeSpan.FromSeconds(2), stop.Token); }
+        catch (OperationCanceledException) { return; }
+    }
+}
+
+void LogProcessChanges(Dictionary<int, string> seen)
+{
+    var now = new Dictionary<int, string>();
+    foreach (var name in new[] { GameProcess, "EasyAntiCheat_EOS", "EasyAntiCheat", "start_protected_game" })
+        foreach (var process in Process.GetProcessesByName(name))
+        {
+            now[process.Id] = name;
+            process.Dispose();
+        }
+    foreach (var (pid, name) in now.Where(entry => !seen.ContainsKey(entry.Key))) Log($"process {name} started (pid {pid})");
+    foreach (var (pid, name) in seen.Where(entry => !now.ContainsKey(entry.Key))) Log($"process {name} exited (pid {pid})");
+    seen.Clear();
+    foreach (var entry in now) seen[entry.Key] = entry.Value;
+}
 
 // Once the inventory is in: seal what was captured and tell the launcher, then keep the game's connection until it exits.
 void CompleteCapture()
@@ -229,9 +301,10 @@ void CompleteCapture()
     _ = Task.Run(ForwardUntilGameExits);
 }
 
-// Ending the redirect right after the login was followed by Easy Anti-Cheat closing the game ("Could not connect to Easy
-// Anti Cheat network", live run 2026-10-26); the game most likely keeps the loopback address it resolved. So the redirect
-// and the CA stay until the game exits.
+// The redirect and the CA stay until the game exits, so its requests after the login still reach the API. Easy Anti-Cheat
+// closed the game ("Could not connect to Easy Anti Cheat network") both when the redirect ended right after the login and
+// when it stayed (live runs, 2026-10-26), so that error has another cause; WatchProcesses and the per-connection lines
+// are there to find it.
 async Task ForwardUntilGameExits()
 {
     stop.CancelAfter(TimeSpan.FromHours(ForwardHoursAtMost));
@@ -255,10 +328,46 @@ static bool IsGameRunning()
     return running.Length > 0;
 }
 
+// One connection, one request (the response says Connection: close). Each line carries the connection's number, so
+// interleaved connections stay apart in the log.
 async Task Handle(TcpClient client)
 {
+    var id = "#" + Interlocked.Increment(ref connections);
     using var connection = client;
     using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
+    var watch = Stopwatch.StartNew();
+    Log($"{id} connection from {client.Client.RemoteEndPoint}");
+    if (!await Handshake(ssl, id, watch)) return;
+    var stage = "reading the request";
+    try
+    {
+        if (await ReadRequest(ssl) is not { } request) { Log($"{id} closed before a whole request ({CaptureDiagnostics.Milliseconds(watch)})"); return; }
+        var path = request.Target.Split('?')[0];
+        if (path.Equals(LoginPath, StringComparison.OrdinalIgnoreCase)) loginHeaders = request.Headers;
+        LogRequest(id, request);
+        stage = "asking the API";
+        using var upstream = Forward(request);
+        var asked = Stopwatch.StartNew();
+        using var response = await http.SendAsync(upstream);
+        var responseBody = await response.Content.ReadAsByteArrayAsync();
+        tally.Add(request.Method, Shorten(path), (int)response.StatusCode);
+        Log($"{request.Method} {Shorten(path)} {(int)response.StatusCode} {responseBody.Length} bytes");
+        LogResponse(id, path, response, responseBody, asked);
+        stage = "keeping the capture";
+        if (response.IsSuccessStatusCode) await Capture(path, responseBody);
+        stage = "answering the game";
+        await Respond(ssl, response, responseBody);
+        await CheckReuse(ssl, id);
+        Log($"{id} done in {CaptureDiagnostics.Milliseconds(watch)}");
+    }
+    catch (Exception error) when (error is IOException or HttpRequestException or TaskCanceledException or InvalidOperationException or FormatException)
+    {
+        Log($"{id} failed while {stage} after {CaptureDiagnostics.Milliseconds(watch)}: {CaptureDiagnostics.Chain(error)}");
+    }
+}
+
+async Task<bool> Handshake(SslStream ssl, string id, Stopwatch watch)
+{
     try
     {
         await ssl.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
@@ -267,29 +376,15 @@ async Task Handle(TcpClient client)
             EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
             ApplicationProtocols = [SslApplicationProtocol.Http11]
         });
+        Log($"{id} TLS {CaptureDiagnostics.Tls(ssl)} in {CaptureDiagnostics.Milliseconds(watch)}");
+        return true;
     }
     catch (Exception error) when (error is AuthenticationException or IOException)
     {
-        // A client that pins the API's certificate fails here.
-        Log("TLS handshake failed: " + error.GetType().Name + " 0x" + (error.InnerException ?? error).HResult.ToString("X8", CultureInfo.InvariantCulture));
-        return;
-    }
-    try
-    {
-        if (await ReadRequest(ssl) is not { } request) return;
-        var path = request.Target.Split('?')[0];
-        if (path.Equals(LoginPath, StringComparison.OrdinalIgnoreCase)) loginHeaders = request.Headers;
-        using var upstream = Forward(request);
-        using var response = await http.SendAsync(upstream);
-        var responseBody = await response.Content.ReadAsByteArrayAsync();
-        Log($"{request.Method} {Shorten(path)} {(int)response.StatusCode} {responseBody.Length} bytes");
-        if (IsCapturePath(path)) LogDetail(request.Target, request.Headers.Keys, response, responseBody);
-        if (response.IsSuccessStatusCode) await Capture(path, responseBody);
-        await Respond(ssl, response, responseBody);
-    }
-    catch (Exception error) when (error is IOException or HttpRequestException or TaskCanceledException or InvalidOperationException or FormatException)
-    {
-        Log("request failed: " + error.GetType().Name);
+        // A client that pins the API's certificate, or does not trust the CA, fails here.
+        Log($"{id} TLS handshake failed after {CaptureDiagnostics.Milliseconds(watch)}: 0x" +
+            (error.InnerException ?? error).HResult.ToString("X8", CultureInfo.InvariantCulture) + " " + CaptureDiagnostics.Chain(error));
+        return false;
     }
 }
 
@@ -297,11 +392,37 @@ static bool IsCapturePath(string path) =>
     path.Equals(LoginPath, StringComparison.OrdinalIgnoreCase) || path.Equals(ProgressionPath, StringComparison.OrdinalIgnoreCase) ||
     path.Equals(InventoryPath, StringComparison.OrdinalIgnoreCase);
 
-// What a request the capture depends on carried (names only), and why it was refused.
-void LogDetail(string target, IEnumerable<string> headers, HttpResponseMessage response, byte[] body)
+// Every request, in names and sizes only.
+void LogRequest(string id, (string Method, string Target, Dictionary<string, string> Headers, byte[] Body) request)
 {
-    Log("  headers: " + CaptureLog.Names(headers) + "; query: " + CaptureLog.QueryNames(target));
+    var type = request.Headers.TryGetValue("Content-Type", out var contentType) ? contentType.Split(';')[0] : "none";
+    Log($"{id} {request.Method} {Shorten(request.Target.Split('?')[0])} {request.Headers.GetValueOrDefault("Host") ?? "no host"}, " +
+        $"body {request.Body.Length} bytes ({type}); headers: {CaptureLog.Names(request.Headers.Keys)}; query: {CaptureLog.QueryNames(request.Target)}");
+}
+
+// Every response: status, time, type and header names; a refused one's reason; the shape of what the capture keeps.
+void LogResponse(string id, string path, HttpResponseMessage response, byte[] body, Stopwatch asked)
+{
+    var type = response.Content.Headers.ContentType?.MediaType ?? "none";
+    Log($"{id} -> {(int)response.StatusCode} {response.ReasonPhrase} HTTP/{response.Version}, {body.Length} bytes ({type}) in " +
+        $"{CaptureDiagnostics.Milliseconds(asked)}; headers: {CaptureLog.Names(response.Headers.Concat(response.Content.Headers).Select(header => header.Key))}");
     if (!response.IsSuccessStatusCode) Log("  refused: " + CaptureLog.ErrorText(body));
+    else if (IsCapturePath(path)) Log($"{id} body shape: {CaptureDiagnostics.JsonShape(body)}");
+}
+
+// The response said Connection: close. A client that still sends on this connection expected to reuse it (keep-alive),
+// which the capture does not do: its next request is lost and it must reconnect.
+async Task CheckReuse(SslStream ssl, string id)
+{
+    try
+    {
+        using var linger = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        var probe = new byte[1];
+        var n = await ssl.ReadAsync(probe, linger.Token);
+        Log(n == 0 ? $"{id} client closed after the response" : $"{id} client sent more on this connection after Connection: close (keep-alive is not supported)");
+    }
+    catch (OperationCanceledException) { Log($"{id} client kept the connection open after the response"); }
+    catch (IOException error) { Log($"{id} connection reset after the response: {CaptureDiagnostics.Chain(error)}"); }
 }
 
 // The game's request as it was, to the real API (hop-by-hop headers left out).
@@ -371,10 +492,12 @@ async Task<byte[]?> Get(string path, string session)
     request.Headers.TryAddWithoutValidation("Authorization", "session " + session);
     foreach (var (name, value) in CaptureHeaders.ForRead(loginHeaders, DateTimeOffset.UtcNow))
         request.Headers.TryAddWithoutValidation(name, value);
+    var asked = Stopwatch.StartNew();
     using var response = await http.SendAsync(request);
     var body = await response.Content.ReadAsByteArrayAsync();
     Log($"GET {path} {(int)response.StatusCode} {body.Length} bytes (login session)");
-    if (!response.IsSuccessStatusCode) Log("  refused: " + CaptureLog.ErrorText(body));
+    Log($"capture GET {path}: sent headers {CaptureLog.Names(request.Headers.Select(header => header.Key))}");
+    LogResponse("capture", path, response, body, asked);
     return response.IsSuccessStatusCode ? body : null;
 }
 

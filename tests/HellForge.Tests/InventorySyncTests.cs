@@ -51,6 +51,9 @@ static class InventorySyncTests
         test("The capture's own reads repeat the game's client headers, without the login's own, so the API's language check passes", () =>
             Headers(check));
 
+        test("The capture's diagnostics give shapes, causes and a tally without values, and a sync collects the game's anti-cheat and crash logs", () =>
+            Diagnostics(root, check));
+
         test("Steam's 32-bit account id is the SteamID64 of an individual account", () =>
             check(SteamAccount.FromAccountId(39734273) == 76561198000000001, "Wrong SteamID64."));
 
@@ -169,6 +172,51 @@ static class InventorySyncTests
         check(InventorySync.IsSealed(sync) && CaptureState.Read(sync) is { Progression: false }, "A sealed partial capture reads wrong.");
         File.WriteAllText(Path.Combine(sync, CaptureState.FileName), "{\"sealed\":");
         check(!InventorySync.IsSealed(sync), "A half-written state reads as sealed.");
+    }
+
+    static void Diagnostics(string root, Action<bool, string> check)
+    {
+        static byte[] Utf8(string text) => System.Text.Encoding.UTF8.GetBytes(text);
+        var shape = CaptureDiagnostics.JsonShape(Utf8("""{"items":[{"mixId":1},{"mixId":2}],"limitSettings":{"a":1,"b":2},"name":"Secret Ship","xp":5}"""));
+        check(shape == "object{items[2], limitSettings{2}, name:string, xp:number}", "The body's shape is wrong: " + shape);
+        check(!shape.Contains("Secret", StringComparison.Ordinal) && !shape.Contains('5', StringComparison.Ordinal), "A value reached the shape.");
+        check(CaptureDiagnostics.JsonShape(Utf8("[1,2,3]")) == "array[3]" && CaptureDiagnostics.JsonShape([]) == "empty" &&
+            CaptureDiagnostics.JsonShape(Utf8("nope")) == "not JSON, 4 bytes", "Shapes of other bodies are wrong.");
+        var chain = CaptureDiagnostics.Chain(new HttpRequestException("send failed", new IOException("read failed",
+            new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.ConnectionReset))));
+        check(chain.StartsWith("HttpRequestException: send failed <- IOException: read failed <- SocketException (10054): ", StringComparison.Ordinal),
+            "The cause chain is wrong: " + chain);
+
+        var tally = new CaptureTally();
+        tally.Add("POST", "/api/Proxy/...", 200);
+        tally.Add("POST", "/api/Proxy/...", 200);
+        tally.Add("GET", "/api/Progression", 400);
+        check(tally.Total == 3 && tally.Lines().SequenceEqual(["GET /api/Progression 400 x1", "POST /api/Proxy/... 200 x2"]), "The tally is wrong.");
+
+        var sync = Directory.CreateDirectory(Path.Combine(root, "sync-diagnostics")).FullName;
+        InventorySync.Note(sync, "first step");
+        InventorySync.Note(Path.Combine(root, "no-such-folder", "sync"), "lost");
+        check(File.ReadAllText(Path.Combine(sync, InventorySync.LauncherLogFile)).TrimEnd().EndsWith(" first step", StringComparison.Ordinal),
+            "The launcher's step was not noted.");
+
+        var appData = Path.Combine(root, "appdata");
+        var since = DateTime.UtcNow.AddMinutes(-1);
+        check(InventorySync.CollectGameLogs(sync, since, appData).SequenceEqual(["no Easy Anti-Cheat launcher log written since the sync started",
+            "no game crash report since the sync started"]), "Missing game logs are not reported as missing.");
+        var eacLog = Path.Combine(appData, "EasyAntiCheat", "product", "deployment", "anticheatlauncher.log");
+        Directory.CreateDirectory(Path.GetDirectoryName(eacLog)!);
+        File.WriteAllText(eacLog, "[16:16:38] Launcher finished with: 301");
+        var old = Path.Combine(appData, "EasyAntiCheat", "product", "older", "anticheatlauncher.log");
+        Directory.CreateDirectory(Path.GetDirectoryName(old)!);
+        File.WriteAllText(old, "old");
+        File.SetLastWriteTimeUtc(old, since.AddHours(-1));
+        var crash = Path.Combine(appData, "Arrowhead", "Helldivers2", "crash_data", "report", "params.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(crash)!);
+        File.WriteAllText(crash, "x");
+        var found = InventorySync.CollectGameLogs(sync, since, appData);
+        check(File.ReadAllText(Path.Combine(sync, "eac-deployment.log")).Contains("301", StringComparison.Ordinal) &&
+            !File.Exists(Path.Combine(sync, "eac-older.log")), "The run's Easy Anti-Cheat log was not copied, or an older one was.");
+        check(found.Count == 2 && found[1].StartsWith("the game wrote ", StringComparison.Ordinal), "A new crash report was not reported: " + string.Join(" | ", found));
     }
 
     static void Headers(Action<bool, string> check)

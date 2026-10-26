@@ -16,6 +16,7 @@ public partial class MainWindow
     LocalProfile? syncProfile;
     string? syncDir, syncSnapshotDir;
     bool syncGameOpened, syncStarting, syncTaken;
+    DateTime syncStartedUtc;
 
     // Busy until the capture is taken; after that the proxy only keeps the game connected, and imports may run.
     bool SyncBusy => syncProxy != null && !syncTaken || syncStarting;
@@ -82,11 +83,14 @@ public partial class MainWindow
         syncStarting = false;
         if (started == null)
         {
+            InventorySync.Note(folder, "capture did not start: " + (failure ?? "the administrator prompt was declined"));
             SyncButton.IsEnabled = true;
             SetSyncStatus(failure ?? "Sync cancelled: it needs the administrator prompt.", failure != null ? Red : Orange);
             return;
         }
         (syncProxy, syncProfile, syncDir, syncSnapshotDir, syncGameOpened, syncTaken) = (started, profile, folder, snapshot, false, false);
+        syncStartedUtc = DateTime.UtcNow;
+        InventorySync.Note(folder, $"sync started for profile {profile.Name}; capture pid {started.Id}; launcher {Environment.ProcessPath}");
         SetSyncStatus("Starting the capture...", Gold);
         Append("Inventory sync: capture started for profile " + profile.Name + ". HELLDIVERS 2 opens through Steam; take it past the title screen.", LauncherLine);
     }
@@ -116,11 +120,13 @@ public partial class MainWindow
         syncProxy = null;
         SyncButton.IsEnabled = true;
         var (profile, folder, snapshot) = (syncProfile, syncDir, syncSnapshotDir);
-        (syncProfile, syncDir, syncSnapshotDir) = (null, null, null);
+        InventorySync.Note(folder, $"capture exited with code {exitCode} (game opened {(syncGameOpened ? "yes" : "no")}, capture taken {(syncTaken ? "yes" : "no")})");
+        foreach (var line in InventorySync.CollectGameLogs(folder, syncStartedUtc)) InventorySync.Note(folder, line);
         if (syncTaken) ProxyClosed(exitCode, folder);
         else if (exitCode == 0) TakeCapture(profile, folder, snapshot);
         else SyncFailed(syncGameOpened ? $"Nothing was captured within {InventorySync.TimeoutMinutes} minutes. Close the game and sync again."
             : "The capture could not start: see " + Path.Combine(folder, "proxy.log") + ".");
+        (syncProfile, syncDir, syncSnapshotDir) = (null, null, null);
         syncTaken = false;
         UpdateSyncStatus();
     }
@@ -131,11 +137,15 @@ public partial class MainWindow
         syncTaken = true;
         if (InventorySync.FinalizeCapture(folder, snapshot) is { } error)
         {
+            InventorySync.Note(folder, "capture not taken: " + error);
             SyncFailed(error);
             return;
         }
         UpdateSyncStatus();
-        var partial = InventorySync.ReadMetadata(snapshot) is not { Progression: true };
+        var info = InventorySync.ReadMetadata(snapshot);
+        var partial = info is not { Progression: true };
+        InventorySync.Note(folder, $"capture taken into {snapshot}: {info?.Items ?? 0} items, progression {(partial ? "no" : "yes")}, " +
+            $"capture {(syncProxy is { HasExited: false } ? "still forwarding the game" : "exited")}");
         if (partial)
         {
             // No progression is a failed sync, not a smaller success: the inventory alone still gives the backend premium
@@ -154,6 +164,7 @@ public partial class MainWindow
 
     void SyncFailed(string error)
     {
+        if (syncDir != null) InventorySync.Note(syncDir, "sync failed: " + error);
         SetSyncStatus(error, Red);
         Append("Inventory sync failed: " + error, Red);
     }
@@ -170,10 +181,12 @@ public partial class MainWindow
         try
         {
             InventorySync.OpenVanillaGame();
+            if (syncDir != null) InventorySync.Note(syncDir, "capture listening; asked Steam to open the game (steam://rungameid/553850)");
             SetSyncStatus("Log in to HELLDIVERS 2 and pass the title screen. This updates when the capture is done.", Gold);
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (System.ComponentModel.Win32Exception error)
         {
+            if (syncDir != null) InventorySync.Note(syncDir, "Steam did not open the game: " + error.Message);
             SetSyncStatus("Steam did not open the game: start HELLDIVERS 2 from Steam and pass the title screen.", Orange);
         }
     }
