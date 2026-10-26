@@ -343,6 +343,17 @@ int wmain(int argc, wchar_t** argv)
     EXPECT(send(p2pNet, listed, bytes, 7000, 2, 0) && fake->p2pSends == 2 && fake->p2pSize == 7000,
         "a peer the backend just listed (a join seconds old) is reached at once, 7000 bytes in one call");
     EXPECT(!send(p2pNet, listed, bytes, 7001, 2, 0) && fake->p2pSends == 2, "more than 7000 bytes is refused in the game");
+    // The backend can rewrite its file twice within one tick of the clock (a lobby change, then a join's peer), and both
+    // writes get the same time stamp: the peer written second is reached all the same.
+    int reached = 0;
+    for (int i = 1; i <= 50; i++)
+    {
+        char list[64];
+        snprintf(list, sizeof list, "76561197960287931\n%llu\n", (unsigned long long)(listed + i));
+        WriteText(g_peers, list);
+        reached += send(p2pNet, listed + i, bytes, 5, 2, 0);
+    }
+    EXPECT(reached == 50 && fake->p2pSends == 52, "a peer listed within the same clock tick as the list before it is reached at once");
     uint8_t session[20] = { 0 };
     EXPECT(state(p2pNet, HOST_PEER, session) && session[0] == 1, "GetP2PSessionState: its P2PSessionState_t comes back as bytes");
     EXPECT(accept(p2pNet, HOST_PEER) && !accept(p2pNet, stranger) && fake->p2pAccepts == 1, "AcceptP2PSessionWithUser: a peer, never anyone else");
