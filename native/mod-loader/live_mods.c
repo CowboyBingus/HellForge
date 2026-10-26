@@ -475,6 +475,7 @@ static void TxnStatsResolve(void)
  * HF_EVENT_MODS_CHANGED. */
 static const char* TxnMake(char* why, size_t size)
 {
+    LiveTakeoversWait(); /* off the locks: game.dll's code may still be decoding */
     AcquireSRWLockExclusive(&g_fieldsLock);
     AcquireSRWLockExclusive(&g_statsLock);
     const char* refused = TxnGate(); /* again: a friend may have joined meanwhile */

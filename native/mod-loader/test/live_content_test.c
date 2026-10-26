@@ -345,6 +345,15 @@ static void ContentTakeovers(uintptr_t g, uint8_t* history, HfMod* n)
     ContentChange(NULL, p);
     assert(ContentStratagem(p, "u", 0) == type && !ContentCommit());
     RemoveEdit(edits);
+    /* code not decoded yet (or not the reviewed one): the refusal names the pin */
+    char why[512];
+    *(uint8_t*)(g + 0x1369120) ^= 0xFF;
+    ContentChange(NULL, p);
+    assert(ContentStratagem(p, "u", 0) == type && ScrubTakeoverPin(g) == 0x1369120 && LiveNumbersCheck(why, sizeof why) != NULL &&
+        strstr(why, "game.dll+0x1369120") != NULL);
+    LiveContentUnstage();
+    TxnReset();
+    *(uint8_t*)(g + 0x1369120) ^= 0xFF;
 
     uint8_t* old = *(uint8_t**)(g_stratagemTable + type * 8);
     int owned = g_fakeOwnedCount, takes = g_fakeTakes;
@@ -354,6 +363,7 @@ static void ContentTakeovers(uintptr_t g, uint8_t* history, HfMod* n)
     g_liveSetup = p;
     assert(ApiSetField(p, type, &cooldown, &seven) == 0 && g_editCount == edits + 1); /* while it sets up: on n's row */
     g_liveSetup = NULL;
+    LiveTakeoversWait(); /* the pins read as reviewed: no wait */
     assert(ContentCommit() && g_stratagems[1].mod == p && !LiveTomb(LC_STRATAGEM, 1) && BoundsAt(g, 2) && g_fakeTakes == takes);
     uint8_t* row = *(uint8_t**)(g_stratagemTable + type * 8);
     assert(row == g_stratagems[1].row && row != old && *(uint32_t*)(row + 4) == g_stratagems[1].stable && ContentCooldown(type) == 7.0f &&
@@ -374,8 +384,8 @@ static void ContentTakeovers(uintptr_t g, uint8_t* history, HfMod* n)
         g_fakeOwned[owned + 1] == nItem && g_fakeSorts == sorts + 1 && *(uint32_t*)(OwnRecordAt((uintptr_t)g_fakeCatalogue, child) + 0xC) == 10);
     assert(*(uint32_t*)(loadout + LS_SLOT_COUNT) == 2 && pairs[2] == 0 && n->removed);
     g_tableRow = TableRowOf;
-    printf("  live content: a taken-out stratagem's type taken over by another mod (4 refusals: its packages held twice, the loadout screen, "
-        "an edit of the row); its edits follow, items given back before owned, a returning child filed again\n");
+    printf("  live content: a taken-out stratagem's type taken over by another mod (5 refusals: its packages held twice, the loadout screen, "
+        "an edit of the row, a pin not decoded); its edits follow, items given back before owned, a returning child filed again\n");
 }
 
 /* m out and k in (k sorts before m and n): k's damage, projectile and stratagem take m's 650, 351 and 150 over, each a

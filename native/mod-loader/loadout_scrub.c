@@ -205,13 +205,24 @@ static int ScrubTypeHolds(uintptr_t history, uint32_t type)
     return 0;
 }
 
+/* The first of a takeover's pins (the scrub's and the holds') that does not read as reviewed, or 0. game.dll's code is
+ * decoded in parts after the game loads, so a pin can differ for a while (LiveTakeoversWait waits). */
+static uint32_t ScrubTakeoverPin(uintptr_t game)
+{
+    for (size_t i = 0; i < sizeof kLoadoutPins / sizeof kLoadoutPins[0]; i++)
+        if (!PinMatches(game + kLoadoutPins[i].rva, kLoadoutPins[i].bytes, kLoadoutPins[i].size)) return kLoadoutPins[i].rva;
+    for (size_t i = 0; i < sizeof kHeldPins / sizeof kHeldPins[0]; i++)
+        if (!PinMatches(game + kHeldPins[i].rva, kHeldPins[i].bytes, kHeldPins[i].size)) return kHeldPins[i].rva;
+    return 0;
+}
+
 /* Why another mod's stratagem cannot take type `type` now, or NULL. */
 static const char* ScrubTakeover(uintptr_t game, uint32_t type, char* why, size_t size)
 {
-    int pins = ScrubPinsMatch(game);
-    for (size_t i = 0; i < sizeof kHeldPins / sizeof kHeldPins[0] && pins; i++) pins = PinMatches(game + kHeldPins[i].rva, kHeldPins[i].bytes, kHeldPins[i].size);
-    if (!pins)
-        snprintf(why, size, "capability\tthe game's loadout code is not the reviewed one, so stratagem %u cannot pass to another mod; a restart numbers it as the host does", type);
+    uint32_t pin = ScrubTakeoverPin(game);
+    if (pin != 0)
+        snprintf(why, size, "capability\tthe game's loadout code (game.dll+0x%x) is not the reviewed one, so stratagem %u cannot pass to another mod; a "
+            "restart numbers it as the host does", pin, type);
     else if (ScrubScreenOpen(game)) snprintf(why, size, "state\tthe loadout screen is open; close it and try again");
     else
     {
