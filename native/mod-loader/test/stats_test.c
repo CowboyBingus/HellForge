@@ -12,6 +12,7 @@
 #include "crash_notes_test.c"
 #include "log_header_test.c"
 #include "mod_identity_test.c"
+#include "mod_status_test.c"
 
 static StatEdit Edit(int mod, uint32_t value, uint32_t offset, int own)
 {
@@ -3354,6 +3355,7 @@ int main(int argc, char** argv)
     CrashNotesFixture();
     LogHeaderFixture();
     ModIdentityFixture();
+    StatusFixture();
     DifficultyFixture();
     NetSwitchFixture();
     NetworkTypesFixture();

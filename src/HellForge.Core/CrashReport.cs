@@ -39,7 +39,7 @@ public static partial class CrashReport
     private static partial Regex ByModuleNote();
 
     // The game writes into the run folder, or into run/game when sandboxed.
-    static IEnumerable<string> GameFolders(string run) => [run, Path.Combine(run, "game")];
+    internal static IEnumerable<string> GameFolders(string run) => [run, Path.Combine(run, "game")];
 
     public static string? LoaderLog(string run) =>
         GameFolders(run).Select(f => Path.Combine(f, "modloader.log")).FirstOrDefault(File.Exists);

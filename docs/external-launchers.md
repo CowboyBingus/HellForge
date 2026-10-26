@@ -202,8 +202,9 @@ a player:
 | File | What it holds |
 |---|---|
 | `session.log` | the session runner's steps; it opens with HellForge's, the engine's, the mod SDK's and the game's versions, Windows' version (and Wine's), the GPUs and their drivers, the session's settings, and the mods with their versions and content hashes |
-| `result.json` | the session's status and outcome; `report` holds the opening facts of `session.log` as JSON; `ownershipCheck` is `full` when it asked Steam, `recent` when it reused a check that passed at `ownershipConfirmedUtc` |
-| `modloader.log` | the mod loader: which mods loaded, and why one did not |
+| `result.json` | the session's status and outcome; `report` holds the opening facts of `session.log` as JSON; `ownershipCheck` is `full` when it asked Steam, `recent` when it reused a check that passed at `ownershipConfirmedUtc`; `sessionEndHeard` whether the mods answered the session's end before a stop ended the game |
+| `modloader.log` | the mod loader: which mods loaded, with each code mod's version and its DLL's SHA-256, and why one did not |
+| `mod-status.tsv` | each code mod's status for the player (SDK 16 `set_status`), a line `<id>\t<text>` per mod; the launcher shows it on the Mods page |
 | `modlist.txt` | the mods the session ran, in load order |
 | `mod-<id>.log` | a code mod's own log; `mod-lua.<name>.log` is a Lua mod's |
 | `cli-output.txt` | mod builds and staging |

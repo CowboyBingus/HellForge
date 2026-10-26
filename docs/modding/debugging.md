@@ -19,6 +19,7 @@ The newest ten are kept, and of the older ones the five newest that ended in a c
 | `arsenal.tsv` | every armory item: loadout id, type, entity, name (for choosing a weapon's base); written when a mod adds a weapon or changes component stats |
 | `stats-values.tsv` | every stats field's raw value from before the stats pass, by its place (kind, component, resource, record, offset) |
 | `hooks.tsv` | every hooked function, with its hooks in the order they run (owner, priority) |
+| `mod-status.tsv` | each code mod's status (`set_status`, SDK 16) as the Mods page shows it: id, tab, text |
 | `engine-logs/` | the game's own logs, when the launcher's **Engine log** setting is on (`play --engine-log yes`) |
 
 Each log's first line gives the local date and time it was opened and the offset from UTC; the lines after it give a

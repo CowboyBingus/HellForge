@@ -362,6 +362,7 @@ public partial class MainWindow : Window
         else if (!stopRequested && ShowModBuilds(out var built)) RenderSteps(BuildStep, false, built);
         if (runner.IsRunning) ShowModSync(runDirectory!);
         else ModSyncCard.IsVisible = false;
+        FollowModStatuses();
     }
 
     // The backend stopped the session so the launcher starts again with the host's mods it downloaded; true when it restarted.

@@ -41,6 +41,7 @@ sealed partial class PlaySession(PlayOptions options)
     string[] erlBefore = [];
     FileStream? lease;
     HostBoundedProcess? job;
+    SessionEndSignal? endSignal; // SDK 16: the mods hear the session's end before a stop takes the game down
     Process? server, broker;
     nint lowToken;
     Thread? applier;
@@ -852,6 +853,8 @@ sealed partial class PlaySession(PlayOptions options)
         job = new HostBoundedProcess(exe, $"--bundle-dir \"{bundle}\" --release" + (options.EngineLog ? " --log-to-file" : "") + (gameOptions.Length > 0 ? " " + gameOptions : ""),
             Path.Combine(copy, "bin"), profileFolder, 0, singleProcess: childReason == null, token: lowToken);
         result["gamePid"] = job.Process.Id;
+        // made before the game runs, so the mod loader finds them as it starts (native/mod-loader/mod_status.c)
+        Try("sessionEndSignalError", () => endSignal = SessionEndSignal.Create(job.Process.Id));
         result["gameLaunched"] = true;
         if (options.Sandbox) StartBroker(bridgeSuffix!);
         result["status"] = "patching";

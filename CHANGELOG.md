@@ -6,7 +6,7 @@ Unreleased, and a release renames that section ([CONTRIBUTING.md](CONTRIBUTING.m
 
 ## Unreleased (0.3.0-beta)
 
-On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
+On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 16.
 
 ### Added
 
@@ -67,6 +67,8 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
   complete by then.
 - Profile backups: every import or restore first saves the profile, the newest 10 are kept, and Profile lists them with
   Restore backup (#45).
+- The Mods page shows what a code mod says it is doing ("In game: ..." during a session, "Last session: ..." after it),
+  for mods that tell it (SDK 16).
 
 ### Changed
 
@@ -130,6 +132,9 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
 
 - SDK 14: `sync_state`, `sync_mod` and `sync_answer`, the MOD SYNC prompt's calls (#17).
 - SDK 15: `stats_source`, whether the lobby plays with the host's stats or each player's own (0df8add).
+- SDK 16: `set_status`, a mod's line for the player, which the Mods page shows on its row (and `mod-status.tsv` in the
+  session's logs); and `HF_EVENT_SESSION_END`, the session's end, when the launcher stops it (the session runner waits
+  up to 2 seconds for the mods) or the game quits normally.
 - `HF_NOTICE_BRIEF` shows a notice as a short corner note (#34).
 - A mod's manifest can give its web page as `"url"`, which MOD SYNC shows as GET IT (15e54f1).
 - `HellForge.Cli mod-hash --mod <folder or zip>` prints a mod's content hash, as mod sync and the verified list use it

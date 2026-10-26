@@ -31,6 +31,7 @@
 #define MAX_COMPONENTS 64
 #define MAX_CALLBACKS 256
 #define MAX_PINS 4
+#define STATUS_MAX 192 /* a mod's status line with its 0 (SDK 16, set_status: mod_status.c) */
 
 struct HfMod
 {
@@ -45,6 +46,8 @@ struct HfMod
     int lua;        /* a Lua mod (lua.<name>), registered through the Lua bridge while the game runs (lua_bridge.c) */
     char name[128]; /* a Lua mod's name as its runtime gave it (SDK 10, mods) */
     char version[64]; /* a code mod's version, from the plan (mod_identity.c) */
+    char status[STATUS_MAX];      /* its status line for the player (SDK 16, set_status), as the launcher shows it */
+    char statusGiven[STATUS_MAX]; /* the text set_status was given last, to skip the same text again cheaply */
 };
 
 typedef struct Component
@@ -100,7 +103,7 @@ static void SetupOrder(int order[MAX_MODS])
 }
 static Callback g_callbacks[MAX_CALLBACKS];
 static int g_callbackCount;
-static volatile LONG g_fired[5];
+static volatile LONG g_fired[HF_EVENT_SESSION_END + 1];
 static uintptr_t g_region;
 static SRWLOCK g_lock = SRWLOCK_INIT;
 static int g_hooksReady;
@@ -614,7 +617,7 @@ static uint64_t ApiResourceHash(const char* name) { return name != NULL ? Murmur
 
 static int ApiOn(HfMod* mod, HfEvent event, HfEventCallback callback, void* user)
 {
-    if (mod == NULL || callback == NULL || event < HF_EVENT_GAME_LOADED || event > HF_EVENT_PROJECTILES_READY || g_callbackCount >= MAX_CALLBACKS) return 1;
+    if (mod == NULL || callback == NULL || event < HF_EVENT_GAME_LOADED || event > HF_EVENT_SESSION_END || g_callbackCount >= MAX_CALLBACKS) return 1;
     g_callbacks[g_callbackCount++] = (Callback){mod, event, callback, user};
     if (g_fired[event]) callback(mod, event, user);
     return 0;
@@ -865,6 +868,8 @@ static void WatchRunning(void)
     if (g_fired[HF_EVENT_ENTITIES_READY]) StatsSnapshotReady(ApiModuleBase("game.dll", NULL));
 }
 
+#include "mod_status.c" /* SDK 16: set_status, and the session's end (WatchPause) */
+
 static DWORD WINAPI Watch(void* parameter)
 {
     ULONGLONG started = GetTickCount64();
@@ -887,7 +892,7 @@ static DWORD WINAPI Watch(void* parameter)
         WatchRegion(elapsed);
         WatchWaiting();
         WatchRunning();
-        Sleep(elapsed < 180000 ? 5 : 250);
+        WatchPause(elapsed < 180000 ? 5 : 250); /* ends early when the session runner stops the session */
     }
     return 0;
 }
@@ -1105,7 +1110,7 @@ __declspec(dllexport) int hellforge_loader_start(const wchar_t* plan)
         ApiRegisterEntity, ApiCopyField, ApiSetField, ApiSetTag, ApiMount, ApiRecord, ApiFind, ApiEditEntity, ApiSetLive, ApiGetLive, ApiSetPassives, ApiGetPassives,
         ApiOnGameThread, ApiLoadPackage, ApiLastLog, ApiLogsFolder, ApiGetStat, ApiSession, ApiSubscribe, ApiGameState, ApiContent, ApiAddAbility, ApiAddStratagemCategory, ApiSetStat, ApiCopyRow, ApiMods,
         ApiHeal, ApiHealLimb, ApiInjure, ActLimbState, ApiApplyStatus, ApiAddVelocity, ApiResupply, ApiSpawnExplosion, ApiSpawnProjectile,
-        ApiCreditToPlayer, ApiFreezeTimer, ApiSpawnPelican, ApiModifyShots, ApiHoming, ApiStopShots, ApiNotice, ApiHookEx, ApiCodeMatches, ApiReadCode, ApiSyncState, ApiSyncMod, ApiSyncAnswer, ApiStatsSource};
+        ApiCreditToPlayer, ApiFreezeTimer, ApiSpawnPelican, ApiModifyShots, ApiHoming, ApiStopShots, ApiNotice, ApiHookEx, ApiCodeMatches, ApiReadCode, ApiSyncState, ApiSyncMod, ApiSyncAnswer, ApiStatsSource, ApiSetStatus};
     int setupOrder[MAX_MODS];
     SetupOrder(setupOrder);
     if (g_modCount > 1) Note("code mods are set up in the order of their ids (the same on every machine); their edits apply in load order");
@@ -1114,6 +1119,7 @@ __declspec(dllexport) int hellforge_loader_start(const wchar_t* plan)
     g_modsSettingUp = 0;
     FinishSetupEdits(); /* fields.c: the edits queued while the mods set up, reported and applied in load order */
     CoopDiagStart(); /* coop_diag.c: before the event sources install (they hook the kinds someone listens to) */
+    OpenSessionEnd(); /* mod_status.c: the session runner's stop, which the watch thread waits on */
     HANDLE thread = CreateThread(NULL, 0, Watch, NULL, 0, NULL);
     if (thread != NULL) CloseHandle(thread);
     HANDLE live = g_logs[0] ? CreateThread(NULL, 0, LiveWatch, NULL, 0, NULL) : NULL; /* the launcher's live editor */

@@ -98,6 +98,8 @@ public static unsafe class ModLoaderSmoke
         File.Copy(Path.Combine(standIns, "steam_api64.dll"), Path.Combine(root, "steam_api64.dll"));
         Environment.SetEnvironmentVariable("HELLFORGE_MODLOADER", Path.Combine(root, "hellforge_modloader.dll"));
         Environment.SetEnvironmentVariable("HELLFORGE_MODLOADER_PLAN", planPath);
+        // the session runner's two events for this "game" (SDK 16, the session's end), made before the loader starts
+        using var endSignal = SessionEndSignal.Create(Environment.ProcessId)!;
         NativeLibrary.Load(Path.Combine(root, "steam_api64.dll"));
 
         string Log(string name) => File.Exists(Path.Combine(root, name)) ? ReadShared(Path.Combine(root, name)) : "";
@@ -161,10 +163,27 @@ public static unsafe class ModLoaderSmoke
         Expect(WaitFor(() => rows[0x18 + 13] == 14), "The Machine Gun mod widens deposit_value once the network configuration is ready");
         Expect(rows[13] == 1, "Other field types are untouched");
         Expect(Log("mod-skyeshade.machine-gun-10k-code.log").Contains("holds up to 16383"), "The mod logs to its own log");
+        SessionEndChecks(root, endSignal, Expect);
 
         Console.WriteLine($"Mod loader smoke: {(problems.Count == 0 ? "passed" : problems.Count + " problem(s)")}; logs in {root}");
         foreach (var problem in problems) Console.Error.WriteLine("  failed: " + problem);
         return problems.Count == 0 ? 0 : 1;
+    }
+
+    // SDK 16: the hook-test mods' status in mod-status.tsv, then the session's end as the session runner tells it: the mods
+    // hear it, the loader answers, and their status says so.
+    static void SessionEndChecks(string root, SessionEndSignal endSignal, Action<bool, string> expect)
+    {
+        string Log(string name) => File.Exists(Path.Combine(root, name)) ? ReadShared(Path.Combine(root, name)) : "";
+        var statuses = ModStatus.Read(root);
+        expect(statuses?.GetValueOrDefault("test.hook") == "detour installed", "set_status reaches mod-status.tsv, its tab a space: " + Log(ModStatus.FileName));
+        expect(statuses?.GetValueOrDefault("test.hook2") == "detour installed", "Each mod has its own status");
+        expect(Log("mod-test.hook.log").Contains("status: detour installed"), "The mod's log records its status");
+        expect(endSignal.Signal(TimeSpan.FromSeconds(5)), "The loader answers the session's end");
+        expect(Log("modloader.log").Contains("session end: the session is stopping"), "modloader.log notes the session's end");
+        expect(Log("mod-test.hook.log").Contains("heard the session end") && Log("mod-test.hook2.log").Contains("heard the session end"),
+            "Both hook-test mods hear the session's end");
+        expect(ModStatus.Read(root)?.GetValueOrDefault("test.hook") == "session over", "A status set at the session's end is kept");
     }
 
     static string ReadShared(string path)
