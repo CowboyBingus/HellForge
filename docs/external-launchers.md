@@ -148,7 +148,7 @@ lists and creates profiles; `settings --profile <name>` selects one.
 ```
 HellForge.Cli.exe play [--profile <name>] [--war live | frozen | open] [--local-playfab yes | no] [--multiplayer yes | no]
                        [--engine-log yes | no] [--crash-dump yes | no] [--sandbox yes | no] [--game-options "<launch options>"]
-                       [--wait yes] [--dry-run yes]
+                       [--full-ownership-check yes | no] [--wait yes] [--dry-run yes]
 ```
 
 | Option | Default (the launcher's setting) | Meaning |
@@ -161,6 +161,7 @@ HellForge.Cli.exe play [--profile <name>] [--war live | frozen | open] [--local-
 | `--crash-dump` | `no` | a full memory dump if the game crashes (large) |
 | `--sandbox` | `yes` where the sandbox can run | the game at low integrity, with Steam through the Steam broker ([steam-bridge.md](steam-bridge.md)); on unless turned off, but only with an engine built with the Steam bridge (`settings` prints `steamBridge`) and only on Windows, so `play` runs unsandboxed elsewhere even when `settings` prints `"sandbox": true`. An installation with the older Windows Firewall rules gets the WFP block placed first (one Windows prompt) |
 | `--game-options` | the launcher's launch options | options for the game's command line, as Steam takes them; options a session sets itself are refused |
+| `--full-ownership-check` | `no` | `yes` asks Steam to confirm ownership even when a check of this installation passed within the last 7 days for the same Steam account and game build (which a session otherwise reuses); for this session only, not a setting |
 | `--dry-run yes` | | prints the session runner's command line and starts nothing |
 
 Once the session runner has made its run folder, `play` prints
@@ -197,7 +198,7 @@ Only the newest ten are kept. These are the files to show a player:
 | File | What it holds |
 |---|---|
 | `session.log` | the session runner's steps |
-| `result.json` | the session's status and outcome |
+| `result.json` | the session's status and outcome; `ownershipCheck` is `full` when it asked Steam, `recent` when it reused a check that passed at `ownershipConfirmedUtc` |
 | `modloader.log` | the mod loader: which mods loaded, and why one did not |
 | `modlist.txt` | the mods the session ran, in load order |
 | `mod-<id>.log` | a code mod's own log; `mod-lua.<name>.log` is a Lua mod's |
