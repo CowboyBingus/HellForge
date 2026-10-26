@@ -58,8 +58,8 @@ What a live mod registers is numbered as a fresh start of the session's mods wou
 the order of their ids, and each one's stratagems, projectiles, damage types, behaviours and abilities are numbered in
 its call order; weapons and entities by their resource ids. Friends with the same mods therefore number them alike, as
 co-op needs. The change is refused (a restart) when that number is not free: another mod that stays holds it, or a mod
-taken out held it under another name. A new version of your mod that registers the same names again takes over its old
-numbers.
+taken out this session held it (until the next session only that mod's own entries, under the same names, take it
+back). A new version of your mod that registers the same names again takes over its old numbers.
 
 New items are owned at once (the catalogue's copies of the base's items, as the backend makes them at login). What a mod
 taken out registered stays in the game's tables, so nothing that still holds it breaks, but it leaves `content()`,

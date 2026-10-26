@@ -165,6 +165,30 @@ static int OwnOwned(uintptr_t manager, uint32_t mixId)
 }
 
 /* On the game thread: the batch's records appended, the catalogue sorted, and each item owned (or, take, given back). */
+/* One item's records appended, copies of its base's: how many (0: its base is not in the catalogue). */
+static int OwnAppendItem(uintptr_t manager, const OwnItem* item)
+{
+    if (item->kind == OWN_STRATAGEM) return OwnStratagem(manager, item);
+    return item->kind == OWN_WEAPON ? OwnWeapon(manager, item) : OwnDifficulty(manager, item);
+}
+
+/* The batch's new records appended: 1 when any was. */
+static int OwnAppendAll(uintptr_t manager, OwnBatch* b)
+{
+    int appended = 0;
+    for (int i = 0; i < b->count; i++)
+    {
+        const OwnItem* item = &b->items[i];
+        if (item->take || OwnEntry(manager, item->mixId, 0, 0) >= 0) continue; /* given back, or in the catalogue already */
+        if (*(const uint32_t*)(manager + OWN_COUNT) + 16 > OWN_MAX) { b->why = "the game's catalogue is full"; break; }
+        int added = OwnAppendItem(manager, item);
+        if (added == 0 && b->why == NULL) b->why = kOwnNoBase[item->kind];
+        b->added += added;
+        appended |= added > 0;
+    }
+    return appended;
+}
+
 static void OwnBatchStep(void* arg)
 {
     OwnBatch* b = (OwnBatch*)arg;
@@ -173,19 +197,7 @@ static void OwnBatchStep(void* arg)
     uintptr_t manager = g_ownManager != NULL ? g_ownManager() : 0;
     if (manager == 0 || *(const uint32_t*)(manager + OWN_CATALOGUE) != 2 || *(const uint32_t*)(manager + OWN_INVENTORY) != 2)
     { b->why = "the game's catalogue is not loaded"; return; }
-    int appended = 0;
-    for (int i = 0; i < b->count; i++)
-    {
-        const OwnItem* item = &b->items[i];
-        if (item->take) continue;
-        if (OwnEntry(manager, item->mixId, 0, 0) >= 0) continue; /* in the catalogue already (taken out and back) */
-        if (*(const uint32_t*)(manager + OWN_COUNT) + 16 > OWN_MAX) { b->why = "the game's catalogue is full"; break; }
-        int added = item->kind == OWN_STRATAGEM ? OwnStratagem(manager, item) : item->kind == OWN_WEAPON ? OwnWeapon(manager, item) : OwnDifficulty(manager, item);
-        if (added == 0) { if (b->why == NULL) b->why = kOwnNoBase[item->kind]; continue; }
-        b->added += added;
-        appended = 1;
-    }
-    if (appended)
+    if (OwnAppendAll(manager, b))
     {
         memset((void*)(manager + OWN_STARTS), 0, 24 * 4);
         g_ownSort();
