@@ -1,6 +1,7 @@
 /* The crash note (crash_notes.c): every fatal code it watches is noted, at most four times per code, so one code's
  * faults leave the others theirs; an access violation says what it read, the other codes say nothing of an access; a
- * stack overflow is written by the crash worker, for the crashed thread; a code it does not watch is left alone.
+ * stack overflow is written by the crash worker, for the crashed thread; a code it does not watch is left alone. The
+ * first noted fault leaves the small dump (crash-<pid>.dmp, written by the worker), the only one of the session.
  * Included by stats_test.c. */
 
 /* How often `needle` occurs in text. */
@@ -37,9 +38,16 @@ static void CrashNotesFixture(void)
     swprintf(path, MAX_PATH, L"%ls\\modloader.log", folder);
     DeleteFileW(path);
     HANDLE saved = g_log;
+    wchar_t savedLogs[MAX_PATH], dump[MAX_PATH];
+    wcscpy(savedLogs, g_logs);
+    wcscpy(g_logs, folder);
+    swprintf(dump, MAX_PATH, L"%ls\\crash-%lu.dmp", folder, GetCurrentProcessId());
+    DeleteFileW(dump);
     g_log = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     assert(g_log != INVALID_HANDLE_VALUE);
-    SetEnvironmentVariableW(L"HELLFORGE_CRASH_DUMP", NULL); /* no full dump */
+    SetEnvironmentVariableW(L"HELLFORGE_CRASH_DUMP", NULL); /* no full dump: the small one */
+    StartCrashWorker();
+    assert(g_crashWorkerReady && g_crashWorkerId != 0);
 
     static uintptr_t stack[300];
     EXCEPTION_RECORD record = {0};
@@ -55,8 +63,6 @@ static void CrashNotesFixture(void)
     CrashRaise(&info, EXCEPTION_INT_DIVIDE_BY_ZERO, 1);
     CrashRaise(&info, EXCEPTION_ILLEGAL_INSTRUCTION, 1);
     CrashRaise(&info, 0xE06D7363, 1);                      /* a C++ exception: not a crash yet */
-    StartCrashWorker();
-    assert(g_crashWorkerReady);
     CrashRaise(&info, EXCEPTION_STACK_OVERFLOW, 1);        /* through the worker */
 
     static char text[64 * 1024];
@@ -67,13 +73,23 @@ static void CrashNotesFixture(void)
     assert(CrashCount(text, "crash: c0000374 ") == 1 && CrashCount(text, "crash: c0000094 ") == 1 && CrashCount(text, "crash: c000001d ") == 1);
     assert(CrashCount(text, "crash: c00000fd ") == 1 && CrashCount(text, thread) == 8 && CrashCount(text, "(0x1234); rax 0 ") == 4);
     assert(CrashCount(text, "e06d7363") == 0 && CrashCount(text, "crash: by module: at no module") == 8);
+    char dumped[64];
+    snprintf(dumped, sizeof dumped, "crash dump: small dump written (thread %lu, ", GetCurrentThreadId());
+    assert(CrashCount(text, dumped) == 1 && CrashCount(text, "crash dump:") == 1 && g_crashWorkerReady);
+    assert(strstr(text, dumped) > strstr(text, "crash: by module:")); /* after the first note */
+    FILE* file = _wfopen(dump, L"rb");
+    char signature[4] = {0};
+    assert(file != NULL && fread(signature, 1, 4, file) == 4 && !memcmp(signature, "MDMP", 4));
+    fclose(file);
+    DeleteFileW(dump);
 
     CloseHandle(g_log);
     g_log = saved;
+    wcscpy(g_logs, savedLogs);
     DeleteFileW(path);
     RemoveDirectoryW(folder);
     memset((void*)g_crashNoted, 0, sizeof g_crashNoted);
     g_crashDumped = 0;
     puts("PASS crash notes: access violations, illegal instructions, heap corruption, stack overflow (by the worker) and "
-        "divide by zero, four of each code");
+        "divide by zero, four of each code; the small dump of the first, by the worker");
 }

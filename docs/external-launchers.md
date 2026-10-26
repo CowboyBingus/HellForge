@@ -161,7 +161,7 @@ HellForge.Cli.exe play [--profile <name>] [--war live | frozen | open] [--local-
 | `--local-playfab` | `yes` | the game's PlayFab calls go to the local backend |
 | `--multiplayer` | `yes` | co-op with Steam friends |
 | `--engine-log` | `yes` | the game's own log, copied into the session's logs |
-| `--crash-dump` | `no` | a full memory dump if the game crashes (large) |
+| `--crash-dump` | `no` | a full memory dump if the game crashes (large), instead of the small dump every crash leaves |
 | `--sandbox` | `yes` where the sandbox can run | the game at low integrity, with Steam through the Steam broker ([steam-bridge.md](steam-bridge.md)); on unless turned off, but only with an engine built with the Steam bridge (`settings` prints `steamBridge`) and only on Windows, so `play` runs unsandboxed elsewhere even when `settings` prints `"sandbox": true`. An installation with the older Windows Firewall rules gets the WFP block placed first (one Windows prompt) |
 | `--game-options` | the launcher's launch options | options for the game's command line, as Steam takes them; options a session sets itself are refused |
 | `--full-ownership-check` | `no` | `yes` asks Steam to confirm ownership even when a check of this installation passed within the last 7 days for the same Steam account and game build (which a session otherwise reuses); for this session only, not a setting |

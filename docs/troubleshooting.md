@@ -253,17 +253,18 @@ When a session ends in a crash, the Play page offers Save crash report. It saves
 HellForge's, the engine's and the game's versions, your Windows version and graphics driver, the session's settings,
 where the game crashed and which mods ran, and the session's logs. On top of the user folder and the PC's name, it
 leaves out Steam ids, IP addresses and the names of the other players HellForge's logs give. The game's own logs can
-name players in ways HellForge does not know, so read `summary.txt` before you post it. If Crash dump was on, the
-launcher asks whether to add the dump, which cannot be scrubbed. Open a GitHub issue then opens the new-issue page;
+name players in ways HellForge does not know, so read `summary.txt` before you post it. If the session wrote a crash
+dump, the launcher asks whether to add it, since a dump cannot be scrubbed. Open a GitHub issue then opens the new-issue page;
 nothing is sent until you attach the zip yourself.
 
 Settings > Troubleshooting has two switches for harder problems. Both apply to the next session.
 
 - Engine log starts the game with its own log switched on (`--log-to-file`) and copies that log into the session's logs,
   so Save logs to Desktop includes it. It helps find why a join or connection fails.
-- Crash dump writes a full memory dump of the game (about 1 GB) into the session's logs if it crashes. It holds what the
-  game had in memory, your Steam account name for one, so only send it to people you trust. Leave it off unless you need
-  it.
+- Crash dump writes a full memory dump of the game (about 1 GB) into the session's logs if it crashes. Without it, a
+  crash still leaves a small dump (`crash-<process id>.dmp`: the game's threads and the memory they point to, not all
+  of it). Either can hold what the game had in memory, your Steam account name for one, so only send a dump to people you
+  trust. Save logs to Desktop includes it. Leave Crash dump off unless someone asks for the full dump.
 
 ## Where to ask
 

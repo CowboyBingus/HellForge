@@ -59,9 +59,9 @@ The loader does not catch a mod's crash, so the game ends. Then:
    DLL is your code, and a fault in game.dll right after your mod changed something often is too. Notes cover access
    violations (`c0000005`), illegal instructions (`c000001d`), heap corruption (`c0000374`), stack overflows
    (`c00000fd`) and integer divide by zero (`c0000094`), the first four of each.
-2. Take a memory dump. The launcher's **Crash dump** setting (or `HellForge.Cli play --crash-dump yes`) writes a full
-   dump of the game at its first crash beside the session's logs (`crash-<pid>.dmp`), to open in WinDbg or Visual
-   Studio.
+2. Open the crash dump in WinDbg or Visual Studio. The first noted crash of a session leaves one beside the session's
+   logs (`crash-<pid>.dmp`): a small dump, with every thread's stack and registers and the memory they point to. The
+   launcher's **Crash dump** setting (or `HellForge.Cli play --crash-dump yes`) makes it a full memory dump instead.
 3. Narrow it down: run your mod alone, then with the others, and turn off one change at a time.
 
 HELLDIVERS 2 also crashes as it quits (`helldivers2.exe+0x626296` at the end of a session). That crash is the game's

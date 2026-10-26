@@ -19,6 +19,7 @@
 #include <string.h>
 #include <math.h>
 #include <tlhelp32.h>
+#include <dbghelp.h> /* MiniDumpWriteDump's types: the small crash dump (crash_notes.c) */
 #include "hellforge_mod.h"
 #include "MinHook.h"
 #include "hde/hde64.h" /* MinHook's instruction decoder: FarHook */

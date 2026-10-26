@@ -13,7 +13,8 @@ namespace HellForge.Core;
 //                loader's crash note: code, module and offset, thread), the mods, the loader's events before the crash
 //                and the last TailLines lines of its log;
 //   logs/        the session's export (SessionLogs.Export) without crash dumps;
-//   dump/        the crash dump, only when the player asks for it (it exists only with the Crash dump setting on).
+//   dump/        the crash dump, only when the player asks for it: the small one the mod loader writes at a crash, or
+//                the full one with the Crash dump setting.
 // Every text in it goes through ReportPrivacy, which leaves out more than the export does: it is made to be public. A
 // dump is the game's memory and cannot be scrubbed, which the summary and the launcher say plainly.
 public static partial class CrashReport
@@ -184,7 +185,7 @@ public static partial class CrashReport
     static void DumpLine(StringBuilder text, string run, bool included)
     {
         var dump = Dump(run);
-        text.AppendLine(dump == null ? "Crash dump: none (the Crash dump setting was off, or the game did not crash in a way that writes one)"
+        text.AppendLine(dump == null ? "Crash dump: none (the game did not crash in a way that writes one)"
             : included ? $"Crash dump: included as dump/{Path.GetFileName(dump)}. A dump is the game's memory as it crashed and cannot be scrubbed: " +
                 "it can hold your Steam account name and your friends' names. Only share it with someone you trust."
             : "Crash dump: not included (one was written; it is in the session's logs folder)");

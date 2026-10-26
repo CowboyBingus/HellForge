@@ -50,7 +50,7 @@ public partial class MainWindow
     {
         if (ConfirmOverlay.IsVisible) return false;
         ConfirmTitle.Text = "Add the crash dump?";
-        ConfirmText.Text = "This session wrote a crash dump (Settings > Crash dump). A dump is the game's memory as it crashed: HellForge " +
+        ConfirmText.Text = "This session wrote a crash dump. A dump is the game's memory as it crashed: HellForge " +
             "cannot scrub it, and it can hold your Steam account name and your friends' names. Add it only if you are fine with " +
             "whoever reads the issue seeing that. The rest of the report is scrubbed either way.";
         (ConfirmCancel.Content, ConfirmStop.Content) = ("Without the dump", "Add the dump");

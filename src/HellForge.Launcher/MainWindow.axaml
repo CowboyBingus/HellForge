@@ -433,7 +433,7 @@
                            Text="Starts the game with its own log switched on (--log-to-file) and copies that log into the session's logs, so &quot;Save logs to Desktop&quot; includes it. Helps find why a join or connection fails. Applies to the next session." />
                 <CheckBox x:Name="CrashDumpBox" Content="Crash dump" Margin="0,6,0,0" />
                 <TextBlock Classes="muted" TextWrapping="Wrap"
-                           Text="If the game crashes, writes a full memory dump of it (about 1 GB) into the session's logs, for a bug report about crashes. It holds what the game had in memory (your Steam account name, for one): only send it to someone you trust. Off unless you need it. Applies to the next session." />
+                           Text="A crash always leaves a small dump in the session's logs (the game's threads and the memory they point to, not all of it). This writes a full memory dump instead (about 1 GB), for a bug report about crashes that needs it. A dump holds what the game had in memory (your Steam account name, for one): only send it to someone you trust. Off unless you need it. Applies to the next session." />
               </StackPanel>
             </Border>
 
