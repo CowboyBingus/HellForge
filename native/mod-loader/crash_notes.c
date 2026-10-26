@@ -1,6 +1,7 @@
-/* Crash and hang diagnostics that are not a behaviour's (from behaviours.c): a freeze of the game's clock, any access
- * violation or illegal instruction, a fail-fast exit, and the war table's map preview watchpoints. Each logs and leaves
- * the game's own handling as it was. Included by hellforge_modloader.c after behaviours.c. */
+/* Crash and hang diagnostics that are not a behaviour's (from behaviours.c): a freeze of the game's clock, the faults a
+ * crash ends with (access violations, illegal instructions, heap corruption, stack overflows, divide by zero), a
+ * fail-fast exit, and the war table's map preview watchpoints. Each logs and leaves the game's own handling as it was.
+ * Included by hellforge_modloader.c after behaviours.c. */
 
 /* The game's two code modules: game.dll and helldivers2.exe, by their address ranges. */
 typedef struct GameModules { uintptr_t game; size_t gameSize; uintptr_t exe; size_t exeSize; } GameModules;
@@ -112,20 +113,18 @@ static void FreezeWatch(void)
     CloseHandle(snapshot);
 }
 
-/* Any access violation or illegal instruction: where it happened (game.dll / exe offset or raw), what it read, the main
- * registers and the game addresses on the stack, then left to the game's own handling. The game's crash reporter does
- * not always get to write its dump; this is the record the loader keeps. The first 4 only. */
 /* Diagnostics (the launcher's Crash dump setting: HELLFORGE_CRASH_DUMP names HellForge.Cli.exe): a full memory dump of the
- * game at its first crash, beside the session's logs. It is written from outside (HellForge.Cli crash-dump), while this
- * thread waits: a process dumping itself from its exception handler can deadlock on a lock a suspended thread holds. */
-static void WriteCrashDump(EXCEPTION_POINTERS* info)
+ * game at its first crash, beside the session's logs. It is written from outside (HellForge.Cli crash-dump), while the
+ * crashed thread (`thread`) waits: a process dumping itself from its exception handler can deadlock on a lock a
+ * suspended thread holds. */
+static void WriteCrashDump(EXCEPTION_POINTERS* info, DWORD thread)
 {
     wchar_t cli[MAX_PATH];
     DWORD length = GetEnvironmentVariableW(L"HELLFORGE_CRASH_DUMP", cli, MAX_PATH);
     if (length == 0 || length >= MAX_PATH || g_logs[0] == 0) return;
     wchar_t command[3 * MAX_PATH];
     swprintf(command, sizeof command / sizeof command[0], L"\"%ls\" crash-dump --pid %lu --thread %lu --pointers %llx --out \"%ls\\crash-%lu.dmp\"",
-        cli, GetCurrentProcessId(), GetCurrentThreadId(), (unsigned long long)(uintptr_t)info, g_logs, GetCurrentProcessId());
+        cli, GetCurrentProcessId(), thread, (unsigned long long)(uintptr_t)info, g_logs, GetCurrentProcessId());
     STARTUPINFOW startup = {sizeof startup};
     PROCESS_INFORMATION process;
     if (!CreateProcessW(cli, command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &startup, &process))
@@ -137,7 +136,7 @@ static void WriteCrashDump(EXCEPTION_POINTERS* info)
     GetExitCodeProcess(process.hProcess, &exit);
     CloseHandle(process.hThread);
     CloseHandle(process.hProcess);
-    Note(waited == WAIT_OBJECT_0 && exit == 0 ? "crash dump: written (thread %lu)" : "crash dump: not written (thread %lu, exit %lu)", GetCurrentThreadId(), exit);
+    Note(waited == WAIT_OBJECT_0 && exit == 0 ? "crash dump: written (thread %lu)" : "crash dump: not written (thread %lu, exit %lu)", thread, exit);
 }
 
 /* The registers that point into a module, appended to names at m: its length. */
@@ -297,33 +296,116 @@ static void CrashLocationRecords(const CONTEXT* c, uintptr_t game)
     CrashGenerationBlock(c, game);
 }
 
-static LONG CALLBACK CrashNote(EXCEPTION_POINTERS* info)
+/* The crash note's codes: those a game crash ends with. Each is noted at most CRASH_NOTES_PER_CODE times in a session,
+ * so faults of one code the game raises and handles itself (first-chance) leave the others their notes. */
+#define CRASH_HEAP_CORRUPTION 0xC0000374u /* STATUS_HEAP_CORRUPTION, raised by the heap when it finds itself damaged */
+static const DWORD kCrashCodes[] = {EXCEPTION_ACCESS_VIOLATION, EXCEPTION_ILLEGAL_INSTRUCTION, CRASH_HEAP_CORRUPTION, EXCEPTION_STACK_OVERFLOW,
+    EXCEPTION_INT_DIVIDE_BY_ZERO};
+#define CRASH_CODES ((int)(sizeof kCrashCodes / sizeof kCrashCodes[0]))
+#define CRASH_NOTES_PER_CODE 4
+static volatile LONG g_crashNoted[CRASH_CODES];
+static volatile LONG g_crashDumped; /* the first noted fault writes the session's dump */
+
+/* Which of kCrashCodes a code is, or -1. */
+static int CrashCodeIndex(DWORD code)
 {
-    static volatile LONG reported;
-    DWORD code = info->ExceptionRecord->ExceptionCode;
-    if ((code != EXCEPTION_ACCESS_VIOLATION && code != EXCEPTION_ILLEGAL_INSTRUCTION) || InterlockedIncrement(&reported) > 4)
-        return EXCEPTION_CONTINUE_SEARCH;
-    if (reported == 1) WriteCrashDump(info);
+    for (int i = 0; i < CRASH_CODES; i++)
+        if (kCrashCodes[i] == code) return i;
+    return -1;
+}
+
+/* An access violation's ", reading 0x..." (writing, executing), into text; empty for the other codes. */
+static void CrashAccess(const EXCEPTION_RECORD* r, char* text, size_t size)
+{
+    text[0] = 0;
+    if (r->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || r->NumberParameters < 2) return;
+    const char* how = r->ExceptionInformation[0] == 8 ? "executing" : r->ExceptionInformation[0] ? "writing" : "reading";
+    snprintf(text, size, ", %s 0x%llx", how, (unsigned long long)r->ExceptionInformation[1]);
+}
+
+/* The crash note of a fault on `thread`: where it happened (game.dll / exe offset or raw), what an access violation
+ * read, the main registers and the game addresses on the stack, then the modules involved (CrashModules). The game's
+ * crash reporter does not always get to write its dump; this is the record the loader keeps. */
+static void CrashNoteOf(EXCEPTION_POINTERS* info, DWORD thread)
+{
     GameModules g = CurrentModules();
     uintptr_t at = (uintptr_t)info->ExceptionRecord->ExceptionAddress;
     const char* module = "?";
     uintptr_t offset = at;
     InGame(at, g.game, g.gameSize, g.exe, g.exeSize, &module, &offset);
     CONTEXT* c = info->ContextRecord;
-    char trail[1024];
+    char trail[1024], access[64];
     uintptr_t stack[256];
     if (SafeRead(c->Rsp, stack, sizeof stack)) trail[0] = 0;
     else GameTrail(stack, 256, 24, &g, trail, (int)sizeof trail);
-    Note("crash: %08lx on thread %lu at %s+0x%llx (0x%llx), %s 0x%llx; rax %llx rbx %llx rcx %llx rdx %llx rsi %llx rdi %llx r8 %llx "
-        "r9 %llx r12 %llx r13 %llx r14 %llx r15 %llx; stack:%s", code, GetCurrentThreadId(), module, (unsigned long long)offset,
-        (unsigned long long)at, info->ExceptionRecord->ExceptionInformation[0] ? "writing" : "reading",
-        (unsigned long long)(info->ExceptionRecord->NumberParameters > 1 ? info->ExceptionRecord->ExceptionInformation[1] : 0),
+    CrashAccess(info->ExceptionRecord, access, sizeof access);
+    Note("crash: %08lx on thread %lu at %s+0x%llx (0x%llx)%s; rax %llx rbx %llx rcx %llx rdx %llx rsi %llx rdi %llx r8 %llx "
+        "r9 %llx r12 %llx r13 %llx r14 %llx r15 %llx; stack:%s", info->ExceptionRecord->ExceptionCode, thread, module, (unsigned long long)offset,
+        (unsigned long long)at, access,
         (unsigned long long)c->Rax, (unsigned long long)c->Rbx, (unsigned long long)c->Rcx, (unsigned long long)c->Rdx,
         (unsigned long long)c->Rsi, (unsigned long long)c->Rdi, (unsigned long long)c->R8, (unsigned long long)c->R9,
         (unsigned long long)c->R12, (unsigned long long)c->R13, (unsigned long long)c->R14, (unsigned long long)c->R15, trail);
     CrashModules(at, c, &g, stack, sizeof stack);
     if (module[0] == 'g' && offset == 0xF8F670) CrashObjectiveList(c);
     if (module[0] == 'g' && offset == 0xC176B8) CrashLocationRecords(c, g.game);
+}
+
+/* The crash worker: a thread of its own, started with the crash note, that writes a note (and the session's dump) for
+ * a crashed thread while that thread waits. A stack overflow leaves its thread a few KB of stack, less than the note
+ * needs (its buffers alone take 4 KB), so that note is written here. Idle, it waits on g_crashAsk and costs nothing. */
+typedef struct CrashJob { EXCEPTION_POINTERS* info; DWORD thread; int dump; } CrashJob;
+static CrashJob g_crashJob;
+static HANDLE g_crashAsk, g_crashDone;
+static volatile LONG g_crashWorkerReady;
+static SRWLOCK g_crashJobLock = SRWLOCK_INIT;
+
+static DWORD WINAPI CrashWorker(void* unused)
+{
+    for (;;)
+    {
+        if (WaitForSingleObject(g_crashAsk, INFINITE) != WAIT_OBJECT_0) return 1;
+        CrashJob job = g_crashJob;
+        CrashNoteOf(job.info, job.thread);
+        if (job.dump) WriteCrashDump(job.info, job.thread);
+        SetEvent(g_crashDone);
+    }
+}
+
+/* Starts the crash worker, once. Without it a stack overflow is noted on its own thread, which may lack the stack for it. */
+static void StartCrashWorker(void)
+{
+    if (g_crashWorkerReady) return;
+    g_crashAsk = CreateEventW(NULL, FALSE, FALSE, NULL);
+    g_crashDone = CreateEventW(NULL, FALSE, FALSE, NULL);
+    HANDLE thread = g_crashAsk != NULL && g_crashDone != NULL ? CreateThread(NULL, 0, CrashWorker, NULL, 0, NULL) : NULL;
+    if (thread == NULL) { Note("crash notes: the crash worker did not start (%lu): a stack overflow may not be noted", GetLastError()); return; }
+    CloseHandle(thread);
+    InterlockedExchange(&g_crashWorkerReady, 1);
+}
+
+/* The crash handed to the worker, this thread waiting for it at most `wait` ms: 1, or 0 when there is no worker. */
+static int CrashHandOff(EXCEPTION_POINTERS* info, int dump, DWORD wait)
+{
+    if (!g_crashWorkerReady) return 0;
+    AcquireSRWLockExclusive(&g_crashJobLock);
+    g_crashJob = (CrashJob){info, GetCurrentThreadId(), dump};
+    SetEvent(g_crashAsk);
+    WaitForSingleObject(g_crashDone, wait);
+    ReleaseSRWLockExclusive(&g_crashJobLock);
+    return 1;
+}
+
+/* Every fault of the codes above, as it is raised (before the game's own handlers), is noted and then left to the
+ * game's own handling. */
+static LONG CALLBACK CrashNote(EXCEPTION_POINTERS* info)
+{
+    int kind = CrashCodeIndex(info->ExceptionRecord->ExceptionCode);
+    if (kind < 0 || InterlockedIncrement(&g_crashNoted[kind]) > CRASH_NOTES_PER_CODE) return EXCEPTION_CONTINUE_SEARCH;
+    int dump = InterlockedExchange(&g_crashDumped, 1) == 0;
+    /* the worker's wait covers a full dump's (WriteCrashDump: 120 s) */
+    if (kCrashCodes[kind] == EXCEPTION_STACK_OVERFLOW && CrashHandOff(info, dump, 130000)) return EXCEPTION_CONTINUE_SEARCH;
+    CrashNoteOf(info, GetCurrentThreadId());
+    if (dump) WriteCrashDump(info, GetCurrentThreadId());
     return EXCEPTION_CONTINUE_SEARCH;
 }
 

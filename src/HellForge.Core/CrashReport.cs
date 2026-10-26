@@ -76,6 +76,7 @@ public static partial class CrashReport
         0xC00000FD => "stack overflow",
         0xC000001D => "illegal instruction",
         0xC0000374 => "heap corruption",
+        0xC0000094 => "integer divide by zero",
         0xC0000142 => "a DLL failed to initialise",
         0xE06D7363 => "unhandled C++ exception",
         0x80000003 => "breakpoint",

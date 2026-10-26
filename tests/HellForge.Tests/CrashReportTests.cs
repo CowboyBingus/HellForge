@@ -100,7 +100,8 @@ static class CrashReportTests
             var handled = Session(new string('7', 32), """{"gameLaunched": true, "observationStoppedBySignal": true, "gameExitCode": "0x00000001"}""");
             File.WriteAllBytes(Path.Combine(handled, "crash-43.dmp"), [0x4D, 0x44, 0x4D, 0x50]);
             check(!CrashReport.Crashed(handled), "A session the launcher stopped after a fault the game handled left a dump.");
-            check(CrashReport.Meaning(0xC0000005) == "access violation" && CrashReport.Meaning(0x1) == null, "Exit code meanings.");
+            check(CrashReport.Meaning(0xC0000005) == "access violation" && CrashReport.Meaning(0xC0000094) == "integer divide by zero" &&
+                CrashReport.Meaning(0x1) == null, "Exit code meanings.");
         });
 
         var crashed = Session(new string('c', 32), $$"""

@@ -57,7 +57,8 @@ The loader does not catch a mod's crash, so the game ends. Then:
    game.dll+0x...`, or `?+0x...` outside the game), the address it read, the registers and the game addresses on the
    stack. The next line, `crash: by module: at my_mod.dll+0x...`, names the module, your DLL among them. A fault in your
    DLL is your code, and a fault in game.dll right after your mod changed something often is too. Notes cover access
-   violations and illegal instructions, the first four of them.
+   violations (`c0000005`), illegal instructions (`c000001d`), heap corruption (`c0000374`), stack overflows
+   (`c00000fd`) and integer divide by zero (`c0000094`), the first four of each.
 2. Take a memory dump. The launcher's **Crash dump** setting (or `HellForge.Cli play --crash-dump yes`) writes a full
    dump of the game at its first crash beside the session's logs (`crash-<pid>.dmp`), to open in WinDbg or Visual
    Studio.

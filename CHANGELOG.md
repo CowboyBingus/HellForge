@@ -130,6 +130,8 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
 - Premium content: a weapon or stratagem a mod makes as a copy of a premium one is locked for players who don't own the
   original, and a manifest's `"premium"` list (`warbond:<id>`, `dlc:<name>`, `item:<mixId>`) declares other content a mod
   recreates or builds on ([docs/modding/concepts.md](docs/modding/concepts.md#premium-content), #45).
+- The crash note in `modloader.log` also covers heap corruption, stack overflows and integer divide by zero, and notes
+  the first four faults of each kind instead of the first four in all.
 
 ### For launcher developers
 
