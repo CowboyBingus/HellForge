@@ -42,6 +42,20 @@ not submit the game's files or code taken from the game, or code from other proj
   [docs/external-launchers.md](docs/external-launchers.md) in the same pull request and say so in it. Launchers built
   on the CLI read that page.
 
+## Changelog
+
+[CHANGELOG.md](CHANGELOG.md) lists what changed in each release, as a player updating from the release before sees it.
+
+- **Each pull request** that changes something a player, a modder or a launcher would notice adds its line under
+  Unreleased, in the same pull request: Added, Changed or Fixed, with the issue and pull request numbers ("(#18, #50)").
+  CLI and settings changes go under "For launcher developers", SDK changes under "For mod makers".
+- **Fixed** is only for a bug the latest release has. Something new since that release that a later pull request fixes
+  goes into the line that adds it.
+- **Write it in players' words:** what they see or do, not the code. Leave out test status and what is still to do.
+- **The release pull request** renames Unreleased to the version and date (`## 0.2.0-beta (2026-10-22)`), puts a new
+  empty Unreleased above it, and the GitHub release notes are written from that section. Issues its Fixed lines name
+  are closed when the release lands.
+
 ## Building and testing
 
 You need Windows 10 or 11, the .NET 10 SDK, Visual Studio 2022 Build Tools with the C++ workload (the NativeAOT linker
