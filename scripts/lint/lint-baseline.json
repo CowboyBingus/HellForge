@@ -1,0 +1,6 @@
+{
+  "format": 2,
+  "note": "Known structure violations per (unit, file, rule, function) with the measured values. `py -3 scripts/lint/lint.py check` reports what is new or worse (scripts/lint/README.md); `update` rewrites this file.",
+  "entries": [
+  ]
+}

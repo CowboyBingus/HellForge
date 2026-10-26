@@ -24,6 +24,19 @@ public sealed record SupportedBuild(int SchemaVersion, string AppId, string Buil
         path is "bin/GameGuard.des" or "tools/GGSetup.exe" or "tools/gguninst.exe" ||
         path.StartsWith("bin/GameGuard/", StringComparison.Ordinal);
 
+    // Upscaler libraries players swap for newer versions (DLSS, XeSS, FSR): graphics only, no gameplay. They must be
+    // present, but any version counts as the build's, so sessions start with a swapped one and repairs keep it.
+    public static bool IsReplaceable(string path) =>
+        path is "bin/nvngx_dlss.dll" or "bin/libxess.dll" or "bin/amd_fidelityfx_upscaler_dx12.dll";
+
+    // A file in place that counts as the build's: its content, or any version of a replaceable one.
+    public static bool Accepts(string path, SupportedFile file)
+    {
+        var info = new FileInfo(path);
+        return info.Exists && (IsReplaceable(file.Path) ||
+            info.Length == file.Size && Sha1(path).Equals(file.Sha1, StringComparison.OrdinalIgnoreCase));
+    }
+
     static readonly Lazy<SupportedBuild> current = new(LoadEmbedded);
     public static SupportedBuild Current => current.Value;
 
@@ -50,19 +63,7 @@ public sealed record SupportedBuild(int SchemaVersion, string AppId, string Buil
         var depots = new List<SupportedDepot>();
         var files = new SortedDictionary<string, SupportedFile>(StringComparer.Ordinal);
         foreach (var (id, entry) in installed.Children.OrderBy(x => x.Key, StringComparer.Ordinal))
-        {
-            var manifestId = entry.Required("manifest");
-            var path = Path.Combine(depotCache, $"{id}_{manifestId}.manifest");
-            if (!File.Exists(path)) throw new InvalidDataException($"Steam has not cached depot manifest {id}_{manifestId}.");
-            var manifest = SteamDepotManifest.Load(path);
-            if (manifest.DepotId.ToString() != id || manifest.ManifestId.ToString() != manifestId)
-                throw new InvalidDataException($"Depot manifest {path} names another depot or manifest.");
-            if (manifest.FilenamesEncrypted) throw new InvalidDataException($"Depot {id} has encrypted file names.");
-            depots.Add(new(manifest.DepotId, manifestId));
-            foreach (var file in manifest.Files.Where(f => !f.IsDirectory && !IsUnused(f.Path)))
-                if (!files.TryAdd(file.Path, new(file.Path, (long)file.Size, file.Sha1, manifest.DepotId)))
-                    throw new InvalidDataException($"Two depots provide {file.Path}.");
-        }
+            depots.Add(ReadDepot(depotCache, id, entry, files));
         foreach (var required in new[] { LocalInstall.Exe, LocalInstall.GameDll })
         {
             if (!files.TryGetValue(required, out var file)) throw new InvalidDataException($"The depots lack {required}.");
@@ -72,6 +73,23 @@ public sealed record SupportedBuild(int SchemaVersion, string AppId, string Buil
         return new(1, LocalInstall.AppId, report.Pin.BuildId, report.Pin.ExeSha256, report.Pin.GameDllSha256, depots, files.Values.ToList());
     }
 
+    // An installed depot from its cached manifest, its files added to files (each from one depot only).
+    static SupportedDepot ReadDepot(string depotCache, string id, ValveData entry, SortedDictionary<string, SupportedFile> files)
+    {
+        var manifestId = entry.Required("manifest");
+        var path = Path.Combine(depotCache, $"{id}_{manifestId}.manifest");
+        if (!File.Exists(path)) throw new InvalidDataException($"Steam has not cached depot manifest {id}_{manifestId}.");
+        var manifest = SteamDepotManifest.Load(path);
+        if (manifest.DepotId.ToString() != id || manifest.ManifestId.ToString() != manifestId)
+            throw new InvalidDataException($"Depot manifest {path} names another depot or manifest.");
+        if (manifest.FilenamesEncrypted) throw new InvalidDataException($"Depot {id} has encrypted file names.");
+        var depot = new SupportedDepot(manifest.DepotId, manifestId);
+        foreach (var file in manifest.Files.Where(f => !f.IsDirectory && !IsUnused(f.Path)))
+            if (!files.TryAdd(file.Path, new(file.Path, (long)file.Size, file.Sha1, manifest.DepotId)))
+                throw new InvalidDataException($"Two depots provide {file.Path}.");
+        return depot;
+    }
+
     // A quick check without hashing: every file is present with its size. Verify proves the content.
     // Sessions write data/settings.ini from a kept original (GameSettings), so that original is the copy checked here.
     public bool IsComplete(string gameRoot) => Files.All(file =>
@@ -79,7 +97,7 @@ public sealed record SupportedBuild(int SchemaVersion, string AppId, string Buil
         var path = Path.Combine(gameRoot, file.Path);
         if (File.Exists(path + GameSettings.OriginalSuffix)) path += GameSettings.OriginalSuffix;
         var info = new FileInfo(path);
-        return info.Exists && info.Length == file.Size;
+        return info.Exists && (info.Length == file.Size || IsReplaceable(file.Path));
     });
 
     public static string Sha1(string path)
@@ -105,6 +123,7 @@ public sealed record SupportedBuild(int SchemaVersion, string AppId, string Buil
             var path = Path.Combine(gameRoot, file.Path);
             var info = new FileInfo(path);
             if (!info.Exists) problems.Add("missing: " + file.Path);
+            else if (IsReplaceable(file.Path)) { }
             else if (info.Length != file.Size) problems.Add("wrong size: " + file.Path);
             else
             {

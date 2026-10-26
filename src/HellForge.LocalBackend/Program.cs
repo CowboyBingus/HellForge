@@ -10,11 +10,11 @@ if (args.Contains("--help"))
     Console.WriteLine("--item-catalog <file> (development) serves that file's \"items\" array as /Progression/items.");
     Console.WriteLine("--profile-template <name> sets the inventory of a newly created profile: " + string.Join(", ", ProfileStore.TemplateNames));
     Console.WriteLine("Synthetic loopback-only login service. Default port 0 selects a free port. No game launch or routing changes.");
-    Console.WriteLine("--profile-dir keeps a persistent offline profile (requires startup fixtures); a new one starts from fixture defaults.");
+    Console.WriteLine("--profile-dir keeps a persistent local profile (requires startup fixtures); a new one starts from fixture defaults.");
     Console.WriteLine("--live-war <cache file> follows the live galactic war read-only through the community mirror " + LiveWar.Mirror + " (fetched before ready, then every 5 minutes; the cache is used offline).");
     Console.WriteLine("HellForge.LocalBackend fetch-live-war <cache file>   fetches the live war once into the cache file, for a session with no network (HELLFORGE_LINUX_NETNS=1 serves it without refreshing).");
     Console.WriteLine("--war open serves the all-planets war instead: the frozen war with every planet but Super Earth an enemy's, each with a liberation campaign (no --live-war).");
-    Console.WriteLine("--pipe <name> serves the game's lobby stand-in on that named pipe; --link none|steam:<steam_api64.dll>|udp:<id>:<port>:<peer>=<port>,... reaches friends' backends; --mod-digest <text> must match theirs; --mod-list <file> names its mods, so a refused join says which differ.");
+    Console.WriteLine("--pipe <name> serves the game's lobby stand-in on that named pipe; --link none|steam:<steam_api64.dll>|udp:<id>:<port>:<peer>=<port>,... reaches friends' backends; --mod-digest <text> must match theirs; --mod-list <file> names its mods, so a refused join says which differ; --modset <file> is the session's mod set, which joiners lacking its mods may download; --directory <folder> lists public lobbies in a folder (the loopback harness; Steam's directory otherwise); --rejoin <file> (after a mod sync, a ModSyncSession) invites the game back into that host's lobby once it is on the ship.");
     return 0;
 }
 if (args is ["profile", "show", var showDirectory])
@@ -81,8 +81,10 @@ try
     var warClock = new WarClock();
     var accountKeys = new AccountKeys();
     var presence = new FriendPresence();
-    // The mod loader writes the session's registered weapons beside the backend's evidence folder.
-    var registeredItems = new RegisteredItems(Path.Combine(Path.GetDirectoryName(evidence)!, "registered-items.json"));
+    // --sandbox: the session's game runs at low integrity, so it writes only into the run's game folder (PlaySession's
+    // gameOut), and the pipes it opens carry a low label (PipeServer)
+    var sandboxed = options.GetValueOrDefault("--sandbox") == "true";
+    var registeredItems = new RegisteredItems(RegisteredItems.PathFor(evidence, sandboxed));
     // --live-war <cache file>: follow the live galactic war read-only through the community mirror (LiveWar).
     Directory.CreateDirectory(evidence);
     var liveWarLog = Path.Combine(evidence, "live-war.log");
@@ -90,21 +92,45 @@ try
     var war = options.GetValueOrDefault("--war");
     if (war != null && war != OpenWar.Mode) throw new ArgumentException("--war takes \"" + OpenWar.Mode + "\".");
     var openWar = war == OpenWar.Mode;
+    // --war-seed <n>: the all-planets war's subfaction seed (0 the default layout)
+    var warSeed = options.GetValueOrDefault("--war-seed") is { } seedText
+        ? uint.TryParse(seedText, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed
+            : throw new ArgumentException("--war-seed takes a whole number from 0 to 4294967295.")
+        : 0u;
+    // --war-subfactions / --war-seaf yes|no: whether it deals its subfactions and SEAF allies from the seed (yes, the
+    // default) or keeps the frozen war's
+    bool Deal(string name) => options.GetValueOrDefault(name) switch
+    {
+        null or "yes" => true,
+        "no" => false,
+        _ => throw new ArgumentException(name + " takes yes or no."),
+    };
+    var dealSubfactions = Deal("--war-subfactions");
+    var dealSeaf = Deal("--war-seaf");
     await using var liveWar = !openWar && options.GetValueOrDefault("--live-war") is { } liveWarCache && startupFixtures
         ? await LiveWar.StartAsync(liveWarCache, warClock, message =>
         {
             lock (liveWarLog) File.AppendAllText(liveWarLog, DateTime.UtcNow.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) + " " + HellForge.Core.Privacy.Scrub(message) + Environment.NewLine);
         }, cacheOnly: Environment.GetEnvironmentVariable("HELLFORGE_LINUX_NETNS") == "1") // Linux: fetched before the namespace
         : null;
-    await using var app = LocalBackend.Create(port, evidence, mode, startupFixtures, profile, options.GetValueOrDefault("--item-catalog"),
-        options.GetValueOrDefault("--fixture-override"), options.GetValueOrDefault("--capture-mission-bodies") == "true", warClock, accountKeys, liveWar, presence, registeredItems, openWar);
+    await using var app = LocalBackend.Create(new BackendSettings(port, evidence, mode)
+    {
+        StartupFixtures = startupFixtures, Profile = profile, ItemCatalog = options.GetValueOrDefault("--item-catalog"),
+        FixtureOverride = options.GetValueOrDefault("--fixture-override"), CaptureMissionBodies = options.GetValueOrDefault("--capture-mission-bodies") == "true",
+        WarClock = warClock, AccountKeys = accountKeys, LiveWar = liveWar, Presence = presence, RegisteredItems = registeredItems, OpenWar = openWar, WarSeed = warSeed,
+        DealSubfactions = dealSubfactions, DealSeaf = dealSeaf
+    });
     await app.StartAsync(lifetime.Token);
     var pipeName = options.GetValueOrDefault("--pipe");
+    HellForge.Core.PipeServer.LowIntegrityClients = sandboxed;
     // --mod-list <file>: the digest's mods one by one (ModlistDiff's form), so a refused join can say which differ
     var modList = options.GetValueOrDefault("--mod-list") is { } modListFile ? File.ReadAllText(modListFile) : null;
     await using var multiplayer = pipeName != null
-        ? HellForge.LocalBackend.Multiplayer.MultiplayerHost.Start(pipeName, options.GetValueOrDefault("--link", "none"), options.GetValueOrDefault("--mod-digest", "none"), evidence, warClock, accountKeys, presence,
-            options.GetValueOrDefault("--mods"), modList)
+        ? HellForge.LocalBackend.Multiplayer.MultiplayerHost.Start(new(pipeName, options.GetValueOrDefault("--link", "none"), options.GetValueOrDefault("--mod-digest", "none"), evidence)
+        {
+            WarClock = warClock, AccountKeys = accountKeys, Presence = presence, ModsFolder = options.GetValueOrDefault("--mods"), ModList = modList,
+            ModSetFile = options.GetValueOrDefault("--modset"), DirectoryFolder = options.GetValueOrDefault("--directory"), RejoinFile = options.GetValueOrDefault("--rejoin")
+        })
         : null;
     var ready = new System.Text.Json.Nodes.JsonObject
     {

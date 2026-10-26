@@ -12,9 +12,12 @@ const string Usage = """
     HellForge.SdkShimGen verify <original.dll> <stand-in.dll>
     HellForge.SdkShimGen smoke <directory with both stand-ins>
     HellForge.SdkShimGen forward <original.dll> <real module> <handwritten.c> <output.def>
+    HellForge.SdkShimGen census-thunks <original.dll> <real module> <handwritten.c> <output.def> <output.c>   (the Steam census's stand-in)
+    HellForge.SdkShimGen steam-bridge <steam_api.json> <original steam_api64.dll> <bridge-methods.json> <handwritten.c[,more.c]> <output directory>   (the Steam bridge)
     HellForge.SdkShimGen verify-forward <original.dll> <real module> <handwritten.c> <stand-in.dll>
     HellForge.SdkShimGen smoke-cloud <steam_api64 stand-in> <original steam_api64.dll>
     HellForge.SdkShimGen smoke-lobby-link <directory with the stand-ins> <HellForge.LocalBackend.dll>
+    HellForge.SdkShimGen smoke-lobby-search <directory with PlayFabMultiplayerWin.dll> <HellForge.LocalBackend.dll>
     HellForge.SdkShimGen smoke-modloader <directory with the stand-ins and loader> <directory with the test DLLs> <Machine Gun 10k code mod>
     """;
 try
@@ -26,9 +29,15 @@ try
         ["verify", var original, var standIn] => Verify(original, standIn),
         ["smoke", var directory] => Smoke.Run(directory),
         ["forward", var original, var module, var handwritten, var output] => Forward(original, module, handwritten, output),
+        ["census-thunks", var original, var module, var handwritten, var definition, var code] =>
+            CensusThunks.Write(original, module, handwritten, definition, code, OwnFunctions),
         ["verify-forward", var original, var module, var handwritten, var standIn] => VerifyForward(original, module, handwritten, standIn),
+        ["steam-bridge", var sdkJson, var original, var table, var handwritten, var output] =>
+            SteamBridge.Write(sdkJson, original, table, handwritten, output,
+                files => files.Split(',').SelectMany(OwnFunctions).ToHashSet(StringComparer.Ordinal)),
         ["smoke-cloud", var standIn, var original] => CloudSmoke.Run(standIn, original),
         ["smoke-lobby-link", var directory, var backend] => LobbyLinkSmoke.Run(directory, backend),
+        ["smoke-lobby-search", var searchDirectory, var searchBackend] => LobbySearchSmoke.Run(searchDirectory, searchBackend),
         ["smoke-modloader", var directory, var tests, var machineGun] => ModLoaderSmoke.Run(directory, tests, machineGun),
         ["smoke-modloader", var directory, var tests, var machineGun, var compendium] => ModLoaderSmoke.Run(directory, tests, machineGun, compendium),
         _ => Fail(Usage)
@@ -43,10 +52,7 @@ static int Generate(string prefix, string original, string handwritten, string o
 {
     if (!Regex.IsMatch(prefix, "^[a-z]+$")) return Fail("Prefix must be lowercase letters.");
     var exports = PeTables.Exports(original).OrderBy(e => e.Name, StringComparer.Ordinal).ToList();
-    var declared = new Dictionary<string, HeaderFunction>(StringComparer.Ordinal);
-    foreach (var header in headers)
-        foreach (var function in HeaderFunctions.Parse(File.ReadAllText(header)))
-            declared.TryAdd(function.Name, function);
+    var declared = CollectDeclared(headers);
     var handwrittenText = File.ReadAllText(handwritten);
     var implemented = Regex.Matches(handwrittenText, @"^[\w \t\*]+?\b(?:PARTY_API|PFMULTIPLAYER_API)\s+(\w+)\s*\(", RegexOptions.Multiline)
         .Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
@@ -78,6 +84,33 @@ static int Generate(string prefix, string original, string handwritten, string o
     foreach (var export in exports)
         source.AppendLine($"    {{\"{export.Name}\", {(HasOutput(export.Name) ? "true" : "false")}}},");
     source.AppendLine("};").AppendLine("}").AppendLine();
+    var stubs = WriteStubs(source, exports, implemented, declared);
+    File.WriteAllText(Path.Combine(output, prefix + "_gen.g.cpp"), source.ToString());
+
+    var definition = new StringBuilder().AppendLine($"LIBRARY {dllName}").AppendLine("EXPORTS");
+    foreach (var export in exports.OrderBy(e => e.Ordinal)) definition.AppendLine($"    {export.Name} @{export.Ordinal}");
+    File.WriteAllText(Path.Combine(output, Path.GetFileNameWithoutExtension(dllName) + ".def"), definition.ToString());
+
+    Console.WriteLine($"{dllName}: {exports.Count} exports, {implemented.Count} hand-written, {stubs} generated stubs " +
+        $"({exports.Count(e => !implemented.Contains(e.Name) && !HasOutput(e.Name))} succeed by default).");
+    return 0;
+
+    bool HasOutput(string name) => declared.TryGetValue(name, out var function) && function.Parameters.Any(p => p.IsOutput);
+}
+
+// Every function declared across the SDK headers, the first declaration of each name winning.
+static Dictionary<string, HeaderFunction> CollectDeclared(string[] headers)
+{
+    var declared = new Dictionary<string, HeaderFunction>(StringComparer.Ordinal);
+    foreach (var header in headers)
+        foreach (var function in HeaderFunctions.Parse(File.ReadAllText(header)))
+            declared.TryAdd(function.Name, function);
+    return declared;
+}
+
+// A generated stub for every export the hand-written source does not implement; returns how many were written.
+static int WriteStubs(StringBuilder source, IReadOnlyList<PeExport> exports, HashSet<string> implemented, Dictionary<string, HeaderFunction> declared)
+{
     var stubs = 0;
     foreach (var export in exports.Where(e => !implemented.Contains(e.Name)))
     {
@@ -96,17 +129,7 @@ static int Generate(string prefix, string original, string handwritten, string o
             .AppendLine("}").AppendLine();
         stubs++;
     }
-    File.WriteAllText(Path.Combine(output, prefix + "_gen.g.cpp"), source.ToString());
-
-    var definition = new StringBuilder().AppendLine($"LIBRARY {dllName}").AppendLine("EXPORTS");
-    foreach (var export in exports.OrderBy(e => e.Ordinal)) definition.AppendLine($"    {export.Name} @{export.Ordinal}");
-    File.WriteAllText(Path.Combine(output, Path.GetFileNameWithoutExtension(dllName) + ".def"), definition.ToString());
-
-    Console.WriteLine($"{dllName}: {exports.Count} exports, {implemented.Count} hand-written, {stubs} generated stubs " +
-        $"({exports.Count(e => !implemented.Contains(e.Name) && !HasOutput(e.Name))} succeed by default).");
-    return 0;
-
-    bool HasOutput(string name) => declared.TryGetValue(name, out var function) && function.Parameters.Any(p => p.IsOutput);
+    return stubs;
 }
 
 // The stand-in must export exactly the original's names and ordinals and depend only on Windows system modules.

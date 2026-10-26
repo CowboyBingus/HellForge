@@ -81,6 +81,7 @@ static class MultiplayerTests
             try { Frame.Decode(bad); } catch (InvalidDataException) { rejected = true; }
             check(rejected, "A malformed frame decodes");
         }
+        DeliveryOrder(check);
 
         var network = new InMemoryNetwork();
         // The host's and the stranger's mods one by one (ModlistDiff's form): A at another version, B only the host's, C
@@ -101,6 +102,10 @@ static class MultiplayerTests
         // and their backend takes the host's war time.
         host.Clock.Set(5_000_000);
         stranger.Clock.Set(42);
+        // the host's backend lists the joiner for a sandboxed game's Steam P2P before its game hears of the joiner
+        // (MultiplayerHost.ListPeer): the host's game sends to a joiner the moment it does
+        var admitted = new System.Collections.Concurrent.ConcurrentQueue<(ulong Peer, bool GameKnew)>();
+        host.Lobby.PeerAdmitted += peer => admitted.Enqueue((peer, host.Inbox.Any(f => f.Type == "lobby.memberAdded")));
         guest.Lobby.FromLocal(Join("j1", GuestId, connection));
         var joined = guest.Next("lobby.result", check);
         check(joined.Text(0) == "j1" && joined.Text(1) == "join" && joined.Text(2) == "0" && joined.Text(3) == lobbyId, "Join succeeds");
@@ -109,8 +114,10 @@ static class MultiplayerTests
         _ = joined.Properties(ref index);
         check(joined.Int(index) == 2 && joined.Text(index + 1) == LobbyService.EntityId(HostId), "The joiner sees both members");
         var added = host.Next("lobby.memberAdded", check);
-        Thread.Sleep(100);
-        check(Math.Abs(guest.Clock.Seconds - 5_000_000) <= 1, "The friend's war time follows the host's");
+        check(admitted.TryPeek(out var listedFirst) && listedFirst.Peer == GuestId && !listedFirst.GameKnew,
+            "The joiner is admitted as a P2P peer before the host's game hears of it");
+        // (the host's own clock, not the value it was set to: both run on while the war.clock frame is on its way)
+        check(Poll.Until(() => Math.Abs(guest.Clock.Seconds - host.Clock.Seconds) <= 1), "The friend's war time follows the host's");
         network.Join(StrangerId + 20).Send(GuestId, new Frame("war.clock").Add(7).Encode(), true);
         Thread.Sleep(100);
         check(guest.Clock.Seconds >= 5_000_000, "War time from a machine that hosts no joined lobby is ignored");
@@ -272,6 +279,22 @@ static class MultiplayerTests
         var rejected = false;
         try { host.Keys.SetLocal("has spaces"); } catch (ArgumentException) { rejected = true; }
         check(rejected && host.Keys.Local == hostKey, "A malformed local key was accepted.");
+    }
+
+    // The in-memory network delivers a sender's frames to a receiver in the order they were sent, as a network does (a
+    // host's party.deviceLeft then party.networkGone came the other way round in CI, 2026-10-25).
+    static void DeliveryOrder(Action<bool, string> check)
+    {
+        const int count = 2000;
+        var network = new InMemoryNetwork();
+        var sender = network.Join(HostId);
+        var receiver = network.Join(GuestId);
+        var got = new BlockingCollection<int>();
+        receiver.Received += (_, bytes) => got.Add(BitConverter.ToInt32(bytes));
+        for (var i = 0; i < count; i++) sender.Send(GuestId, BitConverter.GetBytes(i), reliable: true);
+        var inOrder = true;
+        for (var i = 0; i < count && inOrder; i++) inOrder = got.TryTake(out var n, TimeSpan.FromSeconds(5)) && n == i;
+        check(inOrder, "The in-memory network delivers a sender's frames in the order they were sent");
     }
 
     static void PartyFlow(Action<bool, string> check)
