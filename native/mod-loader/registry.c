@@ -28,8 +28,9 @@
  * The engine's network configuration ([[helldivers2.exe + 0x1A10268]], the plan's network_config) has the same entity
  * types, index-aligned with the short ids: arrays {u32 count, u32 capacity, data, allocator} at +0x28 (u32 own index),
  * +0x40 (a byte per type, zero) and +0x70 (80-byte entries {u32 short id, ...} sorted by short id, binary-searched by the engine,
- * exe 0x34B700: a missing type crashed the game when the weapon was equipped). Each registered weapon gets its base's
- * entry under its own short id, appended (RegisterNetworkTypes). Short ids, and with them the network types, are given
+ * exe 0x34B700: a missing type crashed the game when the weapon was equipped). Each registered weapon gets a copy of its
+ * base's entry under its own short id, appended (RegisterNetworkTypes), with the two arrays an entry owns copied too
+ * (CopyNetworkEntry). Short ids, and with them the network types, are given
  * in the order of the entities' resource ids, not the mods' load order (WeaponOrder): a joining machine builds the
  * entity type another names by number, so friends who load the same mods in another order must number them alike
  * (2026-10-18: a friend's Pelican arrived on the others' machines as another mod's entity, sitting on the ground).

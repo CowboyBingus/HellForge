@@ -451,6 +451,37 @@ static uint8_t* EngineAllocate(uintptr_t array, size_t size)
     return block;
 }
 
+/* A network configuration entry copied for an added type. An 80-byte entry owns two engine arrays {u32 count, u32
+ * capacity, data, allocator} of u32s, its fields' type rows (+0x18) and their keys (+0x30, searched by exe 0x34B830),
+ * which the engine frees with the entry when the game quits (constructor exe 0x175C40, destructor 0x175B60, freeing
+ * only arrays with a capacity). A byte copy shared its base's, so the quit freed them twice: the second free left a
+ * worker thread's allocator span counted empty while that thread's scratch allocator was still in it, and the quit
+ * then read the scratch allocator after its span was given back (helldivers2.exe+0x5B7A43, 2026-10-25). The copy gets
+ * arrays of its own from the same allocator; one it cannot have stays its base's with capacity 0, so it is never freed
+ * through the copy. Returns how many it could not have. */
+static int CopyNetworkEntry(uint8_t* to, const uint8_t* from)
+{
+    static const uint32_t arrays[2] = {0x18, 0x30};
+    int shared = 0;
+    memcpy(to, from, 80);
+    for (int i = 0; i < 2; i++)
+    {
+        uint8_t* array = to + arrays[i];
+        uint32_t count;
+        uint8_t *data, *own = NULL;
+        memcpy(&count, array, 4);
+        memcpy(&data, array + 8, 8);
+        if (count != 0 && data != NULL && (own = EngineAllocate((uintptr_t)array, (size_t)count * 4)) != NULL)
+            memcpy(own, data, (size_t)count * 4);
+        uint8_t* kept = own != NULL || count == 0 ? own : data;
+        uint32_t capacity = own != NULL ? count : 0;
+        if (kept != NULL && kept == data) shared++;
+        memcpy(array + 4, &capacity, 4);
+        memcpy(array + 8, &kept, 8);
+    }
+    return shared;
+}
+
 /* The engine's network configuration: its entries (+0x70), own indices (+0x28) and values (+0x40), one per type. */
 typedef struct NetworkConfig { uintptr_t config; uint32_t count; uint8_t *entries, *own, *values; } NetworkConfig;
 
@@ -514,7 +545,8 @@ static void AddNetworkTypes(const NetworkConfig* n)
         int found = NetworkEntryOf(n->entries, count, w->baseShortId);
         if (found < 0 || w->shortId <= lastKey) { ApiLog(w->mod, "%s: no network type to copy (base short id %u); joining games with it may fail", w->name, w->baseShortId); continue; }
         uint32_t index = count + added++;
-        memcpy(newEntries + (size_t)index * 80, n->entries + (size_t)found * 80, 80);
+        if (CopyNetworkEntry(newEntries + (size_t)index * 80, n->entries + (size_t)found * 80))
+            ApiLog(w->mod, "%s: its network type keeps its base's field lists (no memory for its own)", w->name);
         memcpy(newEntries + (size_t)index * 80, &w->shortId, 4);
         memcpy(newOwn + (size_t)index * 4, &index, 4);
         newValues[index] = n->values[found];

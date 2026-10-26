@@ -15,10 +15,16 @@ and [ask](#where-to-ask).
 
 ### Steam must be running and signed in
 
-HellForge keeps the game's Steam ownership check. It runs at setup and before every launch, so Steam must be running and
-signed in to an account that owns HELLDIVERS 2 or has it through Steam Family Sharing. When it fails, setup says "The
+HellForge keeps the game's Steam ownership check. It runs at setup, and before a launch unless a check passed within the
+last 7 days for the same installation, the same Steam account (the one signed in now) and the same game build; another
+account, Steam signed out, a new game build or an older check runs it again. Either way Steam must be running and signed
+in to an account that owns HELLDIVERS 2 or has it through Steam Family Sharing. When it fails, setup says "The
 ownership check did not pass: ... Make sure Steam is running and signed in, then start setup again", and a session fails
-with "Steam ownership was not confirmed: ..." followed by the reason.
+with "Steam ownership was not confirmed: ..." followed by the reason. A failed check is never reused.
+
+The last passed check is kept in the installation's `temp\steam-ownership.json`, sealed for your Windows account.
+Deleting it, `HellForge.Cli play --full-ownership-check yes` or Settings > Installation's check and repair makes
+HellForge ask Steam again.
 
 Start Steam, sign in to the account that owns the game, and try again. The launcher's idle line is a reminder: "Ready.
 Steam must be running and signed in."
