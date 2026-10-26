@@ -156,6 +156,20 @@ static class StatsShareTests
         check(Eventually(() => Read(guestHostValues) == longKeys), "Long mod keys are kept: " + Read(guestHostValues));
         File.WriteAllText(hostModValues, silo.Replace(":2}", ":3}"));
         check(Eventually(() => Read(guestHostValues) == silo.Replace(":2}", ":3}")), "The host's values come back after the long keys.");
+        // The editor reading the file just as it is replaced: that write fails, and is made again a second later (not left
+        // until the host's next change). Windows only: elsewhere an open file does not stop its replacement.
+        if (OperatingSystem.IsWindows())
+        {
+            using (File.Open(guestHostValues, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                File.WriteAllText(hostModValues, longKeys);
+                check(Eventually(() => log.Any(l => l.Contains("mod content values could not be written", StringComparison.Ordinal))),
+                    "The joiner could not replace a file the editor holds open.");
+            }
+            check(Eventually(() => Read(guestHostValues) == longKeys), "Once the editor lets go, the host's latest values are written.");
+            File.WriteAllText(hostModValues, silo.Replace(":2}", ":3}"));
+            check(Eventually(() => Read(guestHostValues) == silo.Replace(":2}", ":3}")), "... and its next change too.");
+        }
 
         // The host applies a change: it reaches the joiner's game.
         File.WriteAllText(hostFile, Stats("\"AR-23 Liberator\":{\"weapon.fire_rate\":1000}"));
