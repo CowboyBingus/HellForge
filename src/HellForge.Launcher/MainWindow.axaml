@@ -74,8 +74,10 @@
                 <SelectableTextBlock x:Name="FailureText" Foreground="{StaticResource DangerBrush}" TextWrapping="Wrap" IsVisible="False" />
                 <TextBlock x:Name="HintText" Classes="muted" TextWrapping="Wrap" />
                 <ProgressBar x:Name="BootProgress" Classes="detail" Minimum="0" Maximum="1000" IsVisible="False" Margin="0,6,0,0" />
-                <!-- After a session that ended in a crash (CrashReport): one zip for a GitHub issue, saved to the Desktop -->
+                <!-- After a session that ended in a crash (CrashReportOffer.cs): its logs for whoever helps, and one zip for a GitHub issue,
+                     both saved to the Desktop -->
                 <StackPanel x:Name="CrashReportPanel" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0" IsVisible="False">
+                  <Button x:Name="CrashLogsButton" Classes="ghost" Content="Save logs to Desktop" />
                   <Button x:Name="CrashReportButton" Classes="ghost" Content="Save crash report" />
                   <Button x:Name="CrashIssueButton" Classes="ghost" Content="Open a GitHub issue" IsVisible="False" />
                 </StackPanel>

@@ -96,6 +96,7 @@ static class CrashReportTests
         test("A session crashed when the game left a dump, or ended by itself with an error or a crash note; not when it was stopped", () =>
         {
             check(CrashReport.Crashed(Session(new string('1', 32), """{"gameLaunched": true, "gameExitCode": "0xC0000005"}""")), "An access violation exit.");
+            check(CrashReport.ExitText(Path.Combine(sessions, new string('1', 32))) == "0xC0000005 (access violation)", "The launcher's text for the exit.");
             check(!CrashReport.Crashed(Session(new string('2', 32), """{"gameLaunched": true, "gameExitCode": "0x00000000"}""")), "A clean exit.");
             check(!CrashReport.Crashed(Session(new string('3', 32), """{"gameLaunched": true, "observationStoppedBySignal": true, "gameExitCode": "0x00000001"}""")),
                 "A session the launcher stopped.");
@@ -106,6 +107,9 @@ static class CrashReportTests
             var dumped = Session(new string('6', 32), "{}");
             File.WriteAllBytes(Path.Combine(dumped, "crash-42.dmp"), [0x4D, 0x44, 0x4D, 0x50]);
             check(CrashReport.Crashed(dumped), "A session that left a dump.");
+            check(CrashReport.ExitText(dumped) == null, "No exit code kept: no text.");
+            check(CrashReport.ExitText(Session(new string('8', 32), """{"gameLaunched": true, "exitCode": "-1073741515"}""")) ==
+                "0xC0000135 (a DLL the game needs could not be found)", "The runner's own exit code, as a start-up DLL failure.");
             var handled = Session(new string('7', 32), """{"gameLaunched": true, "observationStoppedBySignal": true, "gameExitCode": "0x00000001"}""");
             File.WriteAllBytes(Path.Combine(handled, "crash-43.dmp"), [0x4D, 0x44, 0x4D, 0x50]);
             check(!CrashReport.Crashed(handled), "A session the launcher stopped after a fault the game handled left a dump.");

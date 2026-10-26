@@ -61,6 +61,11 @@ public static partial class CrashReport
         return LoaderLog(run) is { } log && FindFault(Tail(log, int.MaxValue)) != null;
     }
 
+    // How the game ended, for the launcher's status: "0xC0000005 (access violation)", or null when no exit code was kept.
+    public static string? ExitText(string run) =>
+        SessionFiles.ReadJson(Path.Combine(run, "result.json")) is { } result && ExitCode(result) is { } code
+            ? $"0x{code:X8}" + (Meaning(code) is { } meaning ? $" ({meaning})" : "") : null;
+
     static uint? ExitCode(JsonElement result)
     {
         var text = SessionFiles.Text(result, "gameExitCode");
@@ -69,7 +74,8 @@ public static partial class CrashReport
         return int.TryParse(SessionFiles.Text(result, "exitCode"), CultureInfo.InvariantCulture, out var code) ? unchecked((uint)code) : null;
     }
 
-    // What a Windows exit code means, for the ones crashes end with.
+    // What a Windows exit code means, for the ones crashes end with, and those of a DLL the game could not start with (as
+    // the session runner's Tools.ExitMeaning names them).
     public static string? Meaning(uint code) => code switch
     {
         0xC0000005 => "access violation",
@@ -79,6 +85,11 @@ public static partial class CrashReport
         0xC0000374 => "heap corruption",
         0xC0000094 => "integer divide by zero",
         0xC0000142 => "a DLL failed to initialise",
+        0xC0000135 => "a DLL the game needs could not be found",
+        0xC000007B => "a DLL the game loads is damaged or for the wrong architecture",
+        0xC0000022 => "Windows or security software denied the game access",
+        0xC0000428 => "Windows blocked an unsigned DLL",
+        0xC0000361 => "a Windows policy blocked a file the game loads",
         0xE06D7363 => "unhandled C++ exception",
         0x80000003 => "breakpoint",
         _ => null

@@ -249,14 +249,15 @@ In the text files in the zip, your Windows user folder is written as `%USERPROFI
 PC's name as `PC`. Paths stay readable. The zip still names Steam accounts by their id. Files that are not text, such
 as a crash dump, go in as they are.
 
-When a session ends in a crash, the Play page offers Save crash report. It saves one zip to your Desktop
+When a session ends in a crash, the Play page says so, with the game's exit code and what it means, and offers Save
+logs to Desktop and Save crash report. Save crash report saves one zip to your Desktop
 (`HellForge-crash-report-<date>-<time>.zip`) made to be attached to a public GitHub issue: a `summary.txt` with
 HellForge's, the engine's and the game's versions, your Windows version and graphics driver, the session's settings,
 where the game crashed and which mods ran, and the session's logs. On top of the user folder and the PC's name, it
 leaves out Steam ids, IP addresses and the names of the other players HellForge's logs give. The game's own logs can
 name players in ways HellForge does not know, so read `summary.txt` before you post it. If the session wrote a crash
-dump, the launcher asks whether to add it, since a dump cannot be scrubbed. Open a GitHub issue then opens the new-issue page;
-nothing is sent until you attach the zip yourself.
+dump, the launcher asks whether to add it, since a dump cannot be scrubbed. Open a GitHub issue then opens the
+new-issue page; nothing is sent until you attach the zip yourself.
 
 Settings > Troubleshooting has two switches for harder problems. Both apply to the next session.
 

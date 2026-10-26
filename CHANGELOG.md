@@ -81,6 +81,8 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
   panel with the mod list (#34).
 - The in-game editor shows the values on screen first, before it works out which mod holds each one (#34).
 - Save logs to Desktop from a sandboxed session leaves out the game's AppData copy, saves and shader cache (#40).
+- After a crash the Play page says "The game crashed." with the game's exit code and what it means, instead of
+  "Session ended.", and offers Save logs to Desktop beside Save crash report.
 - Sessions that ended in a crash keep their logs past the newest ten, the five newest of them, so a crash report can
   still be made a few sessions later.
 - A crash leaves a small dump in the session's logs (the game's threads and the memory they point to, not all of
