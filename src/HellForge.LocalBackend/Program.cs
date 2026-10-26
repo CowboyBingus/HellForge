@@ -152,7 +152,8 @@ try
         ? HellForge.LocalBackend.Multiplayer.MultiplayerHost.Start(new(pipeName, options.GetValueOrDefault("--link", "none"), options.GetValueOrDefault("--mod-digest", "none"), evidence)
         {
             WarClock = warClock, AccountKeys = accountKeys, Presence = presence, ModsFolder = options.GetValueOrDefault("--mods"), ModList = modList,
-            ModSetFile = options.GetValueOrDefault("--modset"), DirectoryFolder = options.GetValueOrDefault("--directory"), RejoinFile = options.GetValueOrDefault("--rejoin")
+            ModSetFile = options.GetValueOrDefault("--modset"), DirectoryFolder = options.GetValueOrDefault("--directory"), RejoinFile = options.GetValueOrDefault("--rejoin"),
+            SandboxStats = sandboxed ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(evidence))!, "game", "sandbox-stats") : null
         })
         : null;
     var ready = new System.Text.Json.Nodes.JsonObject

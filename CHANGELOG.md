@@ -4,9 +4,40 @@ What changed in each HellForge release, newest first, as a player updating from 
 are GitHub issues and pull requests (#24); short hashes are commits on `dev`. Each pull request adds its lines under
 Unreleased, and a release renames that section ([CONTRIBUTING.md](CONTRIBUTING.md#changelog)).
 
-## Unreleased (0.3.0-beta)
+## Unreleased
 
-On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 16.
+On `dev`, since 0.3.0-beta. Mod SDK 16.
+
+### Added
+
+- The Mods page shows what a code mod says it is doing ("In game: ..." during a session, "Last session: ..." after it),
+  for mods that tell it (SDK 16) (#84).
+
+### Changed
+
+- After a crash the Play page says "The game crashed." with the game's exit code and what it means, instead of
+  "Session ended.", and offers Save logs to Desktop beside Save crash report (#84).
+- Sessions that ended in a crash keep their logs past the newest ten, the five newest of them, so a crash report can
+  still be made a few sessions later (#84).
+- A crash leaves a small dump in the session's logs (the game's threads and the memory they point to, not all of
+  it), also without the Crash dump setting, which now only makes it a full memory dump. Save logs to Desktop includes
+  it (#84).
+
+### For mod makers
+
+- SDK 16: `set_status`, a mod's line for the player, which the Mods page shows on its row (and `mod-status.tsv` in the
+  session's logs); and `HF_EVENT_SESSION_END`, the session's end, when the launcher stops it (the session runner waits
+  up to 2 seconds for the mods) or the game quits normally (#84).
+- `modloader.log` gives each code mod's version and its DLL's SHA-256, and, for a DLL that does not load, Windows'
+  error ("error 126: The specified module could not be found.") (#84).
+- `modloader.log`, each mod's log, `steam-cloud.log`, `session.log` and `backend/multiplayer.log` start with the local
+  date and time they were opened and the offset from UTC: their lines give only a time of day (#84).
+- The crash note in `modloader.log` also covers heap corruption, stack overflows and integer divide by zero, and notes
+  the first four faults of each kind instead of the first four in all (#84).
+
+## 0.3.0-beta (2026-10-26)
+
+[Release](https://github.com/SkyeShade/HellForge/releases/tag/v0.3.0-beta). Engine 0.1.41, mod SDK 15.
 
 ### Added
 
@@ -67,8 +98,6 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 16.
   complete by then.
 - Profile backups: every import or restore first saves the profile, the newest 10 are kept, and Profile lists them with
   Restore backup (#45).
-- The Mods page shows what a code mod says it is doing ("In game: ..." during a session, "Last session: ..." after it),
-  for mods that tell it (SDK 16) (#84).
 
 ### Changed
 
@@ -83,13 +112,6 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 16.
   panel with the mod list (#34).
 - The in-game editor shows the values on screen first, before it works out which mod holds each one (#34).
 - Save logs to Desktop from a sandboxed session leaves out the game's AppData copy, saves and shader cache (#40).
-- After a crash the Play page says "The game crashed." with the game's exit code and what it means, instead of
-  "Session ended.", and offers Save logs to Desktop beside Save crash report (#84).
-- Sessions that ended in a crash keep their logs past the newest ten, the five newest of them, so a crash report can
-  still be made a few sessions later (#84).
-- A crash leaves a small dump in the session's logs (the game's threads and the memory they point to, not all of
-  it), also without the Crash dump setting, which now only makes it a full memory dump. Save logs to Desktop includes
-  it (#84).
 - The launcher says HellForge runs the game locally with co-op over Steam, not "offline", and its tagline is "Local
   HELLDIVERS 2" (e224491, #31).
 - Play asks Steam whether you own the game only when no check passed in the last 7 days on the same installation,
@@ -132,9 +154,6 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 16.
 
 - SDK 14: `sync_state`, `sync_mod` and `sync_answer`, the MOD SYNC prompt's calls (#17).
 - SDK 15: `stats_source`, whether the lobby plays with the host's stats or each player's own (0df8add).
-- SDK 16: `set_status`, a mod's line for the player, which the Mods page shows on its row (and `mod-status.tsv` in the
-  session's logs); and `HF_EVENT_SESSION_END`, the session's end, when the launcher stops it (the session runner waits
-  up to 2 seconds for the mods) or the game quits normally (#84).
 - `HF_NOTICE_BRIEF` shows a notice as a short corner note (#34).
 - A mod's manifest can give its web page as `"url"`, which MOD SYNC shows as GET IT (15e54f1).
 - `HellForge.Cli mod-hash --mod <folder or zip>` prints a mod's content hash, as mod sync and the verified list use it
@@ -142,12 +161,6 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 16.
 - Premium content: a weapon or stratagem a mod makes as a copy of a premium one is locked for players who don't own the
   original, and a manifest's `"premium"` list (`warbond:<id>`, `dlc:<name>`, `item:<mixId>`) declares other content a mod
   recreates or builds on ([docs/modding/concepts.md](docs/modding/concepts.md#premium-content), #45).
-- `modloader.log` gives each code mod's version and its DLL's SHA-256, and, for a DLL that does not load, Windows'
-  error ("error 126: The specified module could not be found.") (#84).
-- `modloader.log`, each mod's log, `steam-cloud.log`, `session.log` and `backend/multiplayer.log` start with the local
-  date and time they were opened and the offset from UTC: their lines give only a time of day (#84).
-- The crash note in `modloader.log` also covers heap corruption, stack overflows and integer divide by zero, and notes
-  the first four faults of each kind instead of the first four in all (#84).
 
 ### For launcher developers
 
