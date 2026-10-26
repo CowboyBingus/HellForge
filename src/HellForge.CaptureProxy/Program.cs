@@ -3,7 +3,8 @@
 //
 // It maps the API host to 127.0.0.1 in the hosts file, trusts a per-run CA in LocalMachine\Root (with a CRL served on
 // loopback, since Schannel checks revocation), terminates the game's TLS and forwards every request unchanged to the real
-// API by IP. With the session the login returns it reads GET /api/Progression and GET /api/Progression/inventory and
+// API by IP. With the session the login returns it reads GET /api/Progression and GET /api/Progression/inventory,
+// repeating the client headers the login carried (CaptureHeaders: the API refuses a read without Accept-Language), and
 // writes them to --progression and --output. With --seal-key and --steam-account it seals the two files for that Steam
 // account (HellForge.Core SnapshotSeal) as soon as the inventory is in, and says so in its state file (CaptureState), so
 // the launcher takes them while the game plays on; the backend unlocks premium items only from a seal. It then keeps
@@ -192,6 +193,9 @@ using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
 
 var captured = 0;
 var sealOk = false;
+// The login's client headers, repeated on the capture's own reads (CaptureHeaders): the API refuses a read without
+// Accept-Language, which is how a live sync sealed an inventory and no progression (2026-10-26).
+Dictionary<string, string>? loginHeaders = null;
 // Cancelled when nothing was captured in time, and after a capture once the game exits (ForwardUntilGameExits).
 using var stop = new CancellationTokenSource(TimeSpan.FromMinutes(timeoutMin));
 try
@@ -274,6 +278,7 @@ async Task Handle(TcpClient client)
     {
         if (await ReadRequest(ssl) is not { } request) return;
         var path = request.Target.Split('?')[0];
+        if (path.Equals(LoginPath, StringComparison.OrdinalIgnoreCase)) loginHeaders = request.Headers;
         using var upstream = Forward(request);
         using var response = await http.SendAsync(upstream);
         var responseBody = await response.Content.ReadAsByteArrayAsync();
@@ -364,6 +369,8 @@ async Task<byte[]?> Get(string path, string session)
 {
     using var request = new HttpRequestMessage(HttpMethod.Get, $"https://{host}{path}");
     request.Headers.TryAddWithoutValidation("Authorization", "session " + session);
+    foreach (var (name, value) in CaptureHeaders.ForRead(loginHeaders, DateTimeOffset.UtcNow))
+        request.Headers.TryAddWithoutValidation(name, value);
     using var response = await http.SendAsync(request);
     var body = await response.Content.ReadAsByteArrayAsync();
     Log($"GET {path} {(int)response.StatusCode} {body.Length} bytes (login session)");

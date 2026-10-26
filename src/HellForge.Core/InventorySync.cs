@@ -144,12 +144,18 @@ public static class InventorySync
 
     // Once the proxy has sealed its capture (or exited with success): moves its sealed files into the snapshot folder and
     // writes the metadata.
-    // Returns null on success, or what went wrong. A previous snapshot is replaced only by a complete, sealed new one.
+    // Returns null on success, or what went wrong. A previous snapshot is replaced only by a complete, sealed new one; an
+    // inventory-only capture (a failed sync) replaces one without progression, never one with it.
     public static string? FinalizeCapture(string syncDir, string snapshotDir)
     {
         if (ReadInventory(Path.Combine(syncDir, InventoryFile), out var items) is { } inventoryProblem) return inventoryProblem;
         if (ReadProgression(Path.Combine(syncDir, ProgressionFile), out var experience) is { } progressionProblem) return progressionProblem;
         if (SnapshotSeal.Verify(syncDir, SealKeyFor(snapshotDir)) == null) return "The capture is not sealed for this PC. Sync again.";
+        // A capture without progression is a failed sync: the last complete snapshot keeps the level and unlocks it imported.
+        if (!File.Exists(Path.Combine(syncDir, ProgressionFile)) && ReadMetadata(snapshotDir) is { Progression: true } kept)
+            return "The capture got your inventory but not your progression, and the snapshot from " +
+                (kept.CapturedUtc?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "an earlier sync") +
+                " has one: the last snapshot is kept. Sync again.";
         try
         {
             Directory.CreateDirectory(snapshotDir);

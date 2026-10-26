@@ -39,7 +39,7 @@ static class InventorySyncTests
 
         test("A snapshot seal holds only for its files, its Steam account and this installation's key", () => Seals(root, check));
 
-        test("A capture becomes the snapshot only sealed and with an inventory list; a newer one without progression drops the older progression", () =>
+        test("A capture becomes the snapshot only sealed and with an inventory list; a capture without progression never replaces one with it", () =>
             Finalize(root, check));
 
         test("The capture's state says when it listens and when its files are sealed, for the launcher to take while the game plays on", () =>
@@ -47,6 +47,9 @@ static class InventorySyncTests
 
         test("The capture logs a refused request's short fields, never a token-like value, and only names of headers and query parameters", () =>
             Log(check));
+
+        test("The capture's own reads repeat the game's client headers, without the login's own, so the API's language check passes", () =>
+            Headers(check));
 
         test("Steam's 32-bit account id is the SteamID64 of an individual account", () =>
             check(SteamAccount.FromAccountId(39734273) == 76561198000000001, "Wrong SteamID64."));
@@ -129,17 +132,27 @@ static class InventorySyncTests
             "A progression that is not an object was saved, or changed the snapshot.");
         File.Delete(Path.Combine(sync, InventorySync.ProgressionFile));
         SnapshotSeal.Write(sync, key, Account, DateTime.UtcNow);
-        check(InventorySync.FinalizeCapture(sync, snapshot) == null, "A sealed inventory-only capture was refused.");
-        check(!File.Exists(Path.Combine(snapshot, InventorySync.ProgressionFile)) && SnapshotSeal.Verify(snapshot, key) != null,
-            "Progression from an older capture stayed beside a newer inventory.");
-        check(InventorySync.ReadMetadata(snapshot) is { Items: 2, Experience: null, Progression: false }, "Metadata claims progression that was not captured.");
+        check(InventorySync.FinalizeCapture(sync, snapshot) != null && File.Exists(Path.Combine(snapshot, InventorySync.ProgressionFile)) &&
+            InventorySync.ReadMetadata(snapshot) is { Items: 2, Experience: 485592, Progression: true },
+            "An inventory-only capture replaced the complete snapshot, or was not refused.");
+        check(File.Exists(Path.Combine(sync, InventorySync.InventoryFile)), "The refused capture's files were moved.");
 
         // A progression without XP is still progression; a snapshot from before the flag has it exactly when it has XP.
         File.WriteAllText(Path.Combine(sync, InventorySync.InventoryFile), Inventory);
         File.WriteAllText(Path.Combine(sync, InventorySync.ProgressionFile), """{"onboardingState":128}""");
         SnapshotSeal.Write(sync, key, Account, DateTime.UtcNow);
         check(InventorySync.FinalizeCapture(sync, snapshot) == null && InventorySync.ReadMetadata(snapshot) is { Experience: null, Progression: true },
-            "A progression without XP reads as a partial sync.");
+            "A progression without XP does not count as progression.");
+
+        // With no complete snapshot to keep, an inventory-only capture still makes one: the backend's premium ownership
+        // comes from it, while the launcher reports that sync as failed.
+        var newcomer = Path.Combine(root, "sync-install", InventorySync.SnapshotFolder, "newcomer");
+        File.WriteAllText(Path.Combine(sync, InventorySync.InventoryFile), Inventory);
+        File.Delete(Path.Combine(sync, InventorySync.ProgressionFile));
+        SnapshotSeal.Write(sync, InventorySync.SealKeyFor(newcomer), Account, DateTime.UtcNow);
+        check(InventorySync.FinalizeCapture(sync, newcomer) == null && InventorySync.ReadMetadata(newcomer) is { Items: 2, Experience: null, Progression: false },
+            "An inventory-only capture made no snapshot where there was none.");
+
         File.WriteAllText(Path.Combine(snapshot, InventorySync.MetadataFile), """{"items":2,"experience":7}""");
         check(InventorySync.ReadMetadata(snapshot) is { Progression: true }, "An older snapshot with XP lost its progression.");
         File.WriteAllText(Path.Combine(snapshot, InventorySync.MetadataFile), """{"items":2,"experience":null}""");
@@ -156,6 +169,36 @@ static class InventorySyncTests
         check(InventorySync.IsSealed(sync) && CaptureState.Read(sync) is { Progression: false }, "A sealed partial capture reads wrong.");
         File.WriteAllText(Path.Combine(sync, CaptureState.FileName), "{\"sealed\":");
         check(!InventorySync.IsSealed(sync), "A half-written state reads as sealed.");
+    }
+
+    static void Headers(Action<bool, string> check)
+    {
+        var login = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["User-Agent"] = "Stingray WIN64 : stingray:1 e176252a3ac4eb5436b25e7cef665a8c71afa243",
+            ["Accept-Language"] = "de-DE",
+            ["Authorization"] = "session 0",
+            ["X-Signature"] = new string('a', 44),
+            ["Key_ID"] = "1234",
+            ["Content-Length"] = "345"
+        };
+        var now = new DateTimeOffset(2026, 10, 26, 16, 44, 47, TimeSpan.Zero);
+        var headers = CaptureHeaders.ForRead(login, now);
+        check(headers.Count == 5 && headers["Accept-Language"] == "de-DE" && headers["User-Agent"] == login["User-Agent"] &&
+            headers["Accept"] == "application/json" && headers["Content-Type"] == "application/json",
+            "The login's language or user agent, or the JSON accept, is missing.");
+        check(headers["ct"] == "1793033087000000" && headers["ct"] == CaptureHeaders.Microseconds(now),
+            "The client time is not microseconds since the epoch: " + headers["ct"]);
+        check(!headers.ContainsKey("Authorization") && !headers.ContainsKey("X-Signature") && !headers.ContainsKey("Key_ID") &&
+            !headers.ContainsKey("Content-Length"), "A header of the login request itself was repeated.");
+
+        var bare = CaptureHeaders.ForRead(null, now);
+        check(bare["Accept-Language"] == CaptureHeaders.DefaultLanguage && !bare.ContainsKey("User-Agent"),
+            "A read without the login's headers has no language, or invented a user agent.");
+        var blank = CaptureHeaders.ForRead(new Dictionary<string, string> { ["Accept-Language"] = " " }, now);
+        check(blank["Accept-Language"] == CaptureHeaders.DefaultLanguage, "A blank language was repeated.");
+        var lower = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["accept-language"] = "ja-JP" };
+        check(CaptureHeaders.ForRead(lower, now)["Accept-Language"] == "ja-JP", "A lower-case header name was not found.");
     }
 
     static void Log(Action<bool, string> check)

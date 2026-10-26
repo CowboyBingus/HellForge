@@ -49,19 +49,16 @@ public partial class MainWindow
         BackupCombo.IsVisible = RestoreBackupButton.IsVisible = backups.Count > 0;
     }
 
-    // partialLog: the capture's log when it got the inventory without the progression, so only part of the review is filled.
-    async Task AfterCaptureAsync(LocalProfile profile, string? partialLog)
+    // After a complete sync (inventory and progression): the review, or the saved choices.
+    async Task AfterCaptureAsync(LocalProfile profile)
     {
-        var (synced, brush) = partialLog == null ? ("Synced", Green)
-            : ($"Partly synced: your inventory, but not your progression (see {partialLog}). Level and XP, warbond unlocks, ship " +
-               "modules and weapon levels, ship name and tutorial progress can't be imported from it", Orange);
         if (!AccountImportSettings.Load(AccountImportSettings.PathIn(profile.Folder)).AutoApply)
         {
-            SetSyncStatus(synced + ". Choose what to import below.", brush);
+            SetSyncStatus("Synced. Choose what to import below.", Green);
             await ShowReviewAsync(profile);
             return;
         }
-        if (await RunImportAsync(profile)) SetSyncStatus(synced + ". Imported with your saved choices; a backup was made first.", brush);
+        if (await RunImportAsync(profile)) SetSyncStatus("Synced and imported with your saved choices. A backup was made first.", Green);
     }
 
     async Task ShowReviewAsync(LocalProfile profile)

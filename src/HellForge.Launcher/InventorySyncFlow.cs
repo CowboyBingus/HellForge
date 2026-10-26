@@ -33,9 +33,10 @@ public partial class MainWindow
         if (paths.InstallRoot == null || !SyncCard.IsVisible) return;
         var info = InventorySync.ReadMetadata(InventorySync.SnapshotDirectory(paths.InstallRoot, Selected.Name));
         SyncDetailText.Text = info == null ? "No snapshot yet. Sync to copy your real inventory into this profile."
+            : !info.Progression ? "Last sync failed " + (info.CapturedUtc?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "at an unknown time") +
+                $": {info.Items:N0} items, no progression. Sync again to get your level, unlocks and ship."
             : "Last synced " + (info.CapturedUtc?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "at an unknown time") +
-              $": {info.Items:N0} items, " + (!info.Progression ? "no progression (a partial sync)."
-                  : info.Experience is { } xp ? $"{xp:N0} XP." : "progression captured.");
+              $": {info.Items:N0} items, " + (info.Experience is { } xp ? $"{xp:N0} XP." : "progression captured.");
         UpdateImportControls();
         if (SyncBusy) return;
         var leftover = InventorySync.HasLeftoverRedirect();
@@ -135,10 +136,20 @@ public partial class MainWindow
         }
         UpdateSyncStatus();
         var partial = InventorySync.ReadMetadata(snapshot) is not { Progression: true };
-        Append("Inventory sync complete for profile " + profile.Name + (partial ? ", without progression (see " + Path.Combine(folder, "proxy.log") + ")." : "."), LauncherLine);
+        if (partial)
+        {
+            // No progression is a failed sync, not a smaller success: the inventory alone still gives the backend premium
+            // ownership, but nothing is imported from half an account.
+            SyncFailed("The capture got your inventory but not your progression (see " + Path.Combine(folder, "proxy.log") + "). " +
+                "Nothing was imported; sync again.");
+            if (syncProxy is { HasExited: false })
+                Append("Inventory sync: the game stays connected through the capture until you close it; then the hosts line and certificate are removed.", LauncherLine);
+            return;
+        }
+        Append("Inventory sync complete for profile " + profile.Name + ".", LauncherLine);
         if (syncProxy is { HasExited: false })
             Append("Inventory sync: the game stays connected through the capture until you close it; then the hosts line and certificate are removed.", LauncherLine);
-        _ = AfterCaptureAsync(profile, partial ? Path.Combine(folder, "proxy.log") : null);
+        _ = AfterCaptureAsync(profile);
     }
 
     void SyncFailed(string error)
