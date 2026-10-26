@@ -123,7 +123,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
             try
             {
                 host.Stats = new StatsShare(host.transport, host.Lobby, pipeName["hellforge-".Length..], modsFolder, host.FriendName, host.Log,
-                    () => ModSettings.Read(modsFolder).HostStats, settings.SandboxStats);
+                    new StatsShareOptions(() => ModSettings.Read(modsFolder).HostStats, settings.SandboxStats));
                 var stats = host.Stats;
                 host.Assets = new AssetShare(host.transport, host.Lobby, stats.Live, host.Log, () => stats.LocalStats, () => stats.LobbyPlaysHostStats);
                 host.Log("Stats: every player keeps their own unless the host shares its (the Mods page); the lobby's packages load on every machine; this game's live-edit pipe is served here.");

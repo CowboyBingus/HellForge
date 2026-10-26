@@ -96,11 +96,10 @@ public sealed class StatsShare : IAsyncDisposable
     string role = "solo", roleHost = "";
     bool sessionSent;
 
-    // hostShares: whether friends play with this machine's stats when it hosts (ModSettings.HostStats; read each second).
-    // sandboxStats: the run's sandbox-stats folder when the game is sandboxed, else null.
     public StatsShare(IPeerTransport transport, LobbyService lobby, string runId, string modsFolder, Func<ulong, string> nameOf, Action<string> log,
-        Func<bool>? hostShares = null, string? sandboxStats = null)
+        StatsShareOptions? options = null)
     {
+        var (hostShares, sandboxStats) = options ?? new StatsShareOptions();
         this.transport = transport;
         this.lobby = lobby;
         this.nameOf = nameOf;
@@ -438,3 +437,7 @@ public sealed class StatsShare : IAsyncDisposable
         applying.Dispose();
     }
 }
+
+// HostShares: whether friends play with this machine's stats when it hosts (ModSettings.HostStats; read each second).
+// SandboxStats: the run's sandbox-stats folder when the game is sandboxed, else null.
+public sealed record StatsShareOptions(Func<bool>? HostShares = null, string? SandboxStats = null);
