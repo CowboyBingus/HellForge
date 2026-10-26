@@ -46,6 +46,8 @@ sealed partial class PlaySession(PlayOptions options)
     Thread? applier;
     DateTime? gameStarted;
     TextWriter? log;
+    // Whether this session asked Steam itself (Ownership): its second check then does too.
+    bool fullOwnershipCheckRan;
 
     string Shims => Path.Combine(app, "sdk-shims");
     string Scripts => Path.Combine(app, "scripts");
@@ -439,12 +441,42 @@ sealed partial class PlaySession(PlayOptions options)
         return local && v4 == 10013 ? 0 : 1;
     }
 
-    // The Steam ownership check, against the given steam_api64.dll: app/scripts/Test-SteamOwnership.ps1 on Windows, the
-    // probe itself under Wine (whose powershell.exe runs nothing and returns 0). Either way the evidence it writes decides
-    // (SteamOwnershipCheck.Problem): a check that ran nothing passes nothing.
+    // The Steam ownership check, against the given steam_api64.dll. A recent passed check stands in for it while
+    // SteamOwnershipRecord.Problem allows (the same installation, Steam account and game build, within its limit), unless
+    // the session was asked for the full check (--full-ownership-check); once a session has run the full check, it runs it
+    // again for the second check too, as before. Either way the session's result says which it was.
     void Ownership(string steamApi, string evidence)
     {
+        if (!options.FullOwnershipCheck && !fullOwnershipCheckRan)
+        {
+            var (record, why) = SteamOwnershipRecord.Reusable(install);
+            if (why == null)
+            {
+                result["ownershipCheck"] = "recent";
+                result["ownershipConfirmedUtc"] = record!.ConfirmedUtc.ToString("o");
+                Say($"Steam ownership: confirmed {record.ConfirmedUtc:yyyy-MM-dd HH:mm} UTC for this account and build; not asking Steam again.");
+                return;
+            }
+            Say("Steam ownership: asking Steam (" + why + ").");
+        }
+        fullOwnershipCheckRan = true;
+        result["ownershipCheck"] = "full";
         var started = DateTime.UtcNow;
+        try { FullOwnershipCheck(steamApi, evidence, started); }
+        catch (SessionFailure)
+        {
+            SteamOwnershipRecord.AfterCheck(install, evidence, passed: false, started);
+            throw;
+        }
+        if (!SteamOwnershipRecord.AfterCheck(install, evidence, passed: true, started))
+            Say("Steam ownership: confirmed, but not recorded for later sessions.");
+    }
+
+    // The full check: app/scripts/Test-SteamOwnership.ps1 on Windows, the probe itself under Wine (whose powershell.exe
+    // runs nothing and returns 0). Either way the evidence it writes decides (SteamOwnershipCheck.Problem): a check that ran
+    // nothing passes nothing.
+    void FullOwnershipCheck(string steamApi, string evidence, DateTime started)
+    {
         if (File.Exists(evidence)) File.Delete(evidence);
         if (LinuxNetworkBlock.UnderWine)
         {

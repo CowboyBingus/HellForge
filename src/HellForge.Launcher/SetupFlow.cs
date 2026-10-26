@@ -289,6 +289,9 @@ public partial class MainWindow
             (ownershipExit, ownershipError) = (ownership.ExitCode, ownership.Error);
         }
         if (ownershipExit == 0 && SteamOwnershipCheck.Problem(evidence, checkStarted) is { } problem) (ownershipExit, ownershipError) = (1, problem + ".");
+        // Setup always asks Steam. A pass is recorded for the sessions to reuse for a while (SteamOwnershipRecord); a
+        // failure ends the reuse of an earlier one.
+        SteamOwnershipRecord.AfterCheck(install, evidence, ownershipExit == 0, checkStarted);
         if (ownershipExit != 0)
             throw new SetupStopped("The ownership check did not pass: " + (ownershipError.Length > 0 ? ownershipError : $"exit code {ownershipExit}.") +
                 " Make sure Steam is running and signed in, then start setup again.");

@@ -67,6 +67,9 @@ public sealed class StatsShare : IAsyncDisposable
     readonly StatsSync sync = new();
     readonly SemaphoreSlim applying = new(1, 1);
     readonly object gate = new();
+    // Notices go to the game one after another, in the order they were made (each continues the one before).
+    readonly object noticesGate = new();
+    Task notices = Task.CompletedTask;
     readonly Timer timer;
     // host: the file last read, its version, whether friends play with it, and the friends that have it
     string? mine, mineMods, mineSettings, mineMounts;
@@ -81,6 +84,8 @@ public sealed class StatsShare : IAsyncDisposable
     long hostVersion = -1;
     bool hostShared;
     string? hostStats, hostMods, hostMounts;
+    bool hostWritePending; /* under gate: the host's files on disk are not the latest (WriteHostNow) */
+    readonly object hostWriteGate = new(); /* one WriteHostNow at a time; taken before gate */
     string role = "solo", roleHost = "";
     bool sessionSent;
 
@@ -100,7 +105,7 @@ public sealed class StatsShare : IAsyncDisposable
         hostStatsFile = Path.Combine(editor, HostStatsName);
         editorSettingsFile = Path.Combine(editor, EditorSettingsName);
         hostMountsFile = Path.Combine(editor, HostMountsName);
-        WriteHost(null, null, null); /* a session cut short leaves its host's files behind */
+        WriteHostNow(); /* a session cut short leaves its host's files behind */
         live = new LiveEditServer(runId);
         live.StateChanged += () => { lock (gate) sessionSent = false; _ = ApplyAsync(); };
         live.Start();
@@ -123,12 +128,12 @@ public sealed class StatsShare : IAsyncDisposable
                 if (hostGone)
                 {
                     log($"Stats: the host {LobbyService.EntityId(hostPeer)} is gone" + (hostShared ? "; this game's own values come back." : "."));
-                    (hostPeer, hostVersion, hostShared, hostStats, hostMods, hostMounts) = (0, -1, false, null, null, null);
+                    (hostPeer, hostVersion, hostShared, hostStats, hostMods, hostMounts, hostWritePending) = (0, -1, false, null, null, null, true);
                 }
                 var (wantRole, wantHost) = hostPeer != 0 ? ("joiner", nameOf(hostPeer)) : friends.Count > 0 ? ("host", "") : ("solo", "");
                 if (wantRole != role || wantHost != roleHost) (role, roleHost, sessionSent) = (wantRole, wantHost, false);
             }
-            if (hostGone) WriteHost(null, null, null);
+            if (HostWritePending()) WriteHostNow(); /* the host gone (its files go), or a write that failed */
             if (hostGone || !sessionSent) _ = ApplyAsync();
         }
         catch (Exception error) { log("Stats sharing failed: " + error.Message); }
@@ -221,12 +226,29 @@ public sealed class StatsShare : IAsyncDisposable
 
     // The host's Local Stats file and mod content values for the in-game editor (null: none, the files go), each written
     // whole (the editor reads them each second and skips one caught mid-write).
-    void WriteHost(string? stats, string? mods, string? mounts)
+    // Always the host's latest (hostStats, hostMods, hostMounts, read under the write lock), so two writes at once (two
+    // versions from the transport) cannot leave the older on disk. A write that failed (the editor had the file open
+    // as it was replaced) is made again on the next second's tick, not left until the host's next version.
+    void WriteHostNow()
     {
-        Write(hostStatsFile, stats, "Local Stats");
-        Write(hostModValuesFile, mods, "mod content values");
-        Write(hostMountsFile, mounts, "arm swaps");
-        void Write(string path, string? text, string what)
+        lock (hostWriteGate)
+        {
+            string? stats, mods, mounts;
+            lock (gate) (stats, mods, mounts, hostWritePending) = (hostStats, hostMods, hostMounts, false);
+            if (!WriteHost(stats, mods, mounts)) lock (gate) hostWritePending = true;
+        }
+    }
+
+    bool HostWritePending() { lock (gate) return hostWritePending; }
+
+    // True when all three were written (or removed).
+    bool WriteHost(string? stats, string? mods, string? mounts)
+    {
+        var written = Write(hostStatsFile, stats, "Local Stats");
+        written &= Write(hostModValuesFile, mods, "mod content values");
+        written &= Write(hostMountsFile, mounts, "arm swaps");
+        return written;
+        bool Write(string path, string? text, string what)
         {
             try
             {
@@ -238,13 +260,18 @@ public sealed class StatsShare : IAsyncDisposable
                     if (text == null) log($"Stats: the host's {what} is not a file the editor reads; it is left out.");
                     else if (dropped > 0) log($"Stats: {dropped} value(s) of the host's {what} are beyond the limits and left out.");
                 }
-                if (text == null) { if (File.Exists(path)) File.Delete(path); return; }
-                if (!Directory.Exists(Path.GetDirectoryName(path))) return;
+                if (text == null) { if (File.Exists(path)) File.Delete(path); return true; }
+                if (!Directory.Exists(Path.GetDirectoryName(path))) return true;
                 var partial = path + ".partial";
                 File.WriteAllText(partial, text);
                 File.Move(partial, path, overwrite: true);
+                return true;
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { log($"Stats: the host's {what} could not be written: " + error.Message); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                log($"Stats: the host's {what} could not be written (tried again in a second): " + error.Message);
+                return false;
+            }
         }
     }
 
@@ -282,7 +309,7 @@ public sealed class StatsShare : IAsyncDisposable
         }
         log(shared ? $"Stats: the host's Local Stats, version {received}, from {LobbyService.EntityId(peer)}."
             : $"Stats: the host {LobbyService.EntityId(peer)} lets every player keep their own stats (version {received}).");
-        WriteHost(text, mods, mounts);
+        WriteHostNow();
         _ = ApplyAsync();
     }
 
@@ -291,11 +318,16 @@ public sealed class StatsShare : IAsyncDisposable
     public void Notice(string kind, string title, IReadOnlyList<string> lines)
     {
         if (!live.Connected || live.Mismatched) { log($"Notice not shown, the game is not connected: {title}"); return; }
-        _ = Task.Run(async () =>
-        {
-            var result = await live.NoticeAsync(kind, title, lines);
-            log(result.Ok ? $"Notice shown in the game: {title}" : $"Notice not shown ({result.Detail}): {title}");
-        });
+        // Off the caller's thread (it may hold the lobby service's lock), as a Task.Run each would be, but never overtaking
+        // an earlier notice: the game gets them in the order they were made.
+        lock (noticesGate) notices = notices.ContinueWith(_ => ShowNotice(kind, title, lines), CancellationToken.None,
+            TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+    }
+
+    async Task ShowNotice(string kind, string title, IReadOnlyList<string> lines)
+    {
+        var result = await live.NoticeAsync(kind, title, lines);
+        log(result.Ok ? $"Notice shown in the game: {title}" : $"Notice not shown ({result.Detail}): {title}");
     }
 
     // Whether the lobby plays with its host's stats, as the game is told (HfApi stats_source): joined to a host who shares

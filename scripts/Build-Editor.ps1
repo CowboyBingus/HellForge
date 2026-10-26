@@ -4,9 +4,10 @@
 # With -Test it also runs native/editor/test/overlay_test.cpp: the editor against a real D3D12 swap chain (then a D3D11 one) in a window of
 # its own (shown for a few seconds), with F8, resizes and a screenshot check, and native/editor/test/local_stats_test.cpp,
 # its saving into the Local Stats mod.
-# Usage: scripts/Build-Editor.ps1 [-Install <installation>] [-Test]   (with -Install, the folder is copied into its mods, with
-# the game icons extracted from that installation's game copy)
-param([string]$Install,[switch]$Test)
+# Usage: scripts/Build-Editor.ps1 [-Install <installation>] [-Test [-SkipOverlayTest]]   (with -Install, the folder is copied into
+# its mods, with the game icons extracted from that installation's game copy; -SkipOverlayTest leaves out overlay_test, which
+# needs a GPU and a desktop to draw on, as on CI's hosted runners)
+param([string]$Install,[switch]$Test,[switch]$SkipOverlayTest)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -59,7 +60,7 @@ if($Install){$dataArgs+=@('--install',$Install)}
 if($LASTEXITCODE){throw 'The editor catalogue could not be made.'}
 Copy-Item -LiteralPath (Join-Path $imgui 'LICENSE.txt') -Destination (Join-Path $out 'imgui-LICENSE.txt')
 Write-Output ('Built {0} ({1:N0} KB)' -f (Join-Path $out 'hellforge_editor.dll'),((Get-Item (Join-Path $out 'hellforge_editor.dll')).Length/1KB))
-if($Test){
+if($Test -and -not $SkipOverlayTest){
     $minHook=$buildTools.MinHook
     $testOut=Join-Path $project 'artifacts/editor/test'
     New-Item -ItemType Directory $testOut -Force|Out-Null
@@ -83,6 +84,10 @@ if($Test){
     try { & (Join-Path $testOut 'overlay_test.exe') (Join-Path $out 'hellforge_editor.dll') (Join-Path $testOut 'screen11.bmp') $out }
     finally { Remove-Item Env:HELLFORGE_EDITOR_TEST_D3D11 }
     if($LASTEXITCODE){throw 'The overlay test failed on Direct3D 11.'}
+}
+if($Test){
+    $testOut=Join-Path $project 'artifacts/editor/test'
+    New-Item -ItemType Directory $testOut -Force|Out-Null
     & $zig c++ -target x86_64-windows-gnu -O1 -std=c++17 -Wall -Werror (Join-Path $project 'native/editor/test/local_stats_test.cpp') `
         (Join-Path $project 'native/editor/local_stats.cpp') (Join-Path $project 'native/editor/json.cpp') -o (Join-Path $testOut 'local_stats_test.exe')
     if($LASTEXITCODE){throw 'The Local Stats test did not compile.'}

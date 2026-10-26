@@ -52,6 +52,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
     readonly string peersFile;
     readonly object peersGate = new();
     string? peersWritten;
+    long peersTicket, peersWrittenTicket; /* WritePeers' order: taken before its list is read; the last written, under peersGate */
     readonly Dictionary<ulong, DateTime> pinned = []; /* ListPeer's, under peersGate */
     static readonly TimeSpan PinnedFor = TimeSpan.FromSeconds(30);
 
@@ -237,14 +238,19 @@ public sealed class MultiplayerHost : IAsyncDisposable
 
     // The co-op peers file (PeersFileName), written whole when the set changed: the lobby and Party peers, and the peers
     // listed ahead of them (ListPeer) until those list them too or PinnedFor has passed, so a list read just before an
-    // admission cannot take the new peer out again.
+    // admission cannot take the new peer out again. Each change starts one (Task.Run) and they can reach peersGate in any
+    // order: one whose list was read before a later one's is not written after it, so a list from before a kick cannot put
+    // the kicked peer back until the next heartbeat. (A list read after a ticket holds every change made before it.)
     void WritePeers()
     {
         try
         {
+            var ticket = Interlocked.Increment(ref peersTicket);
             var listed = Lobby.Peers().Concat(Party.Peers()).ToHashSet();
             lock (peersGate)
             {
+                if (ticket < peersWrittenTicket) return;
+                peersWrittenTicket = ticket;
                 foreach (var (peer, since) in pinned.ToList())
                     if (listed.Contains(peer) || DateTime.UtcNow - since > PinnedFor) pinned.Remove(peer);
                 WriteListed(listed.Concat(pinned.Keys));
