@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json.Nodes;
 using HellForge.Core;
 
 namespace HellForge.LocalBackend;
@@ -5,15 +7,22 @@ namespace HellForge.LocalBackend;
 // Changes the running session's mods without a restart (HellForge-Open docs/mods.md "Changing mods while you play"): the
 // Mods page's changes (the launcher asks: GET and POST /hellforge/live-mods) or, after a mod sync, the host's set. It plans
 // the change (LiveModPlan), sends it to the game's loader over the live pipe (native/mod-loader/live_mods.c) and waits
-// for the loader's result. Then the session runs the new mods: its session-mods.json and modset.json say so, and Changed
-// gives the new set to the lobby, mod sync and the directory, so joins are checked against the new digest.
+// for the loader's result. A change with source mods or game data is prepared first by HellForge.Cli mods-live (the
+// backend cannot build them itself): the builds' DLLs and the change's hot package (LivePrepared). Then the session runs
+// the new mods: its session-mods.json and modset.json say so, and Changed gives the new set to the lobby, mod sync and the
+// directory, so joins are checked against the new digest.
 public sealed class LiveMods
 {
     public sealed record Result(bool Live, bool Applied, IReadOnlyList<string> Changes, IReadOnlyList<string> Blocking, string Detail, string Digest);
 
     public static readonly TimeSpan ResultTimeout = TimeSpan.FromSeconds(30);
+    // Building source mods and packaging game data for a change may take a while (a cold build compiles them).
+    public static readonly TimeSpan PrepareTimeout = TimeSpan.FromMinutes(5);
+    // The loader waits up to 90 s for a hot package to load (live_data.c), then reports.
+    public static readonly TimeSpan DataResultTimeout = TimeSpan.FromSeconds(120);
     readonly LiveEditServer live;
     readonly string modsFolder, sessionFile, modSetFile;
+    readonly string? cli;
     readonly Action<string> log;
     readonly SemaphoreSlim one = new(1, 1);
     readonly object gate = new();
@@ -21,9 +30,11 @@ public sealed class LiveMods
     string? waitingFor;
     int changes;
 
-    public LiveMods(LiveEditServer live, string modsFolder, string sessionFile, string modSetFile, Action<string> log)
+    // cli: HellForge.Cli.exe, for changes that need builds or game data (null: those wait for the next session).
+    public LiveMods(LiveEditServer live, string modsFolder, string sessionFile, string modSetFile, Action<string> log, string? cli = null)
     {
         this.live = live;
+        this.cli = cli;
         this.modsFolder = modsFolder;
         this.sessionFile = sessionFile;
         this.modSetFile = modSetFile;
@@ -76,24 +87,10 @@ public sealed class LiveMods
             if (expectDigest != null && set.Digest != expectDigest)
                 return new(false, false, described, ["The mods here do not make the host's mod list."], "Applies to the next session.", "");
             var txn = "live" + Interlocked.Increment(ref changes).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            var waiter = new TaskCompletionSource<string[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-            lock (gate) { result = waiter; waitingFor = txn; }
-            foreach (var (verb, fields) in plan.Lines(txn, sync, set.Digest))
-            {
-                var reply = await live.ModAsync(verb, fields);
-                if (reply.Ok) continue;
-                if (verb != "modbegin") await live.ModAsync("modabort", [txn]);
-                log($"Live mods {txn} refused at {verb}: {reply.Detail.Replace('\t', ' ')}");
-                return new(false, false, described, [Explain(reply.Detail)], "Applies to the next session.", "");
-            }
-            string[] done;
-            try { done = await waiter.Task.WaitAsync(ResultTimeout, cancel); }
-            catch (TimeoutException)
-            {
-                log($"Live mods {txn}: the game did not report its result within {ResultTimeout.TotalSeconds} s.");
-                return new(false, false, described, ["The game did not finish the change."], "Restart the session to be sure of its mods.", "");
-            }
-            if (done[2] != "ok") return new(false, false, described, [Explain(string.Join('\t', done[3..]))], "Applies to the next session.", "");
+            var (prepared, problem) = await PrepareAsync(plan, txn, set.Digest, cancel);
+            if (problem != null) return new(false, false, described, [problem], "Applies to the next session.", "");
+            var refused = await SendAsync(plan, txn, sync, set.Digest, prepared, cancel);
+            if (refused != null) return refused with { Changes = described };
             SessionMods.Of(plan.Target, active, sync ? syncedWith : current.SyncedWith).Write(sessionFile);
             set.Write(modSetFile);
             log($"Live mods {txn}: {string.Join("; ", described)}. The mods' digest is now {set.Digest}.");
@@ -105,6 +102,80 @@ public sealed class LiveMods
             lock (gate) { result = null; waitingFor = null; }
             one.Release();
         }
+    }
+
+    // The change sent to the loader, then its result awaited: null when it was made, else the refusal (its Changes filled
+    // in by the caller).
+    async Task<Result?> SendAsync(LiveModPlan plan, string txn, bool sync, string digest, LivePrepared? prepared, CancellationToken cancel)
+    {
+        var waiter = new TaskCompletionSource<string[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (gate) { result = waiter; waitingFor = txn; }
+        foreach (var (verb, fields) in plan.Lines(txn, sync, digest, prepared))
+        {
+            var reply = await live.ModAsync(verb, fields);
+            if (reply.Ok) continue;
+            if (verb != "modbegin") await live.ModAsync("modabort", [txn]);
+            log($"Live mods {txn} refused at {verb}: {reply.Detail.Replace('\t', ' ')}");
+            return new(false, false, [], [Explain(reply.Detail)], "Applies to the next session.", "");
+        }
+        var timeout = prepared?.Data.Count > 0 ? DataResultTimeout : ResultTimeout;
+        string[] done;
+        try { done = await waiter.Task.WaitAsync(timeout, cancel); }
+        catch (TimeoutException)
+        {
+            log($"Live mods {txn}: the game did not report its result within {timeout.TotalSeconds} s.");
+            return new(false, false, [], ["The game did not finish the change."], "Restart the session to be sure of its mods.", "");
+        }
+        return done[2] == "ok" ? null : new(false, false, [], [Explain(string.Join('\t', done[3..]))], "Applies to the next session.", "");
+    }
+
+    // What HellForge.Cli mods-live made for a change that needs it (source builds, the hot package): null with no problem
+    // when the change needs nothing, else the prepared change or why it cannot be made now.
+    async Task<(LivePrepared? Prepared, string? Problem)> PrepareAsync(LiveModPlan plan, string txn, string digest, CancellationToken cancel)
+    {
+        if (!plan.NeedsPreparation) return (null, null);
+        if (cli == null || !File.Exists(cli)) return (null, "This session cannot build mods or game data while it runs.");
+        var target = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sessionFile))!, txn + "-target.txt");
+        File.WriteAllLines(target, plan.Target.Select(m => m.Folder));
+        var start = new ProcessStartInfo(cli) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        foreach (var argument in new[] { "mods-live", "--install", Path.GetDirectoryName(Path.GetFullPath(modsFolder))!, "--session-mods", sessionFile,
+            "--target", target, "--seed", txn + ":" + digest + ":" + DateTime.UtcNow.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture) })
+            start.ArgumentList.Add(argument);
+        string output;
+        try
+        {
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("mods-live did not start");
+            var errors = process.StandardError.ReadToEndAsync(cancel);
+            output = await process.StandardOutput.ReadToEndAsync(cancel);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+            timeout.CancelAfter(PrepareTimeout);
+            await process.WaitForExitAsync(timeout.Token);
+            foreach (var line in (await errors).Split('\n', StringSplitOptions.RemoveEmptyEntries)) log($"Live mods {txn} (mods-live): {line.TrimEnd()}");
+            if (process.ExitCode != 0) return (null, "The change's mods could not be built or packaged (live-mods.log).");
+        }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or OperationCanceledException)
+        {
+            log($"Live mods {txn}: mods-live failed: {error.Message}");
+            return (null, "The change's mods could not be built or packaged.");
+        }
+        return Prepared(output, txn);
+    }
+
+    // mods-live's printed result: {"builds": {id: dll}, "data": [[verb, owner, ...]], "problems": [...]}.
+    (LivePrepared? Prepared, string? Problem) Prepared(string output, string txn)
+    {
+        JsonObject? root;
+        try { root = JsonNode.Parse(output) as JsonObject; }
+        catch (System.Text.Json.JsonException) { root = null; }
+        if (root == null) return (null, "The change's mods could not be prepared.");
+        var problems = (root["problems"] as JsonArray ?? []).Select(p => (string?)p).OfType<string>().ToList();
+        foreach (var problem in problems) log($"Live mods {txn}: {problem}");
+        if (problems.Count > 0) return (null, problems[0]);
+        var builds = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (id, dll) in root["builds"] as JsonObject ?? []) if ((string?)dll is { } path) builds[id] = path;
+        var data = (root["data"] as JsonArray ?? []).Select(l => (l as JsonArray ?? []).Select(f => (string?)f ?? "").ToArray()).Where(l => l.Length >= 3).ToList();
+        if ((string?)root["package"] is { } package) log($"Live mods {txn}: hot package {package}, {data.Count - 1} override(s).");
+        return (new LivePrepared(builds, data), null);
     }
 
     // A host's mods after a mod sync, in load order with this player's cosmetic mods and Local Stats (ModSyncSession.Resolve);

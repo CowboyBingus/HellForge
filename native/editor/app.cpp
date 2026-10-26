@@ -4332,11 +4332,15 @@ static std::wstring IconFile(const std::string& folder, const std::string& resou
     return L"";
 }
 
+/* The stratagems that have a page (by name): a live change's AddModContent adds the others. */
+static std::set<std::string> g_contentPages;
+static volatile LONG g_modsChanged;
+
+void ModsChanged() { InterlockedExchange(&g_modsChanged, 1); }
+
 void AddModContent()
 {
-    static bool done;
-    if (done || !g_catalogOk) return;
-    done = true;
+    if (!g_catalogOk) return;
     const HfApi* api = g_host.api;
     if (api->size < offsetof(HfApi, content) + sizeof(void*) || api->content == nullptr) return;
     std::vector<HfContent> all;
@@ -4350,7 +4354,7 @@ void AddModContent()
     int pages = 0;
     for (const HfContent& s : all)
     {
-        if (s.kind != HF_KIND_STRATAGEM) continue;
+        if (s.kind != HF_KIND_STRATAGEM || !g_contentPages.insert(s.name).second) continue;
         const Object* like = g_catalog.StratagemObject(s.editor_like);
         if (like == nullptr) { api->log(g_host.mod, "editor: %s has no page (stratagem type %llu has none)", s.name, (unsigned long long)s.editor_like); continue; }
         /* its own settings row, the entities standing for the page's, and the projectiles and damage its mod copied from
@@ -4430,6 +4434,7 @@ void AddModContent()
 
 void Tick()
 {
+    if (InterlockedExchange(&g_modsChanged, 0)) AddModContent();
     ReadSync();
     static ULONGLONG next, nextNotice;
     ULONGLONG now = GetTickCount64();

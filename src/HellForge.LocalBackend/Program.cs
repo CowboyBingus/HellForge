@@ -16,7 +16,7 @@ if (args.Contains("--help"))
     Console.WriteLine("--war open serves the all-planets war instead: the frozen war with every planet but Super Earth an enemy's, each with a liberation campaign (no --live-war).");
     Console.WriteLine("--pipe <name> serves the game's lobby stand-in on that named pipe; --link none|steam:<steam_api64.dll>|udp:<id>:<port>:<peer>=<port>,... reaches friends' backends; --mod-digest <text> must match theirs; --mod-list <file> names its mods, so a refused join says which differ; --modset <file> is the session's mod set, which joiners lacking its mods may download; --directory <folder> lists public lobbies in a folder (the loopback harness; Steam's directory otherwise); --rejoin <file> (after a mod sync, a ModSyncSession) invites the game back into that host's lobby once it is on the ship.");
     Console.WriteLine("--pipe <name> serves the game's lobby stand-in on that named pipe; --link none|steam:<steam_api64.dll>|udp:<id>:<port>:<peer>=<port>,... reaches friends' backends; --mod-digest <text> must match theirs; --mod-list <file> names its mods, so a refused join says which differ; --modset <file> is the session's mod set, which joiners lacking its mods may download; --directory <folder> lists public lobbies in a folder (the loopback harness; Steam's directory otherwise).");
-    Console.WriteLine("--live-run <run id> serves the game's live pipe in a solo session (a multiplayer session's comes with stats sharing); with --mods, --modset and --session-mods <file> (the mods the session runs), the launcher can change the session's mods without a restart (POST /hellforge/live-mods).");
+    Console.WriteLine("--live-run <run id> serves the game's live pipe in a solo session (a multiplayer session's comes with stats sharing); with --mods, --modset and --session-mods <file> (the mods the session runs), the launcher can change the session's mods without a restart (POST /hellforge/live-mods). --cli <HellForge.Cli.exe> builds a change's source mods and game data first (mods-live).");
     return 0;
 }
 if (args is ["profile", "show", var showDirectory])
@@ -141,7 +141,7 @@ try
         liveMods.Service = new LiveMods(livePipe, liveModsFolder, sessionModsFile, liveModSetFile, message =>
         {
             lock (liveLogLock) File.AppendAllText(liveLog, DateTime.UtcNow.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) + " " + message + Environment.NewLine);
-        });
+        }, options.GetValueOrDefault("--cli"));
         if (multiplayer != null) liveMods.Service.Changed += multiplayer.ModsChanged;
         // mod sync: the running game takes the host's mods when it can, instead of restarting, and is invited back into
         // the host's lobby at once (AutoRejoin from the ship)

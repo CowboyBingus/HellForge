@@ -43,7 +43,6 @@ sealed class PlaySession(PlayOptions options)
     HostBoundedProcess? job;
     Process? server, broker;
     nint lowToken;
-    Thread? applier;
     DateTime? gameStarted;
     TextWriter? log;
 
@@ -207,8 +206,6 @@ sealed class PlaySession(PlayOptions options)
         }
         modDigest = (string?)plan["digest"] ?? "none";
         modList = (string?)plan["modlist"];
-        modNative = (bool?)plan["native"] == true;
-        nativeFolders = (plan["nativeFolders"] as JsonArray)?.Select(f => (string?)f).OfType<string>().ToList();
         result["mods"] = new JsonObject
         {
             ["loaded"] = new JsonArray((plan["mods"] as JsonArray ?? []).Select(m => (JsonNode?)JsonValue.Create($"{(string?)m!["id"]} {(string?)m["version"]}")).ToArray()),
@@ -297,8 +294,6 @@ sealed class PlaySession(PlayOptions options)
         try { return File.ReadAllText(Path.Combine(run, "stop-observation.signal")).Trim(); }
         catch (IOException) { return ""; }
     }
-    bool modNative;
-    List<string>? nativeFolders; // mods-stage's mods with network type edits (null: a mods-stage from before it)
 
     // HellForge's own programs (the installation's app folder: the launcher, this runner, the backend, the stand-ins the
     // copy loads, the scripts) are held read-only for the session like the game's files, so nothing the game runs can
@@ -711,16 +706,7 @@ sealed class PlaySession(PlayOptions options)
         // stand-in; started before the slow edits so the URL is replaced right after the engine formats it, however long
         // the game takes to get there.
         var playFab = options.LocalPlayFab ? HellForgeLocalRoutingPatch.StartPlayFabRedirect(job.Process.Id, exe, (string)result["backendOrigin"]! + "/playfab", -1) : null;
-        if (modNative)
-        {
-            var pid = job.Process.Id;
-            applier = new Thread(() =>
-            {
-                try { NativeModApplier.Run(install, nativeFolders, pid, exe, Path.Combine(run, "native-mods.log"), Path.Combine(run, "native-mods.json")); }
-                catch (Exception error) when (error is IOException or System.ComponentModel.Win32Exception or InvalidOperationException) { }
-            }) { IsBackground = true, Name = "native mods" };
-            applier.Start();
-        }
+        // Network field type edits are the in-game loader's (the plan's nettype lines, applied at HF_EVENT_NETWORK_READY).
         result["localPlayFab"] = options.LocalPlayFab;
         HellForgeHostEarlyConstructorExperiment.TargetExe = exe;
         HellForgeHostEarlyResult experiment;
@@ -810,7 +796,7 @@ sealed class PlaySession(PlayOptions options)
         // The game's live pipe, and the session's mods, which the launcher's Mods page can change without a restart
         // (LiveMods; a multiplayer session's pipe comes with stats sharing). --modset: joiners lacking this session's mods may
         // download them (ModSync); --mods: co-op plays with the host's Local Stats (StatsShare).
-        foreach (var argument in new[] { "--live-run", (string)result["runId"]!, "--mods", install.Mods, "--modset", ModSetFile, "--session-mods", SessionModsFile })
+        foreach (var argument in new[] { "--live-run", (string)result["runId"]!, "--mods", install.Mods, "--modset", ModSetFile, "--session-mods", SessionModsFile, "--cli", Cli })
             start.ArgumentList.Add(argument);
         if (options.Multiplayer)
         {
@@ -999,12 +985,6 @@ sealed class PlaySession(PlayOptions options)
             try { if (!server.HasExited) { server.Kill(); server.WaitForExit(5000); } result["backendStopped"] = server.HasExited; }
             catch (InvalidOperationException) { }
             finally { server.Dispose(); }
-        // The applier ends with the game.
-        if (applier != null)
-        {
-            applier.Join(5000);
-            if (Tools.ReadJson(Path.Combine(run, "native-mods.json")) is { } status) result["nativeMods"] = status;
-        }
         if (result["backendOrigin"] != null)
             Try("backendRequestError", () =>
             {

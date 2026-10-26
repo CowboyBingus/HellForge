@@ -2,8 +2,9 @@ using HellForge.Core;
 using HellForge.Core.GameData;
 
 // Changing a running session's mods (LiveModPlan): stats mods added, removed and replaced plan live, with the loader's
-// lines; code, data patches, Lua, own records and a new order wait for the next session; a mod that did not load at the
-// start is not new; the session's mods file round-trips. Every mod here is synthetic.
+// lines; so do own records, network field types (modnet, the boot plan's nettype fields), code that declares "live" and
+// data patches (after mods-live: its hot package's lines); code without "live" and a new order wait for the next session;
+// a mod that did not load at the start is not new; the session's mods file round-trips. Every mod here is synthetic.
 static class LiveModsTests
 {
     const string Rpm = """{"format":1,"weapons":{"AR-23 Liberator":{"rpm":900}}}""";
@@ -20,7 +21,7 @@ static class LiveModsTests
 
     public static void Register(Action<string, Action> test, Action<bool, string> check, Action<Action> reject, string root)
     {
-        test("Live mod changes: stats mods plan live with the loader's lines; code, data, own records and a new order wait", () =>
+        test("Live mod changes: stats, own records, network types, live code and data plan live with the loader's lines; other code and a new order wait", () =>
         {
             var mods = Path.Combine(root, "live-mods");
             Mod(mods, "s1", stats: Rpm);
@@ -62,19 +63,45 @@ static class LiveModsTests
             ModSettings.SetEnabled(mods, "s2", true);
             Directory.Delete(Path.Combine(mods, "s3"), true);
 
-            // code, a data patch and own records wait for the next session; so does a new order
+            // code without "live" waits for the next session
             ModSettings.SetEnabled(mods, "c1", false);
             plan = LiveModPlan.Make(current, Session(mods));
-            check(!plan.Live && plan.Blocking.Any(b => b.StartsWith("c1", StringComparison.Ordinal) && b.Contains("code")), "A code mod switched off planned live.");
+            check(!plan.Live && plan.Blocking.Any(b => b.StartsWith("c1", StringComparison.Ordinal) && b.Contains("live")), "A code mod switched off planned live.");
             ModSettings.SetEnabled(mods, "c1", true);
+            // a changed data patch plans live once mods-live has made its hot package: the package's lines go last
             File.WriteAllBytes(Path.Combine(mods, "v1", "data", "9ba626afa44a3aa3.patch_0"), [.. archive, 0]);
             plan = LiveModPlan.Make(current, Session(mods));
-            check(!plan.Live && plan.Blocking.Any(b => b.Contains("patches game data")), "A changed data patch planned live.");
+            check(plan.Live && plan.NeedsPreparation, "A changed data patch did not plan live.");
+            reject(() => plan.Lines("t3", sync: false, "digest").ToList());
+            var prepared = new LivePrepared(new Dictionary<string, string>(), [["moddata", "-", "0123456789abcdef"]]);
+            var data = plan.Lines("t3", sync: false, "digest", prepared).ToList();
+            check(data[^2].Verb == "moddata" && data[^2].Fields.SequenceEqual(["t3", "-", "0123456789abcdef"]) && !data.Any(l => l.Verb == "modreplace"),
+                "A data mod's change is not its package's line.");
             File.WriteAllBytes(Path.Combine(mods, "v1", "data", "9ba626afa44a3aa3.patch_0"), archive);
+            // own records plan live (the loader copies the record)
             Mod(mods, "o1", stats: """{"format":1,"weapons":{"AR-23 Liberator":{"own":true,"rpm":950}}}""");
             plan = LiveModPlan.Make(current, Session(mods));
-            check(!plan.Live && plan.Blocking.Any(b => b.StartsWith("o1", StringComparison.Ordinal) && b.Contains("own")), "Own records planned live: " + string.Join(" | ", plan.Blocking));
+            check(plan.Live && plan.Lines("t4", sync: false, "digest").Single(l => l.Verb == "modstat").Fields[10] == "1", "Own records did not plan live: " + string.Join(" | ", plan.Blocking));
             Directory.Delete(Path.Combine(mods, "o1"), true);
+            // network field types: the mod is the loader's, its modnet lines are the boot plan's nettype fields
+            Mod(mods, "n1", ",\"native\":{\"networkFieldTypes\":[{\"name\":\"deposit_amount\",\"bits\":12,\"expect\":{\"kind\":1,\"bits\":8,\"min\":0}}]}");
+            plan = LiveModPlan.Make(current, Session(mods));
+            var n1 = plan.Target.Single(m => m.Id == "n1");
+            var net = plan.Lines("t5", sync: false, "digest").ToList();
+            check(plan.Live && n1.NeedsLoader && net.Any(l => l.Verb == "modadd" && l.Fields[1] == "n1" && l.Fields[2] == "net") &&
+                net.Single(l => l.Verb == "modnet").Fields.Skip(1).SequenceEqual(ModLoaderPlan.NetFields(n1, n1.NetworkFieldTypes.Single())) &&
+                ModLoaderPlan.Text(plan.Target, root, EntityProfile.Current, "25480438").Contains("nettype\t" + string.Join('\t', ModLoaderPlan.NetFields(n1, n1.NetworkFieldTypes.Single())) + "\n"),
+                "Network field types did not plan live with their lines.");
+            Directory.Delete(Path.Combine(mods, "n1"), true);
+            // code that declares "live" (SDK 16): added live, its DLL on its line, "live" on its boot plan line
+            Mod(mods, "l1", ",\"code\":{\"dll\":\"mod.dll\",\"sdk\":16,\"live\":true}");
+            File.WriteAllText(Path.Combine(mods, "l1", "mod.dll"), "synthetic live dll");
+            plan = LiveModPlan.Make(current, Session(mods));
+            var l1 = plan.Target.Single(m => m.Id == "l1");
+            check(plan.Live && l1.Live && plan.Lines("t6", sync: false, "digest").Any(l => l.Verb == "modadd" && l.Fields[1] == "l1" && l.Fields[2] == "code,live" &&
+                l.Fields[5] == l1.DllPath) && ModLoaderPlan.Text(plan.Target, root, EntityProfile.Current, "25480438").Contains($"mod\tl1\t{l1.Folder}\t{l1.DllPath}\tlive\n"),
+                "A live code mod did not plan live.");
+            Directory.Delete(Path.Combine(mods, "l1"), true);
             var order = ModCatalog.Load(mods).Mods.Select(m => m.Id).ToList();
             ModSettings.SetOrder(mods, order.AsEnumerable().Reverse());
             plan = LiveModPlan.Make(current, Session(mods));

@@ -20,6 +20,7 @@ try
             prepare-session --install <folder> --profile <name> [--user-data <root>]
             migrate --install <folder> --from <artifacts/host-startup> [--appdata <folder>]
             mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>] [--modset <file>] [--sync <mod sync session file>] [--session-mods <file>]
+            mods-live --install <folder> --session-mods <file> --target <file of mod folders, in load order> --seed <text>
             build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> [--steam-data <Steam's game data folder>] --out <folder>]
             check-stats --mod <mod folder>
             sdk-headers --repo <HellForge source folder> [--mode write | check]
@@ -87,6 +88,7 @@ try
         "prepare-session" => ["--install", "--profile", "--user-data"],
         "migrate" => ["--install", "--from", "--appdata"],
         "mods-stage" => ["--install", "--plan", "--logs", "--progress", "--modset", "--sync", "--session-mods"],
+        "mods-live" => ["--install", "--session-mods", "--target", "--seed"],
         "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--out"],
         "check-stats" => ["--mod"],
         "sdk-headers" => ["--repo", "--mode"],
@@ -275,9 +277,47 @@ try
                 loaderRequired = true, // read-only stats snapshots are also collected without mods
                 disabled = mods.Where(m => !m.Enabled).Select(m => m.Id),
                 problems = modProblems, staged, stagedCopied = ModStaging.LastCounts.Copied, stagedKept = ModStaging.LastCounts.Kept,
-                native = active.Any(m => m.HasNative), digest, modlist = ModlistDiff.Encode(compared), syncedWith,
-                // the session's mods with network type edits (after a mod sync, the host's), for the session's native applier
-                nativeFolders = active.Where(m => m.NetworkFieldTypes.Count > 0).Select(m => Path.GetFullPath(m.Folder))
+                native = active.Any(m => m.HasNative), digest, modlist = ModlistDiff.Encode(compared), syncedWith
+            };
+            break;
+        }
+        case "mods-live":
+        {
+            // A live change of a running session's mods (LiveModPlan.NeedsPreparation): its source mods built and its game
+            // data packaged (LiveData) before the session's backend sends the loader the change. --liveTarget: the mods the
+            // session runs after it, one folder per line in load order; --seed: unique to the change.
+            var liveInstall = new InstallLayout(Required("--install"));
+            if (!liveInstall.Exists) throw new InvalidDataException($"{liveInstall.Root} is not a HellForge installation.");
+            var running = SessionMods.Read(Required("--session-mods"));
+            var liveTarget = File.ReadAllLines(Required("--liveTarget")).Where(l => l.Length > 0).Select(f => ModCatalog.Parse(f, EntityProfile.Current)).ToList();
+            var livePlan = LiveModPlan.Make(running, liveTarget);
+            var changing = livePlan.Changes.Select(c => c.Mod).OfType<ModManifest>().Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
+            // every data mod of the liveTarget with its data built (the change's, and those that stay: their bytes come back
+            // where a removed mod's go); the change's source mods built
+            var (withData, liveProblems) = ModDataCache.Prepare(liveInstall, liveTarget.Where(m => changing.Contains(m.Id) || LiveModPlan.HasData(m)).ToList(), Console.Error.WriteLine);
+            var (liveBuilt, liveBuildProblems) = ModBuilds.Prepare(liveInstall, ModSdk.Find(liveInstall.Root), withData.Where(m => changing.Contains(m.Id)).ToList(),
+                SupportedBuild.Current.BuildId, Console.Error.WriteLine);
+            liveProblems.AddRange(liveBuildProblems);
+            var missing = changing.Where(id => liveBuilt.All(m => m.Id != id)).ToList();
+            liveProblems.AddRange(missing.Select(id => $"{id} could not be prepared."));
+            LiveData.Result? liveData = null;
+            if (missing.Count == 0)
+            {
+                static LiveData.ModData Data(ModManifest m) => new(m.Id, ModStaging.Patches(m));
+                var removed = livePlan.Changes.Where(c => c.Was?.Data == true).Select(c => c.Was!).Select(w =>
+                {
+                    try { return Data(ModCatalog.Parse(w.Folder, EntityProfile.Current)); }
+                    catch (Exception error) when (error is InvalidDataException or IOException or System.Text.Json.JsonException) { return null; } /* gone: nothing to restore by */
+                }).OfType<LiveData.ModData>().ToList();
+                var keeps = withData.Where(m => !changing.Contains(m.Id) && LiveModPlan.HasData(m)).Select(Data).ToList();
+                var adds = liveBuilt.Where(LiveModPlan.HasData).Select(Data).ToList();
+                liveData = LiveData.Build(Path.Combine(liveInstall.Game, "data"), keeps, adds, removed, Required("--seed"));
+                ModStaging.RecordLive(liveInstall, liveData.Files);
+            }
+            result = new
+            {
+                builds = liveBuilt.Where(m => m.HasSource && m.BuiltDll != null).ToDictionary(m => m.Id, m => m.BuiltDll!),
+                data = liveData?.Lines ?? [], package = liveData?.PackageId, problems = liveProblems
             };
             break;
         }

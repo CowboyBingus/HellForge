@@ -62,25 +62,38 @@ The page saves its switches, order and pack options in `mods/hellforge-mods.json
 
 ## Changing mods while you play
 
-While a session runs, the Mods page's switches still work:
-- **Stats mods change the running game at once.** These are mods whose only changes are stats (`hellforge-stats.json`)
-  and `componentWrites`. Switching one on or off, or saving an edit to its stats file, goes straight to the game. The
-  console says what changed.
-  - Each value applies as a live edit does: now, on respawn, or at the next mission. The stats editor shows which.
-  - A changed mod keeps its place in the load order. The mods above it still win where they change the same value,
-    Local Stats included. A code mod's edit of a field stays on top of the stats under it.
-- **Everything else is saved for the next session,** and the page says why. That covers code mods (a DLL or sources),
-  Lua, data patches and cosmetic packs, network field types, stats with `"own": true`, and a new order. The order and
-  packs' options stay locked while a session runs.
-- **Only while no friend is in your game.** Friends need the same mods, so the game refuses a change while one is
-  connected. After a change, friends who join need your new mods, which mod sync offers them.
+While a session runs, the Mods page's switches still work. Switching a mod on or off, or saving a change to its files,
+goes to the running game, and the console says what changed:
+- **Stats mods** (`hellforge-stats.json`, `componentWrites`, `"own": true` records). Each value applies as a live edit
+  does: now, on respawn, or at the next mission; the stats editor shows which. A changed mod keeps its place in the load
+  order: the mods above it still win where they change the same value, Local Stats included, and a code mod's edit of a
+  field stays on top of the stats under it.
+- **Network field types** widen, or narrow back, at once.
+- **Code mods that declare `"live": true`** are set up while the game runs, and taken out again (a source mod is built
+  first, which can take a moment). New stratagems, weapons, entities, projectiles, damage types, behaviours and abilities
+  they add are numbered as a fresh start with your mods would number them, and the game owns their items at once. What
+  a mod taken out added stays out of sight: out of the armory's items you own, the stratagem picker and your loadout.
+  Their items come back only through the next session.
+- **Data mods** (game patches and data specs) reach the game as a package of their own. Objects already in the world
+  keep their old look until they are made again (a respawn, the next mission).
+- **A level 11 difficulty** is added at once when it has no larger maps or extra objectives; it can be picked once no
+  menu is open. Hell Forge's larger maps need a new session, as does taking a difficulty out.
+- **Everything else is saved for the next session,** and the page says why: code without `"live": true`, Lua mods,
+  cosmetic packs, a new order, and whatever the game refuses (for example content a fresh start would number another
+  way, because your mods differ in what they add before it). The order and packs' options stay locked while a session
+  runs.
+- **Only while no friend is in your game, on the ship or the title screen.** Friends need the same mods, so the game
+  refuses a change while one is connected; stats alone also change in a mission. After a change, friends who join need
+  your new mods, which mod sync offers them.
 - **A session that plays a host's mods** (after a mod sync) keeps them. Your Mods page applies to your next session.
 
 How it works:
 - **The session's files.** The session's backend compares the mods the session runs (`session-mods.json` in its log
   folder) with the Mods page's (HellForge.Core `LiveModPlan`).
+- **Builds and data.** A change with source mods or game data is prepared first by `HellForge.Cli mods-live`: it builds
+  the mods and writes the change's package into the game copy's `data` folder (the next session removes it).
 - **One change.** It sends the in-game loader the whole change over the live pipe, and the loader takes all of it or
-  none.
+  none. A change the loader refuses is saved for the next session, as before.
 - **Afterwards.** The session's modlist code, `modset.json`, its lobby and its public listing follow the new mods.
 - **Logs.** Each change is logged in the session's `backend/live-mods.log`, and the loader's side in `modloader.log`.
 
