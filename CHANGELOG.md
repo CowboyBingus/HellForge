@@ -57,6 +57,12 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
   gives SDR content, instead of looking washed out (#53).
 - Language packs: Japanese can be added to the game copy, so the game runs in Japanese instead of crashing when Steam
   is set to it. For now through the command line, `HellForge.Cli language-add --name japanese` (#73).
+- **Sync Inventory** (Profile > Account sync) brings your own HELLDIVERS 2 account's inventory and progression into a
+  profile, after one Windows prompt. A review then shows each category (level and XP, medals, requisition and samples,
+  warbond and armory items, ship modules, weapon levels, ship name, tutorial) side by side, and nothing changes until
+  Apply. Your choices are kept per profile (#45).
+- Profile backups: every import or restore first saves the profile, the newest 10 are kept, and Profile lists them with
+  Restore backup (#45).
 
 ### Changed
 
@@ -76,6 +82,14 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
 - Play asks Steam whether you own the game only when no check passed in the last 7 days on the same installation,
   Steam account and game build, so HELLDIVERS 2 no longer flashes as running in Steam at every launch. Setup and Check
   and repair always ask (#43, #69).
+- Premium content (premium warbonds, Superstore items bought with Super Credits, and the Steam DLCs' gear) is in a
+  profile only when your last Sync Inventory, for the Steam account signed in now, shows you own it. The unlock-all
+  template no longer includes it (#45).
+- Super Credits can't be earned, found on a map, imported or edited into a profile (#45).
+- A new installation's first profile starts from the starter template instead of unlock-all (#45).
+- Mods that recreate premium content follow your Sync Inventory: their weapons and stratagems are locked, and a
+  cosmetic one isn't loaded, unless you own the original. The Mods page tags them PREMIUM or PREMIUM: LOCKED and says
+  what is missing (#45).
 
 ### Fixed
 
@@ -107,6 +121,9 @@ On `dev`, since 0.2.0-beta. Engine 0.1.40, mod SDK 15.
 - A mod's manifest can give its web page as `"url"`, which MOD SYNC shows as GET IT (15e54f1).
 - `HellForge.Cli mod-hash --mod <folder or zip>` prints a mod's content hash, as mod sync and the verified list use it
   (9f09153).
+- Premium content: a weapon or stratagem a mod makes as a copy of a premium one is locked for players who don't own the
+  original, and a manifest's `"premium"` list (`warbond:<id>`, `dlc:<name>`, `item:<mixId>`) declares other content a mod
+  recreates or builds on ([docs/modding/concepts.md](docs/modding/concepts.md#premium-content), #45).
 
 ### For launcher developers
 
