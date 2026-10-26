@@ -104,10 +104,7 @@ sealed class PlaySession(PlayOptions options)
         result["play"] = true;
         result["installRoot"] = install.Root;
         result["engine"] = typeof(PlaySession).Assembly.GetName().Version?.ToString();
-        // the versions, the system and the settings, first in the log and kept for a crash report (CrashReport)
-        var facts = SessionHeader.Facts(options, (string?)result["engine"] ?? "unknown");
-        result["report"] = facts.ToJson();
-        foreach (var line in facts.Lines()) Say(line);
+        RecordFacts(options);
         File.WriteAllText(Path.Combine(install.Logs, "play-session.json"),
             new JsonObject { ["runId"] = runId, ["run"] = run, ["startedUtc"] = (string?)result["startedUtc"] }.ToJsonString());
         try
@@ -126,6 +123,19 @@ sealed class PlaySession(PlayOptions options)
         Say("Session result: " + Path.Combine(run, "result.json"));
         log.Dispose();
         return (string?)result["status"] == "observed" ? 0 : 1;
+    }
+
+    // The versions, the system and the settings, first in the log and kept for a crash report (CrashReport). Whatever goes
+    // wrong collecting them, the session starts: the report then says they were not recorded.
+    void RecordFacts(PlayOptions options)
+    {
+        try
+        {
+            var facts = SessionHeader.Facts(options, (string?)result["engine"] ?? "unknown");
+            result["report"] = facts.ToJson();
+            foreach (var line in facts.Lines()) Say(line);
+        }
+        catch (Exception error) { Say("Session facts not recorded: " + error.Message); }
     }
 
     // Holds a file of the installed game closed (no other handle, so it cannot start) into `into`; false when another

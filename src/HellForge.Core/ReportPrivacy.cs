@@ -16,8 +16,9 @@ public sealed partial class ReportPrivacy
     readonly Dictionary<string, string> tokens = new(StringComparer.OrdinalIgnoreCase);
     readonly Dictionary<string, int> counts = new(StringComparer.Ordinal);
 
-    // SteamID64: individual accounts are 7656119 followed by 10 digits; in hexadecimal, 0x0110000100000000 and up
-    [GeneratedRegex(@"(?<![0-9])7656119[0-9]{10}(?![0-9])")]
+    // SteamID64: individual accounts are 76561197960265728 and up, 7656119 followed by 10 digits, or 765612 followed by 11
+    // from account id 2,039,734,272 on; in hexadecimal, 0x0110000100000000 and up
+    [GeneratedRegex(@"(?<![0-9])(?:7656119[0-9]{10}|765612[0-9]{11})(?![0-9])")]
     private static partial Regex SteamDecimal();
 
     [GeneratedRegex(@"(?<![0-9A-Za-z])(?:0x)?0*1100001[0-9A-Fa-f]{8}(?![0-9A-Za-z])")]
@@ -99,14 +100,21 @@ public sealed partial class ReportPrivacy
         {
             using var reader = new StreamReader(new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
             for (var line = reader.ReadLine(); line != null; line = reader.ReadLine())
-                if (NamedPlayer().Match(line) is { Success: true } named && !SteamHex().IsMatch(named.Groups["name"].Value))
-                    found.Add(named.Groups["name"].Value);
+            {
+                if (NamedPlayer().Match(line) is { Success: true } named) found.Add(named.Groups["name"].Value);
+                if (FriendsList().Match(line) is { Success: true } listed) found.AddRange(listed.Groups["names"].Value.Split(", "));
+            }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-        return [.. found.Distinct(StringComparer.OrdinalIgnoreCase)];
+        return [.. found.Where(n => !SteamHex().IsMatch(n)).Distinct(StringComparer.OrdinalIgnoreCase)];
     }
 
     // FriendPresence's "Profile of <name> received", ModSync's "<name>'s lobby" and AutoRejoin's "plays <name>'s mods"
     [GeneratedRegex(@"(?:Profile of (?<name>.+?) received for the friends list|Mod sync: (?<name>.+?)'s lobby:|Rejoin: this session plays (?<name>.+?)'s mods)")]
     private static partial Regex NamedPlayer();
+
+    // FriendPresence's "Steam friends running HellForge: N (<name>, <name>)": friends counted whose profile never arrived
+    // are named only here. A name with ", " in it is split, and its parts are left out.
+    [GeneratedRegex(@"Steam friends running HellForge: [0-9]+ \((?<names>.+)\)\.$")]
+    private static partial Regex FriendsList();
 }

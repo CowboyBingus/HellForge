@@ -6,8 +6,9 @@ using HellForge.Core;
 // (CrashReport): its summary, and the zip's contents with and without the crash dump.
 static class CrashReportTests
 {
-    const string Friend = "Ragnar Swiftboots", Host = "LadyLiberty";
-    const ulong FriendId = 76561198012345678, OwnId = 76561197960287930;
+    const string Friend = "Ragnar Swiftboots", Host = "LadyLiberty", Counted = "Quiet Comet";
+    // NewId: an account id past 2,039,734,272, whose SteamID64 starts 765612
+    const ulong FriendId = 76561198012345678, OwnId = 76561197960287930, NewId = 76561202012345678;
 
     static readonly Privacy Pc = new(@"C:\Users\Alex", ["DESKTOP-K2Q7R4T"], "/home/alex");
 
@@ -17,12 +18,13 @@ static class CrashReportTests
         {
             var scrub = new ReportPrivacy(Pc, [Friend, null, "ab"]);
             var hex = FriendId.ToString("X");
-            var text = scrub.Apply($"peer {FriendId} joined from 203.0.113.9:27015 as {Friend}; peer 0x{hex} again, {OwnId} hosts on 127.0.0.1:62000 " +
+            var text = scrub.Apply($"peer {FriendId} joined from 203.0.113.9:27015 as {Friend}; peer 0x{hex} again, {OwnId} hosts on 127.0.0.1:62000, {NewId} joins " +
                 @"and [2001:db8::5]:1; at C:\Users\Alex\x on DESKTOP-K2Q7R4T");
             check(!text.Contains(FriendId.ToString()) && !text.Contains(hex) && !text.Contains(OwnId.ToString()), "A Steam id stayed: " + text);
             check(text.Contains("peer steam-id-1 joined") && text.Contains("peer steam-id-1 again"),
                 "The two forms of one id are not the same placeholder: " + text);
-            check(text.Contains("steam-id-2 hosts"), "Another account did not get its own placeholder: " + text);
+            check(text.Contains("steam-id-2 hosts") && text.Contains("steam-id-3 joins") && !text.Contains(NewId.ToString()),
+                "Another account did not get its own placeholder: " + text);
             check(!text.Contains("203.0.113.9") && text.Contains("ip-1:27015") && text.Contains("127.0.0.1:62000") && !text.Contains("2001:db8"), "IP addresses: " + text);
             check(!text.Contains(Friend) && text.Contains("as player-1"), "A named player stayed: " + text);
             check(text.Contains(@"%USERPROFILE%\x on PC"), "Privacy's own scrub was not applied: " + text);
@@ -32,7 +34,7 @@ static class CrashReportTests
         {
             var scrub = new ReportPrivacy(Pc, []);
             foreach (var kept in new[] { "12:34:56.789 game.dll+0xF8F670", "Windows 11 24H2 (10.0.26100.4652)", "engine 0.1.40.0, driver 32.0.15.8129",
-                "sha 0a1100001deadbeef12", "std::string at 0.0.0.0", "digest 76561198012345678901", "lobby 109775241047563412" })
+                "sha 0a1100001deadbeef12", "std::string at 0.0.0.0", "digest 76561198012345678901", "digest 765612020123456789", "lobby 109775241047563412" })
                 check(scrub.Apply(kept) == kept, "Changed: " + kept + " -> " + scrub.Apply(kept));
             check(scrub.ApplyNames("Mod: a.b 1.0.0.0") == "Mod: a.b 1.0.0.0", "A four-part version was taken for an address.");
         });
@@ -95,6 +97,9 @@ static class CrashReportTests
             var dumped = Session(new string('6', 32), "{}");
             File.WriteAllBytes(Path.Combine(dumped, "crash-42.dmp"), [0x4D, 0x44, 0x4D, 0x50]);
             check(CrashReport.Crashed(dumped), "A session that left a dump.");
+            var handled = Session(new string('7', 32), """{"gameLaunched": true, "observationStoppedBySignal": true, "gameExitCode": "0x00000001"}""");
+            File.WriteAllBytes(Path.Combine(handled, "crash-43.dmp"), [0x4D, 0x44, 0x4D, 0x50]);
+            check(!CrashReport.Crashed(handled), "A session the launcher stopped after a fault the game handled left a dump.");
             check(CrashReport.Meaning(0xC0000005) == "access violation" && CrashReport.Meaning(0x1) == null, "Exit code meanings.");
         });
 
@@ -113,7 +118,7 @@ static class CrashReportTests
         File.WriteAllLines(Path.Combine(crashed, "modloader.log"), loaderLines);
         File.WriteAllText(Path.Combine(crashed, "session.log"), $"10:00:00 HellForge 0.3.0-beta\n10:31:00 Session result: C:\\Users\\Alex\\HellForge\\result.json\n");
         File.WriteAllText(Path.Combine(crashed, "backend", "multiplayer.log"),
-            $"10:05:00.000 Profile of {Friend} received for the friends list.\n10:06:00.000 Mod sync: {Host}'s lobby: download, skye.d11 download.\n" +
+            $"10:04:00.000 Steam friends running HellForge: 2 ({Friend}, {Counted}).\n10:05:00.000 Profile of {Friend} received for the friends list.\n10:06:00.000 Mod sync: {Host}'s lobby: download, skye.d11 download.\n" +
             $"10:07:00.000 peer {FriendId:X} at 192.0.2.77:27015\n");
         File.WriteAllBytes(Path.Combine(crashed, "crash-4242.dmp"), [0x4D, 0x44, 0x4D, 0x50, 0, 1, 2, 3]);
         Directory.CreateDirectory(Path.Combine(crashed, "steam-link"));
@@ -125,6 +130,12 @@ static class CrashReportTests
             check(fault.Code == "c0000005" && fault.Thread == "4242" && fault.Where == "game.dll+0xf8f670" && fault.ByModule == "game.dll+0xf8f670" && fault.Line == 260,
                 $"Fault: {fault}");
             check(CrashReport.FindFault(["10:00:00.000 nothing here"]) == null, "A fault in a log without one.");
+        });
+
+        test("The friends the backend counted are left out, also when their profile never arrived", () =>
+        {
+            var names = ReportPrivacy.NamesIn(crashed);
+            check(names.Contains(Counted) && names.Contains(Friend) && names.Contains(Host), "Names: " + string.Join(", ", names));
         });
 
         test("The summary states versions, system, settings, the crash, the mods and the last 200 log lines, all scrubbed", () =>
@@ -157,7 +168,7 @@ static class CrashReportTests
                 {
                     using var reader = new StreamReader(entry.Open());
                     var text = reader.ReadToEnd();
-                    foreach (var leaked in new[] { "Alex", "DESKTOP-K2Q7R4T", Friend, Host, FriendId.ToString(), FriendId.ToString("X"), "192.0.2.77", "198.51.100.4" })
+                    foreach (var leaked in new[] { "Alex", "DESKTOP-K2Q7R4T", Friend, Host, Counted, FriendId.ToString(), FriendId.ToString("X"), "192.0.2.77", "198.51.100.4" })
                         check(!text.Contains(leaked, StringComparison.OrdinalIgnoreCase), entry.FullName + " names " + leaked + ":\n" + text);
                 }
             }

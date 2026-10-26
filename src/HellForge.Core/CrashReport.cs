@@ -47,14 +47,16 @@ public static partial class CrashReport
     public static string? Dump(string run) =>
         GameFolders(run).Where(Directory.Exists).SelectMany(f => Directory.EnumerateFiles(f, "crash-*.dmp")).FirstOrDefault();
 
-    // Whether a session ended in a crash: the game left a dump, or it ended by itself (not stopped by the launcher) with
-    // an exit code other than 0 or after the mod loader noted a crash.
+    // Whether a session ended in a crash: it was not stopped by the launcher, and the game left a dump, or it ended by
+    // itself with an exit code other than 0 or after the mod loader noted a crash. Stopped comes first: the loader writes
+    // a dump on the first first-chance fault, which the game may have handled.
     public static bool Crashed(string run)
     {
+        var result = SessionFiles.ReadJson(Path.Combine(run, "result.json"));
+        if (result is { } stopped && SessionFiles.Text(stopped, "observationStoppedBySignal") == "true") return false;
         if (Dump(run) != null) return true;
-        if (SessionFiles.ReadJson(Path.Combine(run, "result.json")) is not { } result) return false;
-        if (SessionFiles.Text(result, "gameLaunched") != "true" || SessionFiles.Text(result, "observationStoppedBySignal") == "true") return false;
-        if (ExitCode(result) is { } code && code != 0) return true;
+        if (result is not { } ended || SessionFiles.Text(ended, "gameLaunched") != "true") return false;
+        if (ExitCode(ended) is { } code && code != 0) return true;
         return LoaderLog(run) is { } log && FindFault(Tail(log, int.MaxValue)) != null;
     }
 
