@@ -374,8 +374,9 @@ sealed partial class PlaySession(PlayOptions options)
     }
 
     // Places the WFP block for the backend's port alone (Install-WfpBlock.ps1, as setup does), with one Windows prompt; its
-    // report goes into the result under reportKey. The backend already runs on that port (install.BackendPort is the
-    // computed one while the marker names none). Null when placed, else why not.
+    // report goes into the result under reportKey. The port is the one the backend already runs on (install.BackendPort:
+    // the computed one while the marker names none, else the marker's, which a moved folder keeps). Null when placed,
+    // else why not.
     string? PlaceWfpBlock(string reason, string reportName, string reportKey, string message)
     {
         result["networkBlockInstallReason"] = reason;
@@ -383,8 +384,9 @@ sealed partial class PlaySession(PlayOptions options)
         Save();
         Say(message);
         var report = Path.Combine(run, reportName);
+        var port = new Uri((string)result["backendOrigin"]!).Port;
         var elevated = new ProcessStartInfo(Tools.PowerShell, $"-NoProfile -ExecutionPolicy Bypass -File \"{Path.Combine(Scripts, "Install-WfpBlock.ps1")}\" " +
-            $"-InstallRoot \"{install.Root}\" -ReportPath \"{report}\" -BackendPort {install.ComputedBackendPort}")
+            $"-InstallRoot \"{install.Root}\" -ReportPath \"{report}\" -BackendPort {port}")
             { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden };
         string? why = null;
         try { using var installer = Process.Start(elevated); installer?.WaitForExit(); }
@@ -396,8 +398,9 @@ sealed partial class PlaySession(PlayOptions options)
         }
         else why ??= "the install wrote no report";
         result["status"] = "preparing";
-        // placed is what the marker says (the script writes it only once the block is in place): the backend's port
-        return install.BlockedBackendPort() == new Uri((string)result["backendOrigin"]!).Port ? null : why ?? "the placed block names another port";
+        // placed is what the install reports and the marker says (the script writes it only once the block is in place):
+        // the backend's port. A marker that named it before (a block placed again) proves nothing by itself.
+        return why == null && install.BlockedBackendPort() == port ? null : why ?? "the placed block names another port";
     }
 
     // Wine (Proton): its ntdll exports wine_get_version, Windows' does not.
@@ -717,23 +720,49 @@ sealed partial class PlaySession(PlayOptions options)
     // The block's probe: loopback reaches the backend, the outside does not (WSAEACCES). A narrowed block is proved
     // narrow too (another loopback port is refused). Linux: the same probe in this process (NetworkProbe.exe is a .NET
     // Framework program, which a Wine prefix runs only with Wine Mono installed).
+    // A WFP block that no longer holds is placed again, once, with one Windows prompt. Its filters name each program by
+    // its volume's device path (\device\harddiskvolumeN), which for a drive other than Windows' own can change between
+    // boots (a USB drive or another disk plugged in); a moved folder leaves them behind. Either way the marker still
+    // says the block is there and the probe's outside connect just waits (0.2.0 tickets: installs on D: and E:, the
+    // block proved at install and gone days later, a fresh install the only fix). Placing it again proves it holds, or
+    // says what lets traffic past it (a VPN, a proxy, a security suite).
     void ProveNetworkBlock(bool linuxNamespace, bool wfpOnly)
     {
-        var networkReport = Path.Combine(run, "network-probe.json");
         var probe = Path.Combine(install.Root, "network-block", "NetworkProbe.exe");
         // Made by the network block's install; antivirus programs sometimes remove it.
         if (!linuxNamespace && !File.Exists(probe))
             throw new SessionFailure("The network block's check program is missing (" + probe + "). Antivirus programs sometimes remove it: " +
                 "restore it from quarantine and exclude the HellForge folder, or run Settings > Installation again to put the block back.");
+        var problem = RunNetworkProbe(probe, linuxNamespace, wfpOnly, "network-probe.json");
+        if (problem == null) return;
+        if (linuxNamespace) throw new SessionFailure($"The network namespace is not holding: {problem}.");
+        if (!wfpOnly) throw new SessionFailure($"The network block is not holding: {problem}. Run Settings > Installation to place it again.");
+        result["networkControlBefore"] = result["networkControl"]?.DeepClone();
+        var why = PlaceWfpBlock("the block's check failed: " + problem, "network-block-repair.json", "networkBlockRepair",
+            $"The network block is not holding ({problem}): placing it again. Windows will ask for administrator consent once.");
+        if (why == null && (problem = RunNetworkProbe(probe, false, true, "network-probe-again.json")) == null)
+        {
+            result["networkBlockRepaired"] = true;
+            Say("The network block was placed again and holds.");
+            return;
+        }
+        throw new SessionFailure(why != null
+            ? $"The network block is not holding ({problem}), and placing it again did not work: {why}. Press Play to try again, or run Settings > Installation."
+            : $"The network block is not holding ({problem}), even placed again. A VPN, a proxy or a security program may be letting the game's traffic past it: turn it off or exclude the HellForge folder, then press Play again.");
+    }
+
+    // One run of the probe into reportName; the result's networkControl is what it saw. Null when the block holds, else
+    // what is wrong (NetworkBlockProbe.Problem).
+    string? RunNetworkProbe(string probe, bool linuxNamespace, bool wfpOnly, string reportName)
+    {
+        var networkReport = Path.Combine(run, reportName);
         var origin = new Uri((string)result["backendOrigin"]!);
         var otherPort = wfpOnly && install.BlockedBackendPort() != null ? (origin.Port + 1).ToString() : null;
         var (probeExit, _, _) = linuxNamespace ? (NetworkProbeInProcess(origin.Port, networkReport), "", "")
             : Tools.Run(probe, otherPort == null ? [origin.Port.ToString(), networkReport] : [origin.Port.ToString(), networkReport, otherPort], timeoutMs: 10000);
         var network = Tools.ReadJson(networkReport);
         result["networkControl"] = network?.DeepClone();
-        if (probeExit != 0 || network == null || (bool?)network["loopbackHttpPassed"] != true || (int?)network["externalIpv4TcpError"] != 10013 ||
-            (otherPort != null && (int?)network["otherLoopbackTcpError"] != 10013))
-            throw new SessionFailure("Required loopback/egress controls failed.");
+        return NetworkBlockProbe.Problem(network, otherPort != null) ?? (probeExit != 0 ? $"the network block's check ended with exit code {probeExit}" : null);
     }
 
     // The profile's environment folders (a sandbox copy when sandboxed), and the pre-launch backend request count.

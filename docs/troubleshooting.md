@@ -203,9 +203,22 @@ Installation > Check and repair. For the security codes, see
 
 ### Other network block messages
 
-"Required loopback/egress controls failed." means the session's check of the network block did not pass: the local
-backend must answer on this PC and a connection to the outside must be refused. The session's `network-probe.json`
-records what the check saw; include the logs when you ask.
+"The network block is not holding" means the session's check of the network block did not pass: the local backend must
+answer on this PC, and a connection to the outside must be refused by the block. (Before 0.3.0 the message was
+"Required loopback/egress controls failed.") The message says which part failed:
+
+- **"not stopping the game's connections to the internet"**: the block's filters no longer apply to the game. They name
+  each program by its drive's internal device path, which for a drive other than Windows' own can change after a
+  restart (for example with a USB drive or another disk plugged in), and they stay behind when the HellForge folder is
+  moved. The session places the block again by itself, with one Windows prompt. If it still does not hold, a VPN, a
+  proxy or a security program is letting the game's traffic past it: turn it off or exclude the HellForge folder.
+- **"stops the game reaching HellForge's own backend"**: usually an older HellForge started on an installation a newer
+  one set up. Use the newer HellForge, or run Settings > Installation.
+- **"the game cannot reach HellForge's own backend on this PC"**: another firewall or security program is blocking
+  connections inside this PC (loopback). Allow HellForge's folder in it.
+
+The session's `network-probe.json` (and `network-probe-again.json` after the block was placed again) records what the
+check saw; include the logs when you ask.
 
 "Network block was not installed: Linked target path: <path> is a link or a special file" means a folder or file on
 the way to the game copy is a link: a junction or symbolic link (a Documents folder moved to another drive is often
