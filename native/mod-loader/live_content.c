@@ -230,16 +230,17 @@ static const char* LiveTakeoverRefused(int kind, uint32_t index, char* why, size
     return game != 0 ? ScrubTakeover(game, k->first + index, why, size) : NULL;
 }
 
-/* Before the change is checked, off every lock: a change giving a stratagem's type to another mod waits up to 60 s for
- * the code its check reads to be decoded (game.dll decodes in parts after it loads; a mod sync on the title screen
- * comes seconds after the boot). The check then refuses only a pin that still differs. */
+/* Before the change is checked, off every lock: a change giving a stratagem's type to another mod waits up to 20 s (the
+ * loader's grace for later pins; the backend waits 30 s for a change) for the code its check reads to be decoded
+ * (game.dll decodes in parts after it loads; a mod sync on the title screen comes seconds after the boot). The check
+ * then refuses only a pin that still differs. */
 static void LiveTakeoversWait(void)
 {
     int stratagem = 0;
     for (uint32_t i = 0; i < g_lcBefore[LC_STRATAGEM] && !stratagem; i++) stratagem = g_lcShadowed[LC_STRATAGEM][i] == LC_STAND_OVER;
     uintptr_t game = stratagem && g_stratagemState == 1 ? (g_lcFixtureGame ? g_lcFixtureGame : ApiModuleBase("game.dll", NULL)) : 0;
     uint32_t pin = game != 0 ? ScrubTakeoverPin(game) : 0;
-    for (int waited = 0; pin != 0 && waited < 60000; waited += 500, pin = ScrubTakeoverPin(game)) Sleep(500);
+    for (int waited = 0; pin != 0 && waited < 20000; waited += 500, pin = ScrubTakeoverPin(game)) Sleep(500);
 }
 
 /* Every takeover of the change (LiveTakeoverRefused). g_fieldsLock held. */
