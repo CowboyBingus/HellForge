@@ -181,20 +181,21 @@ public sealed class MultiplayerHost : IAsyncDisposable
     {
         var (target, reason) = AutoRejoin.Read(file, transport!.LocalId, modDigest, DateTime.UtcNow);
         if (target == null) { Log("Rejoin: not rejoining, because " + reason); return; }
-        StartRejoin(target, modDigest, onShip: false);
+        StartRejoin(target, modDigest);
     }
 
-    // After the running game took a host's mods without a restart (LiveMods, mod sync's APPLY AND JOIN): the game is on
-    // the ship already, so the host is asked at once. digest: this session's modlist digest now, the host's.
+    // After the running game took a host's mods without a restart (LiveMods, mod sync's APPLY AND JOIN): the host is asked
+    // at once when the game is on the ship (it has its own lobby), else once it gets there (a change on the title screen,
+    // a Steam invitation's join that failed there, say). digest: this session's modlist digest now, the host's.
     public void RejoinAfterLiveSync(ModSyncSession session, string digest)
     {
         if (transport == null) return;
         var (target, reason) = AutoRejoin.From(session, transport.LocalId, digest);
         if (target == null) { Log("Rejoin: not rejoining, because " + reason); return; }
-        StartRejoin(target, digest, onShip: true);
+        StartRejoin(target, digest);
     }
 
-    void StartRejoin(AutoRejoin.Target target, string modDigest, bool onShip)
+    void StartRejoin(AutoRejoin.Target target, string modDigest)
     {
         var rejoin = new AutoRejoin(target, modDigest, (peer, frame) => transport!.Send(peer, frame.Encode(), reliable: true), Lobby.InviteLocal,
             (kind, title, lines) =>
@@ -205,7 +206,7 @@ public sealed class MultiplayerHost : IAsyncDisposable
         Rejoin?.Dispose(); /* a rejoin from an earlier sync of this session ends: this one is the player's latest */
         Rejoin = rejoin;
         rejoin.Attach(Lobby);
-        if (onShip) rejoin.GameReady();
+        if (Lobby.HostedLobbies().Any(l => l.LocalOwner)) rejoin.GameReady(); /* on the ship already; else its lobby's creation */
         rejoin.Start();
     }
 

@@ -4,7 +4,7 @@ namespace HellForge.LocalBackend.Multiplayer;
 
 // Rejoining by itself after a mod sync (docs/multiplayer.md "Mod sync"). The session the launcher restarts with a host's
 // mods (--mod-sync) passes the same file to its backend (--rejoin, a ModSyncSession); a session whose running game took
-// the host's mods without a restart (LiveMods) starts it at once, its game already on the ship (OnShip). Either brings
+// the host's mods without a restart (LiveMods) starts it at once, past Waiting when its game has its own lobby. Either brings
 // the game back into that host's lobby through the game's own invitation path, the one a friend's invitation takes:
 //   Waiting   until this machine's game creates its own lobby (LobbyService.LocalLobbyCreated: it is on the ship and has
 //             listened for invitations since it booted), at most ReadyTimeout from the start;
