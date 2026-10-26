@@ -205,17 +205,38 @@ static void TestServe(void)
     CHECK(b.ended == BROKER_END_SHUTDOWN, "serve: closing says shutdown and the loop ends");
 }
 
+/* Whether the DACL allows this process's user, compared as SIDs: SDDL text names some accounts by an alias (the built-in
+ * Administrator, CI's runner account, is "LA"), not by S-1-5-21-... */
+static int GrantsOwnUser(PACL dacl)
+{
+    HANDLE token = NULL;
+    union { TOKEN_USER user; BYTE bytes[256]; } info;
+    DWORD size = 0;
+    if (!dacl || !OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return 0;
+    BOOL ok = GetTokenInformation(token, TokenUser, &info, sizeof info, &size);
+    CloseHandle(token);
+    if (!ok) return 0;
+    for (DWORD i = 0; i < dacl->AceCount; i++)
+    {
+        ACCESS_ALLOWED_ACE* ace = NULL;
+        if (GetAce(dacl, i, (void**)&ace) && ace->Header.AceType == ACCESS_ALLOWED_ACE_TYPE && EqualSid((PSID)&ace->SidStart, info.user.User.Sid))
+            return 1;
+    }
+    return 0;
+}
+
 static void TestSecurity(void)
 {
     BrokerChannel* ch = (BrokerChannel*)calloc(1, sizeof *ch);
     if (!ch || !BrokerChannelCreate(ch, L"test-security")) { CHECK(0, "security: channel created"); free(ch); return; }
     PSECURITY_DESCRIPTOR sd = NULL;
+    PACL dacl = NULL;
     wchar_t* text = NULL;
-    DWORD got = GetSecurityInfo(ch->pipe, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION, NULL, NULL, NULL, NULL, &sd);
+    DWORD got = GetSecurityInfo(ch->pipe, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION, NULL, NULL, &dacl, NULL, &sd);
     if (got == ERROR_SUCCESS) ConvertSecurityDescriptorToStringSecurityDescriptorW(sd, SDDL_REVISION_1, DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION, &text, NULL);
     CHECK(text && wcsstr(text, L"ML;;NW;;;LW"), "security: the pipe carries a low no-write-up label");
     CHECK(text && !wcsstr(text, L";;;WD)"), "security: Everyone is not granted");
-    CHECK(text && wcsstr(text, L"S-1-5-21") , "security: the player's own SID is granted");
+    CHECK(got == ERROR_SUCCESS && GrantsOwnUser(dacl), "security: the player's own SID is granted");
     if (text) LocalFree(text);
     if (sd) LocalFree(sd);
     BrokerChannelClose(ch);
