@@ -39,7 +39,8 @@ public partial class MainWindow
             : "Last synced " + (info.CapturedUtc?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "at an unknown time") +
               $": {info.Items:N0} items, " + (info.Experience is { } xp ? $"{xp:N0} XP." : "progression captured.");
         UpdateImportControls();
-        if (SyncBusy) return;
+        // While this launcher's capture still keeps the game connected, its hosts line is its own, not an earlier sync's leftover.
+        if (SyncBusy || syncProxy != null) return;
         var leftover = InventorySync.HasLeftoverRedirect();
         SyncButton.Content = leftover ? "Clean up" : "Sync Inventory";
         if (leftover) SetSyncStatus("An earlier sync did not finish: the normal game cannot reach its servers until you clean up.", Orange);
